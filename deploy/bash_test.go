@@ -103,6 +103,13 @@ func novoAmbienteBash(t *testing.T) *ambienteBash {
 		t.Skip("sem bash (no Windows, o do Git): os testes com programas de mentira não rodam")
 	}
 	dir := t.TempDir()
+	// No Windows, o TEMP pode vir com o nome curto (C:\Users\RUNNER~1, nos
+	// runners do GitHub), e o pwd -P do script devolve o nome longo: as
+	// comparações de pasta dos scripts falhariam só por isso. O EvalSymlinks
+	// do Windows troca cada pedaço pelo nome longo.
+	if longo, err := filepath.EvalSymlinks(dir); err == nil {
+		dir = longo
+	}
 	// No Windows, o chmod 0444 do script vira o atributo "somente leitura", e
 	// a limpeza do TempDir não apaga esses arquivos. Esta limpeza roda antes
 	// dela (as limpezas rodam da última para a primeira).

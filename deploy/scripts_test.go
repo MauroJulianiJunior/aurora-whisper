@@ -1477,7 +1477,10 @@ func TestVPS_RestaurarReceberSoNaMemoriaDoUsuario(t *testing.T) {
 		delete(r.a.env, "AW_MEMORIA")
 		r.a.falso("stat", statDeMentira)
 		res := r.a.rodar(restaurarSh, r.dump, "receber")
-		if res.codigo == 0 || !regexp.MustCompile(`nao achei a pasta em memoria so sua \(/run/user/\d+\)`).MatchString(res.erro) {
+		// A recusa cita o /run/user/<uid>: "nao achei" onde ele não existe, e
+		// "nao e memoria" onde existe (um runner de CI com sessão aberta), porque
+		// o stat de mentira, sem FALSO_FS_TIPO, não diz tmpfs.
+		if res.codigo == 0 || !regexp.MustCompile(`(nao achei a pasta em memoria so sua \(/run/user/\d+\)|/run/user/\d+ nao e memoria \(tmpfs\))`).MatchString(res.erro) {
 			t.Fatalf("quero a recusa com /run/user/<uid>: %d %q", res.codigo, res.tudo())
 		}
 	})

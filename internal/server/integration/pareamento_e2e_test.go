@@ -72,6 +72,23 @@ func portaDe(srv *httptest.Server) int {
 	return n
 }
 
+// naFaixaDinamica troca o listener do servidor ainda parado por um em
+// 127.0.0.1 numa porta de 49152 a 65535: a nuvem só aceita o retorno do PC
+// nessa faixa (a dinâmica do Windows, onde o painel do Agent abre). A porta
+// automática do Linux (32768 a 60999) cai fora dela com frequência.
+func naFaixaDinamica(t *testing.T, srv *httptest.Server) {
+	t.Helper()
+	for porta := 49152; porta <= 65535; porta++ {
+		l, err := net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(porta))
+		if err == nil {
+			srv.Listener.Close()
+			srv.Listener = l
+			return
+		}
+	}
+	t.Fatal("nenhuma porta livre de 49152 a 65535 em 127.0.0.1")
+}
+
 func TestPareamento_AgentContraANuvemDeVerdade(t *testing.T) {
 	ctx := context.Background()
 	agora := time.Now()
@@ -120,6 +137,7 @@ func TestPareamento_AgentContraANuvemDeVerdade(t *testing.T) {
 		NovoID: cloudstore.NewUUIDv7, Log: slog.New(slog.NewTextHandler(&logPC, nil)),
 	})
 	painelSrv := httptest.NewUnstartedServer(nil)
+	naFaixaDinamica(t, painelSrv)
 	portaDoPainel := portaDe(painelSrv)
 	painelSrv.Config.Handler = painel.Handler(painel.Config{
 		Porta: portaDoPainel, Token: "tok", Bilhetes: painel.NovosBilhetes(), DirPainel: t.TempDir(), Retorno: s.Retorno(),
@@ -150,7 +168,7 @@ func TestPareamento_AgentContraANuvemDeVerdade(t *testing.T) {
 		t.Helper()
 		e, err := s.Conectar(ctx, base)
 		if err != nil {
-			t.Fatalf("Conectar: %v", err)
+			t.Fatalf("Conectar: %v\nlog do PC:\n%s\nlog da nuvem:\n%s", err, logPC.String(), logNuvem.String())
 		}
 		// 1. A página de aprovação serve o app.
 		aberto := abertos[len(abertos)-1]
