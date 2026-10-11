@@ -62,6 +62,37 @@ export interface PropsDaFaixa {
   // sair do lugar. O PC não usa.
   textoNaoSalvo?: string
   aoEntrarDeNovo?(): void
+  // ditadoNaoEnviado: a sessão acabou com um ditado gravado e ainda não
+  // enviado (ADR-021: o áudio conta como texto não salvo). Só a nuvem.
+  ditadoNaoEnviado?: boolean
+}
+
+// PropsDoDitar é o que o Painel passa ao gravador do ditado (ADR-021). O
+// gravador mora na nuvem (ambiente.ditar): o Painel só lhe dá o campo de busca
+// para pôr ao lado do microfone e recebe de volta o que chegou.
+export interface PropsDoDitar {
+  // busca: o campo de busca do Painel. O gravador o mostra ao lado do
+  // microfone e o troca pela faixa da onda enquanto grava; null nas
+  // Configurações, onde não há busca.
+  busca: ReactNode
+  // escondido: o Painel está nas Configurações. O microfone sai de cena, mas
+  // uma gravação em curso, ou um áudio que espera "Tentar de novo", fica.
+  escondido: boolean
+  // aoChegar: o servidor gravou o ditado. nota é o que o app fez sozinho
+  // ("Parei quando o app saiu da frente."); aviso, a frase de o Polish não
+  // ter agido.
+  aoChegar(ditado: Ditado, extra: { nota?: string; aviso?: string }): void
+  // aoAudioPendente: passou a haver, ou deixou de haver, um ditado gravado e
+  // não enviado, só na memória. Conta como texto não salvo: a sessão que acaba
+  // não troca a tela inteira (o áudio se perderia).
+  aoAudioPendente(pendente: boolean): void
+  // aoSemSessao: o envio levou 401. O áudio fica, e o Painel acende a faixa
+  // da sessão.
+  aoSemSessao(): void
+  // abrirConfiguracoes: a falha se resolve nas Configurações (a chave, o
+  // aceite).
+  abrirConfiguracoes(): void
+  avisar(texto: ReactNode): void
 }
 
 export interface Ambiente {
@@ -86,4 +117,9 @@ export interface Ambiente {
   // resolverConflito é a escolha do selo ("2 versões"). Os dois ambientes o
   // têm (o PC desde a F7c); sem ele, o selo apareceria sem os botões.
   resolverConflito?(id: string, versao: number, escolha: EscolhaDoSelo): Promise<Ditado>
+  // ditar é o microfone do celular (ADR-021, C6a): o botão ao lado da busca, a
+  // faixa da onda e o envio. Só a nuvem o tem, e o código do gravador só entra
+  // no build dela (bundle.test.ts). Um componente por ambiente: o gravador, e o
+  // áudio que ele guarda até o envio, ficam entre um render e outro.
+  ditar?: ComponentType<PropsDoDitar>
 }

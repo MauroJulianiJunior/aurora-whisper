@@ -126,6 +126,20 @@ describe('o bundle local (bin\\painel)', () => {
     // F8h: o Desfazer do celular (a /api/v1/learned, a pergunta na linha) é só do app.
     'Desfeito em todos os aparelhos',
     'Nada aprendido ainda',
+    // C6a (ADR-021): o gravador do ditado e o envio são só do app. O painel do
+    // PC nunca abre o microfone do navegador: o Agent captura o áudio, e o
+    // áudio do PC não sai dele.
+    'getUserMedia',
+    'MediaRecorder',
+    'AudioContext',
+    'createAnalyser',
+    'wakeLock',
+    '/api/v1/dictations',
+    'Ditado-Id',
+    'Ditado-Duracao-Ms',
+    'Ditado-Fala-Ms',
+    'audio/webm',
+    'Transcrevendo',
   ])('não tem %s', (texto) => {
     expect(local.js).not.toContain(texto)
   })
@@ -151,6 +165,39 @@ describe('o bundle da nuvem (dist-nuvem)', () => {
     expect(nuvem.js).toContain('/api/v1/learned/undo')
     expect(nuvem.js).toContain('Desfeito em todos os aparelhos.')
   })
+
+  // C6a (ADR-021): o gravador e o envio do ditado. O microfone, o MediaRecorder
+  // em webm/opus, o AnalyserNode da onda e da fala, o Wake Lock, e a rota nova
+  // com os três cabeçalhos.
+  it('tem o gravador do ditado e o envio', () => {
+    for (const texto of [
+      'getUserMedia',
+      'MediaRecorder',
+      'audio/webm;codecs=opus',
+      'createAnalyser',
+      'wakeLock',
+      '/api/v1/dictations',
+      'Ditado-Id',
+      'Ditado-Duracao-Ms',
+      'Ditado-Fala-Ms',
+      'Transcrevendo',
+      'Tentar de novo',
+    ]) {
+      expect(nuvem.js, texto).toContain(texto)
+    }
+  })
+
+  // O áudio vive só numa variável da página: nada em IndexedDB, Cache ou
+  // localStorage (o it.each de baixo trava as três frases do armazenamento do
+  // navegador), nem salvo em arquivo, nem tocado de volta. O analisador não é
+  // ligado a nenhuma saída, e o AudioWorklet fica de fora: a CSP default-src
+  // 'self' não muda.
+  it.each(['caches.', 'createObjectURL', 'showSaveFilePicker', 'FileReader', 'new Audio(', 'audioWorklet', 'AudioWorklet', 'navigator.storage'])(
+    'o gravador não guarda nem toca o áudio: sem %s',
+    (texto) => {
+      expect(nuvem.js).not.toContain(texto)
+    },
+  )
 
   // Nada do PC: o bilhete, o token, a Local API, as Configurações do PC. E
   // nada guardado no aparelho.
@@ -530,6 +577,8 @@ describe('o service worker emitido (sw.js)', () => {
       ['GET /api/v1/me, navegando', pedido('/api/v1/me', { mode: 'navigate' })],
       ['GET /api/v1/transcriptions', pedido('/api/v1/transcriptions?trash=false')],
       ['POST /api/v1/transcriptions/search', pedido('/api/v1/transcriptions/search', { method: 'POST' })],
+      // ADR-021: o áudio do ditado vai direto à rede, e o service worker nem o vê.
+      ['POST /api/v1/dictations', pedido('/api/v1/dictations', { method: 'POST' })],
       ['POST /api/v1/device-auth/start', pedido('/api/v1/device-auth/start', { method: 'POST' })],
       ['POST /auth/start', pedido('/auth/start', { method: 'POST' })],
       ['GET /auth/google/callback, navegando', pedido('/auth/google/callback?code=c&state=s', { mode: 'navigate' })],

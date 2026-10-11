@@ -1618,6 +1618,170 @@ a.botao {
   }
 }
 
+/* O ditado no celular (ADR-021, C6a). O microfone é um botão pequeno ao lado da
+   busca. Gravando, a busca dá lugar a uma faixa do mesmo tamanho e do mesmo
+   contorno, com a onda, o tempo e o Cancelar; o microfone vira o botão de
+   parar. Tudo em tons de cinza, como a pílula do overlay do PC: o verde é da
+   ação e o vermelho, do erro, e gravar não é nenhum dos dois. */
+.ditar {
+  min-width: 0;
+}
+
+.ditar-linha {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ditar-linha > .busca {
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
+}
+
+.ditar-botao {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid var(--contorno);
+  border-radius: var(--raio-md);
+  background: var(--superficie);
+  color: var(--texto-2);
+  transition: border-color 160ms var(--curva), color 160ms var(--curva);
+}
+
+.ditar-botao:hover:not([aria-disabled='true']) {
+  border-color: var(--texto-3);
+  color: var(--texto);
+}
+
+/* Ocupado (abrindo o microfone, transcrevendo, ou com um áudio esperando):
+   continua legível, só não responde. */
+.ditar-botao[aria-disabled='true'] {
+  color: var(--texto-3);
+}
+
+.ditar-botao.gravando {
+  border-color: var(--texto);
+  color: var(--texto);
+}
+
+.ditar-faixa {
+  flex: 1 1 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 40px;
+  padding: 0 4px 0 14px;
+  border: 1px solid var(--contorno);
+  border-radius: var(--raio-md);
+  background: var(--superficie);
+}
+
+/* A onda do overlay: 33 barras de 2 px com 1 px entre elas, espelhadas, o
+   brilho acompanhando a altura. A altura e o brilho vêm do JS a cada quadro
+   (Ditar.tsx); aqui está o repouso. */
+.onda {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  min-width: 0;
+  height: 24px;
+  overflow: hidden;
+}
+
+.onda-barra {
+  flex: none;
+  width: 2px;
+  height: 24px;
+  border-radius: 1px;
+  background: var(--texto-2);
+  opacity: 0.45;
+  transform: scaleY(0.12);
+}
+
+.ditar-tempo {
+  flex: none;
+  color: var(--texto-2);
+  font-family: var(--fonte-mono);
+  font-size: 12px;
+}
+
+/* Num celular de 320 px a onda inteira (33 barras, 98 px) não cabe ao lado do
+   tempo e do Cancelar: as 5 mais antigas saem da vista, em vez de a onda ser
+   cortada nas duas pontas, a mais nova inclusive. */
+@media (max-width: 340px) {
+  .onda-barra:nth-child(-n + 5) {
+    display: none;
+  }
+}
+
+.ditar-cancelar {
+  flex: none;
+  height: 30px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--raio-sm);
+  background: transparent;
+  color: var(--texto-2);
+  font-size: 13px;
+  font-weight: 500;
+  transition: background-color 160ms var(--curva), color 160ms var(--curva);
+}
+
+.ditar-cancelar:hover {
+  background: var(--realce);
+  color: var(--texto);
+}
+
+.ditar-enviando {
+  color: var(--texto-2);
+  font-size: 13px;
+  animation: pulsar 1.4s ease-in-out infinite;
+}
+
+/* "A tela pode apagar...": uma frase de cuidado, não um erro. */
+.ditar-aviso {
+  margin: 6px 2px 0;
+  color: var(--texto-2);
+  font-size: 12px;
+}
+
+/* A falha que guarda o áudio: a nota de erro de sempre, com a frase e os
+   botões. */
+.ditar-erro {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  margin: 8px 0 0;
+}
+
+.ditar-frase {
+  flex: 1 1 10rem;
+  min-width: 0;
+  font-weight: 600;
+}
+
+.ditar-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* O ditado que acabou de chegar, no topo. O fundo é o do que entrou (--entrou);
+   a etiqueta "novo" diz o mesmo a quem não vê a cor. */
+.item.chegou > .linha {
+  background: var(--entrou);
+}
+
 /* No toque, os alvos crescem para 44 px (WCAG 2.5.5): o celular é o caso do
    app da nuvem, e um PC com tela de toque ganha o mesmo. */
 @media (pointer: coarse) {
@@ -1627,6 +1791,21 @@ a.botao {
 
   .busca {
     height: 44px;
+  }
+
+  .ditar-botao {
+    width: 44px;
+    height: 44px;
+  }
+
+  /* A faixa tem a altura da busca; o Cancelar preenche o miolo dela. */
+  .ditar-faixa {
+    height: 44px;
+  }
+
+  .ditar-cancelar {
+    height: 42px;
+    padding: 0 10px;
   }
 
   /* As abas também: são os alvos mais usados do celular. O cabeçalho
@@ -1672,6 +1851,12 @@ a.botao {
   }
 }
 
+@keyframes pulsar {
+  50% {
+    opacity: 0.55;
+  }
+}
+
 /* Temas de Contraste do Windows: o navegador troca cores e fundos pelas
    do sistema e apaga as sombras. Sem isto, a vista escolhida (só fundo) e
    o foco da busca e do campo (borda e sombra) sumiam (revisão de
@@ -1692,11 +1877,20 @@ a.botao {
   .diff ins {
     text-decoration-color: CanvasText;
   }
+
+  /* A onda do ditado é só fundo (as barras): sem isto, o navegador as pintaria
+     do fundo da página, e a onda sumiria. O ditado que chegou perde o fundo de
+     destaque, e a etiqueta "novo" continua dizendo o mesmo. */
+  .onda-barra {
+    forced-color-adjust: none;
+    background: CanvasText;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .editor,
-  .aviso {
+  .aviso,
+  .ditar-enviando {
     animation: none;
   }
 }

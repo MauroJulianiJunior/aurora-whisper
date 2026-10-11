@@ -1,7 +1,9 @@
 // O cliente da nuvem (ADR-019, F4): a /api/v1 e o /auth da própria origem,
 // pela sessão do cookie __Host-sessao. Ele nunca manda Authorization, nunca
 // vê o cookie (é HttpOnly) e não guarda nada no aparelho: nem token, nem
-// texto ditado. O CSRF não pede nada daqui: o navegador manda
+// texto ditado, nem o áudio do ditado (ditar só o repassa; quem o segura, na
+// memória, até o envio dar certo é o gravador, nuvem/ditar). O CSRF não pede
+// nada daqui: o navegador manda
 // Sec-Fetch-Site: same-origin, e o servidor confere
 // (http.CrossOriginProtection).
 //
@@ -99,7 +101,30 @@ export const pareceIdDePedido = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-
 // 127.0.0.1: a página nunca navega para outro lugar com o code.
 const pareceRetorno = (u: string) => /^http:\/\/127\.0\.0\.1:\d{4,5}\/nuvem\/retorno\?/.test(u)
 
+// PedidoDeDitado é um ditado do celular a caminho do servidor (ADR-021, "A
+// rota"): o áudio cru e o que o app mediu. O id é o UUID v7 que o app gerou; é
+// a chave da idempotência, e o reenvio leva sempre o mesmo.
+export interface PedidoDeDitado {
+  id: string
+  audio: Blob
+  // duracaoMs: a duração medida no app (o webm do MediaRecorder não a traz).
+  duracaoMs: number
+  // falaMs: quanto do áudio o app achou que era fala (decisão M).
+  falaMs: number
+}
+
+// DitadoGravado é a resposta de POST /api/v1/dictations: o ditado como ficou
+// e, quando o Polish caiu para o Smart, o motivo (um ia.Motivo, nunca texto).
+export interface DitadoGravado {
+  ditado: Ditado
+  aviso?: string
+}
+
 export interface ClienteNuvem extends ClienteDoHistorico {
+  // ditar leva o áudio ao servidor, que o repassa ao provedor da pessoa, passa
+  // pelo Smart (e pelo Polish, se ligado) e grava o ditado (ADR-021). Os erros
+  // chegam em ErroDaApi.codigo; o sinal é o prazo de 90 s do celular.
+  ditar(pedido: PedidoDeDitado, sinal?: AbortSignal): Promise<DitadoGravado>
   eu(): Promise<Eu>
   sessoes(): Promise<Sessao[]>
   encerrarSessao(id: string): Promise<void>
@@ -209,6 +234,31 @@ export function criarClienteNuvem(buscar: Buscador = buscadorPadrao): ClienteNuv
     async resolverConflito(id, versao, escolha) {
       const r = await pedir(buscar, doItem(id), comJson('PATCH', { base_version: versao, resolver_conflito: escolha }))
       return doServidor((await r.json()) as ItemDaNuvem)
+    },
+    async ditar({ id, audio, duracaoMs, falaMs }, sinal) {
+      // O corpo é o áudio cru (nunca multipart nem JSON), e o que o app mediu
+      // vai em cabeçalhos. O 409 não é versão: chega como ErroDaApi, com o
+      // código. Nada daqui vai à URL.
+      const r = await pedir(
+        buscar,
+        '/api/v1/dictations',
+        daOrigem({
+          method: 'POST',
+          headers: {
+            'Content-Type': 'audio/webm',
+            'Ditado-Id': id,
+            'Ditado-Duracao-Ms': String(Math.round(duracaoMs)),
+            'Ditado-Fala-Ms': String(Math.round(falaMs)),
+          },
+          body: audio,
+          signal: sinal,
+        }),
+        false,
+      )
+      const { aviso, ...item } = (await r.json()) as ItemDaNuvem & { aviso?: unknown }
+      const gravado: DitadoGravado = { ditado: doServidor(item) }
+      if (typeof aviso === 'string' && aviso !== '') gravado.aviso = aviso
+      return gravado
     },
     async eu() {
       const r = await pedir(buscar, '/api/v1/me', daOrigem())

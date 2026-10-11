@@ -2,11 +2,14 @@
 // as Configurações da conta, a faixa de "Sem conexão" e a sessão que acaba:
 // sem texto não salvo na tela, ela troca a tela inteira; com ele, o Painel
 // fica, e a faixa da sessão leva a pessoa a entrar de novo (EntrarDeNovo.tsx).
-// Sem o Aprender: aprender é só no PC (ADR-017).
+// Sem o Aprender: aprender é só no PC (ADR-017). Com o microfone do ditado
+// (ADR-021, ditar/): só a nuvem o tem, e o código dele só entra neste build.
 
 import type { Ambiente } from '../ambiente'
 import type { ClienteNuvem, Eu } from './cliente'
 import { ConfiguracoesNuvem } from './ConfiguracoesNuvem'
+import { Ditar } from './ditar/Ditar'
+import type { Plataforma } from './ditar/gravador'
 import type { Reentrada } from './entrar'
 import { FaixaDaSessao } from './EntrarDeNovo'
 import { FaixaNuvem } from './Telas'
@@ -18,10 +21,14 @@ interface Ganchos {
   aoSair(): void
   // reentrada: a faixa da sessão que acabou com um texto não salvo na tela.
   reentrada: Reentrada
+  // plataformaDeDitar: o microfone e o resto do navegador que o gravador usa
+  // (ADR-021). Sem ela, o do navegador de verdade; os testes e as telas de
+  // desenvolvimento põem um dublê.
+  plataformaDeDitar?: Plataforma
 }
 
 // cliente: o do Painel, atrás do portão da reentrada (cliente.ts, Portao).
-export function ambienteNuvem(cliente: ClienteNuvem, eu: Eu, { aoSemSessao, aoSair, reentrada }: Ganchos): Ambiente {
+export function ambienteNuvem(cliente: ClienteNuvem, eu: Eu, { aoSemSessao, aoSair, reentrada, plataformaDeDitar }: Ganchos): Ambiente {
   // O Sair é da sessão, não do histórico: passa por fora do portão. Com o
   // portão fechado (a faixa da sessão na tela), ele voltaria 401 sem sair da
   // página, e o Sair contaria como "já saiu" sem o servidor saber: o texto
@@ -34,10 +41,19 @@ export function ambienteNuvem(cliente: ClienteNuvem, eu: Eu, { aoSemSessao, aoSa
     Configuracoes: (props) => <ConfiguracoesNuvem cliente={clienteDasConfiguracoes} eu={eu} aoSair={aoSair} {...props} />,
     Faixa: (props) =>
       props.problema === 'sem-sessao' ? (
-        <FaixaDaSessao reentrada={reentrada} textoNaoSalvo={props.textoNaoSalvo ?? ''} aoEntrarDeNovo={props.aoEntrarDeNovo ?? props.aoTentarDeNovo} />
+        <FaixaDaSessao
+          reentrada={reentrada}
+          textoNaoSalvo={props.textoNaoSalvo ?? ''}
+          ditadoNaoEnviado={props.ditadoNaoEnviado ?? false}
+          aoEntrarDeNovo={props.aoEntrarDeNovo ?? props.aoTentarDeNovo}
+        />
       ) : (
         <FaixaNuvem {...props} />
       ),
+    // O gravador do ditado (ADR-021): fala pelo cliente do Painel, atrás do
+    // portão, como o resto. Um componente por sessão: o áudio que espera
+    // "Tentar de novo" fica entre um render e outro.
+    ditar: (props) => <Ditar cliente={cliente} plataforma={plataformaDeDitar} {...props} />,
     aoSemSessao,
     excluirDeVez: (id) => cliente.excluirDeVez(id),
     resolverConflito: (id, versao, escolha) => cliente.resolverConflito(id, versao, escolha),

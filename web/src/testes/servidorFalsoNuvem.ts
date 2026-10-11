@@ -17,8 +17,30 @@ export interface PedidoNuvem {
   caminho: string
   busca: URLSearchParams
   corpo?: Record<string, unknown>
+  // audio: o corpo de um ditado (POST /api/v1/dictations), o áudio cru.
+  audio?: Blob
   cabecalhos: Record<string, string>
   credentials?: RequestCredentials
+}
+
+// DitadoDoCelular é um ditado que o servidor de mentira recebeu (ADR-021): o
+// que o app mandou, e se o provedor foi chamado por ele.
+export interface DitadoDoCelular {
+  id: string
+  bytes: number
+  tipo: string
+  duracaoMs: number
+  falaMs: number
+  // chamouOProvedor: false no reenvio do mesmo id (a idempotência).
+  chamouOProvedor: boolean
+}
+
+// ComoDitar é o que o provedor de mentira devolve no próximo ditado.
+export interface ComoDitar {
+  // texto: o que o ASR (e o Smart) escreveram.
+  texto: string
+  // aviso: o motivo de o Polish ter caído para o Smart (um ia.Motivo).
+  aviso?: string
 }
 
 // O item na nuvem, com os campos que só ela manda.
@@ -121,6 +143,8 @@ export interface OpcoesDaNuvem {
 const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
 const erro = (status: number, code: string, message: string) => json({ error: { code, message, request_id: 'r1' } }, status)
 const vazio = (status = 204) => new Response(null, { status })
+// O id do ditado é um UUID v7 (o 05 pede v7): versão 7 e variante 10.
+const pareceUUID = (s: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s)
 
 function ordenar(itens: ItemNuvem[], campo: 'created_at' | 'deleted_at'): ItemNuvem[] {
   const t = (d: ItemNuvem) => Date.parse(d[campo] ?? d.created_at)
@@ -153,6 +177,50 @@ export function servidorFalsoNuvem(
   let conta = { id: 'u1', email }
   let foraDoAr = false
   let interceptar: ((p: PedidoNuvem) => Response | undefined) | null = null
+  // O ditado do celular (ADR-021): cada pedido que chegou, o que o provedor de
+  // mentira devolve, e as lápides (um id apagado de vez é 410, sem provedor).
+  const ditados: DitadoDoCelular[] = []
+  const lapides = new Set<string>()
+  let comoDitar: ComoDitar = { texto: 'Texto ditado pelo celular.' }
+
+  const cabecalho = (p: PedidoNuvem, nome: string) => Object.entries(p.cabecalhos).find(([k]) => k.toLowerCase() === nome.toLowerCase())?.[1]
+
+  // ditar responde POST /api/v1/dictations como o servidor: o id procurado
+  // antes de tudo (o que já existe volta sem chamar o provedor), a fala medida
+  // abaixo do mínimo recusada antes do corpo, o formato e os cabeçalhos
+  // conferidos, e o ditado criado pela sessão, sem aparelho, como "web".
+  function ditar(p: PedidoNuvem): Response {
+    const id = cabecalho(p, 'Ditado-Id') ?? ''
+    if (!pareceUUID(id)) return erro(400, 'BAD_REQUEST', 'Ditado-Id inválido')
+    const existente = itens.find((i) => i.id === id)
+    if (existente) {
+      ditados.push({ id, bytes: p.audio?.size ?? 0, tipo: cabecalho(p, 'Content-Type') ?? '', duracaoMs: 0, falaMs: 0, chamouOProvedor: false })
+      return json({ ...existente })
+    }
+    if (lapides.has(id)) return erro(410, 'APAGADO', 'o ditado foi apagado')
+    const falaMs = Number(cabecalho(p, 'Ditado-Fala-Ms'))
+    const duracaoMs = Number(cabecalho(p, 'Ditado-Duracao-Ms'))
+    if (!Number.isInteger(falaMs) || !Number.isInteger(duracaoMs) || falaMs < 0 || duracaoMs < 0) return erro(400, 'BAD_REQUEST', 'cabeçalho inválido')
+    if (falaMs < 300) return erro(422, 'SEM_FALA', 'fala demais curta')
+    if (cabecalho(p, 'Content-Type') !== 'audio/webm') return erro(415, 'FORMATO', 'só webm')
+    const bytes = p.audio?.size ?? 0
+    ditados.push({ id, bytes, tipo: cabecalho(p, 'Content-Type') ?? '', duracaoMs, falaMs, chamouOProvedor: true })
+    const agora = new Date().toISOString()
+    const novo = itemNuvem({
+      id,
+      created_at: agora,
+      updated_at: agora,
+      raw_text: comoDitar.texto,
+      final_text: comoDitar.texto,
+      asr_provider: 'openai',
+      asr_model: 'gpt-4o-mini-transcribe',
+      duration_ms: duracaoMs,
+      device_id: null,
+      source_platform: 'web',
+    })
+    itens.push(novo)
+    return json({ ...novo, ...(comoDitar.aviso ? { aviso: comoDitar.aviso } : {}) }, 201)
+  }
 
   function rotaDoItem(p: PedidoNuvem, id: string, acao?: string): Response {
     const item = itens.find((i) => i.id === decodeURIComponent(id))
@@ -167,6 +235,7 @@ export function servidorFalsoNuvem(
     if (acao === 'purge' && p.metodo === 'POST') {
       if (!item.deleted_at) return erro(409, 'CONFLICT', 'o ditado não está na lixeira')
       itens.splice(itens.indexOf(item), 1)
+      lapides.add(item.id)
       return vazio()
     }
     if (acao) return erro(404, 'NOT_FOUND', 'rota não encontrada')
@@ -219,6 +288,7 @@ export function servidorFalsoNuvem(
       caminho: url.pathname,
       busca: url.searchParams,
       corpo: typeof init.body === 'string' ? (JSON.parse(init.body) as Record<string, unknown>) : undefined,
+      audio: init.body instanceof Blob ? init.body : undefined,
       cabecalhos: { ...((init.headers ?? {}) as Record<string, string>) },
       credentials: init.credentials,
     }
@@ -247,6 +317,7 @@ export function servidorFalsoNuvem(
     if (!sessao) return erro(401, 'UNAUTHORIZED', 'autenticação obrigatória')
 
     if (p.caminho === '/api/v1/me' && p.metodo === 'GET') return json(conta)
+    if (p.caminho === '/api/v1/dictations' && p.metodo === 'POST') return ditar(p)
     if (p.caminho === '/api/v1/me/data' && p.metodo === 'DELETE') {
       if (p.corpo?.confirmar !== 'apagar') return erro(400, 'VALIDATION', 'confirmação obrigatória')
       itens.splice(0, itens.length)
@@ -335,6 +406,16 @@ export function servidorFalsoNuvem(
     aprendidos: listaDeAprendidos,
     desfeitos,
     pedidosDePareamento,
+    // ditados: os pedidos de ditado do celular que chegaram, na ordem. O
+    // provedor de mentira só é chamado quando chamouOProvedor é true.
+    ditados,
+    get chamadasAoProvedor() {
+      return ditados.filter((d) => d.chamouOProvedor).length
+    },
+    // aoDitar muda o que o provedor de mentira devolve nos próximos ditados.
+    aoDitar(como: ComoDitar) {
+      comoDitar = como
+    },
     get logado() {
       return sessao
     },

@@ -27,6 +27,10 @@ interface PropsDaFaixaDaSessao {
   reentrada: Reentrada
   // textoNaoSalvo: o que o Copiar leva (todos os rascunhos não salvos).
   textoNaoSalvo: string
+  // ditadoNaoEnviado: há um ditado gravado e ainda não enviado, só na memória
+  // da página (ADR-021). Conta como texto não salvo: a faixa fica, e a página
+  // não sai sem perguntar. Não há o que copiar dele.
+  ditadoNaoEnviado?: boolean
   // aoEntrarDeNovo: a mesma conta voltou; o Painel tira a faixa.
   aoEntrarDeNovo(): void
 }
@@ -48,7 +52,7 @@ interface PropsDaFaixaDaSessao {
 // janela de entrar na mesma aba) faz o navegador perguntar antes
 // (beforeunload; o diálogo é dele, sem texto nosso). O Entrar nesta aba é a
 // exceção: a pessoa escolheu perder o texto, e a faixa disse antes.
-export function FaixaDaSessao({ reentrada, textoNaoSalvo, aoEntrarDeNovo }: PropsDaFaixaDaSessao) {
+export function FaixaDaSessao({ reentrada, textoNaoSalvo, ditadoNaoEnviado = false, aoEntrarDeNovo }: PropsDaFaixaDaSessao) {
   const { cliente, eu, portao, host, abrirJanela, irPara } = reentrada
   const teste = useLoginDeTeste(cliente, host, true)
   const [bloqueada, setBloqueada] = useState(false)
@@ -64,6 +68,8 @@ export function FaixaDaSessao({ reentrada, textoNaoSalvo, aoEntrarDeNovo }: Prop
   // temTexto: há o que perder. A faixa continua mesmo se a pessoa apagou o
   // texto ou o devolveu ao que estava salvo, e aí não há por que perguntar.
   const temTexto = textoNaoSalvo.trim() !== ''
+  // aPerder: o texto, ou o ditado que não foi enviado (só em memória).
+  const aPerder = temTexto || ditadoNaoEnviado
   // ultima: só a resposta do último /me vale (o foco e a aba à vista chegam
   // juntos, e a conta de teste confere logo depois de entrar).
   const ultima = useRef(0)
@@ -74,7 +80,7 @@ export function FaixaDaSessao({ reentrada, textoNaoSalvo, aoEntrarDeNovo }: Prop
   }, [portao])
 
   useEffect(() => {
-    if (!temTexto) return
+    if (!aPerder) return
     const perguntar = (e: BeforeUnloadEvent) => {
       if (deixarSair.current) return
       e.preventDefault()
@@ -83,7 +89,7 @@ export function FaixaDaSessao({ reentrada, textoNaoSalvo, aoEntrarDeNovo }: Prop
     }
     window.addEventListener('beforeunload', perguntar)
     return () => window.removeEventListener('beforeunload', perguntar)
-  }, [temTexto])
+  }, [aPerder])
 
   // conferir: a mesma conta abre o portão e tira a faixa; outra conta fica
   // na faixa, com o portão fechado; sem sessão, fica como está (a janela
@@ -185,19 +191,28 @@ export function FaixaDaSessao({ reentrada, textoNaoSalvo, aoEntrarDeNovo }: Prop
     )
   }
 
+  // Só o ditado não enviado (ADR-021): ele espera na memória, e não há o que
+  // copiar dele. Com texto também, a faixa fala do texto e do ditado.
+  const soDitado = ditadoNaoEnviado && !temTexto
   let titulo = 'Sua sessão terminou.'
-  let linha = 'Seu texto continua aqui; entre de novo para salvar.'
+  let linha = soDitado
+    ? 'Seu ditado continua aqui; entre de novo para enviar.'
+    : ditadoNaoEnviado
+      ? 'Seu texto e seu ditado continuam aqui; entre de novo para salvar.'
+      : 'Seu texto continua aqui; entre de novo para salvar.'
   if (bloqueada) {
     titulo = 'Seu navegador bloqueou a janela.'
-    linha =
-      copia === 'feita'
+    linha = soDitado
+      ? 'Entrar nesta aba descarta o ditado que não foi enviado.'
+      : copia === 'feita'
         ? 'Texto copiado. Agora pode entrar de novo nesta aba.'
         : copia === 'falhou'
           ? 'Não consegui copiar. Selecione o texto e copie antes de entrar de novo nesta aba.'
           : 'Copie o texto antes de entrar de novo nesta aba.'
+    if (ditadoNaoEnviado && !soDitado && copia !== 'falhou') linha += ' O ditado que não foi enviado se perde.'
   } else if (outraConta) {
     titulo = 'Você entrou em outra conta.'
-    linha = `Este texto é de ${eu.email}: entre com ela para salvar.`
+    linha = soDitado ? `Este ditado é de ${eu.email}: entre com ela para enviar.` : `Este texto é de ${eu.email}: entre com ela para salvar.`
   }
   if (erro) linha = erro
 
@@ -219,9 +234,11 @@ export function FaixaDaSessao({ reentrada, textoNaoSalvo, aoEntrarDeNovo }: Prop
       <span className="faixa-acoes">
         {bloqueada ? (
           <>
-            <button ref={botaoCopiar} type="button" className="aviso-acao" onClick={copiar}>
-              Copiar o texto
-            </button>
+            {!soDitado && (
+              <button ref={botaoCopiar} type="button" className="aviso-acao" onClick={copiar}>
+                Copiar o texto
+              </button>
+            )}
             <button type="button" className="aviso-acao" aria-disabled={indo !== null || undefined} onClick={() => void entrarNestaAba()}>
               {indo === 'aba' ? 'Abrindo o Google…' : 'Entrar nesta aba'}
             </button>

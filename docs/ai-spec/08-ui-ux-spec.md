@@ -495,8 +495,9 @@ pergunta conta as trocas aprendidas (o `previa_trocas` do `06`, o M).
   o PC de origem e os detalhes da transcrição, e as trocas aprendidas."
 - **Para ver as telas** sem Agent nem nuvem: `pnpm -C web dev` e `/telas-dev.html?cenario=estados` (o
   painel do PC; também `so-estados`, `pergunta`, `so-trocas`, `conectado` e `freio`) ou
-  `/telas-dev-nuvem.html?cenario=lista` (o app da nuvem; também `vazio`, `teto`, `erro` e `longa`). São
-  só do `pnpm dev`: nenhum build as inclui.
+  `/telas-dev-nuvem.html?cenario=lista` (o app da nuvem; também `vazio`, `teto`, `erro` e `longa` e,
+  para o ditado do celular, `gravando`, `enviando`, `erro-rede`, `sessao` e `chegou`: um microfone de
+  mentira fala sozinho, num relógio parado). São só do `pnpm dev`: nenhum build as inclui.
 - **O teste manual** (F8i, 08-out-2026): `docs/teste-manual-nuvem-f8.md` confere, no `bin\` e no app, com
   a nuvem de teste, a pergunta do envio com a troca e o **Desfazer** do **Aprendido** do app e do
   **Aprendido no painel**, nos dois sentidos. É um PC só: as etiquetas de estado e o "não aplicado neste
@@ -623,7 +624,10 @@ com ponteiro de toque, os botões (as abas inclusive) e a busca têm 44 px.
   continua só no PC (ADR-017). Entrou na F8h (07-out-2026), nas Configurações do celular
   (`web/src/nuvem/AprendidoNaNuvem.tsx`; "Configurações do celular", abaixo).
 - **Configurações do celular** (abaixo).
-- Não tem: ditar, chave de API, atalho, microfone, modelo de voz, modo de texto, preferências.
+- **Ditar pelo celular** (ADR-021, C6a): o microfone ao lado da busca, a faixa da onda e o ditado que
+  chega no topo ("Ditar pelo celular", abaixo). A folha do aceite, a chave do provedor e as preferências
+  do ditado são da C6b e ainda não existem nas Configurações.
+- Não tem: chave de API, atalho, modelo de voz, modo de texto, preferências do ditado (C6b).
 - Salvar uma edição só diz "Texto salvo.": a nuvem nunca sugere aprender.
 - O histórico vazio diz "Nenhum ditado ainda." e "O que você ditar num PC conectado aparece aqui."
 
@@ -719,10 +723,105 @@ com ponteiro de toque, os botões (as abas inclusive) e a busca têm 44 px.
     outra conta e a do erro dizem o que fazer, e ficam inteiras.
   - A página da janela, "Você entrou de novo.", tem o link **Abrir o histórico**, para quando o
     navegador não a fechar (ou a abriu na mesma aba).
+  - **Um ditado gravado e ainda não enviado** (ADR-021, C6a) conta como texto não salvo: o `401`
+    não troca a tela inteira, e a faixa diz "**Sua sessão terminou.** Seu ditado continua aqui; entre
+    de novo para enviar." (com texto também: "Seu texto e seu ditado continuam aqui; entre de novo
+    para salvar."). Não há o que copiar de um áudio: com a janela bloqueada, a faixa diz "Entrar
+    nesta aba descarta o ditado que não foi enviado." e só oferece **Entrar nesta aba**. A página
+    também não sai sem perguntar. Depois de entrar de novo, **Tentar de novo** reenvia o áudio com o
+    mesmo id.
 - Cada tela inteira leva o foco ao título dela, para o leitor de tela anunciar a troca. Ao entrar,
   ou quando o **Tentar de novo** abre o histórico, o botão some com a tela, e o foco vai para o
   título do histórico ("Histórico", que só o leitor de tela vê). Aberto com a sessão do cookie, o
   foco fica onde o navegador o pôs.
+
+### Ditar pelo celular (ADR-021, C6a)
+O ditado do celular entra pelo **microfone** do app: toque para começar, toque para parar. A voz vai
+ao servidor, que a repassa ao provedor que a pessoa escolheu; o texto volta como um ditado do
+histórico, e desce aos PCs pelo sync. "O menor que funciona", com forma e movimento no lugar de
+texto (referência do Mauro: o Wispr Flow). Tudo em tons de cinza: o verde é da ação, e o vermelho, do
+erro (sempre com a frase); gravar não é nenhum dos dois. **O que está aqui é o gravador e o envio
+(C6a); a folha do aceite, a chave e as preferências são da C6b.**
+- **O botão:** um quadrado pequeno ao lado da busca, no cabeçalho (40 px; 44 px no toque), com o
+  ícone de microfone, "Ditar" no rótulo e no `title`. Só no app da nuvem, e só se o navegador grava
+  (`getUserMedia`, `MediaRecorder` e `AudioContext`): sem isso, o microfone nem aparece. Nas
+  Configurações ele some, a não ser que haja uma gravação ou um áudio à espera.
+- **Gravando:** a linha da busca vira uma faixa do mesmo tamanho e contorno, com a **onda**, o
+  **tempo** (`m:ss`, na IBM Plex Mono) e o **Cancelar**; o microfone vira o botão de **parar** (um
+  quadrado cheio, "Parar e enviar"). "Gravando" só o leitor de tela ouve (região viva); a onda e o
+  tempo ficam escondidos dele. O foco fica no mesmo botão do começo ao fim. O Esc na faixa também
+  cancela.
+- **A onda** é a do overlay do PC (ADR-014): 33 barras de 2 px com 1 px entre elas, espelhadas, em
+  cinza, o brilho acompanhando a altura, cada uma resumindo uns 39 ms da janela de 1,3 s pelo
+  **pico**. O nível vem do `AnalyserNode` (RMS, em dBFS), e a altura espalha de -48 a -14 dBFS sobre o
+  curso da barra. **Esses limites são os do microfone do PC: a C6c os recalibra no Android, e a onda
+  é renderizada antes de concluir.** Em celulares de até 340 px as 5 barras mais antigas saem da
+  vista, para a onda inteira caber ao lado do tempo e do Cancelar.
+- **Cancelar** descarta a gravação sem enviar: nada sai do aparelho.
+- **Parando:** o microfone desliga na hora. Com menos de **300 ms de fala**, sem contar os últimos
+  200 ms (o toque), o app não envia: o aviso da pílula diz "Não ouvi nada.". Com fala, a faixa diz
+  "Transcrevendo…" e o botão fica ocupado (`aria-disabled`, rótulo "Transcrevendo"): gravar o próximo
+  enquanto o anterior transcreve fica fora. A medição de fala usa o mesmo `AnalyserNode`, com o RMS
+  de 0,03 do PC como limiar de partida (a C6c calibra).
+- **O teto** é de 120 s: o app para sozinho e envia o que gravou; o aviso do ditado que chega diz
+  "Parei no limite de 2 minutos.".
+- **Tela apagada e segundo plano.** O app pede a tela acesa (Wake Lock) ao começar e a solta ao parar;
+  se o pedido não vem, a faixa avisa, embaixo, em texto pequeno: "A tela pode apagar e parar o
+  ditado.". Se a página sai da frente (`visibilitychange`), ou a faixa do microfone fica muda ou acaba
+  (uma ligação recebida), o app **para e envia o que já gravou**, se houver fala, e diz "Parei quando o
+  app saiu da frente." ou "O microfone foi interrompido." (no aviso do ditado que chegou, ou, sem
+  fala, antes do "Não ouvi nada."). **No passo 1 não existe ditado em segundo plano nem com a tela
+  apagada.**
+- **Quando chega:** o ditado entra **no topo do histórico, em destaque** (o fundo do que entrou, mais a
+  etiqueta "novo", que dura 10 s ou até a pessoa abrir uma linha ou trocar de vista), com o **Copiar**
+  que toda linha tem (sempre à vista no toque), e o aviso diz "Ditado no topo do histórico.". Se o
+  Polish caiu para o texto do Smart, o aviso acrescenta "O Polish não agiu: {motivo}." (o motivo é um
+  código do servidor, nunca texto dele; o que o app não conhece fica só "O Polish não agiu."). Numa
+  busca, na Lixeira ou nas Configurações o ditado não entra na lista que está na tela, e o aviso diz
+  "Ditado salvo no histórico.". **Copiar sozinho ao chegar não existe**: escrever na área de
+  transferência pede um gesto recente, e a resposta chega segundos depois do toque (escolha menor 14,
+  a conferir no aparelho).
+- **As falhas** (o app decide pelo `error.code`, nunca pela frase do servidor). As que **não guardam o
+  áudio** viram o aviso da pílula, e a linha volta ao normal:
+
+  | Situação | Frase |
+  |---|---|
+  | permissão negada | "Sem acesso ao microfone. Libere nas permissões do site." |
+  | sem microfone, em uso por outro app, sem suporte, sem webm/opus | "Não achei um microfone." / "Não consegui abrir o microfone. Outro app pode estar usando." / "Este navegador não grava áudio." / "Este navegador não grava no formato certo." |
+  | `SEM_FALA` ou menos de 300 ms de fala | "Não ouvi nada." |
+  | `PAYLOAD_TOO_LARGE` | "Ficou longo demais." |
+  | `FORMATO` | "Não deu para ler o áudio." |
+  | `APAGADO` | "Esse ditado foi apagado." |
+  | `404` (o servidor sem a chave de cifra) | "Este servidor não tem o ditado pelo celular." |
+
+  As que **guardam o áudio** na memória (só aí, até **Tentar de novo** ou **Descartar**, e some ao
+  fechar o app) abrem uma **nota de erro** embaixo da linha, com a frase e os botões **Tentar de
+  novo** (reenvia com o **mesmo id**: se o primeiro envio chegou, o servidor devolve o ditado já
+  gravado, sem cobrar de novo) e **Descartar**. Enquanto o áudio espera, o microfone fica ocupado: não
+  se grava por cima dele.
+
+  | Situação | Frase |
+  |---|---|
+  | sem rede | "Sem conexão." |
+  | os 90 s do envio estouraram | "O envio demorou demais." |
+  | `401` | "O ditado espera você entrar de novo." (e a faixa da sessão, acima) |
+  | `UM_POR_VEZ`, `LIMITE` ou `OCUPADO` (`429`/`503`) | "Espere um pouco. Tente de novo em {n} s." (o `Retry-After`) |
+  | `PROVEDOR_LIMITE` ou `PROVEDOR_FORA` | "O provedor não respondeu agora." |
+  | `PROVEDOR_RECUSOU_CHAVE` | "O provedor recusou a chave." e **Abrir as Configurações** |
+  | `SEM_CHAVE` | "Falta a chave do provedor." e **Abrir as Configurações** |
+  | `SEM_ACEITE` | "Falta aceitar o aviso do ditado pelo celular." e **Abrir as Configurações** |
+  | qualquer outra | "Não deu para enviar o ditado." |
+
+  Nas três com **Abrir as Configurações**, o botão leva à tela de Configurações; a folha do aceite e a
+  chave moram lá a partir da C6b, e o áudio espera.
+- **Só na memória.** O áudio vive numa variável do gravador, do fim da gravação até o envio dar certo
+  ou a pessoa descartar. Nada em `IndexedDB`, `localStorage`, `Cache` ou arquivo; o `bundle.test.ts`
+  trava isso, e que o gravador só existe no build da nuvem. O `MediaRecorder` entrega um `Blob` que o
+  Chrome pode paginar em disco: não verificado (ADR-021, Riscos).
+- **O cabeçalho** `Permissions-Policy: microphone=(self)` sai em toda resposta do servidor da nuvem
+  (escolha menor 18).
+- **Os testes** usam dublês do `getUserMedia`, do `MediaRecorder`, do Wake Lock e da área de
+  transferência: nenhum abre o microfone de verdade.
 
 ### Configurações do celular
 - **Conta:** "Entrou como {e-mail}." e **Sair** (volta para Entrar). Com um texto não salvo na tela,

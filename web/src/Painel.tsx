@@ -65,7 +65,7 @@ function semChave<T>(r: Record<string, T>, id: string): Record<string, T> {
 }
 
 export function Painel({ ambiente, focarNoTitulo = false }: Props) {
-  const { cliente, textos, Configuracoes, Faixa } = ambiente
+  const { cliente, textos, Configuracoes, Faixa, ditar: Ditar } = ambiente
   const [vista, setVista] = useState<Vista>('historico')
   // configurando: a tela de Configurações está à vista, no lugar da lista.
   // A vista da lista não muda por baixo: voltar leva à mesma lista, com a
@@ -90,6 +90,14 @@ export function Painel({ ambiente, focarNoTitulo = false }: Props) {
   // trocava a tela inteira e levava junto o texto que estava sendo
   // editado).
   const [problema, setProblema] = useState<Problema | null>(null)
+  // ditadoPendente: há um ditado gravado e ainda não enviado, só na memória do
+  // gravador (nuvem; ADR-021). Conta como texto não salvo: a sessão que acaba
+  // não troca a tela inteira, e a faixa da sessão diz que o ditado espera.
+  const [ditadoPendente, setDitadoPendente] = useState(false)
+  const audioPendente = useRef(false)
+  // chegou: o ditado que o celular acabou de gravar, em destaque no topo.
+  const [chegou, setChegou] = useState<string | null>(null)
+  const chegouAtual = useRef(chegou)
   const topo = useRef<HTMLElement>(null)
   const titulo = useRef<HTMLHeadingElement>(null)
   const campoBusca = useRef<HTMLInputElement>(null)
@@ -115,6 +123,7 @@ export function Painel({ ambiente, focarNoTitulo = false }: Props) {
     avisoAtual.current = aviso
     abertoAtual.current = aberto
     rascunhosAtuais.current = rascunhos
+    chegouAtual.current = chegou
   })
 
   const chave = `${vista}\u0000${busca}\u0000${recarga}`
@@ -135,7 +144,9 @@ export function Painel({ ambiente, focarNoTitulo = false }: Props) {
   // Mauro de 05-out-2026: "Guarda até entrar de novo").
   const acender = useCallback(
     (p: Problema) => {
-      const comTexto = textosNaoSalvos(rascunhosAtuais.current, resultadoAtual.current?.itens).length > 0
+      // O ditado gravado e ainda não enviado conta como texto não salvo
+      // (ADR-021): trocar a tela inteira o jogaria fora.
+      const comTexto = textosNaoSalvos(rascunhosAtuais.current, resultadoAtual.current?.itens).length > 0 || audioPendente.current
       if (p === 'sem-sessao' && ambiente.aoSemSessao && !comTexto) ambiente.aoSemSessao()
       else setProblema(p)
     },
@@ -175,6 +186,9 @@ export function Painel({ ambiente, focarNoTitulo = false }: Props) {
         // que a pessoa escreveu). Nada disso sai da tela numa recarga.
         const emEdicao = new Set(Object.keys(rascunhosAtuais.current))
         if (abertoAtual.current) emEdicao.add(abertoAtual.current)
+        // O ditado que o celular acabou de gravar: uma carga que o servidor
+        // montou antes de gravá-lo não o tira da tela.
+        if (chegouAtual.current) emEdicao.add(chegouAtual.current)
         setResultado((anterior) => mesclarRecarga(anterior, carga, emEdicao))
         setProblema(null)
         // Quem ficou sem vir na recarga é perguntado um a um: se foi para
@@ -288,6 +302,17 @@ export function Painel({ ambiente, focarNoTitulo = false }: Props) {
     if (focarNoTitulo) titulo.current?.focus()
   }, [focarNoTitulo])
 
+  // O destaque do ditado que acabou de chegar dura 10 s, ou até a pessoa abrir
+  // uma linha ou trocar de vista. E a linha entra na tela: o cabeçalho fixo não
+  // a cobre (scroll-padding-top).
+  useEffect(() => {
+    if (chegou === null) return
+    const t = setTimeout(() => setChegou((c) => (c === chegou ? null : c)), 10_000)
+    const linha = Array.from(lista.current?.querySelectorAll<HTMLElement>('[data-item]') ?? []).find((el) => el.dataset.item === chegou)
+    linha?.scrollIntoView?.({ block: 'nearest' })
+    return () => clearTimeout(t)
+  }, [chegou])
+
   // O foco só muda de lugar se estava perdido (a linha que o tinha saiu
   // da página) ou numa linha ou botão da própria lista. Nunca é tirado de
   // um campo em que a pessoa digita — a busca, ou o editor de outra linha
@@ -352,6 +377,7 @@ export function Painel({ ambiente, focarNoTitulo = false }: Props) {
     setTexto('')
     setBusca('')
     setAberto(null)
+    setChegou(null)
   }
 
   // Ir às Configurações fecha o editor aberto, como trocar de vista: o
@@ -368,6 +394,7 @@ export function Painel({ ambiente, focarNoTitulo = false }: Props) {
     if (aberto !== item.id) largar(aberto)
     setRascunhos((rs) => (item.id in rs ? rs : { ...rs, [item.id]: novoRascunho(item) }))
     setAberto(item.id)
+    setChegou(null)
   }
 
   // fechar é Cancelar ou Esc: a pessoa desistiu da edição.
@@ -503,6 +530,23 @@ export function Painel({ ambiente, focarNoTitulo = false }: Props) {
     }
     if (desfeitas.length > 0) setAprendizado((n) => n + 1)
     avisar(aprendiz.resultadoDeDesfazer(desfeitas, recusas))
+  }
+
+  // chegouUmDitado é o ditado que o celular acabou de gravar (ADR-021): entra
+  // no topo do histórico, em destaque, com o Copiar que toda linha tem. Numa
+  // busca, na Lixeira ou nas Configurações ele não entra na lista que está na
+  // tela, e o aviso diz onde ele está. nota e aviso: o que o app fez sozinho e
+  // a frase de o Polish não ter agido.
+  function chegouUmDitado(d: Ditado, extra: { nota?: string; aviso?: string }) {
+    const r = resultadoAtual.current
+    const naLista = !configurando && r !== null && !r.erro && r.vista === 'historico' && r.busca === '' && vista === 'historico'
+    if (naLista) {
+      setResultado((x) =>
+        x && !x.erro && x.vista === 'historico' && x.busca === '' ? { ...x, itens: inserirEmOrdem(x.itens, d, 'created_at', Boolean(x.proximo)) } : x,
+      )
+      setChegou(d.id)
+    }
+    avisar([naLista ? 'Ditado no topo do histórico.' : 'Ditado salvo no histórico.', extra.aviso, extra.nota].filter(Boolean).join(' '))
   }
 
   // copiar nunca grava texto vazio: a área de transferência pode ter o
@@ -678,6 +722,28 @@ export function Painel({ ambiente, focarNoTitulo = false }: Props) {
   // o oferece para copiar; as Configurações avisam antes de um Sair o jogar fora).
   const naoSalvos = textosNaoSalvos(rascunhos, resultado?.itens)
 
+  // campo é a busca. Na nuvem, o gravador do ditado a recebe e a põe ao lado do
+  // microfone.
+  const campo = (
+    <input
+      ref={campoBusca}
+      type="search"
+      className="busca"
+      placeholder={naLixeira ? 'Buscar na lixeira' : 'Buscar no histórico'}
+      aria-label={naLixeira ? 'Buscar na lixeira' : 'Buscar no histórico'}
+      aria-keyshortcuts="Control+K"
+      value={texto}
+      onChange={(e) => setTexto(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape' && texto) {
+          e.preventDefault()
+          setTexto('')
+          setBusca('')
+        }
+      }}
+    />
+  )
+
   let conteudo
   if (!visivel) {
     conteudo = <p className="estado atrasado">Carregando…</p>
@@ -757,6 +823,7 @@ export function Painel({ ambiente, focarNoTitulo = false }: Props) {
                     outroLugar={textos.outroLugar}
                     edicaoSemConexao={textos.edicaoSemConexao}
                     aoEscolher={ambiente.resolverConflito && ((escolha) => escolher(item, escolha))}
+                    novo={chegou === item.id}
                   />
                 ),
               )}
@@ -781,6 +848,7 @@ export function Painel({ ambiente, focarNoTitulo = false }: Props) {
             aoTentarDeNovo={tentarDeNovo}
             textoNaoSalvo={problema === 'sem-sessao' ? naoSalvos.join('\n\n') : undefined}
             aoEntrarDeNovo={entrouDeNovo}
+            ditadoNaoEnviado={problema === 'sem-sessao' && ditadoPendente}
           />
         )}
         <div className="barra">
@@ -800,24 +868,25 @@ export function Painel({ ambiente, focarNoTitulo = false }: Props) {
             </button>
           </div>
         </div>
-        {!configurando && (
-          <input
-            ref={campoBusca}
-            type="search"
-            className="busca"
-            placeholder={naLixeira ? 'Buscar na lixeira' : 'Buscar no histórico'}
-            aria-label={naLixeira ? 'Buscar na lixeira' : 'Buscar no histórico'}
-            aria-keyshortcuts="Control+K"
-            value={texto}
-            onChange={(e) => setTexto(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Escape' && texto) {
-                e.preventDefault()
-                setTexto('')
-                setBusca('')
-              }
+        {Ditar ? (
+          // Na nuvem, o microfone fica ao lado da busca, e gravando a troca
+          // por uma faixa (ADR-021). Montado também nas Configurações: uma
+          // gravação em curso, ou um áudio que espera, não se perde ao trocar
+          // de tela.
+          <Ditar
+            busca={configurando ? null : campo}
+            escondido={configurando}
+            aoChegar={chegouUmDitado}
+            aoAudioPendente={(pendente) => {
+              audioPendente.current = pendente
+              setDitadoPendente(pendente)
             }}
+            aoSemSessao={() => acender('sem-sessao')}
+            abrirConfiguracoes={abrirConfiguracoes}
+            avisar={avisar}
           />
+        ) : (
+          !configurando && campo
         )}
       </header>
 
