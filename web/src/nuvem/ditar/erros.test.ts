@@ -22,7 +22,7 @@ describe('a falha do envio, pelo código', () => {
     ['PAYLOAD_TOO_LARGE', api(413, 'PAYLOAD_TOO_LARGE'), { tipo: 'longo', frase: 'Ficou longo demais.', retem: false }],
     ['FORMATO', api(415, 'FORMATO'), { tipo: 'formato', retem: false }],
     ['SEM_FALA', api(422, 'SEM_FALA'), { tipo: 'sem-fala', frase: 'Não ouvi nada.', retem: false }],
-    ['PROVEDOR_RECUSOU_CHAVE', api(502, 'PROVEDOR_RECUSOU_CHAVE'), { tipo: 'provedor-chave', frase: 'O provedor recusou a chave.', retem: true, vai: 'configuracoes' }],
+    ['PROVEDOR_RECUSOU_CHAVE', api(422, 'PROVEDOR_RECUSOU_CHAVE'), { tipo: 'provedor-chave', frase: 'O provedor recusou a chave.', retem: true, vai: 'configuracoes' }],
     ['PROVEDOR_LIMITE', api(502, 'PROVEDOR_LIMITE'), { tipo: 'provedor-fora', frase: 'O provedor não respondeu agora.', retem: true }],
     ['PROVEDOR_FORA', api(502, 'PROVEDOR_FORA'), { tipo: 'provedor-fora', frase: 'O provedor não respondeu agora.', retem: true }],
     ['APAGADO', api(410, 'APAGADO'), { tipo: 'apagado', frase: 'Esse ditado foi apagado.', retem: false }],
@@ -149,6 +149,32 @@ describe('fraseDoAviso: o motivo de o Polish não ter agido', () => {
     expect(fraseDoAviso('chave_recusada')).toBe('O Polish não agiu: o provedor recusou a chave.')
     expect(fraseDoAviso('sem_credito')).toBe('O Polish não agiu: falta crédito no provedor.')
     expect(fraseDoAviso('tempo_esgotado')).toBe('O Polish não agiu: o provedor demorou.')
+  })
+
+  // Os motivos do resolver.MotivoFallback (06, "POST /dictations"). O teste do contrato
+  // (contratoDoDitado.test.ts) exige uma frase para cada um da lista do 06; aqui está o texto.
+  it.each([
+    ['sem_chave', 'falta a chave'],
+    ['limite', 'o provedor atingiu o limite'],
+    ['modelo_inexistente', 'o modelo escolhido não existe mais'],
+    ['modelo_incompativel', 'o modelo escolhido não aceita este pedido'],
+    ['prazo', 'o provedor demorou'],
+    ['transporte', 'não consegui falar com o provedor'],
+    ['sobrecarga', 'o provedor está sobrecarregado'],
+    ['pedido_recusado', 'o provedor rejeitou o pedido'],
+    ['recusa', 'o modelo recusou responder'],
+    ['truncada', 'a resposta veio cortada'],
+    ['resposta_invalida', 'o provedor respondeu de um jeito inesperado'],
+    ['json', 'a resposta veio fora do formato'],
+    ['formato', 'a resposta trouxe algo além do texto'],
+    ['numeros', 'a resposta mudou os números'],
+    ['siglas_termos', 'a resposta mudou siglas, termos ou nomes'],
+    ['palavras', 'a resposta mudou o texto'],
+    ['trecho_novo', 'a resposta acrescentou palavras'],
+    ['caixa', 'a resposta pôs palavras em maiúsculas'],
+    ['dicionario', 'não consegui conferir os termos aprendidos'],
+  ])('%s', (motivo, porque) => {
+    expect(fraseDoAviso(motivo)).toBe(`O Polish não agiu: ${porque}.`)
   })
 
   it('um motivo que o app não conhece não vira frase solta, e nunca mostra o texto que veio', () => {
