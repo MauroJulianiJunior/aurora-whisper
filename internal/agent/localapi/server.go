@@ -78,6 +78,10 @@ type Preferencias struct {
 	// /api/nuvem*. Em produção, o *nuvem.Servico. Nil: as rotas respondem
 	// 503.
 	Nuvem Nuvem
+	// Mudancas é o contador de mudanças do sync (ADR-021, S): GET
+	// /api/nuvem/mudancas. Em produção, o *syncengine.Laco. Nil: a rota
+	// responde 503.
+	Mudancas MudancasDoSync
 	// Retencao é o bloco Histórico das Configurações (ADR-019, F10d e F10e):
 	// /api/retencao*, os 6 meses no PC e as cópias do banco. Em produção, o
 	// *expurgo.Ciclo. Nil: as rotas respondem 503.
@@ -181,6 +185,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/nuvem/desconectar", s.handleDesconectarNuvem)
 	mux.HandleFunc("POST /api/nuvem/enviar", s.handleEnviarHistorico)
 	mux.HandleFunc("POST /api/nuvem/esquecer", s.handleEsquecerNuvem)
+	mux.HandleFunc("GET /api/nuvem/mudancas", s.handleMudancasNuvem)
 
 	mux.HandleFunc("GET /api/retencao", s.handleGetRetencao)
 	mux.HandleFunc("POST /api/retencao/ligar", s.handleLigarRetencao)

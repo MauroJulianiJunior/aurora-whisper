@@ -117,6 +117,22 @@ func (r Relatorio) Teve() bool {
 		r.Completados > 0 || soma(r.Varredura) > 0 || soma(r.Reaplicados) > 0
 }
 
+// AplicouDaNuvem conta o que a rodada gravou no histórico deste PC e veio da
+// nuvem, ou seja, o que a lista do painel pode mostrar diferente depois dela
+// (ADR-021, S; é o que faz subir o contador de Laco.LerMudancas):
+//   - o pull que trouxe um ditado novo ou mudado (a edição, a lixeira, o
+//     restaurar feitos no celular ou em outro PC) ou uma lápide que apagou a
+//     linha daqui;
+//   - o push que a nuvem respondeu com a lápide (apagar vence) ou com o estado
+//     que venceu um conflito (o texto da nuvem no lugar do daqui, com o selo).
+//
+// É uma conta por cima: o conflito em que o ditado mudou durante o voo e nada
+// foi gravado também entra, porque reler a lista a mais custa pouco, e deixar
+// de reler não. Só contagens: nunca texto, id ou versão.
+func (r Relatorio) AplicouDaNuvem() int {
+	return r.Pull[TipoRecebido] + r.Pull[TipoApagado] + r.Push[TipoApagado] + r.Push[TipoConflito]
+}
+
 func soma(m map[string]int) int {
 	n := 0
 	for _, v := range m {
