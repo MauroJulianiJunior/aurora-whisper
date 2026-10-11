@@ -333,6 +333,69 @@ describe('os arquivos de cada build', () => {
   })
 })
 
+// C6c (ADR-021): a página de calibração do microfone é só do `pnpm dev`
+// (calibracao-dev.html, como a telas-dev-nuvem.html). Ela abre o microfone e
+// mostra números; nada dela, nem o texto, nem o CSS, nem o HTML, vai para o
+// painel do PC ou para o app da nuvem.
+describe('a página de calibração do microfone (C6c)', () => {
+  const daCalibracao = [
+    'Calibração do microfone',
+    'Medir o silêncio',
+    'Medir a fala',
+    'O que o app usa hoje',
+    'Nível por percentil',
+    'Tempo acima de cada limiar de RMS',
+    'Fala medida pelo app',
+    'Distribuição do nível, em bandas de 6 dB',
+    'contados e jogados fora',
+    'Parar agora',
+  ]
+
+  describe.each([
+    ['local', () => local],
+    ['nuvem', () => nuvem],
+  ])('o bundle %s', (_, bundle) => {
+    it.each(daCalibracao)('não tem %s', (texto) => {
+      expect(bundle().js).not.toContain(texto)
+    })
+
+    it('não tem a página, o HTML nem o CSS dela', () => {
+      expect(bundle().arquivos.filter((f) => /calibr/i.test(f))).toEqual([])
+      expect(bundle().html).not.toMatch(/calibr/i)
+      expect(bundle().css).not.toContain('calibracao')
+    })
+  })
+
+  it('o vite.config.ts e o index.html não a conhecem: a entrada do build é uma só', async () => {
+    expect(await readFile(path.join(raiz, 'vite.config.ts'), 'utf8')).not.toMatch(/calibr/i)
+    expect(await readFile(path.join(raiz, 'index.html'), 'utf8')).not.toMatch(/calibr/i)
+  })
+
+  it('a página existe para o dev: um HTML próprio, com a entrada dela', async () => {
+    const html = await readFile(path.join(raiz, 'calibracao-dev.html'), 'utf8')
+    expect(html).toContain('<script type="module" src="/src/nuvem/ditar/calibracaoDev.tsx"></script>')
+    expect(html).toContain('(só no pnpm dev)')
+  })
+
+  it('nenhum código do app importa a calibração: só os arquivos dela se conhecem', async () => {
+    const arquivos = (await readdir(path.join(raiz, 'src'), { recursive: true })).map((f) => f.split(path.sep).join('/')).filter((f) => /\.(ts|tsx)$/.test(f))
+    const dela = /(^|\/)(calibracao|PaginaDeCalibracao|calibracaoDev)(\.test)?\.tsx?$/
+    expect(arquivos.filter((f) => dela.test(f)).sort()).toEqual([
+      'nuvem/ditar/PaginaDeCalibracao.test.tsx',
+      'nuvem/ditar/PaginaDeCalibracao.tsx',
+      'nuvem/ditar/calibracao.test.ts',
+      'nuvem/ditar/calibracao.ts',
+      'nuvem/ditar/calibracaoDev.tsx',
+    ])
+    // Nenhuma forma de importar: `from '...'`, `import '...'` (sem efeito, o Rollup
+    // a descarta do bundle e o teste de cima não a veria) e `import('...')`.
+    for (const f of arquivos.filter((x) => !dela.test(x))) {
+      const texto = await readFile(path.join(raiz, 'src', f), 'utf8')
+      expect(texto, f).not.toMatch(/['"][^'"\n]*\/(calibracao|PaginaDeCalibracao|calibracaoDev)(\.tsx?|\.css)?(\?[^'"\n]*)?['"]/)
+    }
+  })
+})
+
 describe('o manifest e os ícones (F5)', () => {
   const lerManifest = async () => JSON.parse(await readFile(path.join(nuvem.dir, 'manifest.webmanifest'), 'utf8')) as Record<string, unknown>
 

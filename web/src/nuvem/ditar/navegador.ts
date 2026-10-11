@@ -16,19 +16,36 @@ import type { Microfone, Plataforma } from './gravador'
 import { bitsPorSegundo, tipoDoAudio, uuidV7 } from './medidas'
 
 // O quanto do sinal o analisador lê por vez: 1024 amostras, uns 21 ms a 48 kHz.
-const janelaDoAnalisador = 1024
+// A página de calibração (calibracao.ts) mede com a mesma janela.
+export const janelaDoAnalisador = 1024
 
-function construtorDoContexto(): typeof AudioContext | undefined {
+// As restrições do getUserMedia: o padrão do Chrome para o áudio (eco, ruído e
+// ganho como o aparelho os dá) até a calibração da C6c dizer outra coisa. O
+// gravador e a página de calibração pedem o microfone com ESTE objeto, para a
+// medição valer para o que o gravador de verdade ouve.
+export const restricoesDoMicrofone: MediaStreamConstraints = { audio: true }
+
+export function construtorDoContexto(): typeof AudioContext | undefined {
   return window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
 }
 
-function suporta(): boolean {
+export function suporta(): boolean {
   return (
     typeof navigator !== 'undefined' &&
     typeof navigator.mediaDevices?.getUserMedia === 'function' &&
     typeof MediaRecorder !== 'undefined' &&
     construtorDoContexto() !== undefined
   )
+}
+
+// rmsDoAnalisador é a medição de nível do gravador: o RMS do sinal que o
+// AnalyserNode vê agora, de 0 a 1 (fração do fundo de escala). A onda, a fala
+// medida e a calibração leem o nível por aqui.
+export function rmsDoAnalisador(analisador: Pick<AnalyserNode, 'getFloatTimeDomainData'>, leitura: Float32Array<ArrayBuffer>): number {
+  analisador.getFloatTimeDomainData(leitura)
+  let soma = 0
+  for (const v of leitura) soma += v * v
+  return Math.sqrt(soma / leitura.length)
 }
 
 async function abrirMicrofone(): Promise<Microfone> {
@@ -42,7 +59,7 @@ async function abrirMicrofone(): Promise<Microfone> {
   void contexto.resume().catch(() => undefined)
   let stream: MediaStream
   try {
-    stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    stream = await navigator.mediaDevices.getUserMedia(restricoesDoMicrofone)
   } catch (e) {
     void contexto.close().catch(() => undefined)
     throw e
@@ -73,12 +90,7 @@ async function abrirMicrofone(): Promise<Microfone> {
     })
 
     return {
-      nivel() {
-        analisador.getFloatTimeDomainData(leitura)
-        let soma = 0
-        for (const v of leitura) soma += v * v
-        return Math.sqrt(soma / leitura.length)
-      },
+      nivel: () => rmsDoAnalisador(analisador, leitura),
       comecar() {
         gravador.start()
       },

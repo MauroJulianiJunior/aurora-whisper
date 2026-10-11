@@ -30,8 +30,9 @@ export const limiarDeFala = 0.03
 
 // Um quadro não conta mais que isto como fala: se o navegador segurou a página
 // por alguns segundos (a aba congelada), o intervalo grande não pode virar
-// "fala" de uma vez só.
-const maiorQuadroMs = 100
+// "fala" de uma vez só. A página de calibração soma o tempo acima de cada
+// limiar com o mesmo teto.
+export const maiorQuadroMs = 100
 
 // A onda é a do overlay do PC (ADR-014): barras espelhadas, o nível em dBFS
 // espalhado sobre o curso da barra. Os limites foram medidos no microfone do

@@ -498,7 +498,8 @@ pergunta conta as trocas aprendidas (o `previa_trocas` do `06`, o M).
   para o ditado do celular, `gravando`, `enviando`, `erro-rede`, `sessao` e `chegou`: um microfone de
   mentira fala sozinho, num relógio parado; e, para o aceite e as Configurações do ditado, `aceite` (o
   toque no microfone de uma conta sem aceite, com a folha), `ditar-desligado`, `ditar-ligado` e
-  `ditar-polish`). São só do `pnpm dev`: nenhum build as inclui.
+  `ditar-polish`). A calibração do microfone, `/calibracao-dev.html` ("A calibração do microfone no
+  Android", abaixo). São só do `pnpm dev`: nenhum build as inclui.
 - **O teste manual** (F8i, 08-out-2026): `docs/teste-manual-nuvem-f8.md` confere, no `bin\` e no app, com
   a nuvem de teste, a pergunta do envio com a troca e o **Desfazer** do **Aprendido** do app e do
   **Aprendido no painel**, nos dois sentidos. É um PC só: as etiquetas de estado e o "não aplicado neste
@@ -744,7 +745,7 @@ histórico, e desce aos PCs pelo sync. "O menor que funciona", com forma e movim
 texto (referência do Mauro: o Wispr Flow). Tudo em tons de cinza: o verde é da ação, e o vermelho, do
 erro (sempre com a frase); gravar não é nenhum dos dois. **O que está aqui é o gravador e o envio
 (C6a). A porta do aceite antes do microfone, a folha, a chave e as preferências (C6b) estão nas duas
-seções seguintes.**
+seções seguintes; a calibração do limiar e da onda no Android (C6c), no fim deste bloco.**
 - **A porta antes do microfone (C6b).** O toque no microfone confere a conta antes de abrir o
   `getUserMedia` (um `GET /api/v1/dictation`): **sem o aceite do aviso para os provedores das
   preferências, o microfone nem abre, a chave não é pedida e nada é enviado**. Sem o aceite, o toque
@@ -957,6 +958,33 @@ segundo plano."
   servidor não tem o ditado pelo celular.".
 - **"Apagar meus dados da nuvem"** apaga também o aceite, as preferências e as chaves (o servidor, na
   C3b): a seção lê de novo e fica "Desligada", e o microfone volta a pedir a folha.
+
+### A calibração do microfone no Android (ADR-021, C6c)
+Uma página **só do `pnpm dev`** (`web/calibracao-dev.html`, como a `telas-dev-nuvem.html`), que **não está
+em nenhum dos dois builds** (o `bundle.test.ts` prova: nem a página, nem o texto, nem o CSS dela, e nada
+do app a importa). Serve a **calibrar, com os números do Android**, o limiar de fala (hoje RMS 0,03), a
+onda (hoje -48 a -14 dBFS) e o bitrate (hoje 32 kbit/s), que partem dos valores do PC.
+- **Como abrir** (com o OK do Mauro; ADR-021, "Pontos de parada"): `pnpm -C web dev`, o celular no cabo
+  USB, e o encaminhamento de porta do `docs/teste-manual-nuvem-f4.md`, §9, **para a porta do Vite
+  (5173), no lugar da 8080**; no Chrome do celular, `http://localhost:5173/calibracao-dev.html`.
+  `localhost` é um contexto seguro: o microfone abre.
+- **O que mede**, com **as mesmas restrições do `getUserMedia`** do gravador (o mesmo objeto,
+  `restricoesDoMicrofone`) e **a mesma medição**: o nível sai do mesmo `AnalyserNode` (a mesma janela de
+  1024 amostras, o RMS), a fala é somada pelo mesmo `MedidorDeFala` (o limiar e os 200 ms do fim), e o
+  `MediaRecorder` grava no mesmo formato e bitrate. Duas medições: **o silêncio** (6 s) e **a fala**
+  (12 s); cada uma refaz o resultado dela, e há **Parar agora** e **Zerar**.
+- **O que mostra: só números.** Para cada medição: o nível por percentil (mínimo, p5 como o piso, p10 a
+  p99 e o máximo como o pico), em RMS e em dBFS; o **tempo acima de cada limiar de RMS** (0,003 a 0,2, com
+  o do app marcado); **a fala medida e se o app enviaria** (300 ms); a **distribuição do nível** em
+  bandas de 6 dB (de -96 a 0 dBFS); os **bytes por segundo do `MediaRecorder`** (pedaços de 1 s, **só
+  contados e jogados fora**: total, menor e maior pedaço, kbit/s, o que 120 s ocupariam contra o teto de
+  1 MiB); e o que o navegador diz da captura (taxa, canais, eco, ruído, ganho, tipo, bitrate).
+- **Nenhum arquivo, nenhum envio.** Sem botão de salvar, baixar, copiar ou enviar; sem rede, sem
+  armazenamento, sem `Blob`, sem som. O `calibracao.test.ts` lê o código-fonte e recusa tudo isso. Quem
+  calibra tira uma **captura da tela** e passa os números.
+- **O que falta:** a **calibração com o aparelho é do Mauro**, depois; só então o limiar de fala, a
+  onda e o `getUserMedia` (hoje no padrão do Chrome) são fixados com os números do celular, e a **onda é
+  renderizada com eles antes de concluir**.
 
 ### Configurações do celular
 - **Conta:** "Entrou como {e-mail}." e **Sair** (volta para Entrar). Com um texto não salvo na tela,

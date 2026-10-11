@@ -43,13 +43,25 @@ Por isso `pnpm dev` sozinho mostra só a tela "Abra o painel pela bandeja": não
 nem API. Para ver o painel com dados, rode o Agent e abra pela bandeja.
 
 Para **ver as telas sem Agent nem nuvem**, o `pnpm dev` serve duas páginas que montam o app inteiro
-contra os dublês dos testes (em memória; nada sai da máquina), e que nenhum build inclui:
+contra os dublês dos testes (em memória; nada sai da máquina), e que nenhum build inclui (e uma terceira,
+a da calibração do microfone, mais abaixo):
 `/telas-dev.html?cenario=estados` (o painel do PC; também `so-estados`, `pergunta`, `so-trocas`,
 `conectado`, `freio` e, para o bloco Histórico dos 6 meses, `historico`, `historico-simples`, `historico-1`,
 `historico-ligado`, `historico-pausado`, `historico-copias`, `historico-envio`, `historico-so-envio`, `historico-de-novo` e `historico-velho`) e `/telas-dev-nuvem.html?cenario=lista` (o app da nuvem; também `vazio`, `teto`, `erro` e
 `longa` e, para o ditado do celular, `gravando`, `enviando`, `erro-rede`, `sessao` e `chegou`, com um microfone de mentira que fala sozinho; e, para o aceite e as Configurações do ditado (ADR-021, C6b), `aceite` (o toque no microfone de uma conta sem aceite: a folha), `ditar-desligado`, `ditar-ligado` e `ditar-polish`). Abrem as Configurações sozinhas (`&config=0` deixa no Histórico; os do ditado ficam no Histórico, menos o `aceite`, que abre a folha); claro e escuro seguem o
 sistema do navegador, e 320 e 375 px, o modo de dispositivo. Os cenários estão no cabeçalho de
 `src/testes/telasDev.tsx` e `src/nuvem/telasDev.tsx`.
+
+**A calibração do microfone** (ADR-021, C6c) é uma terceira página só do dev, `/calibracao-dev.html`
+(`src/nuvem/ditar/calibracaoDev.tsx`). Abre o microfone **de verdade**, no próprio aparelho, e mede, com
+as mesmas restrições do `getUserMedia` e a mesma medição do gravador do ditado, o piso e os picos em
+dBFS, a distribuição do RMS, a fala medida e os bytes por segundo do `MediaRecorder`. **Mostra só
+números:** nenhum arquivo, nenhum envio (os pedaços do `MediaRecorder` são só contados e jogados fora; o
+`calibracao.test.ts` recusa rede, armazenamento, arquivo e cópia no código, e o `bundle.test.ts` prova
+que a página não está em nenhum dos dois builds). Roda no Chrome do Android, pelo cabo USB, com o OK do
+Mauro: o encaminhamento de porta é o de `docs/teste-manual-nuvem-f4.md`, §9, **para a porta do Vite
+(5173), no lugar da 8080**; o roteiro (silêncio de 6 s, fala de 12 s) está na própria página, e quem
+calibra tira uma captura da tela. Os testes do repositório usam um microfone de mentira.
 
 O contrato de `/api/sessao` e `/api/history` está em `docs/ai-spec/06-api-contract.md`, seção "API
 local (Windows Agent)". As rotas das Configurações — `/api/settings` na forma nova, `/api/ia/chave` e

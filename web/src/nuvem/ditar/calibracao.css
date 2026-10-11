@@ -1,0 +1,89 @@
+/* A página de calibração do microfone (ADR-021, C6c): só do `pnpm dev`. O CSS
+   dela mora aqui, e não no index.css, para não entrar em nenhum dos dois
+   builds. Só os tokens do index.css, claro e escuro; números em mono, alinhados
+   pela largura dos dígitos. */
+
+.calibracao {
+  padding-top: 18px;
+}
+
+.calibracao-roteiro {
+  margin: 10px 0 0;
+  padding-left: 20px;
+  max-width: 38rem;
+  font-size: 14px;
+}
+
+.calibracao-roteiro li + li {
+  margin-top: 6px;
+}
+
+.calibracao-app {
+  max-width: 38rem;
+  margin: 10px 0 0;
+  font-size: 13px;
+}
+
+.calibracao-linha {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 2px 16px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--linha);
+}
+
+.calibracao-linha dt {
+  color: var(--texto-2);
+}
+
+.calibracao-linha dd {
+  margin: 0;
+  color: var(--texto);
+  font-family: var(--fonte-mono);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.calibracao-sub {
+  margin: 22px 0 6px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.calibracao-tabela {
+  width: 100%;
+  max-width: 38rem;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.calibracao-tabela th,
+.calibracao-tabela td {
+  padding: 5px 0;
+  border-bottom: 1px solid var(--linha);
+  font-weight: 400;
+  text-align: right;
+}
+
+.calibracao-tabela th:first-child {
+  color: var(--texto-2);
+  text-align: left;
+}
+
+.calibracao-tabela thead th {
+  color: var(--texto-2);
+  font-size: 12px;
+}
+
+.calibracao-tabela td {
+  color: var(--texto);
+  font-family: var(--fonte-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.calibracao-fato {
+  max-width: 38rem;
+  margin: 0;
+  font-size: 14px;
+}
