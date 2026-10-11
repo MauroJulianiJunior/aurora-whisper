@@ -203,6 +203,23 @@ func TestDecidePush_CriaNaLixeiraComPrazoDeExpurgo(t *testing.T) {
 	}
 }
 
+// AC-042 (a API aceita um futuro Android) e REQ-042: a origem do ditado no
+// push é um texto livre de 1 a 32 caracteres, e não uma lista fechada em
+// "windows". Esta prova substitui a do servidor em memória da F1-D, que saiu na
+// C5c da ADR-021, e roda sobre as regras que o servidor da nuvem usa de
+// verdade (a suíte de contrato as exerce pela API, contra a memória e o
+// Postgres).
+func TestDecidePush_AceitaQualquerOrigemDeTextoLivre(t *testing.T) {
+	for _, plataforma := range []string{"windows", "android", "web", "ios", "linux-arm64", "a", strings.Repeat("p", 32)} {
+		t.Run(plataforma, func(t *testing.T) {
+			out := DecidePush(mutation(0, createPayload(t, map[string]any{"source_platform": plataforma})), nil, false, pc, testNow)
+			if out.Result.Status != StatusApplied || out.Write == WriteNone || out.Next.SourcePlatform != plataforma {
+				t.Errorf("resultado = %+v (write %v, origem %q), quero applied com a origem %q", out.Result, out.Write, out.Next.SourcePlatform, plataforma)
+			}
+		})
+	}
+}
+
 func TestDecidePush_RecusaOPayloadForaDaLista(t *testing.T) {
 	cases := []struct {
 		name    string

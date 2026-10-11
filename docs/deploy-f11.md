@@ -16,6 +16,10 @@ domínio e o datacenter no Brasil). Tempo estimado: 1 h 30 a 2 h, fora a espera 
 mandar para a VPS → os segredos na VPS → subir → conferir de fora → o primeiro backup e a restauração
 dele no PC. Depois, o `docs/teste-final-f11.md`.
 
+**O ditado pelo celular (ADR-021) acrescenta o passo 10:** a chave de cifra das chaves da IA (numa VPS
+que **já está no ar**, ela vem **antes** do `subir.sh`), as migrations 0017 a 0019 e, **antes do
+primeiro áudio**, a leitura só de leitura do proxy e da swap.
+
 ## Antes de começar (são cinco avisos)
 
 1. **A revisão de LGPD vem antes do passo 7.** O passo 7 roda o primeiro `migrate` em produção, e
@@ -23,7 +27,8 @@ dele no PC. Depois, o `docs/teste-final-f11.md`.
    no banco, ela entra **antes**. Leia o `docs/lgpd-dossie.md` e responda "LGPD aprovada" (ou o que
    mudar). Sem o OK, **nenhum ditado seu sobe** (o `docs/teste-final-f11.md` é o primeiro a mandar).
 2. **Nada do Traefik nem dos outros sites é tocado.** A nuvem entra só com os rótulos do próprio
-   contêiner. Os comandos daqui que olham o Traefik só leem (`docker logs`, `docker network inspect`).
+   contêiner. Os comandos daqui que olham o Traefik só leem (`docker logs`, `docker network inspect`,
+   `docker inspect`).
    Nunca rode `docker compose` na pasta do compose do Traefik nem reinicie o contêiner `traefik`.
 3. **Nunca `docker compose down -v` na nuvem.** O `-v` apaga o volume do Postgres, com tudo. Para parar,
    o passo "Se algo der errado" tem o comando certo.
@@ -104,7 +109,8 @@ a 20 minutos. Depois, uns 5.
 
 **Deve aparecer:** uma sequência de `OK:` (as imagens, os segredos de mentira, o Postgres com os cinco
 ajustes, as migrations, a API saudável com a ordem arrumação, retenção, servindo, o https com o HSTS e a
-CSP, o Host errado, o log de acesso desligado no nosso router, o backup, a restauração com o epoch
+CSP, o `Permissions-Policy` do microfone, as rotas do ditado no celular montadas (a chave de cifra de
+mentira chegou ao servidor), o Host errado, o log de acesso desligado no nosso router, o backup, a restauração com o epoch
 novo) e, no fim, **"OK: o deploy passou no Docker do PC"**. As imagens aprovadas ficam anotadas em
 `%USERPROFILE%\.aurora-whisper-dev\deploy-teste-aprovado.txt`.
 
@@ -155,9 +161,11 @@ alguns minutos (são umas centenas de MB pela internet).
 
 ## 6. Os segredos, na VPS
 
-**Por que:** a senha do Postgres, as duas chaves do servidor e a configuração nascem **na VPS**, de
-números aleatórios, e nunca passam pelo chat nem pelo PC. O script também confere o JSON do Google e
-o move para a pasta de segredos.
+**Por que:** a senha do Postgres, as chaves do servidor (a da sessão, o pepper dos aparelhos e a chave
+de cifra das chaves da IA do celular) e a configuração nascem **na VPS**, de números aleatórios, e nunca
+passam pelo chat nem pelo PC. O script também confere o JSON do Google e o move para a pasta de
+segredos. (Este passo é de uma VPS **nova**: ele recusa rodar quando `segredos/` já existe. Numa VPS que
+já está no ar, a chave de cifra nasce pelo passo 10.1.)
 
 Na sessão `ssh` (a janela da VPS):
 
@@ -183,6 +191,10 @@ Ele pergunta, uma coisa de cada vez:
 ```bash
 cat ~/aurora-whisper/segredos/device-token-pepper
 ```
+
+A chave de cifra (`segredos/ai-keys-secret`) **não tem cópia fora da VPS** (ADR-021, escolha menor 11):
+perdê-la faz cada pessoa colar a chave da IA de novo no app do celular, e nenhum ditado se perde. Por
+isso o script não a mostra, e você não precisa guardá-la.
 
 Se aparecer **FALHOU**, nada foi gravado: leia a frase (ela diz o que estava errado) e rode de novo.
 
@@ -215,7 +227,7 @@ bash ~/aurora-whisper/deploy/scripts/subir.sh
 Ele para duas vezes e pergunta:
 
 1. "**Ha migration pendente** … Digite SIM para rodar o migrate agora": digite `SIM` (na primeira vez
-   são as 16).
+   são as 19, da `0001` à `0019`; numa VPS que já estava no ar, só as pendentes: veja o passo 10.2).
 2. "**Digite SIM para subir a API**": digite `SIM`. É a hora em que a nuvem passa a responder na
    internet.
 
@@ -326,11 +338,160 @@ Com o Docker Desktop aberto, troque o nome do arquivo pelo que você baixou:
 powershell -ExecutionPolicy Bypass -File C:\Desenvolvimento\aurora-whisper\scripts\teste-restauracao-mensal.ps1 -Arquivo $env:USERPROFILE\Downloads\aurora-whisper-AAAAMMDDTHHMMSSZ.dump.age
 ```
 
-**Deve aparecer:** "OK: o backup decifrou e restaurou: 16 migration(s), 1 conta(s), 0 ditado(s)." e
+**Deve aparecer:** "OK: o backup decifrou e restaurou: 19 migration(s), 1 conta(s), 0 ditado(s)." e
 "OK: o backup e de 0 h atras". O contêiner é removido no fim. Apague o arquivo baixado quando quiser.
 
 Pronto: a nuvem está no ar, com backup. O próximo é o `docs/teste-final-f11.md` (o celular, o PC
 conectado e os seus ditados), **só depois do OK da LGPD**.
+
+## 10. O ditado pelo celular (ADR-021): a VPS que já está no ar, e a leitura antes do primeiro áudio
+
+**Por que:** no ditado pelo celular, o app manda a voz ao servidor, e o servidor a repassa ao provedor de
+IA com a chave **da própria pessoa** (ela a cola no app). O servidor guarda essa chave **cifrada**, e só
+liga as rotas do ditado se tiver a **chave de cifra** (o arquivo `segredos/ai-keys-secret`). O compose
+novo **exige** o arquivo: sem ele, o `docker compose up` e o `subir.sh` recusam. O áudio passa pela
+memória da API e é descartado ao fim; nunca vai a disco, a swap, a log nem ao banco. Este passo tem duas
+partes: o que muda numa VPS que **já estava no ar** (10.1 e 10.2) e as duas leituras, **só leitura**,
+que valem para **qualquer** VPS e vêm **antes do primeiro áudio** (10.3 e 10.4). Numa VPS **nova**, o
+`gerar-segredos.sh` do passo 6 já criou a chave de cifra e o `subir.sh` do passo 7 já aplicou as 19
+migrations: só sobram o 10.3 e o 10.4.
+
+**Pontos de parada (são seus):** o deploy, as migrations 0017 a 0019, o `memswap_limit`, o `ulimits` e a
+chave de cifra nova. Você roda cada um, na VPS, pelos comandos daqui; eu não rodo nada. E o **primeiro
+áudio real** só sai do aparelho depois de duas coisas: o seu OK na política e no dossiê reescritos (D0,
+na ADR-021) e as leituras do 10.3 e do 10.4 sem nenhum **PARE**.
+
+### 10.1. A chave de cifra, antes do `subir.sh` (VPS que já está no ar)
+
+**Por que:** o `gerar-segredos.sh` recusa rodar quando a pasta `segredos/` existe (um segredo novo
+desconectaria todos os PCs), então ele não cria o arquivo novo. O `criar-chave-de-cifra.sh` cria **só**
+`segredos/ai-keys-secret`: 32 bytes de `/dev/urandom` em hexadecimal (64 caracteres), `0444` na pasta
+`0700`, sem mostrar o valor e sem tocar nos outros arquivos. Ele vem **antes** do `subir.sh`, porque o
+`subir.sh` confere os segredos no começo e para sem o arquivo.
+
+Primeiro, a imagem nova e a pasta `deploy\` nova, do PC, **sem** o `-ArquivoGoogle` (veja "Uma imagem
+nova, depois", em "Se algo der errado", que também manda rodar o passo 4 antes). Depois, na VPS:
+
+```bash
+bash ~/aurora-whisper/deploy/scripts/criar-chave-de-cifra.sh
+```
+
+**Deve aparecer:** "OK: chave de cifra em …/segredos/ai-keys-secret (0444, na pasta 0700, para o
+conteiner da API ler)" e o aviso de que nenhum valor foi mostrado. Não há nada para guardar: a chave de
+cifra **não tem cópia fora da VPS** (ADR-021, escolha menor 11), e perdê-la só faz cada pessoa colar a
+chave da IA de novo no app.
+
+- **`FALHOU: ja existe …`:** a chave já foi criada. Siga para o 10.2 e **não a troque**: uma chave de
+  cifra nova tem o mesmo efeito de perder a antiga, e o script recusa de propósito.
+- **`FALHOU: nao achei a pasta … segredos`:** é uma VPS nova. Volte ao passo 6 (o `gerar-segredos.sh`
+  cria a chave de cifra junto dos outros segredos).
+- **Se você pular este passo:** o `subir.sh` para no começo, sem mudar nada, com "falta …/ai-keys-secret,
+  a chave de cifra das chaves da IA do celular: rode antes o criar-chave-de-cifra.sh pelo roteiro".
+
+### 10.2. As migrations 0017 a 0019 (o `subir.sh` já roda o `migrate`)
+
+**O `subir.sh` já roda o `migrate`:** no passo 6 dele, depois de conferir o Postgres, ele lê o
+`migrate -status` e, se houver migration pendente, **para e pergunta** "Digite SIM para rodar o migrate
+agora"; só com o `SIM` ele roda o `migrate`, num contêiner descartável da imagem nova da API, na rede
+interna. Se a API está de pé, ela **para antes** do `migrate` (o servidor recusa subir com migration
+pendente) e volta depois do segundo `SIM` (o da API). Não há comando à parte: é o mesmo `subir.sh` do
+passo 7.
+
+```bash
+bash ~/aurora-whisper/deploy/scripts/subir.sh
+```
+
+Numa VPS que já tinha as 16 primeiras, as pendentes são estas três, **só aditivas** (cada uma cria uma
+tabela nova; nenhuma tabela anterior muda, e nada é apagado):
+
+| Migration | O que cria |
+|---|---|
+| `0017_ai_provider_keys_table` | as chaves de IA das pessoas, **cifradas** (nunca em claro) |
+| `0018_dictation_settings_table` | as preferências do ditado, uma linha por conta |
+| `0019_dictation_consents_table` | o aceite do aviso do ditado, com a versão e os provedores |
+
+**Deve aparecer:** o `migrate -status` com as três `pendente`, o `SIM` do `migrate`, "OK: as migrations
+em dia", o `SIM` da API e os `OK:` do passo 7. Como a API ganha o segredo novo, o `memswap_limit`, o
+`ulimits` e o `stop_grace_period` de 90 s, o compose a **recria** (você vê "OK: a API saudavel:
+arrumacao, retencao e so entao servindo…" e não a frase de "nao foi recriada").
+
+### 10.3. Antes do primeiro áudio: o proxy, só lendo
+
+**Por que:** o corpo do ditado (até 1 MiB) passa pelo Traefik da VPS antes de chegar à API. Dois prazos
+dele importam, e a ADR-021 só os conhece pela documentação do Traefik v3, não pela **sua** configuração:
+o `readTimeout` do entrypoint (o padrão é 60 s, e o servidor corta o corpo em 30 s, então o proxy nunca
+deve cortar antes) e o `writeTimeout` (o padrão é 0, sem prazo). Um **middleware de buffering** no
+entrypoint levaria ao disco um corpo grande, e o nosso router não tem middleware. O Traefik não é
+nosso e **não se edita**: aqui só se lê, e o que não bater é ponto de parada. É a mesma leitura do
+passo 8, que já olha os argumentos do Traefik:
+
+```bash
+docker inspect traefik --format '{{json .Args}}' | tr ',' '\n' | grep -i -e respondingtimeouts -e middlewares -e buffering -e configfile
+```
+
+**Deve aparecer:** nada (nenhuma linha): os padrões do Traefik valem, sem prazo curto e sem middleware
+no entrypoint. Se aparecerem linhas, leia cada uma:
+
+- `…respondingTimeouts.readTimeout=…`: tem de ser `0` (sem prazo) ou **maior que 30 s**. De 1 s a 30 s,
+  **PARE**: o proxy cortaria um corpo que o servidor aceitaria.
+- `…respondingTimeouts.writeTimeout=…`: tem de ser `0` ou de **pelo menos 90 s** (o corpo leva até 30 s,
+  e o trabalho depois dele, o provedor, o Smart, o Polish e a gravação, até 44 s). Menos que isso,
+  **PARE**: o proxy cortaria a resposta de um ditado que o provedor já cobrou.
+- `…http.middlewares=…` **no entrypoint** `websecure`, ou qualquer menção a `buffering`: **PARE** e me
+  mande só os nomes. Um middleware de buffering poderia gravar o corpo em disco.
+- `--configFile=…`: a configuração estática está num arquivo. Leia o `entryPoints` dele no host (o
+  caminho de origem está em `docker inspect traefik --format '{{json .Mounts}}'`), com os mesmos
+  critérios acima, e **sem editá-lo**.
+
+### 10.4. Antes do primeiro áudio: a swap e o core dump, só lendo
+
+**Por que:** o `memswap_limit` do compose (igual ao `mem_limit`, 256 MB) tira a swap do contêiner da API,
+para que nem o heap (com o áudio e a chave decifrada) vá para o disco. **Isso depende do kernel da
+VPS:** num cgroup v1 sem `swapaccount=1`, o Docker descarta o limite e só escreve "No swap limit
+support". Por isso a conta é conferida na VPS, antes do primeiro áudio, em quatro leituras. **Se alguma
+não bater, PARE e me conte**; a alternativa é uma VPS sem swap, e quem decide é você.
+
+1. O Docker não descarta o limite de swap (a linha de aviso não pode aparecer):
+
+```bash
+docker info 2>&1 | grep -i "swap limit"
+```
+
+**Deve aparecer:** nada. Se aparecer "No swap limit support", **PARE**.
+
+2. O que o Docker aplicou ao contêiner da API (a memória, a memória mais a swap, e o `ulimits`):
+
+```bash
+docker inspect aurora-whisper-api --format '{{.HostConfig.Memory}} {{.HostConfig.MemorySwap}} {{json .HostConfig.Ulimits}}'
+```
+
+**Deve aparecer:** `268435456 268435456 [{"Name":"core","Hard":0,"Soft":0}]`: os dois primeiros números
+**iguais** (256 MB, sem swap) e o limite de `core` em `0`. Se o segundo número for outro (um `-1`, por
+exemplo) ou o `core` faltar, **PARE**.
+
+3. A swap do contêiner **no cgroup**, lida no host (a imagem da API não tem shell). Em um cgroup v2:
+
+```bash
+ID=$(docker inspect --format '{{.Id}}' aurora-whisper-api); cat $(find /sys/fs/cgroup -name memory.swap.max -path "*$ID*" 2>/dev/null)
+```
+
+**Deve aparecer:** `0`. Se aparecer `max` ou um número maior que zero, ou nada (o arquivo não existe:
+cgroup v1, onde o equivalente é `memory.memsw.limit_in_bytes` igual a `memory.limit_in_bytes` na pasta
+do contêiner), **PARE**.
+
+4. Se a VPS tem swap (informação, para a decisão se a leitura anterior não der `0`):
+
+```bash
+swapon --show
+```
+
+**Deve aparecer:** o que a VPS tem. Sem nenhuma linha, a VPS não tem swap, e é a alternativa aceita pela
+ADR-021 (nada do contêiner pode ir para um disco de swap que não existe). Com linhas, só vale o `0` da
+leitura 3.
+
+Estas leituras são **só leitura**: nenhuma mexe no Traefik, no Docker ou na swap. O **core dump** já vem
+travado pelo `ulimits` (leitura 2), e o Go não grava core no padrão. Depois delas, e do seu OK da D0, a
+ADR-021 (C7) segue com a chave da OpenAI colada **por você no app**, nunca no chat.
 
 ## Uma vez por mês
 
@@ -386,7 +547,8 @@ docker logs --tail 30 aurora-whisper-api
 
 - **Uma imagem nova, depois:** o passo 4; no lugar do passo 5, o comando abaixo, **sem** o JSON do
   Google (ele já está na VPS); e o passo 7. O `gerar-segredos.sh` é só da primeira vez (rodado de novo,
-  ele recusa e não muda nada).
+  ele recusa e não muda nada). **Se a VPS já estava no ar antes do ditado pelo celular**, o passo 10.1
+  (a chave de cifra) vem **antes** do passo 7: sem o arquivo novo, o `subir.sh` para no começo.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File C:\Desenvolvimento\aurora-whisper\scripts\enviar-para-servidor.ps1 -Dominio aurora-whisper.mjj.net.br
@@ -432,3 +594,6 @@ bash ~/aurora-whisper/deploy/scripts/subir.sh
 4. Se a segunda conta foi recusada.
 5. A linha do `teste-restauracao-mensal.ps1`.
 6. Se algum dos outros serviços do servidor ficou mais lento depois do passo 7.
+7. Do passo 10 (o ditado pelo celular): o que apareceu no `criar-chave-de-cifra.sh` e nas migrations
+   0017 a 0019, e, **antes do primeiro áudio**, a saída das leituras do proxy (10.3) e da swap (10.4).
+   Qualquer **PARE** deles é ponto de parada: me conte antes de seguir.

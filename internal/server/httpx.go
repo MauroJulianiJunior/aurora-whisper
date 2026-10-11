@@ -59,8 +59,9 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 // maxJSONBodyBytes limita o corpo das requisições JSON deste pacote.
 // [ASSUMPTION] Nenhum documento fixa um número; 1 MiB é generoso para
-// qualquer payload de sync/CRUD deste contrato (áudio tem limite próprio,
-// ver asr_gateway.go) e evita que um corpo gigante prenda um handler.
+// qualquer payload de sync/CRUD deste contrato (o áudio do ditado do celular
+// tem limite próprio, em ditar.go) e evita que um corpo gigante prenda um
+// handler.
 const maxJSONBodyBytes = 1 << 20
 
 // decodeJSON decodifica o corpo da requisição em T. Em caso de erro,
@@ -84,8 +85,8 @@ func decodeJSONLimit[T any](w http.ResponseWriter, r *http.Request, limit int64)
 	dec := json.NewDecoder(r.Body)
 	if err := dec.Decode(&v); err != nil {
 		if err == io.EOF {
-			// Corpo vazio: trata como zero value (rotas como PUT
-			// /settings com objeto vazio, por exemplo).
+			// Corpo vazio: trata como zero value (cada rota confere o que
+			// precisa do valor depois).
 			return v, true
 		}
 		writeError(w, http.StatusBadRequest, codeBadRequest, "corpo da requisição inválido: "+err.Error())

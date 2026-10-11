@@ -83,6 +83,11 @@ func TestVPS_GerarSegredosNoTexto(t *testing.T) {
 		"falhou() {\ndescartar_entrada\n",
 		"HOST_DO_POSTGRES='aurora-whisper-postgres'",
 		`postgres://$PAPEL:$senha_aurora@$HOST_DO_POSTGRES:5432/$BANCO?sslmode=disable`,
+		// ADR-021, C5c: a chave de cifra das chaves da IA nasce junto dos
+		// outros numa VPS nova (o compose a declara), 32 bytes de /dev/urandom
+		// como eles, diferente do session-secret e do pepper.
+		`chave_de_cifra="$(aleatorio)" || falhou`, `gravar ai-keys-secret "$chave_de_cifra"`,
+		`if [ "$chave_de_cifra" = "$session_secret" ] || [ "$chave_de_cifra" = "$pepper" ]; then`,
 		"PUBLIC_BASE_URL=https://%s", "DOMINIO=%s", "CONTAS_PERMITIDAS=%s", "B2_BUCKET=%s",
 		// O JSON do Google: conferido sem imprimir (grep -q) e movido para
 		// segredos/ junto dos outros, só no fim.
@@ -95,7 +100,7 @@ func TestVPS_GerarSegredosNoTexto(t *testing.T) {
 	// Nenhum segredo vai para a linha de comando de outro programa: todos são
 	// gravados pelo printf do próprio bash.
 	for _, l := range linhasDeCodigo(ler(t, gerarSegredos)) {
-		for _, v := range []string{"$senha_superusuario", "$senha_aurora", "$senha_backup", "$session_secret", "$pepper", "$appkey"} {
+		for _, v := range []string{"$senha_superusuario", "$senha_aurora", "$senha_backup", "$session_secret", "$pepper", "$chave_de_cifra", "$appkey"} {
 			if !strings.Contains(l.texto, v) {
 				continue
 			}
@@ -349,7 +354,7 @@ func TestVPS_GerarSegredosGravaSemMostrar(t *testing.T) {
 		t.Fatalf("falhou (%d): %s", r.codigo, r.tudo())
 	}
 	seg := lerTodos(t, filepath.Join(base, "segredos"))
-	nomes := []string{"backup-chave-publica", "database-url", "device-token-pepper", "google-client.json", "postgres-aurora-senha", "postgres-backup-senha", "postgres-superusuario-senha", "rclone.conf", "session-secret"}
+	nomes := []string{"ai-keys-secret", "backup-chave-publica", "database-url", "device-token-pepper", "google-client.json", "postgres-aurora-senha", "postgres-backup-senha", "postgres-superusuario-senha", "rclone.conf", "session-secret"}
 	if len(seg) != len(nomes) {
 		t.Fatalf("arquivos em segredos/: %v", seg)
 	}
@@ -361,13 +366,13 @@ func TestVPS_GerarSegredosGravaSemMostrar(t *testing.T) {
 		t.Error("a pasta recebido/ ficou (o JSON de entrada tem de sair)")
 	}
 	hex64 := regexp.MustCompile(`^[0-9a-f]{64}\n$`)
-	for _, n := range []string{"postgres-superusuario-senha", "postgres-aurora-senha", "postgres-backup-senha", "session-secret", "device-token-pepper"} {
+	for _, n := range []string{"postgres-superusuario-senha", "postgres-aurora-senha", "postgres-backup-senha", "session-secret", "device-token-pepper", "ai-keys-secret"} {
 		if !hex64.MatchString(seg[n]) {
 			t.Errorf("%s deveria ser uma linha de 64 hexadecimais", n)
 		}
 	}
 	vistos := map[string]bool{}
-	for _, n := range []string{"postgres-superusuario-senha", "postgres-aurora-senha", "postgres-backup-senha", "session-secret", "device-token-pepper"} {
+	for _, n := range []string{"postgres-superusuario-senha", "postgres-aurora-senha", "postgres-backup-senha", "session-secret", "device-token-pepper", "ai-keys-secret"} {
 		if vistos[seg[n]] {
 			t.Errorf("%s repete outro segredo", n)
 		}
@@ -410,7 +415,8 @@ func TestVPS_GerarSegredosGravaSemMostrar(t *testing.T) {
 	if strings.Contains(saida, appKeyDeTeste) || strings.Contains(saida, senha) {
 		t.Error("segredo na saída")
 	}
-	exigirContem(t, "a saída", r.saida, "OK: segredos em", "OK: configuracao em")
+	exigirContem(t, "a saída", r.saida, "OK: segredos em", "OK: configuracao em",
+		"A chave de cifra das chaves da IA (ai-keys-secret) nao tem copia fora desta VPS")
 	// Nada de pasta temporária esquecida.
 	sobras, _ := filepath.Glob(filepath.Join(base, ".*"))
 	if len(sobras) > 0 {
@@ -869,6 +875,42 @@ func TestVPS_CriarChaveDeCifraRecusaSemCriarNada(t *testing.T) {
 			t.Error("criou o arquivo mesmo recusando")
 		}
 	})
+}
+
+// ADR-021, C5c: numa VPS NOVA o gerar-segredos.sh já cria o ai-keys-secret (o
+// compose o declara), e o criar-chave-de-cifra.sh, rodado depois por engano ou
+// por hábito do roteiro, recusa sem mudar nada, sem mostrar o valor e sem
+// apagar o arquivo que o outro criou.
+func TestVPS_CriarChaveDeCifraRecusaNumaVPSNovaDoGerarSegredos(t *testing.T) {
+	a := novoAmbienteBash(t)
+	gerar := copiaDoGerar(t, a)
+	base := baseDoGerar(t, a)
+	if r := a.rodar(gerar, respostasDoGerar(nil)); r.codigo != 0 {
+		t.Fatalf("o gerar-segredos.sh falhou (%d): %s", r.codigo, r.tudo())
+	}
+	// O criar-chave-de-cifra.sh numa árvore de mentira ao lado do gerar-segredos.sh.
+	criar := filepath.Join(filepath.Dir(gerar), "criar-chave-de-cifra.sh")
+	if err := os.WriteFile(criar, []byte(ler(t, criarChaveDeCifra)), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	antes := lerTodos(t, filepath.Join(base, "segredos"))
+	valor := strings.TrimSpace(antes["ai-keys-secret"])
+	if len(valor) != 64 {
+		t.Fatalf("o gerar-segredos.sh não criou o ai-keys-secret: %v", antes)
+	}
+	r := a.rodar(criar, nil)
+	if r.codigo == 0 || !strings.Contains(r.erro, "FALHOU: ja existe") || strings.Contains(r.tudo(), valor) {
+		t.Fatalf("deveria recusar sem mostrar nada: %d %q", r.codigo, r.tudo())
+	}
+	depois := lerTodos(t, filepath.Join(base, "segredos"))
+	if len(depois) != len(antes) {
+		t.Errorf("a pasta mudou: %d arquivos antes, %d depois", len(antes), len(depois))
+	}
+	for n, v := range antes {
+		if depois[n] != v {
+			t.Errorf("o criar-chave-de-cifra.sh mudou o %s", n)
+		}
+	}
 }
 
 // Uma falha depois de criar (aqui, o chmod 0444) apaga o arquivo que o script

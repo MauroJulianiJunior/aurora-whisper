@@ -156,6 +156,14 @@ services:
       SESSION_SECRET_FILE: /run/secrets/session-secret
       DEVICE_TOKEN_PEPPER_FILE: /run/secrets/device-token-pepper
       GOOGLE_CLIENT_SECRET_FILE: /run/secrets/google-client.json
+      # A chave de cifra das chaves da IA que as pessoas colam no app do
+      # celular (ADR-021, C3a e C5c). Com o arquivo, o servidor monta as rotas
+      # do ditado no celular (/ai-keys, /dictation, /dictations); sem ele, elas
+      # cairiam no 404. Por isso o segredo e obrigatorio aqui: sem o arquivo, o
+      # "docker compose up" falha. Numa VPS que ja esta no ar, o arquivo nasce
+      # do criar-chave-de-cifra.sh (docs/deploy-f11.md); numa VPS nova, do
+      # gerar-segredos.sh.
+      AI_KEYS_SECRET_FILE: /run/secrets/ai-keys-secret
       PAINEL_DIR: /painel
       # info: com warn ou error, a linha "retencao" do job some.
       LOG_LEVEL: info
@@ -166,6 +174,7 @@ services:
       - session-secret
       - device-token-pepper
       - google-client.json
+      - ai-keys-secret
     read_only: true
     tmpfs:
       - /tmp:size=16m
@@ -200,11 +209,26 @@ services:
       start_period: 2m
       start_interval: 5s
     mem_limit: 256m
+    # O audio do ditado do celular passa pela memoria da API e nunca vai a
+    # disco (ADR-021, decisao L). O memswap_limit igual ao mem_limit tira a swap
+    # do conteiner: nem o heap nem o tmpfs vao para ela, se a VPS tiver uma.
+    # Isso depende do kernel (num cgroup v1 sem swapaccount=1 o Docker descarta
+    # o limite e so avisa "No swap limit support" no docker info): antes do
+    # primeiro audio, o roteiro (docs/deploy-f11.md) le o docker info e o
+    # memory.swap.max do conteiner, que tem de ser 0.
+    memswap_limit: 256m
+    # Nenhum core dump leva o heap (audio e chave decifrada) ao disco. O Go ja
+    # nao grava core no padrao (so com GOTRACEBACK=crash, que o compose nao
+    # poe); esta e a segunda trava.
+    ulimits:
+      core: 0
     # O peso baixo, como o do Postgres (acima).
     cpus: 1.0
     cpu_shares: 256
-    # O desligamento limpo leva ate 15 s (cmd/server/serve.go).
-    stop_grace_period: 30s
+    # O desligamento limpo leva ate 15 s (o Shutdown) e, depois, a espera de ate
+    # 70 s pelos ditados em andamento (cmd/server/serve.go); 90 s cobre os dois.
+    # O deploy/compose_test.go amarra este numero aos dois.
+    stop_grace_period: 90s
     logging:
       driver: json-file
       options:
@@ -309,6 +333,8 @@ secrets:
     file: ${AW_SEGREDOS:-../segredos}/device-token-pepper
   google-client.json:
     file: ${AW_SEGREDOS:-../segredos}/google-client.json
+  ai-keys-secret:
+    file: ${AW_SEGREDOS:-../segredos}/ai-keys-secret
   backup-chave-publica:
     file: ${AW_SEGREDOS:-../segredos}/backup-chave-publica
   rclone.conf:

@@ -88,9 +88,11 @@
   pasta `~/aurora-whisper/segredos/` (0700, arquivos 0444, do `gerar-segredos.sh`), montados pelo compose
   em `/run/secrets/<nome>`: `DATABASE_URL_FILE=/run/secrets/database-url`,
   `SESSION_SECRET_FILE=/run/secrets/session-secret`,
-  `DEVICE_TOKEN_PEPPER_FILE=/run/secrets/device-token-pepper` e
+  `DEVICE_TOKEN_PEPPER_FILE=/run/secrets/device-token-pepper`,
   `GOOGLE_CLIENT_SECRET_FILE=/run/secrets/google-client.json` (o JSON que o
-  `enviar-para-servidor.ps1` manda e o `gerar-segredos.sh` confere e move). O Postgres lê
+  `enviar-para-servidor.ps1` manda e o `gerar-segredos.sh` confere e move) e, **desde a C5c da ADR-021**,
+  `AI_KEYS_SECRET_FILE=/run/secrets/ai-keys-secret` (a chave de cifra das chaves da IA, abaixo; são dez
+  os arquivos de `segredos/`). O Postgres lê
   `POSTGRES_PASSWORD_FILE` (o superusuário, só para administrar), `AURORA_SENHA_FILE` e
   `AURORA_BACKUP_SENHA_FILE` (os dois papéis, pelo init). O que não é segredo vem do
   `~/aurora-whisper/config.env` (0600, fora do repositório), que o compose lê pelo `--env-file`:
@@ -98,7 +100,13 @@
   `gerar-segredos.sh`) e `PROXY_CONFIAVEL` (a sub-rede da rede `web` do Traefik, que o `subir.sh` lê
   na hora do deploy e grava ali). No contêiner, `HTTP_ADDR=0.0.0.0:8080` (a rede é só a interna e a do
   Traefik; nenhuma porta é publicada), `PAINEL_DIR=/painel`, `LOG_LEVEL=info` e `GOMEMLIMIT=200MiB`
-  (abaixo do limite de 256 MB do contêiner). O contêiner do backup recebe `B2_BUCKET`, a hora
+  (abaixo do limite de 256 MB do contêiner). **Só na API, desde a C5c (ADR-021, decisão L):** o
+  `memswap_limit` de 256 MB, igual ao `mem_limit` (sem swap: o áudio do ditado do celular passa pela
+  memória e não vai ao disco), o `ulimits` com `core: 0` (sem core dump) e o `stop_grace_period` de 90 s
+  (o `Shutdown` de 15 s mais a espera de até 70 s pelos ditados em andamento). O `memswap_limit` só vale
+  se o kernel da VPS contar a swap no cgroup, e isso se lê na VPS antes do primeiro áudio
+  (`docs/deploy-f11.md`, passo 10.4); nenhum desses valores é segredo nem variável de ambiente. O
+  contêiner do backup recebe `B2_BUCKET`, a hora
   `AW_HORA_DO_BACKUP` (06, em UTC: 03:00 em São Paulo) e os arquivos `postgres-backup-senha`,
   `backup-chave-publica` e `rclone.conf`; os padrões do `backup.sh` (`PGHOST`, `PGUSER`,
   `AW_SENHA_FILE`, `AW_CHAVE_PUBLICA`, `RCLONE_CONFIG`) já são os caminhos do compose. As variáveis
@@ -122,8 +130,14 @@
   Trocar o arquivo leva toda chave guardada a `SEM_CHAVE` (a pessoa cola de novo); duas chaves de
   cifra ao mesmo tempo ficam fora. Ela **nunca entra no banco nem no backup**, e não tem cópia fora da
   VPS (escolha menor 11): perdê-la faz cada pessoa colar a chave de novo. Na VPS, quem a cria é o
-  `deploy/scripts/criar-chave-de-cifra.sh` (`deploy/README.md`), com a saída suprimida; o compose a
-  monta em `/run/secrets/ai-keys-secret` a partir da C5c.
+  `deploy/scripts/gerar-segredos.sh`, junto dos outros segredos, numa VPS **nova**, e o
+  `deploy/scripts/criar-chave-de-cifra.sh` (`deploy/README.md`), numa VPS que **já está no ar**, antes do
+  `subir.sh`; os dois com a saída suprimida. **Desde a C5c, o compose a declara e a monta em
+  `/run/secrets/ai-keys-secret`, e o `subir.sh` a exige** (ela está no `SEGREDOS_ESPERADOS`; sem o
+  arquivo ele para e aponta o `criar-chave-de-cifra.sh`): no compose de referência ela deixa de ser
+  opcional, e o `404` das rotas do ditado no celular fica só para o binário rodado sem o arquivo (um
+  compose antigo com a imagem nova). O teste do PC (`scripts\deploy-teste.ps1`) grava uma de mentira e
+  confere que `GET /api/v1/dictation` responde `401` (e não `404`) atrás da borda.
   **O servidor de teste do PC** (`teste`, só com a build tag `logindeteste`) não lê `AI_KEYS_SECRET`
   nem o `_FILE`: cria um cofre **por processo**, com uma chave de cifra aleatória (32 bytes, gerada a
   cada subida como o `SESSION_SECRET` dele, nunca impressa, nunca em arquivo), e o provedor de modelos é

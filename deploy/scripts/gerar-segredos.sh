@@ -18,6 +18,10 @@
 #                                       aurora e a senha acima
 #     session-secret                    SESSION_SECRET_FILE
 #     device-token-pepper               DEVICE_TOKEN_PEPPER_FILE
+#     ai-keys-secret                    AI_KEYS_SECRET_FILE: a chave de cifra das chaves da
+#                                       IA que as pessoas colam no app do celular (ADR-021).
+#                                       Numa VPS que ja esta no ar, quem a cria e o
+#                                       criar-chave-de-cifra.sh (este script recusa rodar)
 #     backup-chave-publica              a chave PUBLICA do age (o servidor so cifra)
 #     rclone.conf                       a application key do B2 (o remoto "b2"), restrita
 #                                       ao bucket, so com listBuckets, listFiles e
@@ -177,10 +181,14 @@ senha_aurora="$(aleatorio)" || falhou "nao consegui ler /dev/urandom"
 senha_backup="$(aleatorio)" || falhou "nao consegui ler /dev/urandom"
 session_secret="$(aleatorio)" || falhou "nao consegui ler /dev/urandom"
 pepper="$(aleatorio)" || falhou "nao consegui ler /dev/urandom"
+chave_de_cifra="$(aleatorio)" || falhou "nao consegui ler /dev/urandom"
 if [ "$session_secret" = "$pepper" ] || [ "$senha_superusuario" = "$senha_aurora" ]; then
   falhou "dois aleatorios iguais: rode de novo"
 fi
 if [ "$senha_backup" = "$senha_aurora" ] || [ "$senha_backup" = "$senha_superusuario" ]; then
+  falhou "dois aleatorios iguais: rode de novo"
+fi
+if [ "$chave_de_cifra" = "$session_secret" ] || [ "$chave_de_cifra" = "$pepper" ]; then
   falhou "dois aleatorios iguais: rode de novo"
 fi
 
@@ -204,6 +212,7 @@ gravar postgres-backup-senha "$senha_backup"
 gravar database-url "postgres://$PAPEL:$senha_aurora@$HOST_DO_POSTGRES:5432/$BANCO?sslmode=disable"
 gravar session-secret "$session_secret"
 gravar device-token-pepper "$pepper"
+gravar ai-keys-secret "$chave_de_cifra"
 gravar backup-chave-publica "$chave_publica"
 {
   printf '[b2]\n'
@@ -239,3 +248,5 @@ printf 'Nenhum valor foi mostrado. Duas copias que so voce guarda, no gerenciado
 printf '  - o DEVICE_TOKEN_PEPPER: perde-lo desconecta todos os PCs. Para ve-lo, so no seu\n'
 printf '    terminal (nunca no chat): cat %s/device-token-pepper\n' "$SEGREDOS"
 printf '  - a chave PRIVADA do backup, que ficou no PC (o scripts\\backup-chave.ps1 disse onde).\n'
+printf 'A chave de cifra das chaves da IA (ai-keys-secret) nao tem copia fora desta VPS: perde-la\n'
+printf 'faz cada pessoa colar a chave da IA de novo no app do celular (nenhum ditado se perde).\n'

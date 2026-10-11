@@ -23,17 +23,17 @@ o `docs/restauracao-f11.md`.
 
 | Arquivo | O que é |
 |---|---|
-| `compose.yml` | A nuvem na VPS: o `aurora-whisper-postgres` (só na rede `aurora-whisper-interna`, `internal: true`), a `aurora-whisper-api` (na interna e na `web` do Traefik, com os rótulos dele) e o `aurora-whisper-backup` (o agendador, na interna e numa rede de saída só dele). Segredos por arquivo, nenhuma porta publicada, nenhum socket do Docker, limites de memória e CPU. Detalhes abaixo, em "O compose". |
+| `compose.yml` | A nuvem na VPS: o `aurora-whisper-postgres` (só na rede `aurora-whisper-interna`, `internal: true`), a `aurora-whisper-api` (na interna e na `web` do Traefik, com os rótulos dele) e o `aurora-whisper-backup` (o agendador, na interna e numa rede de saída só dele). Segredos por arquivo (dez, com a chave de cifra das chaves da IA), nenhuma porta publicada, nenhum socket do Docker, limites de memória e CPU, e a API sem swap e sem core dump. Detalhes abaixo, em "O compose". |
 | `compose.teste.yml` e `teste/traefik-dinamico.yml` | Só do teste do PC (`scripts\deploy-teste.ps1`): por cima do `compose.yml`, um Traefik de teste da mesma versão, só em `127.0.0.1`, com os roteadores por arquivo (sem o socket do Docker), iguais aos rótulos. Nunca no servidor. |
-| `scripts/subir.sh` | Na VPS, para subir (e para cada imagem nova, e para trocar o client do Google): o NTP, a sub-rede da rede `web` gravada como `PROXY_CONFIAVEL`, o Postgres conferido, o `migrate` depois de "digite SIM", "digite SIM" de novo antes da API, a ordem arrumação, retenção, servindo no log da API, o backup e o https pelo Traefik. |
+| `scripts/subir.sh` | Na VPS, para subir (e para cada imagem nova, e para trocar o client do Google): os dez segredos (sem o `ai-keys-secret` ele para e aponta o `criar-chave-de-cifra.sh`), o NTP, a sub-rede da rede `web` gravada como `PROXY_CONFIAVEL`, o Postgres conferido, o **`migrate` depois de "digite SIM"** (ele já roda as migrations pendentes, as 0017 a 0019 inclusive; não há comando à parte), "digite SIM" de novo antes da API, a ordem arrumação, retenção, servindo no log da API, o backup e o https pelo Traefik. |
 | `scripts/agendar-backup.sh` | Dentro do contêiner do backup: o `backup.sh` todo dia às 06 UTC (03:00 em São Paulo), e o `saude` do healthcheck (o último backup que subiu tem no máximo 26 h). Sem cron no host. |
 | `Dockerfile` | A imagem do servidor: o painel da nuvem (`pnpm build:nuvem`), o binário Go estático sem build tags, e a final distroless `nonroot` com o `HEALTHCHECK` pelo subcomando `healthcheck`. |
 | `../.dockerignore` | O contexto do build (a raiz) como **lista de permissão**: só `cmd/`, `internal/`, `migrations/`, `web/` (sem `node_modules` e `dist`), `go.mod` e `go.sum`. O `bin\`, com o `historico.db` de verdade, nunca entra. |
 | `backup/Dockerfile` | A imagem do backup: o cliente do Postgres 18, o `age` e o `rclone`. É a do contêiner do backup na VPS e a dos scripts do PC (a chave e o teste do mês). |
 | `postgres/init/10-papel-da-aplicacao.sh` | Roda uma vez, na criação do volume do Postgres: cria o papel `aurora` sem superusuário, dono do banco `aurora`, e o papel `aurora_backup`, só de leitura (`pg_read_all_data`, com a entrada no banco). A API e o `migrate` usam o `aurora`; o backup, o `aurora_backup`. A sessão do init não registra comando no log (a senha nunca vai para o log, nem num erro). |
 | `postgres/conferir-postgres.sh` | Na VPS, antes do primeiro dado real: confere os cinco ajustes de log (o log do Postgres sem texto ditado) e os dois papéis. Só lê. |
-| `scripts/gerar-segredos.sh` | Na VPS, uma vez: gera as senhas do Postgres, o `SESSION_SECRET` e o `DEVICE_TOKEN_PEPPER` de `/dev/urandom`, pergunta o domínio, o e-mail, o bucket e a chave do B2 e a chave pública do backup, confere o JSON do Google que o `enviar-para-servidor.ps1` mandou (o redirect de produção) e o move para `segredos/`, e grava tudo fora do repositório, sem mostrar nada. Recusa sobrescrever. |
-| `scripts/criar-chave-de-cifra.sh` | Na VPS que já está no ar, uma vez (ADR-021, C3a): cria **só** `segredos/ai-keys-secret`, a chave de cifra das chaves da IA que as pessoas colam no app do celular (32 bytes de `/dev/urandom` em hexadecimal, o `AI_KEYS_SECRET_FILE` da API), `0444` na pasta `0700`, sem mostrar o valor e sem tocar nos outros arquivos. Recusa sobrescrever, e recusa sem a pasta `segredos/` (numa VPS nova, o `gerar-segredos.sh` vem antes). Detalhes abaixo, em "A chave de cifra das chaves da IA". |
+| `scripts/gerar-segredos.sh` | Na VPS, uma vez (numa VPS **nova**): gera as senhas do Postgres, o `SESSION_SECRET`, o `DEVICE_TOKEN_PEPPER` e a chave de cifra das chaves da IA (`ai-keys-secret`) de `/dev/urandom`, pergunta o domínio, o e-mail, o bucket e a chave do B2 e a chave pública do backup, confere o JSON do Google que o `enviar-para-servidor.ps1` mandou (o redirect de produção) e o move para `segredos/`, e grava tudo fora do repositório, sem mostrar nada. Recusa sobrescrever. |
+| `scripts/criar-chave-de-cifra.sh` | Na VPS que **já está no ar**, uma vez, **antes do `subir.sh`** (ADR-021, C3a e C5c; numa VPS nova o `gerar-segredos.sh` já cria o arquivo, e este recusa): cria **só** `segredos/ai-keys-secret`, a chave de cifra das chaves da IA que as pessoas colam no app do celular (32 bytes de `/dev/urandom` em hexadecimal, o `AI_KEYS_SECRET_FILE` da API), `0444` na pasta `0700`, sem mostrar o valor e sem tocar nos outros arquivos. Recusa sobrescrever, e recusa sem a pasta `segredos/` (numa VPS nova, o `gerar-segredos.sh` vem antes). Detalhes abaixo, em "A chave de cifra das chaves da IA". |
 | `scripts/backup.sh` | Dentro do contêiner do backup: `pg_dump` conferido, cifrado com o `age` para a chave pública e enviado ao Backblaze B2 por uma chave sem `deleteFiles`, num bucket com Object Lock (é ele que segura os backups: abaixo). |
 | `scripts/conferir-b2.sh` | Na VPS, antes do primeiro backup e a cada chave nova: num contêiner da imagem do backup, sobe um arquivo de conferência, confere que a chave lista e que **não** consegue apagá-lo de vez. Lembra o que só o painel do B2 mostra (o Object Lock, a regra, as capacidades). |
 | `scripts/restaurar.sh` | Na VPS, num desastre: `receber` (o dump decifrado no PC chega à memória só do usuário e é lido inteiro), `aplicar` (restaura num banco novo, roda nele o `migrate` e o `pos-restauracao`, e só por último troca os nomes) e `descartar`. Nunca apaga banco. |
@@ -65,7 +65,8 @@ mais a pasta `deploy\` e o JSON do Google) e `conferir-nuvem.ps1` (de fora, só 
     backup-chave-publica         a chave PÚBLICA do age
     rclone.conf                  a application key do B2 (só listBuckets, listFiles e writeFiles)
     ai-keys-secret               AI_KEYS_SECRET_FILE: a chave de cifra das chaves da IA do celular
-                                 (o criar-chave-de-cifra.sh; ADR-021, C3a)
+                                 (o gerar-segredos.sh numa VPS nova; o criar-chave-de-cifra.sh numa
+                                 VPS que já está no ar; ADR-021, C3a e C5c)
   config.env                   0600: PUBLIC_BASE_URL, DOMINIO, CONTAS_PERMITIDAS, B2_BUCKET e o
                                PROXY_CONFIAVEL (este, do subir.sh)
   antes-de-restaurar/          a cópia cifrada do banco antes de uma restauração
@@ -89,7 +90,11 @@ mais a pasta `deploy\` e o JSON do Google) e `conferir-nuvem.ps1` (de fora, só 
   HSTS são os do próprio servidor, e uma segunda CSP se somaria à dele.
 - **Os segredos** são arquivos (`secrets:` do compose, montados em `/run/secrets/<nome>`), lidos pelas
   variáveis `*_FILE`; **nenhum segredo vai por variável de ambiente**: o provider docker do Traefik lê
-  o `Config.Env` de todo contêiner, e o `docker inspect` também o mostra.
+  o `Config.Env` de todo contêiner, e o `docker inspect` também o mostra. São dez: a API monta o
+  `ai-keys-secret` (`AI_KEYS_SECRET_FILE=/run/secrets/ai-keys-secret`) além dos quatro de antes, e é
+  **obrigatório** (ADR-021, C5c): sem o arquivo, o `docker compose up` falha, e o `subir.sh` para antes,
+  apontando o `criar-chave-de-cifra.sh`. É o arquivo que liga as rotas do ditado no celular (sem ele, no
+  binário, elas cairiam no `404`).
 - **Os limites.** A API com 256 MB (e o `GOMEMLIMIT` de 200 MiB) e 1 CPU; o Postgres com 512 MB e 1 CPU;
   o backup com 128 MB e meia CPU. O teto de CPU sozinho não dá a vez a ninguém (os três somam 2,5 CPUs,
   mais do que uma VPS pequena tem): o que dá a vez aos outros serviços do servidor na disputa é o
@@ -97,6 +102,19 @@ mais a pasta `deploy\` e o JSON do Google) e `conferir-nuvem.ps1` (de fora, só 
   log do Docker com rotação (10 MB, 3 arquivos), `restart: unless-stopped` e um healthcheck (a API pelo
   `healthcheck` de vida; o backup pelo `agendar-backup.sh saude`). O nome fixo de cada contêiner faz
   o compose parar o velho antes de criar o novo (nunca dois `serve` de pé).
+- **A API não manda o áudio do celular para o disco** (ADR-021, decisão L; só no contêiner da API):
+  `memswap_limit: 256m`, igual ao `mem_limit`, tira a swap dele (nem o heap nem o `/tmp` vão para ela, se
+  a VPS tiver uma); `ulimits: core: 0`, a segunda trava contra um core dump que levaria o áudio e a chave
+  decifrada ao disco (o Go não grava core no padrão); e `stop_grace_period: 90s`, que cobre o `Shutdown`
+  de 15 s mais a espera de até 70 s pelos ditados em andamento (o `cmd/server/serve.go` espera os dois; o
+  `compose_test` amarra os números). **O `memswap_limit` só vale se o kernel da VPS contar a swap no
+  cgroup** (num cgroup v1 sem `swapaccount=1` o Docker o descarta e só escreve "No swap limit support"),
+  e o Traefik pode ter um prazo curto ou um middleware de buffering: nenhum dos dois se prova pelo
+  texto do compose. O roteiro (`docs/deploy-f11.md`, passos 10.3 e 10.4) manda ler, **só lendo**, antes do
+  primeiro áudio: o `readTimeout`, o `writeTimeout` e os middlewares do entrypoint do Traefik, o
+  `docker info` sem o aviso de swap, o `docker inspect` com a memória e a swap iguais e o `core` em 0, e
+  o `memory.swap.max` do contêiner da API em `0`. **Se não der `0`, para** (a alternativa é uma VPS sem
+  swap, vista no `swapon --show`); o Traefik nunca é editado.
 - **A saúde do job de retenção não é o healthcheck da API.** O provider docker do Traefik tira do
   roteamento todo contêiner que não está `healthy`: com o `healthcheck -retencao` no compose, uma
   rodada da retenção com falha de banco tiraria o endereço do ar por até 1 h (e um pedido sem router
@@ -128,7 +146,9 @@ devagar nos picos deles.
   (sempre com o `--project-name`: um `COMPOSE_PROJECT_NAME` exportado vale mais que o `name:` do arquivo).
   Voltar: o `subir.sh`. **Nunca `down -v`**: o `-v` apaga o volume do Postgres.
 - **Uma imagem nova:** `deploy-teste.ps1` e `enviar-para-servidor.ps1` (sem o `-ArquivoGoogle`) no PC,
-  e o `subir.sh` na VPS.
+  e o `subir.sh` na VPS. **Numa VPS que já estava no ar antes do ditado no celular**, o
+  `criar-chave-de-cifra.sh` vem antes do `subir.sh` (ele recusa sem o arquivo), e o `subir.sh` aplica as
+  migrations 0017 a 0019 depois do "digite SIM" do `migrate` (`docs/deploy-f11.md`, passos 10.1 e 10.2).
 - **Trocar o client do Google:** o JSON novo, sozinho, em `~/aurora-whisper/recebido/google-client.json`
   (o `scp` do roteiro, "Se algo der errado"), e o `subir.sh`: ele o confere como o
   `gerar-segredos.sh`, pede o SIM, troca o de `segredos/` (0444) e recria a API com `--force-recreate`
@@ -161,10 +181,14 @@ bash ~/aurora-whisper/deploy/scripts/criar-chave-de-cifra.sh
   antes).
 - **Sem cópia fora da VPS** (ADR-021, escolha menor 11): perder o arquivo, ou a VPS, faz cada pessoa
   colar a chave da IA de novo no app; nenhum ditado se perde.
-- **Quando a API passa a usá-lo:** quando o compose declarar o segredo e o `AI_KEYS_SECRET_FILE` (a
-  C5c, que também o põe no `SEGREDOS_ESPERADOS` do `subir.sh`). Até lá, o arquivo fica na pasta sem
-  uso, e o servidor sobe sem as rotas do ditado no celular (`404`). Com o arquivo montado e malformado,
-  a API não sobe, e a mensagem diz o nome da variável, nunca o conteúdo.
+- **Numa VPS nova:** o `gerar-segredos.sh` já cria o `ai-keys-secret` junto dos outros, e este script
+  recusa ("ja existe"), sem mudar nada.
+- **Quando a API passa a usá-lo:** desde a C5c o compose declara o segredo e o `AI_KEYS_SECRET_FILE`, e o
+  `subir.sh` o exige (está no `SEGREDOS_ESPERADOS`): **o script vem antes do `subir.sh`** numa VPS que já
+  estava no ar, senão o `subir.sh` para no começo e aponta este passo. Com o arquivo montado, as rotas
+  do ditado no celular existem; com ele malformado, a API não sobe, e a mensagem diz o nome da
+  variável, nunca o conteúdo. A imagem sem o arquivo (um compose antigo com a imagem nova) continua
+  subindo, sem as rotas (`404`).
 
 ## O backup (D2)
 

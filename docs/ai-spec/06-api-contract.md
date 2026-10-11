@@ -42,8 +42,14 @@ Base: `https://exemplo.com/api/v1` (o domínio real vem de `PUBLIC_BASE_URL`)
     o `PATCH /devices/{id}`, o renomear, continua sem montar).
   - **Cabeçalhos em toda resposta:** `Content-Security-Policy: default-src 'self'; base-uri 'none';
     object-src 'none'; frame-ancestors 'none'; form-action 'self'`, `X-Content-Type-Options: nosniff`,
-    `Referrer-Policy: no-referrer`, `Cross-Origin-Opener-Policy: same-origin`; `Strict-Transport-Security:
-    max-age=31536000` só com `PUBLIC_BASE_URL` em `https`; `Cache-Control: no-store` em `/api` e `/auth`.
+    `Referrer-Policy: no-referrer`, `Cross-Origin-Opener-Policy: same-origin`,
+    `Permissions-Policy: microphone=(self)` (**ADR-021, escolha menor 18**: o app grava o ditado do
+    celular, e o microfone fica só para a própria origem, mesmo que um dia o `frame-ancestors` deixe de
+    barrar uma moldura; é o único recurso que o app pede, e os outros ficam como o navegador os deixa);
+    `Strict-Transport-Security: max-age=31536000` só com `PUBLIC_BASE_URL` em `https`; `Cache-Control:
+    no-store` em `/api` e `/auth`. O `Permissions-Policy` sai em **toda** resposta, a do app, a das
+    páginas fixas e a da API, e o teste do PC (`scripts\deploy-teste.ps1`) confere que ele chega pela
+    borda do Traefik, sem um segundo.
   - **Host:** um `Host` diferente do de `PUBLIC_BASE_URL` é `400` (`host inválido`), menos em
     `/api/v1/health/*`.
   - **Origem cruzada:** `POST`, `PATCH`, `DELETE` com `Sec-Fetch-Site` `cross-site` ou `same-site`, ou com
@@ -1140,7 +1146,8 @@ suíte `internal/server/chavestest` (os casos `Ditar_*`) é o contrato executáv
 memória e o Postgres; o desligamento é provado em `cmd/server/servir_test.go`.
 
 **O que continua `404`:** `POST /asr/transcribe` (o gateway antigo, multipart de PCM, sem
-idempotência; o código sai na C5c), `POST /resolve` e `POST /transcriptions`: o texto nunca vem do
+idempotência; o código **saiu na C5c**, junto do servidor em memória da F1-D, e o `404` é travado pelas
+suítes `authtest` e `contracttest`), `POST /resolve` e `POST /transcriptions`: o texto nunca vem do
 cliente, e o ditado só nasce pela rota abaixo. `GET`, `PUT` e `DELETE /dictations`, e qualquer coisa
 depois de `/dictations/`, também são `404`.
 

@@ -220,3 +220,70 @@ func TestRoteiros_ImagemNovaETrocaDoGoogle(t *testing.T) {
 	exigirContem(t, subirSh, ler(t, subirSh), `ok "um client do Google NOVO em recebido/, conferido`,
 		`o client do Google e TROCADO`, `ok "o client do Google trocado`)
 }
+
+// ADR-021, C5c: o passo 10 do roteiro do deploy. Numa VPS que já está no ar, a
+// chave de cifra vem ANTES do subir.sh (ele recusa sem o arquivo); o subir.sh já
+// roda o migrate (as migrations 0017 a 0019 entram nele, sem comando à parte); e,
+// antes do primeiro áudio, o proxy e a swap são LIDOS (nunca editados).
+func TestRoteiros_ODitadoNoCelularNaVPSNoAr(t *testing.T) {
+	texto := ler(t, roteiroDeploy)
+	passo10 := secaoDoRoteiro(t, "10")
+	exigirContem(t, "o passo 10", passo10, "gerar-segredos.sh", "ai-keys-secret", "Pontos de parada", "PARE")
+
+	// 10.1: o criar-chave-de-cifra.sh, com o comando do script, antes do subir.sh.
+	chave := secaoDoRoteiro(t, "10.1")
+	cmdChave := "bash ~/aurora-whisper/" + criarChaveDeCifra
+	exigirContem(t, "o passo 10.1", chave, "```bash\n"+cmdChave+"\n```", "FALHOU: ja existe", "não a troque", "não tem cópia fora da VPS")
+	// As frases que o roteiro manda esperar são as dos scripts.
+	exigirContem(t, criarChaveDeCifra, ler(t, criarChaveDeCifra), `ok "chave de cifra em`, `falhou "ja existe `)
+	exigirContem(t, subirSh, ler(t, subirSh), "rode antes o criar-chave-de-cifra.sh pelo roteiro", "a chave de cifra das chaves da IA do celular")
+	exigirContem(t, "o passo 10.1", chave, "rode antes o criar-chave-de-cifra.sh pelo roteiro")
+	// O script de que o roteiro fala é o dos SEGREDOS_ESPERADOS do subir.sh.
+	if !strings.Contains(" "+constanteDoScript(t, subirSh, "SEGREDOS_ESPERADOS")+" ", " "+constanteDoScript(t, criarChaveDeCifra, "NOME")+" ") {
+		t.Error("o arquivo que o criar-chave-de-cifra.sh cria não está nos SEGREDOS_ESPERADOS do subir.sh")
+	}
+	// Na ordem do roteiro: a chave de cifra (10.1) antes do subir.sh (10.2).
+	i101 := strings.Index(texto, "### 10.1. ")
+	i102 := strings.Index(texto, "### 10.2. ")
+	if i101 < 0 || i102 < i101 {
+		t.Fatal("o 10.1 (a chave de cifra) vem antes do 10.2 (o subir.sh com o migrate)")
+	}
+
+	// 10.2: o subir.sh já roda o migrate, e as três migrations são as de verdade.
+	mig := secaoDoRoteiro(t, "10.2")
+	exigirContem(t, "o passo 10.2", strings.Join(strings.Fields(mig), " "), "O `subir.sh` já roda o `migrate`",
+		"Digite SIM para rodar o migrate agora", "bash ~/aurora-whisper/deploy/scripts/subir.sh", "só aditivas")
+	exigirContem(t, subirSh, ler(t, subirSh), "Digite SIM para rodar o migrate agora", "api_descartavel migrate ||")
+	for _, n := range []string{"0017_ai_provider_keys_table", "0018_dictation_settings_table", "0019_dictation_consents_table"} {
+		exigirContem(t, "o passo 10.2", mig, "`"+n+"`")
+		if ler(t, "migrations/"+n+".sql") == "" {
+			t.Errorf("a migration %s não existe", n)
+		}
+	}
+
+	// 10.3 e 10.4: só leitura. Nada que edite o Traefik, o Docker ou a swap.
+	proxy, swap := secaoDoRoteiro(t, "10.3"), secaoDoRoteiro(t, "10.4")
+	exigirContem(t, "o passo 10.3", proxy, "docker inspect traefik --format '{{json .Args}}'", "readTimeout", "writeTimeout",
+		"middlewares", "buffering", "PARE", "não se edita")
+	exigirContem(t, "o passo 10.4", swap, "docker info 2>&1 | grep -i \"swap limit\"", "No swap limit support", "memory.swap.max",
+		"{{.HostConfig.Memory}} {{.HostConfig.MemorySwap}} {{json .HostConfig.Ulimits}}", `"Name":"core"`, "swapon --show", "PARE")
+	for nome, secao := range map[string]string{"10.3": proxy, "10.4": swap} {
+		exigirNaoContem(t, "o passo "+nome, secao, "docker restart", "docker stop", "docker exec", "docker compose", "docker rm",
+			"swapoff", "swapon /", "sysctl -w", "sudo ", "echo 0 >", "rm -", "tee ", "sed -i")
+	}
+	// Os números do que se manda conferir são os do compose.
+	raiz := compose(t)
+	mem := textoYAML(t, raiz, "services", svcAPI, "mem_limit")
+	if mem != "256m" || !strings.Contains(swap, "268435456 268435456") {
+		t.Errorf("o 10.4 espera 268435456 (256 MB) duas vezes, e o compose tem mem_limit %q", mem)
+	}
+	// O que o ADR diz do prazo do corpo é o do servidor (30 s), e o roteiro o cita.
+	exigirContem(t, "cmd/server/serve.go", ler(t, "cmd/server/serve.go"), "readTimeout       = 30 * time.Second")
+	exigirContem(t, "o passo 10.3", proxy, "maior que 30 s")
+
+	// O README do deploy e o roteiro dizem o mesmo.
+	readme := ler(t, "deploy/README.md")
+	exigirContem(t, "deploy/README.md", strings.Join(strings.Fields(readme), " "), "criar-chave-de-cifra.sh", "docs/deploy-f11.md",
+		"passos 10.3 e 10.4", "`memswap_limit: 256m`", "`ulimits: core: 0`", "`stop_grace_period: 90s`",
+		"`migrate` depois de \"digite SIM\"", "0017 a 0019", "memory.swap.max")
+}

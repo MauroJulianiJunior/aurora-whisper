@@ -94,6 +94,8 @@ $Curl = Join-Path $env:SystemRoot 'System32\curl.exe'
 # A CSP e o HSTS do servidor (internal\server\seguranca.go).
 $CspDoServidor = 'default-src ''self''; base-uri ''none''; object-src ''none''; frame-ancestors ''none''; form-action ''self'''
 $HstsDoServidor = 'max-age=31536000'
+# O microfone so para a propria origem (ADR-021, escolha menor 18).
+$PermissionsPolicyDoServidor = 'microphone=(self)'
 
 # A conta de teste do backup e o epoch dela (UUIDs de mentira).
 $IdDaConta = '01900000-0000-7000-8000-000000000001'
@@ -298,6 +300,10 @@ try {
     Gravar (Join-Path $PastaSegredos 'postgres-backup-senha') ((Hex-Aleatorio 32) + "`n")
     Gravar (Join-Path $PastaSegredos 'session-secret') ((Hex-Aleatorio 32) + "`n")
     Gravar (Join-Path $PastaSegredos 'device-token-pepper') ((Hex-Aleatorio 32) + "`n")
+    # A chave de cifra das chaves da IA do celular (ADR-021, C5c): o compose a
+    # declara, e sem o arquivo o "docker compose up" falha. Como na VPS, 64
+    # hexadecimais.
+    Gravar (Join-Path $PastaSegredos 'ai-keys-secret') ((Hex-Aleatorio 32) + "`n")
     Gravar (Join-Path $PastaSegredos 'database-url') ('postgres://aurora:' + $senhaAurora + '@aurora-whisper-postgres:5432/aurora?sslmode=disable' + "`n")
     Gravar (Join-Path $PastaSegredos 'database-url-restaurada') ('postgres://aurora:' + $senhaAurora + '@aurora-whisper-postgres:5432/' + $BancoRestaurado + '?sslmode=disable' + "`n")
     # O "B2" do teste: uma pasta dentro do volume do backup (o rclone com um
@@ -426,6 +432,15 @@ try {
     $painel = Pedir ('https://' + $Dominio + '/') $nosso
     if (($painel.Codigo -ne 200) -or ((Cabecalho $painel 'content-security-policy').Count -ne 1)) { Falhar ('o painel em / deu ' + $painel.Codigo) }
     Ok 'o painel em /'
+    $microfone = Cabecalho $painel 'permissions-policy'
+    if (($microfone.Count -ne 1) -or ($microfone[0] -ne $PermissionsPolicyDoServidor)) { Falhar ('o Permissions-Policy (tem de ser um so, o do servidor): ' + ($microfone -join ' | ')) }
+    Ok 'o Permissions-Policy do servidor (microphone=(self)) chega pela borda'
+    # As rotas do ditado no celular so existem com a chave de cifra (ADR-021,
+    # decisao O): se o ai-keys-secret nao chegasse ao servidor, elas cairiam no
+    # 404 de rota nao montada. Sem sessao, a das preferencias responde 401.
+    $ditado = Pedir ('https://' + $Dominio + '/api/v1/dictation') $nosso
+    if ($ditado.Codigo -ne 401) { Falhar ('as rotas do ditado no celular nao estao montadas (GET /api/v1/dictation deu ' + $ditado.Codigo + ', quero 401): a chave de cifra nao chegou ao servidor') }
+    Ok 'as rotas do ditado no celular montadas (a chave de cifra chegou ao servidor)'
     # A sentinela no CAMINHO (o log de acesso sempre traz o caminho), por
     # este router: a resposta pode ser 200 (o app) ou 404; so importa que
     # passou pela borda.
