@@ -24,9 +24,16 @@ import (
 //   - na subida;
 //   - depois de cada gravação local que pôs um marcador (Avisar), com um
 //     intervalo curto (Debounce) para juntar as que vêm em seguida;
-//   - de tempos em tempos (Intervalo), para trazer o que mudou no celular ou
-//     em outro PC;
+//   - de tempos em tempos, para trazer o que mudou no celular ou em outro PC:
+//     a cada Intervalo (60 s) e, enquanto o painel do PC está aberto e lendo o
+//     contador de mudanças, a cada IntervaloComPainel (10 s) (ADR-021, S);
 //   - ao conectar (o nuvem.Servico chama Avisar).
+//
+// O painel aberto é quem lê o contador (LerMudancas, a GET /api/nuvem/mudancas
+// da API local): a leitura é o aviso. Passada a JanelaDoPainel (15 s) sem
+// leitura, o laço volta aos 60 s. O contador sobe quando uma rodada grava no
+// histórico daqui algo que veio da nuvem (Relatorio.AplicouDaNuvem), e é com
+// ele que o painel sabe que deve reler a lista.
 //
 // Desconectado, nada roda e nenhum pedido sai (e na fila só entra a mudança
 // num ditado que a nuvem já tem, para subir na volta: quem decide isso é a
@@ -60,6 +67,15 @@ type Conexao interface {
 const (
 	// IntervaloPadrao: a busca periódica (decisão 1 da F7b, a recomendada).
 	IntervaloPadrao = 60 * time.Second
+	// IntervaloComPainelPadrao: a busca periódica com o painel do PC aberto e
+	// lendo o contador (ADR-021, decisão P e escolha menor 17, aprovada pelo
+	// Mauro em 10-out-2026). A alternativa que ele não escolheu é 30 s sempre:
+	// os dois valores iguais a 30 s.
+	IntervaloComPainelPadrao = 10 * time.Second
+	// JanelaDoPainelPadrao: por quanto tempo uma leitura do contador mantém o
+	// painel como aberto. O painel lê a cada 3 s, então 15 s perdoam a leitura
+	// que atrasou e fecham logo depois que ele sai de vista.
+	JanelaDoPainelPadrao = 15 * time.Second
 	// DebouncePadrao: a espera depois de uma gravação local.
 	DebouncePadrao = 2 * time.Second
 )
@@ -76,8 +92,14 @@ type ConfigDoLaco struct {
 	Intervalo time.Duration
 	Debounce  time.Duration
 	Espera    BackoffPolicy
-	NovoID    func() string
-	Agora     func() time.Time
+	// IntervaloComPainel é o Intervalo enquanto o painel do PC lê o contador
+	// (LerMudancas); zero é o padrão, e nunca passa de Intervalo.
+	IntervaloComPainel time.Duration
+	// JanelaDoPainel é quanto tempo uma leitura do contador vale como "o
+	// painel está aberto"; zero é o padrão.
+	JanelaDoPainel time.Duration
+	NovoID         func() string
+	Agora          func() time.Time
 	// Dicionario é o dicionario.json do aprendido (Motor.Dicionario); nil
 	// deixa o aprendido de fora, como na F7. Quem o liga é o Agent (F8g).
 	Dicionario DicionarioDoAprendido
@@ -123,6 +145,22 @@ type Laco struct {
 	cfg     ConfigDoLaco
 	log     *slog.Logger
 	gatilho chan struct{}
+	// painel acorda o laço quando o painel acaba de abrir (a primeira leitura
+	// do contador depois da JanelaDoPainel sem nenhuma): a próxima busca não
+	// espera os 60 s que já corriam.
+	painel chan struct{}
+	// despertador arma uma espera; os testes trocam o relógio inteiro por um
+	// falso (o Agora da configuração e este).
+	despertador func(d time.Duration) (espera <-chan time.Time, desarmar func())
+
+	// mudancas é o contador da API local (LerMudancas): sobe, uma vez por
+	// rodada, quando ela grava no histórico algo que veio da nuvem. Só em
+	// memória: recomeça do zero a cada execução do Agent, e o painel, que
+	// compara com a última leitura, só precisa de "mudou".
+	mudancas atomic.Uint64
+	// lidoEm é o instante (UnixNano) da última leitura do contador pelo
+	// painel; 0, nunca.
+	lidoEm atomic.Int64
 
 	situacao  atomic.Int32
 	pendentes atomic.Int64
@@ -148,6 +186,16 @@ func NovoLaco(cfg ConfigDoLaco) *Laco {
 	if cfg.Intervalo <= 0 {
 		cfg.Intervalo = IntervaloPadrao
 	}
+	if cfg.IntervaloComPainel <= 0 {
+		cfg.IntervaloComPainel = IntervaloComPainelPadrao
+	}
+	// O painel aberto nunca deixa a busca mais lenta do que ela já é.
+	if cfg.IntervaloComPainel > cfg.Intervalo {
+		cfg.IntervaloComPainel = cfg.Intervalo
+	}
+	if cfg.JanelaDoPainel <= 0 {
+		cfg.JanelaDoPainel = JanelaDoPainelPadrao
+	}
 	if cfg.Debounce <= 0 {
 		cfg.Debounce = DebouncePadrao
 	}
@@ -170,7 +218,16 @@ func NovoLaco(cfg ConfigDoLaco) *Laco {
 	if log == nil {
 		log = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
-	return &Laco{cfg: cfg, log: log, gatilho: make(chan struct{}, 1)}
+	return &Laco{
+		cfg: cfg, log: log, gatilho: make(chan struct{}, 1), painel: make(chan struct{}, 1),
+		despertador: despertadorReal,
+	}
+}
+
+// despertadorReal arma um time.Timer; uma espera zero ou negativa dispara já.
+func despertadorReal(d time.Duration) (<-chan time.Time, func()) {
+	t := time.NewTimer(d)
+	return t.C, func() { t.Stop() }
 }
 
 // Avisar acorda o laço: uma gravação local pôs um marcador, ou o PC acabou de
@@ -180,6 +237,49 @@ func (l *Laco) Avisar() {
 	case l.gatilho <- struct{}{}:
 	default:
 	}
+}
+
+// LerMudancas é a leitura que o painel do PC faz do contador de mudanças (a
+// GET /api/nuvem/mudancas da API local; ADR-021, subfatia S): devolve quantas
+// rodadas gravaram no histórico daqui algo que veio da nuvem, nesta execução
+// do Agent. O painel relê a lista quando o número muda. Não leva texto, id,
+// token nem URL: é um número.
+//
+// A própria leitura é o aviso de que o painel está aberto: nos próximos
+// JanelaDoPainel o laço busca a nuvem a cada IntervaloComPainel. A primeira
+// leitura depois de uma janela sem nenhuma também acorda o laço, para a busca
+// seguinte não esperar o que sobrava dos 60 s. Nunca bloqueia (é chamada pela
+// goroutine de HTTP).
+func (l *Laco) LerMudancas() uint64 {
+	agora := l.cfg.Agora()
+	if !l.aberto(l.lidoEm.Swap(agora.UnixNano()), agora) {
+		select {
+		case l.painel <- struct{}{}:
+		default:
+		}
+	}
+	return l.mudancas.Load()
+}
+
+// aberto diz se a leitura de lidoEm (UnixNano; 0, nunca) ainda vale, em agora,
+// como "o painel está aberto": menos de JanelaDoPainel atrás. Uma leitura no
+// futuro (o relógio do PC voltou) não vale: a próxima leitura do painel, em
+// poucos segundos, a refaz.
+func (l *Laco) aberto(lidoEm int64, agora time.Time) bool {
+	if lidoEm == 0 {
+		return false
+	}
+	d := agora.Sub(time.Unix(0, lidoEm))
+	return d >= 0 && d < l.cfg.JanelaDoPainel
+}
+
+// intervaloEm é a espera depois de uma rodada que deu certo e terminou em
+// agora: a curta com o painel aberto e lendo, a de sempre sem ele.
+func (l *Laco) intervaloEm(agora time.Time) time.Duration {
+	if l.aberto(l.lidoEm.Load(), agora) {
+		return l.cfg.IntervaloComPainel
+	}
+	return l.cfg.Intervalo
 }
 
 // Resumo é a linha da bandeja: "Nuvem: em dia", "Nuvem: 3 para enviar",
@@ -226,15 +326,20 @@ func (l *Laco) Freio() int { return int(l.freio.Load()) }
 func (l *Laco) Rodar(ctx context.Context) {
 	falhas := 0
 	emEspera := false
+	// livre: a última rodada deu certo (e não foi o "desconectado"). Só então a
+	// abertura do painel adianta a próxima: depois de uma falha a espera é do
+	// backoff, e desconectado não há o que buscar.
+	livre := false
+	var fim time.Time        // quando a última rodada terminou
 	proxima := l.cfg.Agora() // a primeira rodada é na subida
-	timer := time.NewTimer(0)
-	defer timer.Stop()
 	for {
-		timer.Reset(proxima.Sub(l.cfg.Agora()))
+		espera, desarmar := l.despertador(proxima.Sub(l.cfg.Agora()))
 		select {
 		case <-ctx.Done():
+			desarmar()
 			return
 		case <-l.gatilho:
+			desarmar()
 			l.contarPendentes(ctx)
 			// Numa espera depois de falha, a gravação não fura a espera: a
 			// rede caída não vira um pedido por ditado.
@@ -244,7 +349,18 @@ func (l *Laco) Rodar(ctx context.Context) {
 				}
 			}
 			continue
-		case <-timer.C:
+		case <-l.painel:
+			desarmar()
+			// O painel acabou de abrir: a busca seguinte é a de quem o tem
+			// aberto, contada do fim da última rodada, e não os 60 s que já
+			// corriam. Se isso já passou, a busca sai agora.
+			if livre {
+				if p := fim.Add(l.cfg.IntervaloComPainel); p.Before(proxima) {
+					proxima = p
+				}
+			}
+			continue
+		case <-espera:
 		}
 
 		err := l.rodada(ctx)
@@ -258,7 +374,15 @@ func (l *Laco) Rodar(ctx context.Context) {
 			falhas++
 			emEspera = true
 		}
-		proxima = l.cfg.Agora().Add(EsperaDepois(err, falhas, l.cfg.Intervalo, l.cfg.Espera))
+		// Só a rodada que deu certo usa a espera curta do painel aberto; as
+		// outras (a falha, o desconectado, o 401) têm a espera delas.
+		fim = l.cfg.Agora()
+		intervalo := l.cfg.Intervalo
+		if err == nil {
+			intervalo = l.intervaloEm(fim)
+		}
+		livre = err == nil
+		proxima = fim.Add(EsperaDepois(err, falhas, intervalo, l.cfg.Espera))
 	}
 }
 
@@ -303,6 +427,12 @@ func (l *Laco) rodada(ctx context.Context) error {
 	rel, err := m.Rodada(ctx)
 	if rel.FreioConferido {
 		l.freio.Store(int64(rel.Freio))
+	}
+	// O contador do painel sobe depois da gravação (o Rodada só conta o que já
+	// foi para o SQLite), mesmo numa rodada que falhou mais adiante: as páginas
+	// que ela aplicou antes já estão no histórico.
+	if rel.AplicouDaNuvem() > 0 {
+		l.mudancas.Add(1)
 	}
 	if ctx.Err() != nil {
 		return ctx.Err()

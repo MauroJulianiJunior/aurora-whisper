@@ -267,7 +267,7 @@ type Runtime struct {
 	// UsarPolish, em polish.go.
 	abrirPolidor AbrirPolidor
 	// prazoDoPolish é o teto da metade de rede do Polish, contado do começo
-	// da resolução. Zero usa prazoPolish, que cresce com o texto (de 3,5 s
+	// da resolução. Zero usa polish.Prazo, que cresce com o texto (de 3,5 s
 	// a 8 s); só os testes põem um valor fixo, e curto.
 	prazoDoPolish time.Duration
 	// ctxRun é o ctx de Run, de onde deriva o ctx de cada chamada do
@@ -990,7 +990,7 @@ func (rt *Runtime) resolver(e dictation.ResolveEffect) dictation.Event {
 	// O começo da resolução é a âncora do prazo do Polish: o teto (3,5 s no
 	// texto curto) já desconta o Smart, e o TimerResolveTimeout do núcleo,
 	// que vem no mesmo lote logo depois deste efeito, só começa a contar
-	// depois dele. Ver prazoPolish.
+	// depois dele. Ver polish.Prazo.
 	inicio := time.Now()
 	bruto := e.ASRResult.Text
 	rt.brutoDaTentativa.attempt, rt.brutoDaTentativa.texto = e.Attempt, rt.brutoParaOHistorico(e.Attempt, bruto)

@@ -7,6 +7,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/agent/dictation"
+	"github.com/MauroJulianiJunior/aurora-whisper/internal/polish"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/resolver"
 )
 
@@ -17,13 +18,17 @@ import (
 // se perde: prazo estourado, erro, sem chave ou guarda reprovando, entra o
 // texto do Smart.
 
-// pisoPrazoPolish é o teto da metade de rede do Polish para o texto curto,
+// O prazo da metade de rede do Polish. O teto da chamada ao provedor é
+// polish.Prazo(texto): 3,5 s para o texto curto, crescendo com o tamanho
+// até 8 s (polish.PisoPrazo e o acréscimo de dictation.AcrescimoPeloTexto).
+// Ele mora em internal/polish desde a C5a da ADR-021, porque o servidor usa
+// o mesmo; aqui ficam o runtime que o aplica e o porquê de ele caber no
+// núcleo. O texto que decide o tamanho é o do ResolveEffect, já sem o laço
+// de repetição, o MESMO sobre o qual o núcleo arma o watchdog. O prazo é
 // contado do COMEÇO da resolução (antes do Smart), e não do começo da
-// chamada. O texto longo ganha tempo: ver prazoPolish.
+// chamada.
 //
-// # Por que o prazo do Polish cabe no watchdog do núcleo
-//
-// O núcleo encerra a tentativa sem texto se a resolução não responder em
+// Por que o prazo do Polish cabe no watchdog do núcleo. O núcleo encerra a tentativa sem texto se a resolução não responder em
 // dictation.PrazoDeResolucao (5 s no texto curto). Esse timer é armado em
 // onTranscribeResult, no MESMO lote do ResolveEffect, e aplicado logo
 // DEPOIS dele — isto é, depois do Smart, que roda dentro de resolver. A
@@ -42,38 +47,13 @@ import (
 // p95 de 2,35 s no gpt-6-luna (conexão reaproveitada; a fria, 2,49 s) e
 // 1,6% das chamadas acima de 3,5 s: o número fica (ADR-016, decisão 4).
 // TestPrazoPolish_CabeNoWatchdogDoNucleo trava a folga.
-const pisoPrazoPolish = 3500 * time.Millisecond
-
-// prazoPolish é o teto do Polish para o texto que entra na resolução:
-// pisoPrazoPolish mais dictation.AcrescimoPeloTexto, de 3,5 s (até 250
-// caracteres) a 8 s (1000 caracteres ou mais), com 6 ms por caractere no
-// meio (decisão 5 de docs/defeito-ditado-longo.md; ADR-016, emenda de
-// 01-out-2026).
-//
-// # Por que cresce
-//
-// A latência da chamada é uma base (TLS, fila, primeiro token) mais o
-// tempo de gerar a saída, e a saída cresce com o texto. No log de
-// 01-out-2026: 359 caracteres levaram 3143 ms com 96 tokens de saída
-// (aceito, a 357 ms do teto); 907, 3032 ms com 195 (recusado pela guarda,
-// não pelo prazo); 802 levaram mais que os 3468 ms que sobravam e caíram
-// no Smart. Com o prazo fixo, o ditado longo no modo com IA saía sempre
-// como Smart. Agora: 359 caracteres têm 4154 ms; 802, 6812 ms; 907, 7442
-// ms. A conta do acréscimo está em dictation.AcrescimoPorCaractere.
-//
-// O acréscimo é o MESMO do watchdog do núcleo (dictation.PrazoDeResolucao
-// = 5 s + acréscimo), calculado sobre o MESMO texto (o do ResolveEffect,
-// já sem o laço de repetição): a folga de 1,5 s vale em qualquer tamanho.
-func prazoPolish(texto string) time.Duration {
-	return pisoPrazoPolish + dictation.AcrescimoPeloTexto(texto)
-}
 
 // Polidor é a metade de rede do Polish de UM ditado: recebe o resultado do
 // Smart e devolve o do Polish, que nunca é erro (no fallback, o do Smart
 // com Reescrito=false e o motivo). *resolver.PolishResolver o cumpre.
 //
 // Roda na goroutine da chamada, com o ctx do ditado: derivado do de Run e
-// com o prazo de prazoPolish.
+// com o prazo de polish.Prazo.
 type Polidor interface {
 	Reescrever(ctx context.Context, req resolver.ResolveRequest, smart resolver.ResolveResult) resolver.ResolveResult
 }
@@ -134,19 +114,19 @@ type polidoPronto struct {
 }
 
 // prazoDoTeto é o teto que vale para o texto que entrou na resolução:
-// prazoPolish(texto), ou o que o teste pôs.
+// polish.Prazo(texto), ou o que o teste pôs.
 func (rt *Runtime) prazoDoTeto(texto string) time.Duration {
 	if rt.prazoDoPolish > 0 {
 		return rt.prazoDoPolish
 	}
-	return prazoPolish(texto)
+	return polish.Prazo(texto)
 }
 
 // polir dispara a metade de rede do Polish numa goroutine própria e volta
 // na hora. Roda na goroutine de Run: tudo o que ela lê do Runtime é lido
 // aqui, antes do go, e a goroutine só fala com o laço por rt.polidos.
 //
-// inicio é o começo da resolução: o prazo vale de lá (ver prazoPolish). O
+// inicio é o começo da resolução: o prazo vale de lá (ver polish.Prazo). O
 // tamanho que decide o prazo é o de req.ASRResult.Text, o texto do
 // ResolveEffect, que é o mesmo sobre o qual o núcleo armou o watchdog — e
 // não o do Smart, que o dicionário pode ter mudado em alguns caracteres.

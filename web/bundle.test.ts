@@ -91,6 +91,9 @@ describe('o bundle local (bin\\painel)', () => {
     expect(local.js).toContain('/api/nuvem/enviar')
     expect(local.js).toContain('/api/nuvem/esquecer')
     expect(local.js).toContain('Esquecer esta nuvem')
+    // ADR-021, S: o contador de mudanças do sync, que faz o painel reler a lista
+    // sozinho. É só do PC: o '/api/nuvem' da lista do bundle da nuvem o cobre.
+    expect(local.js).toContain('/api/nuvem/mudancas')
     expect(local.js).toContain('resolver_conflito')
     // F8h: o aprendido do PC passa pelo Agent (/api/aprendizado), com as linhas de
     // estado do sync; a pergunta do envio conta as trocas aprendidas.

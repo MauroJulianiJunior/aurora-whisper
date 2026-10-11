@@ -164,6 +164,16 @@ func ligarAprendidoAoPainel(p localapi.Preferencias, hist *storage.SQLiteTranscr
 	return p
 }
 
+// ligarMudancasAoPainel põe na configuração do painel o contador de mudanças
+// do laço (ADR-021, S): a GET /api/nuvem/mudancas, que o painel do PC lê a cada
+// poucos segundos enquanto está à vista. A leitura avisa o laço de que o painel
+// está aberto, e é por isso que ele busca a nuvem a cada 10 s enquanto ela se
+// repete. Sai do run() para o teste.
+func ligarMudancasAoPainel(p localapi.Preferencias, laco *syncengine.Laco) localapi.Preferencias {
+	p.Mudancas = laco
+	return p
+}
+
 // iniciarSync põe o laço para rodar e devolve como pará-lo (o cancelamento e
 // a espera da rodada em curso). Um pânico no laço é registrado e o para, sem
 // derrubar o Agent: o ditado segue local.

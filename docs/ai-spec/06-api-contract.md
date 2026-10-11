@@ -1817,6 +1817,35 @@ Agent sem a nuvem montada responde `503` (`UNAVAILABLE`).
   `versao_em_conflito` (`final_text`, `device_id`, `conflict_at`; ausente sem selo), como o da
   nuvem.
 
+**A chegada mais rápida no PC (ADR-021, decisão P, subfatia S; 10-out-2026).** Fonte da verdade:
+`internal/agent/localapi/nuvem.go` (`handleMudancasNuvem`) e `internal/sync/laco.go`
+(`Laco.LerMudancas`); em divergência vale o código. A rota pede o token da Local API, como o resto de
+`/api`, e responde `Cache-Control: no-store`.
+- `GET /api/nuvem/mudancas`: `{ "contador": 7 }`. **Um inteiro e mais nada: nenhuma resposta traz texto,
+  id, versão, URL, e-mail ou token**, nem nenhum outro campo. Só `GET` (os outros métodos são `405`), sem
+  corpo nem query. É leitura de memória: não vai à nuvem nem ao banco.
+- **O que o contador conta.** Quantas rodadas do sync, desde que o Agent subiu, gravaram no histórico
+  deste PC algo que veio da nuvem: sobe **1 por rodada** (e não 1 por ditado), depois de a gravação ter
+  ido para o SQLite, mesmo na rodada que falhou mais adiante. Conta o pull que trouxe um ditado novo ou
+  mudado (o ditado do celular, a edição feita lá, a lixeira, o restaurar) ou uma lápide que apagou a
+  linha daqui, e o push que a nuvem respondeu com a lápide (apagar vence) ou com o estado que venceu um
+  conflito. A rodada que não gravou nada da nuvem (o eco do que este PC mesmo enviou, a página vazia, o
+  aprendido) não o mexe. Só em memória: recomeça de 0 a cada execução do Agent, e quem lê compara com a
+  leitura anterior, sem supor que ele só cresce.
+- **A leitura é o aviso de "painel aberto".** Depois de cada leitura, durante 15 s (a janela), o laço do
+  sync busca a nuvem a cada **10 s**; passados 15 s sem leitura, volta aos **60 s** de antes (ADR-019,
+  "Decisões da F7a/b", decisão 1; a escolha do Mauro, escolha menor 17 da ADR-021). A primeira leitura
+  depois de uma janela sem nenhuma também acorda o laço: a próxima busca sai 10 s depois da última (ou
+  já, se isso passou), e não espera os 60 s que sobravam. Depois de uma falha de rede o laço segue o
+  backoff, e desconectado ele não gira a cada 10 s: o painel aberto não fura nenhum dos dois.
+- **O painel** (`web/src/mudancas.ts`) lê a rota a cada 3 s só com a aba à vista, uma leitura por vez,
+  e relê a lista quando o número é outro que o da leitura anterior (inclusive um número menor: o Agent
+  reiniciou). Escondida, a aba para de ler, e ao voltar lê já. A leitura que falha é ignorada (a faixa do
+  topo é da lista).
+- `503` (`UNAVAILABLE`, "A nuvem não está disponível neste Agent."): o Agent sem o laço do sync (sem
+  histórico). Um Agent de antes da S responde `404` sem frase, e o painel para de perguntar.
+- A nuvem (`/api/v1`) não tem esta rota: o celular continua relendo a lista ao voltar à aba.
+
 ### Retenção no PC (etapa 5; ADR-019, F10)
 Os 6 meses do histórico no PC e as cópias do banco. **Decidido em 08-out-2026 (ADR-019, "Decisões da
 F10") e implementado na F10d e na F10e.** A fonte da verdade é

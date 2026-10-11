@@ -22,6 +22,12 @@ import (
 // /api/nuvem/enviar: a cópia do banco e a fila) e o "Esquecer esta nuvem"
 // (POST /api/nuvem/esquecer). O painel relê o GET a cada 2 s só enquanto o
 // envio corre e a seção está à vista: é leitura local, sem rede.
+//
+// Desde a S da ADR-021: GET /api/nuvem/mudancas, o contador de mudanças do
+// sync (um número, sem texto), que o painel lê a cada poucos segundos com a
+// aba à vista para saber quando reler a lista. A leitura é também o aviso ao
+// laço de que o painel está aberto: ele busca a nuvem a cada 10 s, e não a
+// cada 60 s.
 
 // Nuvem é o que as rotas usam do nuvem.Servico.
 type Nuvem interface {
@@ -123,6 +129,35 @@ func (s *Server) handleEsquecerNuvem(w http.ResponseWriter, r *http.Request) {
 	}
 	e, err := s.pref.Nuvem.Esquecer(r.Context())
 	s.responderNuvem(w, e, err)
+}
+
+// MudancasDoSync é o contador de mudanças do laço de sync (ADR-021, S).
+type MudancasDoSync interface {
+	// LerMudancas devolve quantas rodadas do sync gravaram no histórico algo
+	// que veio da nuvem, nesta execução do Agent. A leitura é também o aviso de
+	// que o painel está aberto: o laço busca a nuvem mais vezes enquanto ela
+	// se repete (em produção, syncengine.Laco.LerMudancas).
+	LerMudancas() uint64
+}
+
+// mudancasDTO é a resposta de GET /api/nuvem/mudancas: um número e mais nada.
+// Nenhum texto, id, versão, URL ou token: o painel só compara com o que leu
+// da última vez e, se mudou, lê a lista pelo caminho de sempre.
+type mudancasDTO struct {
+	Contador uint64 `json:"contador"`
+}
+
+// handleMudancasNuvem atende GET /api/nuvem/mudancas: o contador de mudanças
+// do sync, que o painel do PC lê a cada poucos segundos enquanto está à vista.
+// É leitura de memória: não vai à nuvem nem ao banco. Um Agent sem o laço (sem
+// histórico) responde 503, e um de antes da S responde 404.
+func (s *Server) handleMudancasNuvem(w http.ResponseWriter, _ *http.Request) {
+	semCache(w)
+	if s.pref.Mudancas == nil {
+		writeError(w, http.StatusServiceUnavailable, codeUnavailable, "A nuvem não está disponível neste Agent.")
+		return
+	}
+	writeJSON(w, http.StatusOK, mudancasDTO{Contador: s.pref.Mudancas.LerMudancas()})
 }
 
 // responderNuvem: o estado com 200, ou a frase do *nuvem.Erro com o status

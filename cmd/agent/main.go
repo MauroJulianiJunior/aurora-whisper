@@ -505,7 +505,10 @@ func run(pp pastas.Pastas) error {
 		defer iniciarSync(laco, slog.Default())()
 		resumoDaNuvem = laco.Resumo
 
-		api := localapi.New(dono, hist, prefs, ligarAprendidoAoPainel(localapi.Preferencias{
+		// O contador de mudanças do sync (ADR-021, S) vai junto: o painel o lê
+		// para saber quando reler a lista, e a leitura avisa o laço de que ele
+		// está aberto.
+		api := localapi.New(dono, hist, prefs, ligarMudancasAoPainel(ligarAprendidoAoPainel(localapi.Preferencias{
 			Padrao:       preferenciasPadrao(),
 			Chaves:       cofre,
 			Inicio:       inicio,
@@ -519,7 +522,7 @@ func run(pp pastas.Pastas) error {
 			// apagado.
 			Retencao: h.retencao,
 			Log:      slog.Default(),
-		}, hist, dono, aprendizado))
+		}, hist, dono, aprendizado), laco))
 		abrir, porta, pararPainel, err := subirPainel(api.Handler(), nuvemDoPC.Retorno(), cam.Painel, slog.Default())
 		if err != nil {
 			slog.Default().Warn("painel: não subiu; o item Abrir da bandeja fica desabilitado", "err", err)

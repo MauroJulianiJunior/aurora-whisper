@@ -20,6 +20,7 @@ import {
   vizinho,
 } from './lista'
 import { Marca } from './Marca'
+import { useMudancasDoSync } from './mudancas'
 
 const esperaDaBusca = 250
 
@@ -224,6 +225,15 @@ export function Painel({ ambiente, focarNoTitulo = false }: Props) {
       document.removeEventListener('visibilitychange', voltou)
     }
   }, [])
+
+  // No PC, o sync pode trazer um ditado do celular (ou a edição feita lá) a
+  // qualquer momento: com a aba à vista, o painel lê o contador de mudanças do
+  // Agent a cada 3 s e, quando o número muda, recarrega a lista pelo mesmo
+  // caminho do "voltar à aba" — sem a pessoa tocar em nada, e sem fechar editor
+  // nem tirar rascunho (mesclarRecarga). Ler o contador é também o aviso ao
+  // Agent de que o painel está aberto, e ele busca a nuvem a cada 10 s
+  // (ADR-021, S). Na nuvem não há contador (ambiente.mudancasDoSync).
+  useMudancasDoSync(ambiente.mudancasDoSync, () => setRecarga((n) => n + 1))
 
   // Os atalhos da página, num ouvinte só, que existe desde a montagem e lê
   // o aviso do momento: um ouvinte que nascesse junto com o aviso só

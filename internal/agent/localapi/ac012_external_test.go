@@ -148,6 +148,9 @@ func TestAC012_LocalAPIRejectsExternalAccess(t *testing.T) {
 		{http.MethodPost, "/api/retencao/ligar", `{"previa":1}`},
 		{http.MethodPost, "/api/retencao/desligar", ""},
 		{http.MethodPost, "/api/retencao/copias/apagar", ""},
+		// O contador do sync (ADR-021, S): a leitura é o aviso de que o painel
+		// está aberto, e só quem tem o token a faz.
+		{http.MethodGet, "/api/nuvem/mudancas", ""},
 	} {
 		t.Run(rota.metodo+" "+rota.caminho+" sem token -> 401, host forjado -> 403", func(t *testing.T) {
 			for _, c := range []struct {
