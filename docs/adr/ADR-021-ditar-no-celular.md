@@ -12,8 +12,15 @@ alternativa.
   podem levar dado de terceiro.
 - **A LG continua pedindo as respostas dele** (as pendências de LGPD da instância).
 - **Nenhum áudio real sai do aparelho antes do OK dele na política e no dossiê reescritos (D0).**
+- **O estado em 11-out-2026:** a fase 1 está na `main` (S, D0, C1, C2, C3a, C3b, C4, C5a, C6a, C6b e
+  C6c). A C5b e a C5c estão em andamento. A C7 espera a C5b e a C5c (o Mauro autorizou o deploy em
+  11-out-2026, e o OK dele na política e no dossiê continua sendo o portão do primeiro áudio real). A
+  C8 e a LG estão pendentes. O estado de cada uma está na coluna "Estado" de "Subfatias", e o que a
+  implementação fixou (nomes, status, números, desvios) está em "O que a implementação fixou". O que a
+  implementação mudou no texto de baixo vem marcado **[C1, 10-out-2026]** e parecidos: a subfatia e o
+  dia em que ela foi feita.
 
-Data: 2026-10-10
+Data: 2026-10-10 (estado e notas da implementação: 2026-10-11)
 Contexto: depois da F11 da ADR-019. Em 10-out-2026 a nuvem já estava no ar, o PC conectado e o app
 instalado no Android. O pedido do Mauro é do mesmo dia, e a leitura do código é a desse dia. Os
 documentos que a preparação do código aberto reescreve (a política, o dossiê, o `09`, o `12` e a
@@ -66,7 +73,8 @@ Na mesma rodada ele fez duas queixas:
   - o ponto único de gravação já grava pela sessão do navegador, sem aparelho, no Edit e no Trash;
   - o pull entrega o ditado sem `device_id`;
   - o PC aplica um `upsert` válido sem olhar `source_platform` (`internal/sync/decisao.go:169-205`;
-    falta um teste que prove).
+    falta um teste que prove). **[C1, 10-out-2026: o teste existe, `TestDecidirMudanca_DitadoDoApp` em
+    `internal/sync/decisao_test.go`, e há o ponta a ponta.]**
 - **O acesso de hoje** (`internal/server/rotas.go:20-32` e `proteger`, `:150-172`):
   - `AcessoSessao` (o navegador), `AcessoAparelho` e `AcessoQualquer` (a sessão ou o token);
   - **qualquer token de aparelho passa no `AcessoAparelho`**, que é o push e o pull do histórico
@@ -90,6 +98,11 @@ Na mesma rodada ele fez duas queixas:
   - Duas peças moram em pacotes do Agent: as conferências do lote (`dictionary.ConferenciasDoLote`,
     `internal/dictionary/lote.go:177-185`) e o `SmartDaSemente` (`internal/agent/aprendiz/conferir.go`).
   - A palavra comum (`learning.Arriscada`) mora num pacote que importa o `internal/storage`.
+  - **[C2, 10-out-2026: as conferências do lote e o `SmartDaSemente` foram para `internal/smartconta`.
+    A `Arriscada` e a `GrafiaArriscada` ficaram em `internal/learning`: o léxico e o tokenizador são
+    usados em dezenas de pontos do motor de sugestão, e mover geraria churn grande sem ganho de
+    comportamento. O que saiu foi a aresta de `learning` para o `storage` (o `confirm.go` importava o
+    `storage` só para o `NewID`), por um pacote novo, `internal/ids`.]**
 - **O Polish é de quem usa.** O `internal/ia` fala com a OpenAI e a Anthropic com a chave que a pessoa
   colou, só por HTTP/1.1, sem seguir redirecionamento e sem repassar o corpo de erro
   (`internal/ia/ia.go:1-35`).
@@ -100,6 +113,9 @@ Na mesma rodada ele fez duas queixas:
   - **O prazo do Polish no PC cresce com o texto:** `prazoPolish`, de 3,5 s a 8 s
     (`internal/agent/winruntime/polish.go:45-68`). Os 10 s do `ia.TimeoutPadrao` são do teste da chave.
   - O adaptador do ditado (`clienteDoDitado` e a política de esforço) mora em `cmd/agent/polish.go`.
+    **[C5a, 10-out-2026: o prazo e o adaptador foram para `internal/polish` (`polish.Prazo`,
+    `polish.PoliticaEsforco`, `polish.Montagem{...}.Abrir()`). Os nomes `prazoPolish` e
+    `clienteDoDitado` do texto de baixo são os do desenho.]**
 - **O servidor tem prazos fixos** (`cmd/server/serve.go:38-43`): 10 s para os cabeçalhos, 30 s para
   ler o pedido e 60 s para escrever, contados do fim dos cabeçalhos. O desligamento espera 15 s, e o
   `stop_grace_period` da API é 30 s. Um corpo JSON tem limite de 1 MiB.
@@ -234,7 +250,12 @@ F. **O Smart da conta, idêntico ao do PC para os mesmos pares** (decisão 4 do 
      `Popular` e `NewSmartResolver`.
    - **O que sai do Agent** **[derivada]**: a palavra comum e o `Agiria` saem de
      `internal/agent/aprendiz` e de `internal/learning` para um pacote sem `storage` nem `sync`, e o
-     Agent passa a importá-lo de lá. O comportamento do Agent não muda (a paridade da C2).
+     Agent passa a importá-lo de lá. O comportamento do Agent não muda (a paridade da C2). **[C2,
+     10-out-2026: o pacote é `internal/smartconta`. A palavra comum (`Arriscada`) ficou em
+     `internal/learning`, e saiu só a aresta para o `storage` (veja "Onde estamos"). O `Agiria` do Smart
+     da conta usa o "acompanhante", um Smart que só acrescenta, e não o `ValidarPar` literal, por
+     velocidade; as respostas são as mesmas (há um teste de equivalência), e o Agent continua no
+     `ValidarPar`.]**
    - **Como roda no ditado:** `repeticao.Colapsar`, depois `Resolve` com `Domain` nulo, sem contexto e
      com `CloudPolicy` desligada.
    - **O par preso a um domínio não age no celular, de propósito (fail-closed)** **[derivada]**. O PWA
@@ -282,7 +303,17 @@ H. **O aceite é de quem dita, e não só do Mauro como controlador** **[derivad
      - a rota de ditar confere os dois provedores, o da transcrição e, com o Polish ligado, o do Polish,
        na hora de chamar.
    - **Quando pede de novo:** trocar de provedor, ligar o Polish com outro provedor ou mudar o texto do
-     aviso. Mudar só o modelo não pede (escolha menor 21).
+     aviso. Mudar só o modelo não pede (escolha menor 21). **[C3b, 11-out-2026: o aceite cobre o
+     CONJUNTO dos dois provedores aceitos (o da transcrição e o do Polish). Ligar o Polish com um
+     provedor que já está no conjunto (a OpenAI aceita para a transcrição, por exemplo) não pede aceite
+     novo; pede um provedor fora dele, trocar de provedor ou mudar a versão do aviso. Com o Polish
+     desligado, o provedor dele pode ser qualquer um da lista: a conferência só vale quando liga.]**
+   - **[C3b, 11-out-2026] A versão do aviso** é um inteiro: `cloudstore.VersaoDoAviso` no servidor e
+     `VERSAO_DO_AVISO` em `web/src/nuvem/avisoDoDitado.ts`, presos por um teste
+     (`TestVersaoDoAviso_AppEServidorConferem`, que lê o arquivo do app). **O `POST` do aceite recusa uma
+     versão diferente da atual** (`409`, `AVISO_DESATUALIZADO`), para cima ou para baixo: um app com o
+     texto velho na memória não registra que a pessoa aceitou o texto novo. Mudar o texto da folha é
+     subir os dois números juntos.
    - **Revogar:** "Desligar o ditado no celular", nas Configurações. Revoga o aceite e apaga as chaves
      (escolha menor 12).
    - **Para quem usa:** uma folha no primeiro toque; trocar de provedor mostra a folha de novo.
@@ -333,7 +364,10 @@ N. **O Polish no celular é o mesmo motor do PC** (decisão 3 do Mauro: `interna
      e a política de esforço) vai para um pacote comum, e o PC e o servidor passam a usar o mesmo. É a
      C5a, com paridade no Agent e teste no PC.
    - **O prazo** **[derivada]:** o do PC, `prazoPolish` (3,5 s a 8 s conforme o texto), que vai junto
-     para o pacote comum. Não os 10 s do `ia.TimeoutPadrao`, que são do teste da chave.
+     para o pacote comum. Não os 10 s do `ia.TimeoutPadrao`, que são do teste da chave. **[C5a,
+     10-out-2026: no pacote comum, `internal/polish`, ele é `polish.Prazo(texto)`, e o piso é
+     `polish.PisoPrazo`. O acréscimo por caractere é o do núcleo (`dictation.AcrescimoPeloTexto`), e não
+     repetido: a folga de 1,5 s até o watchdog do núcleo continua garantida por construção.]**
    - **Regras:** as mesmas do PC, que são 4 palavras ou mais, as guardas sobre o Smart da conta e a
      queda para o texto do Smart quando falha ou estoura o prazo.
    - **Para quem usa:** o Polish do celular começa desligado; quando o provedor demora, vale o texto do
@@ -359,7 +393,15 @@ P. **A chegada ao PC fica mais rápida** **[derivada; escopo novo, com OK própr
 
 1. **O primeiro uso.** No primeiro toque no microfone, o app mostra a folha do aceite (decisão H).
    Sem o aceite, para aí. Com ele, pede o provedor e a chave, se ainda não houver; o servidor confere o
-   aceite, testa a chave no provedor e a guarda cifrada.
+   aceite, testa a chave no provedor e a guarda cifrada. **[C6b, 11-out-2026: a chave não é pedida
+   dentro da folha. Depois do "Aceito", se falta a chave, a pílula diz "Falta a chave da OpenAI. Cole a
+   chave nas Configurações." e o app abre as Configurações na seção do ditado. Assim há um único lugar
+   que cola, troca e remove a chave, e a disciplina de nunca ecoá-la fica num componente só. O
+   microfone também não começa sozinho depois da folha: a pílula diz "Aceito. Toque no microfone para
+   ditar." (a pessoa acabou de ler um aviso longo, e isso evita depender do gesto do toque para o
+   `AudioContext`). E o primeiro toque sem rede não abre o microfone ("Sem conexão."): sem saber do
+   aceite, não abre. Depois de a porta passar uma vez na página, o ditado sem rede segue gravando, e o
+   áudio espera o "Tentar de novo".]**
 2. **A gravação.** O app pede o microfone e começa a gravar. Pede também a tela acesa (Wake Lock) e
    mostra a onda e o tempo.
 3. **O fim.** Num toque, ou no teto de duração, o app para. O microfone desliga na hora, como na
@@ -414,6 +456,17 @@ o status de cada um é fixado na C5b:
 | `PROVEDOR_RECUSOU_CHAVE`, `PROVEDOR_LIMITE`, `PROVEDOR_FORA` | a falha do provedor, já traduzida | sim, e não houve ditado |
 | `APAGADO` (410) | o id tem lápide | não |
 
+**[C3a e C3b, 11-out-2026]** Os status já fixados, nas rotas das chaves, do aceite e das preferências.
+A C5b reaproveita a tradução da falha do provedor (`server.FalhaDoProvedor`) e fixa os que faltam:
+- `SEM_ACEITE` 403; `SEM_CHAVE` 409; `LIMITE` 429, com `Retry-After`.
+- `PROVEDOR_RECUSOU_CHAVE` 422 (o provedor recusou a chave com `401`, ou negou a lista de modelos com
+  `403`); `PROVEDOR_LIMITE` 502 (limite de uso ou falta de crédito, o `429` do provedor);
+  `PROVEDOR_FORA` 502 (qualquer outra falha: `5xx`, prazo, rede, redirecionamento, resposta inesperada).
+- **`AVISO_DESATUALIZADO` 409, código novo da C3b:** o aceite veio com uma versão do aviso que não é a
+  atual, ou seja, o app tem o texto velho; o app recarrega e mostra o texto novo, e nada é gravado.
+- O `{provedor}` fora da lista (`openai`, `groq`, `anthropic`) é `404` `NOT_FOUND`, "provedor
+  desconhecido", sem eco do valor.
+
 ### Prazos
 
 | Trecho | Prazo | Quem corta |
@@ -428,7 +481,7 @@ o status de cada um é fixado na C5b:
 | Escrever a resposta | 45 s depois do fim do corpo | `SetWriteDeadline` no handler. O `writeTimeout` de 60 s (`serve.go:40`) conta do fim dos cabeçalhos e não cobriria 30 + 20 + 8 + 5 |
 | Quem espera o mesmo id | até o fim do primeiro, mais a folga | o handler que espera estende o próprio prazo de escrita com `SetWriteDeadline`: o `writeTimeout` dele conta do fim dos cabeçalhos dele |
 | O desligamento | o `Shutdown` de hoje (15 s) e, depois, até 70 s pelos ditados em andamento | o `serve`, com o `stop_grace_period` da API em 90 s (escolha menor 22) |
-| O celular | 90 s | um `AbortController`. Depois disso, o app reenvia com o mesmo id |
+| O celular | 90 s | um `AbortController`. Depois disso, o app diz "O envio demorou demais." e oferece "Tentar de novo" com o mesmo id. **[C6a, 10-out-2026: ele não reenvia sozinho, para não pagar o provedor de novo sem a pessoa ver.]** |
 
 **As contas.**
 - **Subida:** 1 MiB em 30 s pede uns 280 kbit/s de subida. Um ditado típico de 0,5 MB pede uns 140
@@ -544,33 +597,43 @@ Como funciona:
     calibrar. **Esse filtro roda depois da cobrança:** ele evita o ditado vazio, e não o custo;
   - texto vazio no fim dá `SEM_FALA`, e nenhum ditado é criado;
   - os modelos `gpt-*-transcribe` podem não devolver esses campos (a conferir na C4). Neles vale só a
-    medição do app.
+    medição do app. **[C4, 10-out-2026: o provider trata os `gpt-*-transcribe` como se não devolvessem
+    segmentos: pede `json` a eles, e `verbose_json` aos ids com `whisper`. Nos `gpt-*-transcribe` vale
+    só a medição do app. O que o modelo de fato aceita fica sem chamada real até a C7.]**
 - **Por que não a VAD do PC no servidor:** ela precisa de PCM, e o servidor não decodifica opus.
   Importá-la levaria o `internal/agent/dictation` para o servidor.
 
 ### O motor: os provedores de transcrição
 
 O que segue foi lido nas páginas oficiais pelo levantamento de 10-out-2026, com preços em dólar, sem
-câmbio nem IOF. A D0 relê cada página e cita a data. **O custo é da pessoa, na conta dela no
-provedor.** O projeto não paga nada.
+câmbio nem IOF. A D0 releu cada página em 10-out-2026 e **corrigiu três pontos que este levantamento
+tinha errado ou deixado vagos** (a OpenAI e o Brasil, a Groq e o treino, a retenção zero da Groq); a
+tabela abaixo já traz o texto corrigido, e o Anexo B de `docs/lgpd-dossie.md` diz, página por página, o
+que cada uma afirma e o que **não** afirma. **O custo é da pessoa, na conta dela no provedor.** O
+projeto não paga nada.
 
 | | OpenAI | Groq |
 |---|---|---|
 | Endereço | `api.openai.com/v1/audio/transcriptions` | `api.groq.com/openai/v1/audio/transcriptions` |
-| Modelos (o app lista os que a chave alcança, filtrando `transcribe` e `whisper` no `/models`) | `gpt-transcribe` (US$ 0,0045/min, o que a OpenAI recomenda hoje; o português não aparece escrito nas páginas lidas); `gpt-4o-mini-transcribe` (US$ 0,003/min); `gpt-4o-transcribe` e `whisper-1` (US$ 0,006/min) | `whisper-large-v3-turbo` (US$ 0,04/h, mínimo de 10 s por pedido); `whisper-large-v3` (US$ 0,111/h) |
-| Formatos | mp3, mp4, mpeg, mpga, m4a, wav e **webm**; até 25 MB | flac, mp3, mp4, mpeg, mpga, m4a, ogg, wav e **webm**; até 25 MB |
+| Modelos (o app lista os que a chave alcança, filtrando `transcribe` e `whisper` no `/models`. **[C4]** O filtro do pacote dos provedores, `nuvem.EhModeloDeTranscricao`, exclui também os ids de diarização, `...diarize`, que pedem outro formato de resposta, e os só de inglês, terminados em `-en` ou `.en`; hoje o `GET /ai-keys/{provedor}/models` devolve a lista inteira e o app filtra por nome) | `gpt-transcribe` (US$ 0,0045/min, o que a OpenAI recomenda hoje; o português não aparece escrito nas páginas lidas); `gpt-4o-mini-transcribe` (US$ 0,003/min); `gpt-4o-transcribe` e `whisper-1` (US$ 0,006/min) | `whisper-large-v3-turbo` (US$ 0,04/h, mínimo de 10 s por pedido); `whisper-large-v3` (US$ 0,111/h) |
+| Formatos | mp3, mp4, mpeg, mpga, m4a, wav e **webm**; até 25 MB | flac, mp3, mp4, mpeg, mpga, m4a, ogg, wav e **webm**; até 25 MB no plano gratuito e 100 MB no Developer |
 | Dica | `prompt` (o `gpt-transcribe` tem também `keywords`, que a OpenAI diz que são só dicas e podem induzir termos) | `prompt`, até 224 tokens |
-| Treino | a API não treina sem opt-in | a página de dados não fala em treino; a política de privacidade, vista só pela busca, diz que não treina |
-| Retenção lá | ambígua: a tabela de endpoints diz retenção de abuso "None" para `/v1/audio/transcriptions`, com ZDR elegível; o texto geral da mesma página fala em logs de abuso por até 30 dias para todo uso da API. **A política assume até 30 dias** | não guarda por padrão; pode registrar entrada e saída por até 30 dias, só para investigar falha ou abuso, a menos que o "não guardar" (ZDR) esteja ligado em Data Controls. **O servidor não tem como conferir se está ligado** |
-| **Onde processa** | a página diz que um projeto pode fixar a residência dos dados nos **EUA** ou na **Europa**, e que o `/audio/transcriptions` processa na região escolhida. O Brasil aparece só como armazenamento. **Sem a residência fixada, a página lida não diz o país.** | a página diz que o dado **guardado** fica em buckets do GCP **nos EUA**. **Não diz onde a transcrição roda.** A Groq anunciou 13 data centers na América do Norte, na Europa, no Oriente Médio e na Ásia-Pacífico (22-jun-2026) |
+| Treino | a API não treina sem opt-in | **as páginas lidas não falam em treino com dados de clientes.** A página de dados não fala; a política de privacidade (em vigor desde 12-nov-2025) não se aplica aos dados de clientes da nuvem e os remete ao contrato de serviço e ao DPA (15-out-2025); o DPA limita o tratamento a prestar o serviço, em nome do cliente, e também não fala em treino. A política e a folha **não afirmam** que a Groq não treina |
+| Retenção lá | ambígua: a tabela de endpoints diz retenção de abuso "None" para `/v1/audio/transcriptions`, com ZDR elegível; o texto geral da mesma página fala em logs de abuso por até 30 dias para todo uso da API. **A política assume até 30 dias** | não guarda por padrão; pode registrar entrada e saída por até 30 dias, só para investigar falha ou abuso, a menos que o "não guardar" (ZDR) esteja ligado em Data Controls. **A página diz que essa opção está ao alcance de todos os clientes** (na OpenAI, a retenção zero depende de aprovação dela). **O servidor não tem como conferir se está ligado** |
+| **Onde processa** | a página diz que um projeto pode fixar a residência dos dados nos **EUA** ou na **Europa**, e que a transcrição de áudio processa na região escolhida. A Austrália, o Canadá, o Japão, a Índia, Singapura, a Coreia do Sul e o Reino Unido são só de armazenamento; a Europa exige retenção zero ou monitoramento modificado; a residência depende de elegibilidade (a página manda falar com o comercial). **O Brasil não aparece na página, nem como armazenamento** (a versão anterior desta tabela dizia que aparecia só como armazenamento, e a releitura da D0 não o achou). **Sem a residência fixada, a página lida não diz o país.** | a página diz que o dado **guardado** fica em buckets do GCP **nos EUA**. **Não diz onde a transcrição roda.** A Groq anunciou 13 data centers na América do Norte, na Europa, no Oriente Médio e na Ásia-Pacífico (22-jun-2026). O DPA diz que ela pode transferir e tratar dados nos EUA e em outros países onde ela ou seus subprocessadores operam; a lista de subprocessadores não carregou como texto e não foi lida |
 | Limites | os da conta da pessoa | plano Developer: 20 pedidos por minuto e 7.200 s de áudio por hora, para a organização inteira |
 
 **O que a política diz sobre o país.** A política não afirma "EUA" sem prova. Ela escreve o que a
 documentação diz:
-- **OpenAI:** "nos EUA ou na Europa, conforme o projeto da sua chave; sem essa escolha, onde o provedor
-  processa". Se a conta de quem dita tiver a residência de dados, ela a fixa, e o país passa a ser
-  conhecido (a conferir na C7, na conta do Mauro).
-- **Groq:** "nos EUA e em outros países onde o provedor processa".
+- **OpenAI:** "nos EUA ou na Europa, se o projeto da sua chave tiver a residência de dados fixada; sem
+  isso, a documentação não diz em que país". Se a conta de quem dita tiver a residência de dados, ela a
+  fixa, e o país passa a ser conhecido (a conferir na C7, na conta do Mauro).
+- **Groq:** "o que ela guarda fica nos EUA; a documentação não diz onde a transcrição roda; o contrato
+  prevê tratamento nos EUA e em outros países".
+- **O tratamento que a D0 deu (a confirmar pelo Mauro):** como nenhum dos dois diz processar no Brasil,
+  a política e a folha tratam o envio como transferência internacional, e não afirmam "fora do Brasil".
+  A hipótese do art. 33 (a proposta é o inciso VIII, o consentimento específico e em destaque que a folha
+  cumpre) está como `[A PREENCHER]`, para o responsável.
 
 A D0 pode ainda pedir à Groq onde a transcrição roda, pelo DPA, pela lista de suboperadores ou pelo
 suporte.
@@ -580,6 +643,28 @@ suporte.
   `gpt-transcribe`, o campo é `languages`), o `prompt` com a dica (se ligada), `temperature` 0 e o
   `response_format` que o modelo aceita (`verbose_json` quando dá, senão `json`). O que cada modelo
   aceita é conferido na C4 e numa chamada de teste na C7.
+- **[C4, 10-out-2026] O que o pacote `internal/asr/nuvem` fixou:**
+  - **A tabela por modelo** (`perfilDoModelo`) é mínima e **não foi conferida numa chamada real**, como
+    esta ADR já previa para a C7: o campo `languages` (um só, `pt`) vai só aos ids que começam com
+    `gpt-transcribe`; o `response_format` é `verbose_json` para os ids com `whisper` e `json` para os
+    outros; `temperature=0` e `prompt` vão a todos. Se o `gpt-transcribe` recusar `languages=pt` ou a
+    temperatura, o ajuste é só nessa tabela.
+  - **Só áudio comprimido:** o provider da nuvem recusa PCM (`asr.ErrPCMNaoSuportado`). Embrulhar o PCM
+    em WAV faria uma segunda cópia do áudio, contra a decisão D. Por isso ele ainda não é
+    intercambiável com o local num `Engine` que receba PCM do PC; no servidor o buffer sempre vem
+    comprimido, e isso não importa.
+  - **Erros:** o pacote tem um `Erro` e um `Motivo` próprios, e duplica o transporte só HTTP/1.1 do
+    `internal/ia` (cerca de 15 linhas), porque o `internal/ia` importa o `resolver`, o `dictionary` e o
+    `agent/dictation`, e o pacote do ASR não deve arrastar isso. Os motivos iguais aos do `ia` têm o
+    mesmo texto, e há dois a mais: `sem_chave` e `arquivo_grande` (o `413` do provedor e o teto de
+    25 MB). O erro não embrulha o erro de origem (a única causa embrulhada é `context.DeadlineExceeded`);
+    o cancelamento do chamador volta como `context.Canceled`, e não como falha do provedor; o `429` do
+    provedor não repassa `Retry-After`.
+  - **Nenhum arquivo, nenhum log:** uma guarda de fonte (`TestFonteNaoTocaDiscoNemLog`) proíbe no
+    código do pacote os imports `os`, `io/ioutil`, `path/filepath`, `log`, `log/slog` e `runtime/debug`.
+  - **Falta:** o provider não expõe a duração do áudio nem o idioma detectado (o `ASRResult` não tem
+    campo para isso); a duração do ditado vem do cabeçalho `Ditado-Duracao-Ms`. Os limiares do silêncio
+    (0,6 e -1,0) são constantes (`LimiteSemFala`, `LimiteLogprob`), a calibrar na C7 e na C8.
 - **O envio:** com `Content-Length` calculado, sem `chunked` (decisão D). A chamada de teste da C7 passa
   pelo mesmo caminho de código.
 - **A resposta:** é lida com teto (`io.LimitReader`), e nenhum corpo de erro passa adiante.
@@ -593,11 +678,35 @@ suporte.
 
 ### O Smart da conta e a dica
 
-- **Montagem:** o Smart é montado a cada ditado a partir do aprendido da conta, até 500 pares. A meta
-  é ficar abaixo de 25 ms para montar e resolver, medida por benchmark na C2. Só se não couber entra um
-  cache por conta, invalidado pelo `last_seq`.
+- **Montagem:** o Smart é montado a partir do aprendido da conta, até 500 pares. A meta era ficar abaixo
+  de 25 ms para montar e resolver, medida por benchmark na C2, e só se não couber entraria um cache por
+  conta, invalidado pelo `last_seq`. **[C2, 10-out-2026: não coube, e o cache entrou.]**
+  - **Os números reais:** resolver com o Smart pronto leva cerca de **4 ms** (um ditado de 40
+    palavras); montar do zero leva cerca de **1 s** com 500 pares e cerca de **50 ms** com 100; com o
+    cache acertado, um ditado custa cerca de **3,7 ms**. A meta de 25 ms vale para resolver e para o
+    cache acertado, e **não** para montar do zero.
+  - **Por quê:** o lote do PC confere um par de cada vez sobre a semente acumulada (O(n²) por
+    construção), e a paridade com o PC exige esse caminho. Antes dos ajustes, montar levava 21,5 s e
+    resolver 818 ms (a busca varria entradas por aliases). Mais ganho pede reescrever as varreduras do
+    lote em `dictionary` (`aprenderEm`, `projecaoDe`, `DominiosDaConferencia`), o que não foi feito para
+    não arriscar o comportamento do PC; a estimativa é de cerca de 0,5 s com 500 pares.
+  - **O cache** é o `smartconta.Cache` (tamanho padrão 16, cerca de 12 MiB no pior caso, contra o
+    `GOMEMLIMIT` de 200 MiB). A versão dele é o `last_seq` **da conta**, contando os pares desfeitos, e
+    não o maior `last_seq` dos pares ativos, que cai quando o par mais novo é desfeito. Ele se esquece
+    no "Apagar meus dados" e ao desligar o ditado. A primeira montagem de 500 pares custa cerca de 1 s
+    de CPU numa VPS pouco potente, e por isso entra nas vagas e nos limites da C5b.
+  - **O índice do dicionário** (`1d76697`): o `Search` em memória e o `Normalize` rápido, sem mudar o
+    resultado (testes diferenciais contra a versão antiga). No PC, o benchmark com o dicionário real
+    foi de 6,03 ms para 0,243 ms.
+  - **Duas escolhas da C2:** `Montar` reverte a lista (o `ListLearned` vem do mais recente ao mais
+    antigo, e o lote aplica do mais antigo ao mais novo, a ordem do pull no PC: quem entra primeiro
+    leva a melhor num conflito); e devolve só o erro fixo `ErrMontar`, sem a causa, porque os erros do
+    dicionário citam o termo e texto ditado não vai a erro.
 - **A dica (desligada por padrão até a C8):** termos distintos dos pares sem domínio nem restrição, do
-  mais recente ao mais antigo, até 140 runas.
+  mais recente ao mais antigo, até 140 runas. **[C2: a dica sai direto dos pares, como esta ADR
+  descreve, e não do Smart montado (`smartconta.Dica`, `DicaLigadaPorPadrao` falso). Por isso ela leva
+  também o termo de um par que o lote recusou (palavra comum, que não agiria). Se o Mauro preferir só
+  os que agem, a dica passa a exigir o Smart montado.]**
 - **O que o celular não tem:** os termos do `dicionario.json` de cada PC (os de antes, os
   "adicionados" e as dicas deles), e os pares presos a um domínio. Com isso, o texto do celular pode
   sair pior que o do PC num termo que só o PC conhece. Isso fica escrito na tela de privacidade e em
@@ -622,14 +731,21 @@ suporte.
     `final` (até 4 caracteres, para a tela não precisar decifrar), mais as datas.
 - **A chave de cifra:**
   - vem do arquivo `AI_KEYS_SECRET_FILE` **[derivada: o nome]**, com 64 caracteres em hexadecimal, como
-    os outros segredos;
+    os outros segredos. **[C3a, 11-out-2026: o arquivo se chama `segredos/ai-keys-secret`. A variável
+    comum `AI_KEYS_SECRET` também vale, como nos outros segredos, e as duas juntas dão saída 2. Uma
+    chave de cifra igual (sem diferenciar maiúsculas) ao `SESSION_SECRET` ou ao `DEVICE_TOKEN_PEPPER` é
+    recusada na subida.]**
   - a cifra usa uma subchave dela, derivada por HKDF com o rótulo `aurora-whisper/ai-keys/v1`, e o id
-    é um HMAC dela com outro rótulo, truncado (decisão G);
-  - **numa VPS nova,** o `gerar-segredos.sh` a cria junto com os outros;
+    é um HMAC dela com outro rótulo, truncado (decisão G). **[C3a: o rótulo do id é
+    `aurora-whisper/ai-keys/id/v1`.]**
+  - **numa VPS nova,** o `gerar-segredos.sh` a cria junto com os outros. **[C3a: ele NÃO a cria, ainda.
+    O `compose_test` exige que o número de segredos que ele grava seja igual ao do compose, e o compose
+    só declara o novo na C5c. Até lá, numa VPS nova, o passo é `gerar-segredos.sh` e depois
+    `criar-chave-de-cifra.sh`, e o script novo aceita esse caso. A C5c passa a criá-la junto.]**
   - **numa VPS que já está no ar,** o `gerar-segredos.sh` recusa rodar (a pasta `segredos/` existe). A
-    C3a entrega um passo próprio (um modo "acrescentar só o que falta" ou um script novo, a decidir na
-    C3a) que cria só esse arquivo, `0444` na pasta `0700`, com a saída suprimida, e recusa sobrescrever.
-    Ele é testado em `deploy/scripts_test.go`;
+    C3a entrega um passo próprio, **[C3a: um script novo, `deploy/scripts/criar-chave-de-cifra.sh`]**,
+    que cria só esse arquivo, `0444` na pasta `0700`, com a saída suprimida, e recusa sobrescrever. Ele
+    é testado em `deploy/scripts_test.go`;
   - montada em `/run/secrets`, como o `SESSION_SECRET`, e acrescentada ao `SEGREDOS_ESPERADOS` do
     `subir.sh` quando o compose a declarar (C5c);
   - entra na varredura de segredos e no `compose_test`;
@@ -647,6 +763,35 @@ suporte.
   - `GET /api/v1/ai-keys/{provedor}/models` lista os modelos com a chave guardada.
 - **Um limite por conta** nas duas que chamam o provedor (o `PUT` e o `GET` dos modelos): 10 por
   minuto, juntas (escolha menor 24). O `LimitesPadrao` de hoje não tem nada para rotas de sessão.
+  **[C3a, 11-out-2026: a ficha é gasta logo antes de chamar o provedor; um pedido barrado antes (JSON
+  quebrado, validação, sem aceite, sem chave) não gasta ficha. É um balde de fichas (10 de rajada e 1 a
+  cada 6 s), e por isso numa janela de 60 s cabem até uns 19 pedidos; o sustentado é 10 por minuto, como
+  os outros limites do projeto.]**
+- **[C3a, 11-out-2026] O que a C3a fixou nas rotas:**
+  - o `GET` dos modelos também exige o aceite (ele manda a chave ao provedor); o `DELETE` não pede;
+  - o `GET` devolve a lista **inteira** do provedor, sem filtrar por uso, e o app filtra por nome (voz:
+    `transcribe` ou `whisper`; Polish: o resto). A Groq é chamada pelo `internal/ia` na forma da OpenAI
+    (`BaseOpenAI` com `https://api.groq.com/openai`, `GET /openai/v1/models` com `Bearer`), em
+    `server.ModelosPelaRede`, o que não exigiu mexer no `ia` nem no Agent; a C7 confere numa chamada
+    real. A lista filtrada da C4 (`nuvem.EhModeloDeTranscricao`) pode entrar no lugar;
+  - o "Apagar meus dados" **já apaga a `ai_provider_keys` desde a C3a** (e não só na C3b, como a linha
+    da C3b em "Subfatias" dizia), para que entre o merge da C3a e o da C3b a chave cifrada da conta não
+    fique para trás;
+  - pacotes novos: `internal/chavedeapi` (o pacote neutro de `Validar` e `Final`, com as mensagens que
+    mantêm o prefixo `chaves:`, para o log do Agent não mudar), `internal/server/cofre` (a cifra) e
+    `internal/server/chavestest` (a suíte de contrato, na memória e no Postgres). **Nenhuma dependência
+    nova de produção** (`crypto/hkdf`, `crypto/aes`, `crypto/cipher`, `crypto/hmac`, `crypto/sha256`);
+  - o servidor de teste do PC (`cmd/server`, `logindeteste`) sobe sem a chave de cifra, então as rotas do
+    ditado no celular são `404` nele. Se o `pnpm dev` precisar delas, é gerar um cofre por processo,
+    como o `SESSION_SECRET` de lá.
+- **[C3a-revisão, 11-out-2026] O que a revisão adversarial achou:** nenhuma correção. Cinco mutações
+  pegas e uma lacuna de teste (nenhum caso prova que duas sessões da MESMA conta dividem o balde do
+  limite; o código usa o `UserID`, certo). Ficaram como risco: a corrida do `PUT` contra o apagar e o
+  revogar (`13-implementation-plan.md`, TASK-028, "Fica aberto"); o `GET` dos modelos, que tem efeito
+  colateral e não é barrado pelo `http.CrossOriginProtection`; e, só com acesso ao banco, o tamanho do
+  texto cifrado que revela o tamanho da chave, o `key_suffix` em claro e fora do AAD (quem escreve no
+  banco pode trocar o "terminada em" ou recolocar um cifrado antigo da mesma conta e do mesmo provedor),
+  e uma chave de cifra fraca que a subida aceita (o script gera de `/dev/urandom`).
 - **Em todo caminho de erro:** a chave decifrada nunca vai a log, erro, resposta ou URL. **A rota da
   chave não usa a mensagem do `decodeJSON`:** qualquer erro de decodificação responde com uma frase
   fixa, porque a mensagem do decodificador pode trazer um pedaço do que foi colado.
@@ -662,25 +807,56 @@ suporte.
 
 - **A tabela `dictation_settings`** (uma linha por conta): o provedor e o modelo da transcrição, a dica
   ligada, o Polish ligado, o provedor e o modelo do Polish.
+  - **[C3b, 11-out-2026] Os modelos padrão:** o da OpenAI é o `gpt-4o-mini-transcribe` **até a C7** (o
+    caminho "se não" da escolha menor 1, porque a chamada de teste em pt-BR ainda não rodou; trocar
+    para o `gpt-transcribe` é uma constante, `ModeloPadraoOpenAI`, em
+    `internal/server/cloudstore/ditado_celular.go`); o da Groq é o `whisper-large-v3-turbo`. O Polish
+    não tem modelo padrão: fica vazio até a pessoa escolher, como no PC, e só pode ficar vazio com o
+    Polish desligado. O modelo da transcrição vazio no `PUT` vira o padrão do provedor, resolvido no
+    servidor.
 - **A tabela `dictation_consents`:** cada aceite é uma linha, com a versão do aviso, os provedores
   aceitos, a data e, depois, a data da revogação. Provar o consentimento é do controlador (art. 8º,
   §2º, já citado no dossiê).
+  - **[C3b, 11-out-2026] O aceite terminado tem `ended_at` e `end_reason`** (`revogado` ou
+    `substituido`), e não só uma "data da revogação": o aceite novo substitui o anterior, e chamar isso
+    de revogação falsearia a prova do consentimento. Um índice único parcial garante no máximo um
+    aceite em aberto por conta, e a gravação e a revogação travam a linha do usuário
+    (`FOR NO KEY UPDATE`). Aceitar de novo exatamente o mesmo (a mesma versão e os mesmos provedores)
+    não grava outra linha e mantém a data da primeira vez.
+  - **O aceite fica gravado como prova** (uma linha por aceite, os terminados também) **enquanto a
+    conta existir**, e sai no "Apagar meus dados". As cópias nos backups seguem a retenção do backup.
 - **As rotas:**
   - `GET /api/v1/dictation` traz o estado: as preferências, o aceite vigente e as chaves (só
     `configurada` e `final`);
   - `PUT /api/v1/dictation/settings` muda as preferências e recusa um provedor fora do aceite vigente;
   - `POST /api/v1/dictation/consent` grava o aceite, e só com a versão atual do aviso;
   - `DELETE /api/v1/dictation/consent` revoga e apaga as chaves.
+  - **[C3b, 11-out-2026] O formato** (o `06` tem o detalhe): o `GET`, o `PUT` e o `POST` devolvem o
+    mesmo estado, `{aviso, aceite, preferencias, chaves}`; o `DELETE` do aceite devolve `204`. O
+    `aceite` do estado traz `vigente: false` quando a versão não é a atual. `chaves` traz uma entrada
+    por provedor, com `colar_de_novo` (e `configurada: false`) quando a linha foi cifrada por outra
+    chave de cifra, calculado com `cofre.MesmoID`, sem decifrar. O `PUT` das preferências é a
+    substituição inteira (os três campos são obrigatórios). **Revogar mantém as preferências** (são só
+    escolhas, sem segredo) e apaga **todas** as chaves da conta, também as de um provedor que o aceite
+    já não cobria, mesmo sem aceite em aberto. As frases de erro são fixas, o corpo é estrito (sem eco) e
+    o `AVISO_DESATUALIZADO` (`409`) é o código novo.
 - **A versão do aviso:** mora num lugar que o app e o servidor leem, e um teste prende os dois (o
-  detalhe é da C3b).
+  detalhe é da C3b). **[C3b: em dois lugares presos por um teste, e não um arquivo só lido pelos dois,
+  porque o Go não embute arquivo de fora do pacote e o Vite não deve importar de fora de `web/`:
+  `cloudstore.VersaoDoAviso` (Go) e `VERSAO_DO_AVISO` (`web/src/nuvem/avisoDoDitado.ts`). Ver a decisão
+  H.]**
 - **Nada disso sincroniza com os PCs.** O "Apagar meus dados da nuvem" apaga as três tabelas
   (`internal/server/pgstore/contas.go`, a lista `apagarDaConta`), e um ditado em andamento é descartado
-  (decisão I).
+  (decisão I). **[C3a e C3b: a `ai_provider_keys` já saía no "Apagar" desde a C3a, e a C3b somou as duas
+  tabelas dela.]**
 - **No passo 2:** o aceite, as preferências e as chaves continuam sendo feitos pelo PWA, com a sessão.
   O app nativo recebe `SEM_ACEITE` ou `SEM_CHAVE` e manda a pessoa ao PWA, a menos que a ADR do passo 2
   dê o escopo a essas rotas.
 - **As migrations:** 0017, 0018 e 0019, uma tabela por arquivo, só aditivas (as 0001 a 0016 já estão
-  em produção). O `migrations/schema_test.go` prova que nenhuma coluna guarda áudio.
+  em produção). O `migrations/schema_test.go` prova que nenhuma coluna guarda áudio. **[C3a e C3b:
+  `0017_ai_provider_keys_table`, `0018_dictation_settings_table` e `0019_dictation_consents_table`. O
+  `serve` recusa subir com migration pendente: elas rodam pelo `migrate` antes da imagem nova e entram
+  no roteiro de deploy (C5c).]**
 
 ### A tela
 
@@ -704,7 +880,8 @@ suporte.
   - o ditado entra no topo, em destaque, com o "Copiar" que o `ItemDitado` já tem;
   - copiar sozinho ao chegar depende do navegador: escrever na área de transferência pode pedir um
     gesto recente, e a resposta chega segundos depois do toque (escolha menor 14, a conferir no
-    aparelho).
+    aparelho). **[C6a, 10-out-2026: não foi feito; só o botão "Copiar" que a linha já tem. Fica para
+    conferir no aparelho, na C7.]**
 - **As frases de erro** (o app decide pelo `error.code`):
 
   | Situação | Frase |
@@ -756,7 +933,9 @@ suporte.
    e diz "Parei quando o app saiu da frente." ou "O microfone foi interrompido.".
 3. **No passo 1 não existe ditado em segundo plano nem com a tela apagada.** A tela diz isso na
    primeira vez, e a política também. O passo 2 resolve, com um serviço em primeiro plano do app
-   nativo.
+   nativo. **[C6b, 11-out-2026: o aviso do "primeiro uso" entrou DENTRO do texto da folha ("O que isto
+   não faz") e na introdução da seção do ditado nas Configurações, e não como um "visto" separado,
+   gravado no servidor.]**
 4. **Se o Android congela ou descarta a aba no meio do envio,** o servidor já está com o pedido e grava
    o ditado mesmo assim (decisão I). Ele aparece no histórico quando a pessoa volta.
 
@@ -819,6 +998,9 @@ Escopo novo, com OK próprio (decisão P).
 - **O que não muda:** o celular continua relendo ao voltar à aba.
 - **Não depende do ditado** nem de LGPD, chave ou deploy na nuvem. Com o OK dele no intervalo, pode vir
   primeiro: é a queixa de agora.
+- **[S, 10-out-2026] Implementada** (`6e599dc`, `cbb6d8b`), com os 10 s com o painel aberto e os 60 s
+  fechado que o Mauro aprovou (escolha menor 17). O teste no PC é dele, depois de remontar o Agent. O
+  que ela fixou, incluindo o que o texto acima não dizia, está em "O que a implementação fixou".
 
 ## Segurança e privacidade
 
@@ -985,7 +1167,14 @@ Mauro (a região, a hipótese, o contato e as duas decisões), e esta ADR não a
 11. **O estado da idempotência é de um processo só.** Duas instâncias da API exigiriam levá-lo ao banco.
 12. **O Smart do servidor depende de pacotes movidos do Agent.** O teste de paridade da C2 prende o
     comportamento. O `resolver` continua puxando `internal/context` e `internal/agent/dictation`, que
-    compilam no Linux.
+    compilam no Linux. **[C2 e C5a, 10-out-2026: o teste de paridade existe (`paridade_test.go`), e o
+    fecho do `smartconta` é puro (`dependencias_test.go`: sem `storage`, `sync`, Windows nem
+    terceiros). O `internal/polish` importa `internal/agent/dictation` só por
+    `AcrescimoPeloTexto`, para a folga de 1,5 s até o watchdog do núcleo valer por construção, e o
+    `limites_test.go` proíbe qualquer outro import de `internal/agent`, de `cmd/` e de `x/sys`. Se o
+    Mauro quiser zero import de `internal/agent` no servidor, a saída é subir `AcrescimoPeloTexto` para
+    uma folha neutra que o `dictation` também use: pequena, independente e não feita, para não tocar o
+    núcleo (ADR-007).]**
 13. **A configuração real do proxy** (o `readTimeout`, o `writeTimeout` e o buffering do entrypoint) e
     **a swap da VPS** (se o kernel conta a swap no cgroup) não foram lidas. A C7 as lê antes do
     primeiro áudio, e para se a swap do contêiner não der `0`.
@@ -1000,6 +1189,29 @@ Mauro (a região, a hipótese, o contato e as duas decisões), e esta ADR não a
     do `Create`).
 17. **As chaves antigas ficam cifradas nos backups** (cerca de 30 dias) e no banco da restauração (7
     dias) depois de "Trocar" ou "Remover". A tela manda revogá-las no provedor.
+18. **[Achado na revisão da C3a e na C3b, 11-out-2026] O `PUT /ai-keys` não fecha a corrida com o
+    apagar e o revogar.** O `GravarChaveDeIA` não confere o `sync_epoch` nem o aceite na hora de
+    gravar. Um `PUT` cujo provedor responde (até 10 s) depois de um "Apagar meus dados", ou de um
+    "Desligar o ditado no celular", grava a chave cifrada de novo, e ela sobrevive (a chave estrangeira de
+    `users` continua valendo). Ela não é usável sem aceite (a rota de ditar o confere a cada ditado) e
+    some no próximo revogar ou "Apagar meus dados". Fechar de vez é gravar a chave e conferir o aceite
+    e o epoch na mesma transação que trava o contador, como o `Store.Create` faz com o ditado.
+19. **[Achado na revisão da C3a, 11-out-2026] O `GET /ai-keys/{provedor}/models` tem efeito colateral:**
+    chama o provedor com a chave guardada e gasta uma ficha do limite, e o `http.CrossOriginProtection`
+    não barra `GET` (o cookie de sessão é `SameSite=Lax`). Com o aceite e a chave já gravados, uma
+    navegação de topo vinda de outro site gasta fichas da conta; o atacante não lê a resposta, a lista
+    de modelos é grátis, e o efeito máximo é travar as rotas das chaves por um minuto. Opções:
+    recusar `Sec-Fetch-Site` cruzado nessa rota, ou passá-la para `POST`. Decisão do coordenador ou da
+    C6b; o `06` hoje diz que só o `PUT` e o `DELETE` passam pelo CSRF.
+20. **[Achado na integração da fase 1, 11-out-2026] O app (C6b) e o servidor (C3b) ainda não falam o
+    mesmo JSON.** A C6b desenhou o cliente e o servidor de mentira antes de a C3b existir, e a C3b fixou
+    outro formato (o `06`): o estado traz as chaves como lista e as preferências aninhadas, e o app
+    espera um mapa e as preferências planas; o `POST` do aceite leva `{versao, transcricao, polish}`
+    com a versão **inteira**, e o app manda `{versao, provedores}` com a versão em **texto**
+    (`web/src/nuvem/ditar/aviso.ts` guarda `'2026-10-10'`, provisória, e `avisoDoDitado.ts` guarda o
+    inteiro `1`, preso ao Go). Alinhar é trocar `cliente.ts`, o servidor de mentira e o `aviso.ts` para
+    o `06`; sem isso a folha do aceite não fecha contra o servidor real. É a pendência de maior risco da
+    fase 1 e tem de fechar antes da C7.
 
 ## Pontos de parada (`CLAUDE.md`: parar e perguntar)
 
@@ -1008,7 +1220,8 @@ Mauro (a região, a hipótese, o contato e as duas decisões), e esta ADR não a
 - o OK dele na política e no dossiê reescritos (D0), antes do primeiro áudio real sair do aparelho.
   Recomendado: a LG antes;
 - deploy, as migrations 0017 a 0019 em produção, o `memswap_limit`, o `ulimits` e a chave de cifra nova,
-  gerada por ele na VPS com a saída suprimida: tudo isso é com ele;
+  gerada por ele na VPS com a saída suprimida: tudo isso é com ele; **[11-out-2026: o Mauro autorizou o
+  deploy. O resto desse ponto segue sendo dele, e o primeiro áudio real segue esperando o OK da D0.]**
 - a configuração do proxy e a swap da VPS: só ler, nunca editar o proxy. **Se a swap do contêiner não
   der `0`, parar e perguntar** antes do primeiro áudio;
 - a chave da OpenAI dele: colada por ele no app, **nunca no chat** (memória "Saída com segredo vai ao
@@ -1034,24 +1247,27 @@ Toda subfatia roda `go test ./...` e `go vet ./...`, e o lint, o teste e o build
 nele. Toda subfatia atualiza os documentos que muda e termina com commit local, sem `git push`. As de
 Postgres rodam contra o contêiner de teste, quando o Mauro o sobe.
 
-| Subfatia | O que entrega | O que prova | O que o Mauro faz |
-|---|---|---|---|
-| **S** (OK próprio) | A chegada mais rápida no PC: o contador na API local; 10 s com o painel aberto (ou 30 s sempre, a escolha dele); o painel relê a lista quando o contador muda | Teste do laço com relógio falso (10 s com o painel lendo, 60 s depois de 15 s sem ler); teste da rota local sem texto; vitest do painel relendo; no aparelho, uma edição feita no celular aparece no painel aberto do PC em até ~13 s, sem tocar em nada | escolhe o intervalo; testa no PC (fechar o Agent e conferir o `StartTime`) |
-| **LG** (OK próprio) | As pendências L1 a L5 da LGPD, só documentos, na cópia da instância dele | Nenhum `[A PREENCHER]` da instância dele em aberto | responde a região, a hipótese do art. 33, o contato e as decisões 2 e 3 do dossiê, e dá o OK |
-| **D0** | Esta ADR e as emendas (cabeçalho "Emenda"); o modelo da política e o dossiê reescritos; o texto da folha do aceite e o da tela; as páginas dos provedores relidas, com data; os artigos conferidos no corpus | Nada de código. **O OK do Mauro na ADR libera o código do ditado; o OK na política e no dossiê libera o primeiro áudio real.** As duas datas ficam registradas aqui | lê e aprova (pode ser em dois momentos) |
-| **C1** | `Store.Create` nos dois Stores, pelo ponto único de gravação, reaproveitando a regra de criar (`cloudstore/rules.go:291`) e a validação do payload, **com o epoch esperado**; o `Store.Situacao` (ditado, lápide ou nada); o `Actor` sem aparelho; o id só confere usuário; a origem "pelo app" no histórico do PC | Suíte de contrato verde na memória e no Postgres; o evento de sync sai sem aparelho; o pull entrega o ditado; um teste do sync do PC aplica um ditado `web` como recebido; o mesmo id não cria dois; o mesmo id em duas contas cria dois; **o `Create` com o epoch velho recusa e não grava** (depois do "Apagar meus dados"); o `Situacao` acha a lápide | sobe o Postgres de teste |
-| **C2** | O pacote puro do Smart da conta (as conferências e o `SmartDaSemente` movidos do Agent, que passa a importá-los); o `Colapsar`; a dica | Testes de tabela: o par sem domínio corrige, o par com domínio, desfeito ou ausente não age, e o texto sem par passa igual. **Paridade:** os mesmos pares e o mesmo texto dão o mesmo resultado que o Smart do PC sem o `dicionario.json`. A dica respeita as 140 runas e não leva par preso a domínio. Benchmark: 500 pares montados e resolvidos em menos de 25 ms. A suíte do Agent continua verde | nada (o teste no PC da C5a cobre também esta mudança) |
-| **C3a** | O cofre: AES-GCM com a subchave por HKDF, o id da chave de cifra, a chave de cifra por `*_FILE` em hexadecimal; a migration de `ai_provider_keys`; as rotas das chaves, com o limite por conta e a frase fixa no erro de decodificação; o `Validar` e o `Final` num pacote neutro; as rotas fora quando falta o arquivo; o passo que cria só o arquivo da chave de cifra numa VPS no ar | Canário: a chave nunca aparece em resposta, log, erro nem em claro no banco (varredura dos bytes da tabela), **também com um JSON malformado que leva a chave**. O texto cifrado copiado para outro usuário ou provedor não decifra. Trocar o arquivo leva a `SEM_CHAVE`. Só o `final` volta. Sem o arquivo, `404`; com ele malformado, a subida falha sem mostrar o conteúdo. O `PUT` sem aceite vigente recusa sem chamar o provedor. O 11º pedido no minuto é recusado sem chamar o provedor. O passo novo cria só o arquivo, `0444` na pasta `0700`, sem mostrar nada, e recusa sobrescrever (`deploy/scripts_test.go`) | sobe o Postgres de teste |
-| **C3b** | As preferências e o aceite: as migrations de `dictation_settings` e `dictation_consents`; as rotas; a versão do aviso presa entre o app e o servidor; o "Apagar meus dados" apagando as três tabelas | O aceite fica gravado com a versão e os provedores, e a revogação o encerra e apaga as chaves. O `PUT` das preferências recusa um provedor de transcrição ou de Polish fora do aceite. O "Apagar" deixa as três tabelas vazias. As migrations aplicam sobre um banco com dados, e o `schema_test` não acha coluna de áudio | sobe o Postgres de teste |
-| **C4** | O contrato do ASR com o áudio comprimido (`AudioBuffer.Comprimido` e `Formatos`); o provider local recusando o comprimido; o pacote dos provedores OpenAI e Groq, com o multipart de tamanho calculado; a lista de modelos filtrada; o filtro de silêncio | Testes contra um servidor falso (`httptest`): os campos enviados (modelo, `pt`, `prompt`, arquivo e tipo); **o pedido chega com `Content-Length` e sem `chunked`**; `401`, `403`, `413`, `429`, `5xx` e redirecionamento viram os motivos da lista, sem corpo e sem seguir; texto vazio vira `SEM_FALA`; o segmento de silêncio sai. Canário de áudio e de chave fora de erro e log. Nenhum arquivo novo em disco. Nenhuma chamada real. O Agent compila e os testes dele passam sem mudança | nada |
-| **C5a** | O adaptador do Polish (`clienteDoDitado`, a política de esforço e o `prazoPolish`) num pacote comum; o Agent passa a usá-lo de lá | **Paridade no Agent:** os testes do Polish do PC (`winruntime` e `cmd/agent`) passam sem mudança, com o mesmo prazo por tamanho de texto; o pacote comum compila no Linux | testa no PC: fechar o Agent e conferir o `StartTime`, e ditar com o Polish ligado (curto e longo) |
-| **C5b** | A rota `POST /api/v1/dictations`: o `AcessoDitar`; os códigos em `error.code`; as conferências antes do corpo; os prazos; a idempotência por `(user_id, id)`, com o desfecho pago guardado; o "em andamento" e quem espera estendendo o próprio prazo; as vagas e os limites; o formato pelos primeiros bytes; o provedor; o Smart; o Polish (o pacote da C5a) com o aceite conferido de novo; a gravação desligada da conexão, com o epoch; a espera dos ditados no desligamento; a linha de log | `authtest` e `contracttest`: `401`, **`403` com o token de um PC**, `SEM_ACEITE` (sem aceite do provedor da transcrição **e** sem aceite do provedor do Polish), `SEM_CHAVE`, `413` sem ler o corpo, `415`, `422` sem chamar o provedor, `429` com `Retry-After` sem ler o corpo, **`404` sem o arquivo da chave de cifra**. **Idempotência:** dois envios com o mesmo id dão uma chamada ao provedor; o mesmo id em duas contas dá duas; o reenvio durante o andamento recebe a mesma resposta, mesmo esperando mais que o `writeTimeout`; com o celular caindo depois da resposta do provedor, o ditado fica gravado e o reenvio sai `200` sem chamada; **a gravação que falha uma vez é refeita no reenvio sem chamada**; **o `SEM_FALA` repetido em 10 min não chama o provedor**; **a lápide dá `410` sem chamada**. **Corridas:** revogar o aceite durante o provedor falso não chama o Polish e não grava; "Apagar meus dados" durante o provedor falso não grava. **Prazos:** um corpo lento no `httptest` dentro do prazo recebe a resposta inteira, e um corpo além do prazo é cortado antes do provedor; um ditado em andamento termina durante o desligamento. **Memória:** 10 envios ao mesmo tempo nunca leem mais de 3 corpos, com o pico medido. O Polish que falha grava o texto do Smart com `mode` `smart`. Canário de áudio e de texto no log de acesso, nos erros e no `/tmp`. `/asr/transcribe` e `POST /transcriptions` continuam `404` | nada |
-| **C5c** | O compose e o deploy: o segredo novo declarado (e no `SEGREDOS_ESPERADOS` do `subir.sh`), o `memswap_limit`, o `ulimits: core: 0` e o `stop_grace_period` da API; o `asr_gateway.go` antigo fora (pela branch que já o remove, ou refeito: escolha menor 19); o roteiro de deploy com o passo da chave de cifra e a leitura da swap e do proxy | Casos no `compose_test` para o segredo, o `memswap_limit` igual ao `mem_limit`, o `core: 0` e o `stop_grace_period`; o `subir.sh` recusa sem o arquivo novo, com a mensagem que aponta o passo da C3a; o `roteiros_test` encontra o passo novo | nada |
-| **C6a** | O gravador e o envio: `Ambiente.ditar`, `ClienteNuvem.ditar`; a máquina de estados (parado, pedindo permissão, gravando, enviando, pronto, erro); o `MediaRecorder` em webm/opus a 32 kbit/s; a onda, o tempo e o "Cancelar"; a medição de fala; o Wake Lock; a parada por `visibilitychange`, `mute` e `ended`, com o aviso; o teto; "Tentar de novo" com o mesmo id; o `Permissions-Policy` | Vitest da máquina de estados, de cada código de erro, da parada por tela e por ligação, do reenvio com o mesmo id e da medição de fala (dublês do navegador). O `bundle.test`: o gravador só no build da nuvem, sem `IndexedDB` nem `localStorage`. Teste do servidor: o `Permissions-Policy` sai nas respostas do app. Capturas renderizadas em 320 e 375 px, claro e escuro | nada |
-| **C6b** | As Configurações e o aceite: a folha do aceite, antes da chave; "Ditar pelo celular" (o estado, os provedores, as chaves com o lembrete de revogar, o modelo, a dica e o Polish); o texto de Privacidade e os dois testes dele | Vitest: sem aceite, nem o `getUserMedia` nem o pedido da chave acontecem; trocar de provedor reabre a folha; o `SEM_ACEITE` do `PUT` das preferências abre a folha. O `bundle.test` continua sem "Gerenciador de Credenciais" | nada |
-| **C6c** (OK próprio) | A calibração: uma página só do `pnpm dev` (como a `telas-dev-nuvem.html`), aberta no Chrome do Android pelo cabo USB (o encaminhamento de porta do `docs/teste-manual-nuvem-f4.md`, §9), com as mesmas restrições do `getUserMedia` e a mesma medição do gravador. Ela mede o piso e os picos em dBFS, a distribuição do RMS, a fala medida e os bytes por segundo do `MediaRecorder` (os pedaços são contados e jogados fora), e **mostra só números**. Nenhum arquivo, nenhum envio | O `bundle.test` prova que a página e o texto dela não estão em nenhum dos dois builds. **A onda e o limiar de fala calibrados com os números do Android, renderizados antes de concluir** | dá o OK, abre a página no celular pelo cabo, fala e fica em silêncio pelo roteiro, e passa os números (ou uma captura da tela) |
-| **C7** | No ar e no aparelho, com a autorização do Mauro: o roteiro de deploy (o passo da chave de cifra, as migrations, o compose); a leitura só de leitura do proxy e da swap; a chave da OpenAI dele colada no app; o aceite | **Antes do primeiro áudio:** o `readTimeout`, o `writeTimeout` e os middlewares do entrypoint lidos; o `docker info` sem "No swap limit support" e o `memory.swap.max` do contêiner em `0` (senão, para); o `ulimits` aplicado. **Depois, no Android:** um ditado curto, um de 30 s, um de 120 s (com os bytes medidos contra o teto de 1 MiB), um silêncio (sem envio), sem rede (o "Tentar de novo"), a tela apagando (o Wake Lock), a troca de app no meio e uma ligação recebida. A mediana do toque final até o texto, com a meta de até 4 s, a confirmar. O `docker stats` da API sem salto. O ditado chega ao PC (com a S, em segundos). Uma chamada de teste, pelo mesmo caminho de código, confirma o português, os campos do modelo escolhido e o envio com `Content-Length` | autoriza e roda o deploy pelo roteiro; gera a chave de cifra; cria uma chave só para o celular, com limite de gasto, e a cola no app; liga a residência de dados e o ZDR, se a conta tiver; aceita; roda os testes do aparelho |
-| **C8** (opcional, OK próprio) | A medição de qualidade **sem arquivo de áudio**: o Mauro lê no app, pelo caminho real, um roteiro de 15 a 20 falas curtas e longas, cada uma duas vezes (com e sem a dica, alternando); o texto vem do histórico e é comparado com o roteiro pelas métricas do `internal/benchmark/metrics` (as do `asrbench` e do `entitybench`) | O WER e a Entity Accuracy do celular; se a dica ajuda ou induz (e se ela passa a vir ligada); se o `gpt-transcribe` ganha do `gpt-4o-mini-transcribe` em pt-BR | autoriza mandar essas falas ao provedor e lê o roteiro |
+A coluna "Estado" é de 11-out-2026. Os hashes são os dos commits na `main` (os merges da fase 1 são
+`919338a`, `fc3cec7`, `ce08af4`, `c044fcf` e `a4405ec`). O resto de cada linha é o que foi desenhado.
+
+| Subfatia | Estado | O que entrega | O que prova | O que o Mauro faz |
+|---|---|---|---|---|
+| **S** (OK próprio) | **Implementada (10-out-2026):** `6e599dc`, `cbb6d8b`. 10 s e 60 s, aprovados pelo Mauro. **Teste no PC: dele, depois de remontar o Agent.** | A chegada mais rápida no PC: o contador na API local; 10 s com o painel aberto (ou 30 s sempre, a escolha dele); o painel relê a lista quando o contador muda | Teste do laço com relógio falso (10 s com o painel lendo, 60 s depois de 15 s sem ler); teste da rota local sem texto; vitest do painel relendo; no aparelho, uma edição feita no celular aparece no painel aberto do PC em até ~13 s, sem tocar em nada | escolhe o intervalo; testa no PC (fechar o Agent e conferir o `StartTime`) |
+| **LG** (OK próprio) | **Pendente:** espera as respostas do Mauro. | As pendências L1 a L5 da LGPD, só documentos, na cópia da instância dele | Nenhum `[A PREENCHER]` da instância dele em aberto | responde a região, a hipótese do art. 33, o contato e as decisões 2 e 3 do dossiê, e dá o OK |
+| **D0** | **Escrita (10-out-2026):** `b0820dd` (esta ADR), `c4d0223` (as emendas), `feaaa12` (política, dossiê, README e PRODUCT). **OK do Mauro na ADR: 10-out-2026**, com os padrões (libera o código). **OK na política e no dossiê: pendente** (libera o primeiro áudio real). | Esta ADR e as emendas (cabeçalho "Emenda"); o modelo da política e o dossiê reescritos; o texto da folha do aceite e o da tela; as páginas dos provedores relidas, com data; os artigos conferidos no corpus | Nada de código. **O OK do Mauro na ADR libera o código do ditado; o OK na política e no dossiê libera o primeiro áudio real.** As duas datas ficam registradas aqui | lê e aprova (pode ser em dois momentos) |
+| **C1** | **Implementada (10-out-2026):** `1d36609`. | `Store.Create` nos dois Stores, pelo ponto único de gravação, reaproveitando a regra de criar (`cloudstore/rules.go:291`) e a validação do payload, **com o epoch esperado**; o `Store.Situacao` (ditado, lápide ou nada); o `Actor` sem aparelho; o id só confere usuário; a origem "pelo app" no histórico do PC | Suíte de contrato verde na memória e no Postgres; o evento de sync sai sem aparelho; o pull entrega o ditado; um teste do sync do PC aplica um ditado `web` como recebido; o mesmo id não cria dois; o mesmo id em duas contas cria dois; **o `Create` com o epoch velho recusa e não grava** (depois do "Apagar meus dados"); o `Situacao` acha a lápide | sobe o Postgres de teste |
+| **C2** | **Implementada (10-out-2026):** `43e6648`, e `1d76697` (o índice do dicionário). Os números reais e o cache por conta estão abaixo. | O pacote puro do Smart da conta (as conferências e o `SmartDaSemente` movidos do Agent, que passa a importá-los); o `Colapsar`; a dica | Testes de tabela: o par sem domínio corrige, o par com domínio, desfeito ou ausente não age, e o texto sem par passa igual. **Paridade:** os mesmos pares e o mesmo texto dão o mesmo resultado que o Smart do PC sem o `dicionario.json`. A dica respeita as 140 runas e não leva par preso a domínio. Benchmark: 500 pares montados e resolvidos em menos de 25 ms. **[Medido: resolver leva cerca de 4 ms; montar do zero leva cerca de 1 s com 500 pares e cerca de 50 ms com 100; o cache por conta entrou e, acertado, custa cerca de 3,7 ms. A meta de 25 ms vale para resolver e para o cache, e não para montar do zero.]** A suíte do Agent continua verde | nada (o teste no PC da C5a cobre também esta mudança) |
+| **C3a** | **Implementada (11-out-2026):** `d0ae5b6`. A revisão adversarial rodou **sem correção** (cinco mutações pegas, uma lacuna de teste); as pendências foram para a C3b e para o `06`. | O cofre: AES-GCM com a subchave por HKDF, o id da chave de cifra, a chave de cifra por `*_FILE` em hexadecimal; a migration de `ai_provider_keys`; as rotas das chaves, com o limite por conta e a frase fixa no erro de decodificação; o `Validar` e o `Final` num pacote neutro; as rotas fora quando falta o arquivo; o passo que cria só o arquivo da chave de cifra numa VPS no ar | Canário: a chave nunca aparece em resposta, log, erro nem em claro no banco (varredura dos bytes da tabela), **também com um JSON malformado que leva a chave**. O texto cifrado copiado para outro usuário ou provedor não decifra. Trocar o arquivo leva a `SEM_CHAVE`. Só o `final` volta. Sem o arquivo, `404`; com ele malformado, a subida falha sem mostrar o conteúdo. O `PUT` sem aceite vigente recusa sem chamar o provedor. O 11º pedido no minuto é recusado sem chamar o provedor. O passo novo cria só o arquivo, `0444` na pasta `0700`, sem mostrar nada, e recusa sobrescrever (`deploy/scripts_test.go`) | sobe o Postgres de teste |
+| **C3b** | **Implementada (11-out-2026):** `6447cf0`. A corrida do `PUT` da chave contra o apagar e o revogar, levada da revisão da C3a, **seguiu aberta** (veja "Riscos aceitos"). | As preferências e o aceite: as migrations de `dictation_settings` e `dictation_consents`; as rotas; a versão do aviso presa entre o app e o servidor; o "Apagar meus dados" apagando as três tabelas | O aceite fica gravado com a versão e os provedores, e a revogação o encerra e apaga as chaves. O `PUT` das preferências recusa um provedor de transcrição ou de Polish fora do aceite. O "Apagar" deixa as três tabelas vazias. As migrations aplicam sobre um banco com dados, e o `schema_test` não acha coluna de áudio | sobe o Postgres de teste |
+| **C4** | **Implementada (10-out-2026):** `bb82253` (o contrato), `42d92c5` (os provedores). Sem chamada real: os campos de cada modelo se conferem na C7. | O contrato do ASR com o áudio comprimido (`AudioBuffer.Comprimido` e `Formatos`); o provider local recusando o comprimido; o pacote dos provedores OpenAI e Groq, com o multipart de tamanho calculado; a lista de modelos filtrada; o filtro de silêncio | Testes contra um servidor falso (`httptest`): os campos enviados (modelo, `pt`, `prompt`, arquivo e tipo); **o pedido chega com `Content-Length` e sem `chunked`**; `401`, `403`, `413`, `429`, `5xx` e redirecionamento viram os motivos da lista, sem corpo e sem seguir; texto vazio vira `SEM_FALA`; o segmento de silêncio sai. Canário de áudio e de chave fora de erro e log. Nenhum arquivo novo em disco. Nenhuma chamada real. O Agent compila e os testes dele passam sem mudança | nada |
+| **C5a** | **Implementada (10-out-2026):** `b1d428f`. Paridade provada. **Teste no PC: dele, depois de remontar o Agent.** | O adaptador do Polish (`clienteDoDitado`, a política de esforço e o `prazoPolish`) num pacote comum; o Agent passa a usá-lo de lá | **Paridade no Agent:** os testes do Polish do PC (`winruntime` e `cmd/agent`) passam sem mudança, com o mesmo prazo por tamanho de texto; o pacote comum compila no Linux | testa no PC: fechar o Agent e conferir o `StartTime`, e ditar com o Polish ligado (curto e longo) |
+| **C5b** | **Em andamento.** | A rota `POST /api/v1/dictations`: o `AcessoDitar`; os códigos em `error.code`; as conferências antes do corpo; os prazos; a idempotência por `(user_id, id)`, com o desfecho pago guardado; o "em andamento" e quem espera estendendo o próprio prazo; as vagas e os limites; o formato pelos primeiros bytes; o provedor; o Smart; o Polish (o pacote da C5a) com o aceite conferido de novo; a gravação desligada da conexão, com o epoch; a espera dos ditados no desligamento; a linha de log | `authtest` e `contracttest`: `401`, **`403` com o token de um PC**, `SEM_ACEITE` (sem aceite do provedor da transcrição **e** sem aceite do provedor do Polish), `SEM_CHAVE`, `413` sem ler o corpo, `415`, `422` sem chamar o provedor, `429` com `Retry-After` sem ler o corpo, **`404` sem o arquivo da chave de cifra**. **Idempotência:** dois envios com o mesmo id dão uma chamada ao provedor; o mesmo id em duas contas dá duas; o reenvio durante o andamento recebe a mesma resposta, mesmo esperando mais que o `writeTimeout`; com o celular caindo depois da resposta do provedor, o ditado fica gravado e o reenvio sai `200` sem chamada; **a gravação que falha uma vez é refeita no reenvio sem chamada**; **o `SEM_FALA` repetido em 10 min não chama o provedor**; **a lápide dá `410` sem chamada**. **Corridas:** revogar o aceite durante o provedor falso não chama o Polish e não grava; "Apagar meus dados" durante o provedor falso não grava. **Prazos:** um corpo lento no `httptest` dentro do prazo recebe a resposta inteira, e um corpo além do prazo é cortado antes do provedor; um ditado em andamento termina durante o desligamento. **Memória:** 10 envios ao mesmo tempo nunca leem mais de 3 corpos, com o pico medido. O Polish que falha grava o texto do Smart com `mode` `smart`. Canário de áudio e de texto no log de acesso, nos erros e no `/tmp`. `/asr/transcribe` e `POST /transcriptions` continuam `404` | nada |
+| **C5c** | **Em andamento.** | O compose e o deploy: o segredo novo declarado (e no `SEGREDOS_ESPERADOS` do `subir.sh`), o `memswap_limit`, o `ulimits: core: 0` e o `stop_grace_period` da API; o `asr_gateway.go` antigo fora (pela branch que já o remove, ou refeito: escolha menor 19); o roteiro de deploy com o passo da chave de cifra e a leitura da swap e do proxy | Casos no `compose_test` para o segredo, o `memswap_limit` igual ao `mem_limit`, o `core: 0` e o `stop_grace_period`; o `subir.sh` recusa sem o arquivo novo, com a mensagem que aponta o passo da C3a; o `roteiros_test` encontra o passo novo | nada |
+| **C6a** | **Implementada (10-out-2026):** `227d1b1` (o `Permissions-Policy`), `06b1296` (o gravador e o envio), `543f217` (os testes aguentam a máquina ocupada). Nada foi visto num Android real. | O gravador e o envio: `Ambiente.ditar`, `ClienteNuvem.ditar`; a máquina de estados (parado, pedindo permissão, gravando, enviando, pronto, erro); o `MediaRecorder` em webm/opus a 32 kbit/s; a onda, o tempo e o "Cancelar"; a medição de fala; o Wake Lock; a parada por `visibilitychange`, `mute` e `ended`, com o aviso; o teto; "Tentar de novo" com o mesmo id; o `Permissions-Policy` | Vitest da máquina de estados, de cada código de erro, da parada por tela e por ligação, do reenvio com o mesmo id e da medição de fala (dublês do navegador). O `bundle.test`: o gravador só no build da nuvem, sem `IndexedDB` nem `localStorage`. Teste do servidor: o `Permissions-Policy` sai nas respostas do app. Capturas renderizadas em 320 e 375 px, claro e escuro | nada |
+| **C6b** | **Implementada (11-out-2026):** `243d17f`. O cliente do app ainda não fala o JSON que a C3b fixou (veja "Riscos aceitos"). | As Configurações e o aceite: a folha do aceite, antes da chave; "Ditar pelo celular" (o estado, os provedores, as chaves com o lembrete de revogar, o modelo, a dica e o Polish); o texto de Privacidade e os dois testes dele | Vitest: sem aceite, nem o `getUserMedia` nem o pedido da chave acontecem; trocar de provedor reabre a folha; o `SEM_ACEITE` do `PUT` das preferências abre a folha. O `bundle.test` continua sem "Gerenciador de Credenciais" | nada |
+| **C6c** (OK próprio) | **A página e as provas, implementadas (11-out-2026):** `6ae9447`. **A calibração no aparelho continua com o Mauro.** | A calibração: uma página só do `pnpm dev` (como a `telas-dev-nuvem.html`), aberta no Chrome do Android pelo cabo USB (o encaminhamento de porta do `docs/teste-manual-nuvem-f4.md`, §9), com as mesmas restrições do `getUserMedia` e a mesma medição do gravador. Ela mede o piso e os picos em dBFS, a distribuição do RMS, a fala medida e os bytes por segundo do `MediaRecorder` (os pedaços são contados e jogados fora), e **mostra só números**. Nenhum arquivo, nenhum envio | O `bundle.test` prova que a página e o texto dela não estão em nenhum dos dois builds. **A onda e o limiar de fala calibrados com os números do Android, renderizados antes de concluir** | dá o OK, abre a página no celular pelo cabo, fala e fica em silêncio pelo roteiro, e passa os números (ou uma captura da tela) |
+| **C7** | **Pendente.** O Mauro autorizou o deploy em 11-out-2026; depende da C5b e da C5c, e o primeiro áudio real segue esperando o OK dele na política e no dossiê (D0). | No ar e no aparelho, com a autorização do Mauro: o roteiro de deploy (o passo da chave de cifra, as migrations, o compose); a leitura só de leitura do proxy e da swap; a chave da OpenAI dele colada no app; o aceite | **Antes do primeiro áudio:** o `readTimeout`, o `writeTimeout` e os middlewares do entrypoint lidos; o `docker info` sem "No swap limit support" e o `memory.swap.max` do contêiner em `0` (senão, para); o `ulimits` aplicado. **Depois, no Android:** um ditado curto, um de 30 s, um de 120 s (com os bytes medidos contra o teto de 1 MiB), um silêncio (sem envio), sem rede (o "Tentar de novo"), a tela apagando (o Wake Lock), a troca de app no meio e uma ligação recebida. A mediana do toque final até o texto, com a meta de até 4 s, a confirmar. O `docker stats` da API sem salto. O ditado chega ao PC (com a S, em segundos). Uma chamada de teste, pelo mesmo caminho de código, confirma o português, os campos do modelo escolhido e o envio com `Content-Length` | autoriza e roda o deploy pelo roteiro; gera a chave de cifra; cria uma chave só para o celular, com limite de gasto, e a cola no app; liga a residência de dados e o ZDR, se a conta tiver; aceita; roda os testes do aparelho |
+| **C8** (opcional, OK próprio) | **Pendente.** | A medição de qualidade **sem arquivo de áudio**: o Mauro lê no app, pelo caminho real, um roteiro de 15 a 20 falas curtas e longas, cada uma duas vezes (com e sem a dica, alternando); o texto vem do histórico e é comparado com o roteiro pelas métricas do `internal/benchmark/metrics` (as do `asrbench` e do `entitybench`) | O WER e a Entity Accuracy do celular; se a dica ajuda ou induz (e se ela passa a vir ligada); se o `gpt-transcribe` ganha do `gpt-4o-mini-transcribe` em pt-BR | autoriza mandar essas falas ao provedor e lê o roteiro |
 
 **A ordem:**
 1. A S vem primeiro, com o OK dela. A LG corre em paralelo, com o OK dela.
@@ -1062,13 +1278,158 @@ Postgres rodam contra o contêiner de teste, quando o Mauro o sobe.
 5. A C6a e a C6b dependem da C3b e da C5b. A C6c pode vir junto da C6a, com o OK dele.
 6. A C7 vem por último, depois do OK da D0. A C8 vem depois da C7, se o Mauro quiser.
 
+## O que a implementação fixou (a fase 1, em 10 e 11-out-2026)
+
+O que cada subfatia decidiu dentro do que esta ADR deixou para ela, ou fez diferente do texto acima, e o
+que ela provou e **não** provou. O que já está marcado no corpo da ADR (os números da C2, os nomes e os
+status da C3a e da C3b, a C4) não se repete aqui. Em divergência com o código, vale o código.
+
+**S (a chegada ao PC).**
+- `GET /api/nuvem/mudancas` responde `{"contador": N}` (o nome do campo é da S, para não confundir com o
+  `historico.mudancas` do `GET /api/nuvem`); `503` `UNAVAILABLE` sem o laço; um Agent de antes da S
+  responde `404`, e o painel para de perguntar.
+- O contador sobe **uma vez por rodada** que gravou algo da nuvem, **também com o que o push traz** (a
+  resposta com lápide, "apagar vence", e o conflito com o estado vencedor), e não só com o pull, como a
+  decisão P dizia. É um superconjunto: reler a lista a mais é barato, e deixar de reler seria um defeito
+  visível.
+- **A abertura do painel adianta a busca.** A primeira leitura depois de uma janela de 15 s sem leitura
+  acorda o laço, e a próxima busca sai 10 s depois da última (ou já, se isso passou). Sem isso, a edição
+  do celular só chegaria em até 60 s na primeira vez em que o painel abre, e o alvo de cerca de 13 s não
+  valeria. Não fura o backoff depois de uma falha nem gira a cada 10 s desconectado.
+- O laço passou a criar um timer por volta, por um "despertador" injetável (o padrão é o `time.Timer`),
+  no lugar do `timer.Reset`, para o teste com relógio falso; é refactor interno sem mudança de
+  comportamento.
+- **Uma janela conhecida:** uma mudança que chega nos milissegundos entre a primeira carga da lista e a
+  primeira leitura do contador só aparece na mudança seguinte ou ao voltar à aba; as leituras seguintes
+  não têm essa janela.
+- A alternativa "30 s sempre" é `IntervaloComPainel` igual a `Intervalo`, em 30 s, no `configDoSync`; o
+  contador e o painel não mudam. O `bundle.test` do build local passou a exigir a rota nova.
+
+**C1 (`Store.Create` e `Store.Situacao`).**
+- O `Store.Situacao` devolve também o ditado e o epoch da conta (`SituacaoDoId`: `Estado`, `Ditado`,
+  `Epoch`), lidos num snapshot só (`REPEATABLE READ` somente leitura no Postgres), para a C5b ler o epoch
+  esperado de forma consistente com o que existe. Ele trata como lápide a que venceu e que o job de
+  retenção (de hora em hora) ainda não apagou: a resposta conservadora é `410`, e não pagar de novo.
+- O `Store.Create` recusa um `Actor` com aparelho (`ErrDeviceNotAllowed`) e só aceita `source_platform`
+  `web` ou `android` (`ErrInvalidDictation`). O `device_id` fica nulo também no app nativo, então o
+  `Actor` do passo 2 também se monta sem aparelho. Id com lápide: `ErrTombstoned`; epoch velho:
+  `ErrEpochChanged`. O `NewDictation` vira o payload de criar do push e passa pela mesma validação, sem
+  cópia das regras; um pré-teste de UTF-8 inválido existe porque o `json.Marshal` trocaria o byte
+  inválido por U+FFFD em silêncio.
+- **O storage do PC passou a considerar a origem em "nasceu aqui"** (`internal/storage/origem.go`,
+  `envio_sqlite.go`, `esquecer_sqlite.go`, `transcription_sqlite.go`). O PC tratava `device_id` nulo
+  como "nasceu neste PC" em três SQLs (o envio inicial, o "Esquecer esta nuvem" e a fila do sync), e o
+  ditado do app chega sem aparelho e, depois do esquecer, sem `server_version`: ele entraria no envio
+  inicial como histórico deste PC e iria para uma conta nova. Agora "nasceu aqui" é `device_id` nulo
+  **e** `source_platform` fora de `web` e `android` (um filtro só, `nasceuAquiSQL`). As listas das
+  origens moram em dois lugares (`cloudstore.SourcePlatform*` e `storage.Plataforma*`, porque o storage
+  do PC não importa o servidor), e `TestOrigensDaNuvemConferemEntreOPCEOServidor` confere os nomes: uma
+  origem nova (por exemplo `ios`) entra nos dois.
+- "Pelo app" aparece na linha de detalhes do ditado aberto (`web/src/ItemDitado.tsx`), nos dois builds,
+  para `web` e `android`; o do PC não diz nada.
+- **Não feito:** o teste de mutação da conferência do epoch (o classificador de permissão negou a
+  edição que a enfraquecia). Os testes de epoch são afirmativos, e a corrida real contra a trava do
+  contador está em `TestPostgres_Criar_OEpochTrocadoEnquantoEsperaATrava` e
+  `TestPostgres_Criar_JuntoComOApagarMeusDados`. Um backup restaurado também troca o epoch e recusa do
+  mesmo jeito, sem teste específico.
+
+**C2 (`internal/smartconta`).** Além do que está no corpo: o `Cache` e o `Conta.Resolver` (`Colapsar` e
+`Resolve`) vão além do mínimo pedido, mas a ADR os descreve; o teste de tempo (`desempenho_test.go`) pula
+sob `-short` e com o detector de corrida, com tetos folgados de propósito (25 ms para resolver; 10 s só
+como alarme para montar). O `go test -race` não rodou (a máquina não tem compilador C): convém rodar o
+`Cache` e o `TestConta_UsoConcorrente` no CI Linux.
+
+**C3a e C3b.** Além do corpo:
+- Até a C3b, o `serve` subia com o aceite em falha fechada (a interface `server.AceiteDoDitado`, com o
+  `Aceite` nulo: ninguém tem aceite). **[C3b]** O `CloudConfig` ganhou o campo `Ditado`
+  (`cloudstore.DitadoNoCelular`), obrigatório junto com o `Cofre`; o `Aceite` ficou como sobrescrita só
+  para testes, e, nulo, o aceite é o `aceitePeloStore` sobre o `Ditado`. A suíte `chavestest` ganhou os
+  casos `Ditado_*`.
+- Motivo novo do log de acesso: `aviso` (no `AVISO_DESATUALIZADO`); contagem `chaves_apagadas` no
+  `DELETE` do aceite. Todas as frases de erro são fixas.
+- **Provas que não rodaram:** os testes de mutação do aceite, do limite e do AAD foram negados pelo
+  classificador de permissão (só a da frase fixa foi exercida, e pegou); esses testes são afirmativos
+  (contam as chamadas ao provedor e conferem `ErrNaoDecifra`).
+- O teste de tempo dos pacotes pesados (`deploy`, `internal/storage`, `internal/agent/audio`) é sensível a
+  carga; ver o `13`, TASK-028, "Fica aberto".
+
+**C5a (`internal/polish`).**
+- O pacote leva também a composição do antigo `polishDoAgent.abrir` (`Montagem.Abrir`), porque o
+  `clienteDoDitado` tem campos não exportados e o servidor da C5b não conseguiria montá-lo de fora. Os
+  nomes são escolha da C5a: `Prazo`, `PisoPrazo`, `PoliticaEsforco`, `NovaPoliticaEsforco`, `Atual`,
+  `Recusou`, `RotuloDoEsforco`, `Montagem` e `Abrir`.
+- **Os testes antigos passam sem nenhuma edição, como a prova pedia.** Isso exigiu dois arquivos
+  `_test.go` novos que guardam os nomes antigos só na compilação dos testes
+  (`cmd/agent/polish_paridade_test.go` e `internal/agent/winruntime/polish_paridade_test.go`); o código
+  de produção do Agent não ficou com nenhum repassador. Se for melhor editar os testes antigos para os
+  nomes novos, é uma troca mecânica de poucas linhas.
+- A explicação longa de por que o prazo cabe no watchdog continua em `internal/agent/winruntime/polish.go`
+  (é do runtime do Agent); a de por que ele cresce com o texto foi para `internal/polish/prazo.go`.
+- **Provas:** o pacote compila e testa em Linux; o canário de chave e de texto fora de log e de erro
+  existe também em `internal/polish` (`TestAbrir_NadaDeSegredoNemDeTextoSaiPeloAdaptador`), além do
+  `TestChave_NuncaSaiDoPolishDoAgent` em `cmd/agent`, que continua. O binário de teste compilado para
+  Linux rodou também no WSL, só com leitura do drive. A memória da política de esforço é por processo,
+  e não por conta.
+- **Não provado:** o Polish do PC de verdade, que é o teste do Mauro.
+
+**C6a (o gravador e o envio).**
+- O `Ambiente.ditar` é um **componente** (`ComponentType<PropsDoDitar>`), e não uma função como o
+  `excluirDeVez`: o gravador (`getUserMedia`, `MediaRecorder`) não pode morar no `Painel` compartilhado,
+  ou entraria no bundle local, que o `bundle.test` proíbe. O `Painel` só recebe o campo de busca (para
+  pôr ao lado do microfone) e devolve ganchos (`aoChegar`, `aoAudioPendente`, `aoSemSessao`,
+  `abrirConfiguracoes`, `avisar`).
+- **`401` durante o envio:** o áudio conta como texto não salvo (o `Painel` não troca a tela inteira por
+  "Sessão expirada"); a faixa da sessão (`EntrarDeNovo.tsx`) fala do ditado, não oferece "Copiar o
+  texto" de um áudio e pergunta antes de a página sair. A frase da nota é "O ditado espera você entrar
+  de novo.".
+- O ditado chega no topo com destaque de 10 s (o fundo `--entrou` e a etiqueta "novo"; em tema de alto
+  contraste não há timer, e a etiqueta carrega o sentido). O microfone fica à vista também na Lixeira
+  (só some nas Configurações, e volta se houver gravação ou áudio à espera); lá, e numa busca, o ditado
+  não entra na lista e o aviso diz "Ditado salvo no histórico.".
+- O gravador desiste quando o `MediaRecorder` não entrega nenhum byte: "A gravação falhou. Tente de
+  novo.", sem enviar corpo vazio. Defesa que a ADR não pedia.
+- O ESLint proíbe `src/` importar `src/nuvem`; por isso a `Plataforma` de mentira mora em
+  `src/nuvem/ditar/plataformaFalsa.ts`, e não em `src/testes`.
+- **Não provado, só num Android real (C7):** o `AudioContext` que nasce suspenso (o app diria "Não ouvi
+  nada." com a pessoa falando; o contexto nasce no gesto do toque e leva `resume()`), o `mute` da faixa
+  disparando sem querer no início, o `tracks.stop()` logo depois do `recorder.stop()` sem perder o último
+  pedaço (há um prazo de 3 s se o `stop` nunca vier), o `Blob` paginado em disco, os bytes reais a
+  32 kbit/s, o Wake Lock, a tela apagando e o `visibilitychange`. As capturas da entrega usam uma fala
+  sintética com o relógio parado, e não um microfone.
+
+**C6b (as Configurações e o aceite).**
+- O aceite novo **mantém** os provedores que já valiam (a união do da voz e do do Polish): trocar de
+  volta para um provedor já aceito na versão atual não reabre a folha, como o servidor confere.
+- O texto da folha, da Privacidade e das Configurações segue a proposta da D0 (`feaaa12`); os blocos
+  por provedor vêm de lá, e o da Anthropic ganhou "visto em 29-set-2026, e não relido em 10-out-2026" e
+  "não afirma em que país". Entraram as duas linhas novas da Privacidade (6 meses, lixeira de 30 dias,
+  cópia cifrada de cerca de 30 dias) e a frase do "Apagar meus dados" (aceite, preferências e chaves).
+  O "Política completa: {link}" ficou de fora, porque a política não está publicada. **O texto da folha
+  tem de continuar batendo com `docs/politica-de-privacidade.md`**, e qualquer mudança dele sobe a versão
+  do aviso nos dois lados.
+- A infra de teste ganhou `web/src/testes/preparar.ts` (em `test.setupFiles`), um `testTimeout` de 20 s e
+  um `asyncUtilTimeout` de 5 s no `vite.config.ts`, e timeouts explícitos nos testes mais lentos: a
+  máquina ocupada derrubava a suíte por lentidão.
+- A página de calibração foi renomeada de `Calibracao.tsx` para `PaginaDeCalibracao.tsx` (e o teste):
+  `calibracao.ts` e `Calibracao.tsx` só diferiam pela caixa, e no Windows um import resolvia o `.ts`.
+
+**C6c (a calibração).** A página é `/calibracao-dev.html`, só do `pnpm dev`, aberta no Chrome do Android
+pelo cabo (a porta 5173 do Vite, no encaminhamento do `docs/teste-manual-nuvem-f4.md`, §9, e não a
+8080). Escolhas que a ADR não fixava: silêncio de 6 s e fala de 12 s; o piso é o p5 e o pico é o máximo;
+percentis por posição; bandas de 6 dB de -96 a 0 dBFS; limiares de RMS de 0,003 a 0,2, com o 0,03 do app
+marcado; pedaços do `MediaRecorder` de 1 s (`start(1000)`) só para contar bytes por segundo (o gravador
+do app não pica); RMS zero vale -120 dBFS. A página também mostra o eco, o ruído, o ganho e a taxa que o
+navegador diz ter aplicado, e o ritmo de 120 s contra o teto de 1 MiB. **Falta, e é do Mauro:** com os
+números do aparelho, fixar o limiar de fala, o piso e o teto da onda, a janela dela e as restrições do
+`getUserMedia` (`restricoesDoMicrofone`, em `navegador.ts`), e renderizar a onda antes de concluir.
+
 ## Escolhas menores, a confirmar pelo Mauro na entrega
 
 Cada uma vai implementada com o padrão abaixo até ele dizer o contrário.
 
 1. **O modelo padrão da OpenAI:** o `gpt-transcribe`, se a chamada de teste em pt-BR da C7 for boa; se
    não, o `gpt-4o-mini-transcribe`, o mais barato, com português no FLEURS. A lista vem do provedor, e
-   a pessoa troca.
+   a pessoa troca. **[C3b, 11-out-2026: até a C7, o padrão implementado é o `gpt-4o-mini-transcribe`.]**
 2. **O modelo padrão da Groq:** o `whisper-large-v3-turbo`.
 3. **O teto de duração:** 120 s, como no PC. A alternativa é 60 s ou 300 s.
 4. **Os limites do ditar:** 1 de cada vez por conta, 10 por minuto, 200 por dia e 3 ao mesmo tempo no
@@ -1089,9 +1450,11 @@ Cada uma vai implementada com o padrão abaixo até ele dizer o contrário.
 12. **Desligar o ditado no celular apaga as chaves da nuvem.**
 13. **`source_platform`:** `web` no app e `android` no app nativo.
 14. **O "Copiar":** o botão. Copiar sozinho ao chegar só se o aparelho deixar, a conferir na C6a.
+    **[C6a: não foi feito; fica para conferir no aparelho, na C7.]**
 15. **O "Cancelar"** durante a gravação descarta sem enviar.
 16. **O áudio que falhou** fica em memória até "Tentar de novo" ou "Descartar", e some ao fechar o app.
 17. **O intervalo do sync (S):** 10 s com o painel aberto e 60 s fechado (recomendado), ou 30 s sempre.
+    **[Aprovado pelo Mauro em 10-out-2026: 10 s com o painel aberto e 60 s fechado. Implementado na S.]**
 18. **`Permissions-Policy: microphone=(self)`** nas respostas do app.
 19. **O `asr_gateway.go` antigo** sai na C5c: integrar antes a branch que remove o servidor antigo da
     F1-D (recomendado, porque o trabalho já está feito), ou refazer a remoção.
@@ -1123,6 +1486,9 @@ Cada uma vai implementada com o padrão abaixo até ele dizer o contrário.
   o cadastro (as decisões 2 e 3 do dossiê).
 - **Na D0:** ler a política e o dossiê reescritos e dar o OK no chat. Se ele for ditar dado de cliente
   pelo celular, ou ligar a dica com nomes de clientes no aprendido, dizer isso aqui (dossiê, item 4).
+- **Na S (11-out-2026: o código está na `main`; falta o teste dele):** depois de remontar o Agent, fechar
+  o Agent, conferir o `StartTime`, abrir o painel e ver uma edição feita no celular chegar a ele em até
+  cerca de 13 s, sem tocar em nada.
 - **Na C5a:** fechar o Agent, conferir o `StartTime` e ditar com o Polish ligado.
 - **Na C6c, com o OK dele:** abrir a página de calibração no Android pelo cabo, seguir o roteiro (falas
   e silêncio) e passar os números. Nenhum áudio é gravado em arquivo nem sai do aparelho.

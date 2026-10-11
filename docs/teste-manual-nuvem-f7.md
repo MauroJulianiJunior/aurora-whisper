@@ -152,7 +152,10 @@ minuto).
 1. No app, abra a frase do passo 8, mude uma palavra e clique em **Salvar**.
 2. No painel do PC, clique em **Histórico** (ou volte à aba).
 
-**Deve aparecer:** a mudança no PC em até 1 minuto (o PC busca a cada 60 s).
+**Deve aparecer:** a mudança no PC. Com o painel do PC aberto, em até cerca de 13 s: o Agent busca a
+nuvem a cada 10 s enquanto o painel está aberto, e o painel lê o contador de mudanças a cada 3 s e
+relê a lista sozinho (ADR-021, subfatia S). Com o painel fechado, em até 1 minuto (o Agent busca a
+cada 60 s).
 
 ## 10. O selo ("2 versões") nos dois lados
 
@@ -162,7 +165,8 @@ minuto).
 2. No app, abra a frase do passo 8 e mude o texto para "**versão do app**". Salve.
 3. No PC, abra a mesma frase e mude o texto para "**versão do PC**". Salve.
 4. No PC, **Conectar à nuvem** e aprove de novo (como no passo 6).
-5. Em até 1 minuto, **deve aparecer**, nos dois (no app, recarregando): "2 versões" nessa frase, com
+5. Em até 1 minuto (cerca de 13 s, com o painel do PC aberto), **deve aparecer**, nos dois (no app,
+   recarregando): "2 versões" nessa frase, com
    "versão do app" como a que ficou (chegou primeiro) e "versão do PC" como a outra. Ao abrir:
    "Mudou em dois lugares. Ficou esta; a outra está guardada.", os botões **Ficar com esta** e **Ficar
    com a outra** e, embaixo, "A que você não escolher é descartada."
@@ -172,7 +176,8 @@ minuto).
 ## 11. A lixeira nos dois sentidos
 
 1. No PC, mova um ditado para a lixeira. **Deve aparecer** no app, em **Lixeira**, em até 1 minuto.
-2. No app, **Restaurar** esse ditado. **Deve aparecer** de volta no histórico do PC em até 1 minuto.
+2. No app, **Restaurar** esse ditado. **Deve aparecer** de volta no histórico do PC em até 1 minuto
+   (cerca de 13 s, com o painel do PC aberto).
 
 ## 12. (Opcional) A nuvem fora do ar
 

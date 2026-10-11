@@ -386,7 +386,8 @@ type ErroPolish struct{ Motivo MotivoFallback } // Error() é sempre "polish: <m
   `cmd/polishbench`, S3, conta o status de cada resposta e a forma das respostas 200 por um
   `RoundTripper` próprio, e com `-conexao-nova` pede `Connection: close` a cada chamada).
 - **A chave.** `Polidor.Chave` é chamada a cada ditado (no Agent, a leitura do Gerenciador de
-  Credenciais, feita pelo binário do Agent, onde o portão `sysinput` abre); provedor e modelo são os
+  Credenciais, feita pelo binário do Agent, onde o portão `sysinput` abre; no servidor, a decifragem da
+  chave da conta, ADR-021); provedor e modelo são os
   do keydown. Nenhum campo do `Polidor` nem do `Cliente` guarda a chave, e ela só vai no cabeçalho,
   em HTTP/1.1: remover a chave vale no ditado seguinte. Um erro da função `Chave` nunca é repassado
   (poderia trazer segredo): vira `sem_chave`, exceto quando o `ctx` do ditado já venceu, e então é o
@@ -409,7 +410,8 @@ type ErroPolish struct{ Motivo MotivoFallback } // Error() é sempre "polish: <m
   `AbrirPolidor` (provedor e modelo do keydown) e `Reescrever`, com o `ctx` derivado do de `Run` e
   prazo de **3,5 s contados do começo da resolução** (o Smart incluído; ADR-016, "Decisões tomadas
   na implementação (S4)"), que cresce com o texto que entra na resolução: mais 6 ms por caractere
-  acima de 250, até 8 s aos 1000 (`prazoPolish`; ADR-016, "Emenda de 01-out-2026"). O watchdog da
+  acima de 250, até 8 s aos 1000 (`polish.Prazo`, em `internal/polish`; era o `prazoPolish` do
+  `winruntime` até a C5a da ADR-021; ADR-016, "Emenda de 01-out-2026"). O watchdog da
   resolução no núcleo é sempre 1,5 s maior (`dictation.PrazoDeResolucao`). O runtime espera o
   resultado **ou** o prazo: vencido, entra o texto do Smart com o motivo `prazo` (ou `transporte`, se foi o Agent encerrando), mesmo que o `Polidor`
   ignore o `ctx`, e a resposta tardia é descartada. O resultado volta ao laço por um canal próprio
@@ -417,12 +419,20 @@ type ErroPolish struct{ Motivo MotivoFallback } // Error() é sempre "polish: <m
   recebe os tokens da goroutine da chamada. `AbrirPolidor` nulo, ou `Polidor` nulo, é
   `sem_cliente`. `UltimoPolish`: motivo vazio quando o último Polish agiu ou não houve nenhum; o
   curto não mexe; é o que a S5 lê para `polish_ultimo_motivo`.
-- **O adaptador (`cmd/agent/polish.go`).** `polishDoAgent.abrir` implementa `AbrirPolidor`:
-  `resolver.PolishResolver{Smart: <o Smart do Agent>, Client: ia.Polidor{…}}`, com `Chave =
-  cofre.Ler(provedor)` a cada chamada e `Uso` levando os tokens a `contar`. Provedor que não é
-  `openai` nem `anthropic` não tem cliente. **Política de esforço** (só OpenAI, sem nome de modelo
-  no código): `""` (manda `none`) → `minimal` → `omitir`, descendo um degrau por
-  `modelo_incompativel`, por provedor e modelo, só em memória nesta execução.
+- **O adaptador (`internal/polish`; ADR-021, C5a, 10-out-2026).** Era `cmd/agent/polish.go` e agora
+  mora num pacote comum, que o Agent e o servidor (no ditado do celular, C5b) usam igual, sem build tag.
+  `polish.Montagem{Smart, Cliente, Esforco, Provedor, Modelo, Chave, Contar}.Abrir()` devolve o
+  `resolver.PolishResolver` do ditado e o rótulo do esforço (só para o log):
+  `resolver.PolishResolver{Smart: <o Smart de quem dita>, Client: <o clienteDoDitado, não exportado>}`,
+  onde o cliente embrulha `ia.Polidor{…}` com a `Chave` (uma função chamada a cada ditado) e o `Uso`
+  levando os tokens a `Contar`. Provedor que não é `openai` nem `anthropic` não tem cliente. **Política
+  de esforço** (`polish.PoliticaEsforco`, só OpenAI, sem nome de modelo no código): `""` (manda `none`)
+  → `minimal` → `omitir`, descendo um degrau por `modelo_incompativel`, por provedor e modelo, só em
+  memória, **por processo, e não por conta**. No Agent, o `polishDoAgent.abrir` (`cmd/agent/polish.go`)
+  só implementa `AbrirPolidor` ligando a chave do Gerenciador de Credenciais (`cofre.Ler(provedor)`) à
+  `Montagem.Chave`; no servidor, a `Chave` é a decifragem da chave da conta, a cada ditado, sem cache.
+  `Montagem.Esforco` é obrigatório quando o provedor é válido (nulo dá pânico, de propósito). Texto
+  ditado, chave e contexto nunca vão a log nem a erro daqui (`TestAbrir_NadaDeSegredoNemDeTextoSaiPeloAdaptador`).
 - As guardas (`16-ai-behavior-spec.md`) são funções puras, sem rede e sem relógio, e rodam na
   ordem curto → chamada → JSON → formato → números → siglas, termos e nomes → palavras → caixa.
   Falhou → texto do Smart. Um `final_text` com `\r\n` reprova (`json`): o modelo devolve `\n`, e a conversão

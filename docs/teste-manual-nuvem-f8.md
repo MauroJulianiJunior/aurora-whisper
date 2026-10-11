@@ -236,8 +236,10 @@ Get-ChildItem C:/Desenvolvimento/aurora-whisper/bin/historico.db.antes-da-nuvem-
    "Desfazer? A troca deixa de valer em todos os PCs.", com **Desfazer** (em vermelho) e **Cancelar**.
    Clique em **Desfazer**. **Deve aparecer:** o aviso "Desfeito em todos os aparelhos.", a linha some e a
    seção diz "Nada aprendido ainda."
-2. No PC, espere até 1 minuto (o PC busca a cada 60 s), e então clique em **Histórico** e em
-   **Configurações** (a lista só relê quando a tela aparece). **Deve aparecer:** a seção **Aprendido no
+2. No PC, espere até 1 minuto com o painel fechado (o Agent busca a cada 60 s), ou cerca de 13 s com
+   o painel aberto (o Agent busca a cada 10 s enquanto ele está aberto; ADR-021, subfatia S). Depois
+   clique em **Histórico** e em **Configurações**: o aviso de mudanças do painel não conta o que é só do
+   aprendido, e a seção só relê quando a tela aparece. **Deve aparecer:** a seção **Aprendido no
    painel** sumiu, porque a troca era a única. **Dicionário** > **Adicionados por você** segue igual:
    o desfazer só tira a troca do Aprender.
 3. Dite de novo: **"o contrato está assinado"**. **Deve aparecer:** "o contrato está assinado", e não

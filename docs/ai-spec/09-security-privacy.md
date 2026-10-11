@@ -69,6 +69,11 @@
 - sem rotas de comando arbitrário. A rota que grava no dicionário (`/api/aprendizado`, ADR-017) só
   escreve no `dicionario.json` (na pasta de dados, ADR-018), e só depois de refazer as checagens contra o
   `raw_text` guardado daquele ditado: não grava texto que o cliente inventou.
+- `GET /api/nuvem/mudancas` (ADR-021, subfatia S) devolve **só um inteiro**, `{"contador": N}`: quantas
+  rodadas do sync gravaram no histórico deste PC algo que veio da nuvem. Fica atrás do token, do Host e do
+  Origin como o resto de `/api`, responde `Cache-Control: no-store` e nunca traz texto, id, versão, URL,
+  e-mail nem token. Ler o contador é o aviso de "painel aberto" que acelera a busca do Agent (10 s, em vez
+  de 60 s). Detalhe em `06-api-contract.md`.
 
 ### Painel local: como o token chega à aba
 Acrescentado em 29-set-2026 (revisão adversarial de `6f546e0`). O contrato das rotas está em
@@ -153,13 +158,28 @@ ao provedor.
 
 **ADR-021 (10-out-2026): o Polish também roda no celular, e lá quem chama o provedor é o servidor.** O
 que vai ao provedor é o mesmo (o texto do Smart, com 4 palavras ou mais; o prompt fixo; o nome do
-modelo; a chave, no cabeçalho), com as mesmas travas e o mesmo prazo (`prazoPolish`, de 3,5 s a 8 s).
+modelo; a chave, no cabeçalho), com as mesmas travas e o mesmo prazo (`polish.Prazo`, de 3,5 s a 8 s).
 Muda o resto: a chave vem do cofre cifrado do servidor (e não do Gerenciador de Credenciais), o texto
 que vai é o do **Smart da conta** (sem o `dicionario.json` do PC, nem os pares presos a um domínio), o
 Polish do celular **começa desligado** e só liga com o aceite do provedor do Polish (`SEM_ACEITE`
 antes de chamar). O campo protegido não se aplica: o celular não escreve em outro aplicativo (a
 escrita em outro app e o campo de senha são do passo 2, e são parada própria). O que o provedor do
 Polish diz sobre retenção abaixo vale para os dois. Ver "Ditar no celular: o que sai do aparelho".
+
+**O adaptador do Polish é um só (C5a, 10-out-2026).** Ele mora em `internal/polish` e é o **mesmo** no
+Agent e no servidor (C5b): o cliente do ditado, a política de esforço e o prazo saíram de `cmd/agent` e
+de `winruntime` sem mudar o comportamento do Agent. Três coisas valem aqui e lá:
+- **A chave entra por uma função chamada a cada ditado** (`polish.Montagem.Chave`): no PC, a leitura do
+  Gerenciador de Credenciais, feita pelo binário do Agent; no servidor, a decifragem da chave da conta,
+  sem cache. Nenhum campo do pacote a guarda; ela só chega ao cabeçalho do pedido, e um erro da função
+  vira o motivo `sem_chave`, sem abrir a rede.
+- **O canário de chave e de texto** (a chave e o texto ditado não saem pelo log nem pela mensagem de
+  erro) passou a existir também no pacote comum (`TestAbrir_NadaDeSegredoNemDeTextoSaiPeloAdaptador`),
+  além do `TestChave_NuncaSaiDoPolishDoAgent`, em `cmd/agent`, que continua. A única linha de log do
+  pacote (a da política de esforço) leva só o provedor, o modelo e os rótulos do esforço.
+- **A memória da política de esforço é por processo, e não por conta** (guarda um degrau por provedor e
+  modelo que recusou o esforço): no servidor, o modelo vem da conta, então a C5b valida o modelo contra a
+  lista antes de chegar ao `Recusou`, para o mapa não crescer sem limite e o log não levar texto livre.
 
 - **O que sai:** o texto final do Smart (não o bruto do ASR), só com 4 palavras ou mais; o prompt
   fixo (`polish-ptbr@1.0.2`); o nome do modelo; e a chave, no cabeçalho.
@@ -363,11 +383,15 @@ ADR-019, "Decisões da F3"). O que vale, e onde cada coisa é provada (a suíte
 - **Revogar ou desconectar** não apaga nada no PC: o Agent continua funcionando localmente.
 
 ## Ditar no celular: o que sai do aparelho (ADR-021)
-Acrescentado em 10-out-2026 (D0 da ADR-021). **É o desenho aprovado, e ainda não está implementado**: o
-código vem nas subfatias C1 a C7 da ADR, e cada afirmação abaixo só vale como atendida depois do teste
-que a ADR lista (os ACs são o AC-065 a AC-079). **Nenhum áudio real sai do aparelho antes do OK do
-Mauro na política e no dossiê reescritos** (`docs/politica-de-privacidade.md`, que é o modelo, e
-`docs/lgpd-dossie.md`). O contrato da rota está em `06-api-contract.md`.
+Acrescentado em 10-out-2026 (D0 da ADR-021) e atualizado em 11-out-2026. **O estado:** a fase 1 está na
+`main` (as subfatias S, C1, C2, C3a, C3b, C4, C5a, C6a, C6b e C6c): o cofre das chaves, o aceite e as
+preferências, os provedores de transcrição, o Smart da conta, o adaptador comum do Polish e o app. **A
+rota que recebe a voz (C5b), o compose (C5c) e o deploy no aparelho (C7) ainda não existem**, então a voz
+ainda não chega a servidor nenhum: o que se diz abaixo da rota, dos limites, dos prazos e do
+"descartado ao fim" é o desenho aprovado, e cada afirmação só vale como atendida depois do teste que a
+ADR lista (os ACs são o AC-065 a AC-079). **Nenhum áudio real sai do aparelho antes do OK do Mauro na
+política e no dossiê reescritos** (`docs/politica-de-privacidade.md`, que é o modelo, e
+`docs/lgpd-dossie.md`). O contrato das rotas está em `06-api-contract.md`.
 
 É a **primeira vez que a voz sai da máquina de quem dita**. Para o **PC**, a regra "o áudio não sai do
 PC" continua verdadeira e é a de sempre. O celular é um caminho à parte, opcional, que só começa depois
@@ -447,6 +471,23 @@ Contrato: as rotas das chaves, no `06-api-contract.md`. Desenho: ADR-021, decis�
   de 30 dias) e no banco `aurora_antes_AAAAMMDD` de uma restauração (7 dias). Se a chave de cifra vazar
   depois, essas cópias se decifram. Por isso a tela manda **revogar a chave antiga no provedor**.
 - **A recomendação na tela:** uma chave só para o celular, com limite de gasto no provedor.
+- **Os nomes (C3a, 11-out-2026):** o arquivo é `segredos/ai-keys-secret` (`AI_KEYS_SECRET_FILE`), criado
+  numa VPS no ar pelo `deploy/scripts/criar-chave-de-cifra.sh` (`0444` na pasta `0700`, com a saída
+  suprimida, e recusa sobrescrever); os rótulos são `aurora-whisper/ai-keys/v1` (a subchave HKDF) e
+  `aurora-whisper/ai-keys/id/v1` (o id da chave de cifra). Uma chave de cifra igual (sem diferenciar
+  maiúsculas) ao `SESSION_SECRET` ou ao `DEVICE_TOKEN_PEPPER` é recusada na subida. A chave é **decifrada
+  a cada ditado, sem cache**, só durante a chamada ao provedor.
+- **As travas** (`internal/server/chavestest`, na memória e no Postgres): a chave não aparece em
+  resposta, log, erro nem em claro nos bytes da tabela, nem com um JSON malformado que a leve; o texto
+  cifrado copiado para outro usuário ou provedor não decifra (o AAD); trocar o arquivo leva a
+  `SEM_CHAVE`; só o `final` volta; o `PUT` sem aceite vigente recusa sem chamar o provedor; o 11º pedido
+  no minuto é recusado sem chamar o provedor. A revisão adversarial da C3a rodou sem correção.
+- **O que as travas não cobrem** (ADR-021, riscos 18 e 19): o `PUT` não fecha a corrida com o apagar e o
+  revogar (uma chave pode ser gravada de novo depois deles; não é usável sem aceite e some no próximo
+  revogar); o `GET` dos modelos gasta uma ficha do limite e o `http.CrossOriginProtection` não barra
+  `GET`; e, só com acesso ao banco, o tamanho do texto cifrado revela o tamanho da chave, o `key_suffix`
+  fica em claro e fora do AAD (quem escreve no banco pode trocar o "terminada em" ou recolocar um cifrado
+  antigo da mesma conta e do mesmo provedor), e a subida não confere a entropia da chave de cifra.
 
 ### O aceite
 - **Quando:** no primeiro toque no microfone, antes de pedir a chave. Uma folha só, em destaque,
@@ -461,6 +502,19 @@ Contrato: as rotas das chaves, no `06-api-contract.md`. Desenho: ADR-021, decis�
 - **Pede de novo:** trocar de provedor, ligar o Polish com outro provedor, mudar o texto do aviso. Mudar
   só o modelo não pede.
 - **Revoga:** "Desligar o ditado no celular" revoga o aceite e apaga as chaves (art. 8º, §5º).
+- **Fica gravado como prova (C3b, 11-out-2026):** uma linha por aceite, e os terminados também
+  (`ended_at` e `end_reason`: `revogado` ou `substituido`, para o aceite novo não passar por revogação),
+  **enquanto a conta existir**. Sai no "Apagar meus dados"; as cópias nos backups seguem a retenção do
+  backup (cerca de 30 dias). Revogar **mantém as preferências** (são escolhas, sem segredo) e apaga
+  **todas** as chaves da conta.
+- **A versão do aviso** é um inteiro (`cloudstore.VersaoDoAviso`, no servidor, e `VERSAO_DO_AVISO`, no
+  app, presos por um teste). O `POST` do aceite recusa uma versão diferente da atual com `409`
+  (`AVISO_DESATUALIZADO`): um app com o texto velho na memória não registra que a pessoa aceitou o texto
+  novo. O aceite cobre o **conjunto** dos dois provedores aceitos (o da transcrição e o do Polish).
+- **Quem confere, na implementação:** o `PUT` da chave e o `GET` dos modelos (que mandam a chave ao
+  provedor) exigem o aceite; o `PUT` das preferências recusa um provedor fora do aceite vigente; a rota
+  de ditar (C5b) o confere como descrito acima, e de novo antes do Polish e de gravar. O `DELETE` da
+  chave não pede.
 
 ### O que o provedor diz (páginas lidas em 10-out-2026)
 Resumo; as fontes, o que cada página diz e o que **não** diz estão em `docs/lgpd-dossie.md`, Anexo B.
@@ -516,12 +570,22 @@ dela no provedor; o projeto não paga nada.
 10. As chaves antigas ficam cifradas nos backups e no banco da restauração depois de "Trocar" ou
     "Remover".
 11. O proxy da entrada segura pedaços do corpo na memória dele, fora do nosso `memswap_limit`.
+12. Uma chave pode ser gravada de novo por um `PUT` que perdeu a corrida com o "Apagar meus dados" ou
+    com o "Desligar o ditado no celular" (achado da revisão da C3a): não é usável sem aceite e some no
+    próximo revogar ou apagar (ADR-021, risco 18).
+13. O app (C6b) e o servidor (C3b) ainda não falam o mesmo JSON do aceite e das preferências, nem a mesma
+    versão do aviso (ADR-021, risco 20): a folha do aceite não fecha contra o servidor real até alinhar.
 
 ### Texto da tela
-O texto de Privacidade do app da nuvem e a folha do aceite estão propostos em
-`docs/politica-de-privacidade.md`, "Texto proposto para o app", **ainda não aplicados**; entram no app
-(C6b) com os testes que conferem as frases. O texto novo diz "a chave do PC continua no PC" e **não**
-traz a frase "Gerenciador de Credenciais", que o `bundle.test` recusa no build da nuvem.
+O texto de Privacidade do app da nuvem e a folha do aceite foram propostos em
+`docs/politica-de-privacidade.md`, "Texto proposto para o app", e **entraram no app na C6b**
+(11-out-2026), com os testes que conferem as frases. O texto novo diz "a chave do PC continua no PC" e
+**não** traz a frase "Gerenciador de Credenciais", que o `bundle.test` recusa no build da nuvem. O app
+não pede a chave dentro da folha: depois do "Aceito", abre as Configurações, onde a chave é colada, e ela
+nunca vai à URL nem volta inteira à tela. O "Política completa: {link}" ficou de fora, porque a política
+não está publicada. **O texto da folha tem de continuar batendo com a política**, e qualquer mudança dele
+sobe a versão do aviso (servidor e app). O app ainda guarda uma versão provisória, em texto
+(`ditar/aviso.ts`), que difere do inteiro do servidor: ADR-021, risco 20.
 
 ## Áudio
 - RAM only;
@@ -669,7 +733,9 @@ protegido"; ADR-011, nota de 29-set-2026).
   pela data do ditado; lixeira de 30 dias). A **chave da pessoa** fica até ela trocar, remover, desligar o
   ditado ou apagar os dados; a cópia cifrada dela fica nos backups (cerca de 30 dias) e no banco anterior
   de uma restauração (7 dias). O **aceite e as preferências** ficam pela vida da conta, e o "Apagar meus
-  dados" apaga as três tabelas (`ai_provider_keys`, `dictation_settings`, `dictation_consents`). O
+  dados" apaga as três tabelas (`ai_provider_keys`, `dictation_settings`, `dictation_consents`); o
+  aceite que terminou (revogado ou substituído) fica gravado como prova enquanto a conta existir, e
+  revogar não apaga as preferências, só as chaves. O
   **desfecho pago e não gravado** fica 10 min em memória. No **provedor**, vale o que a documentação dele
   diz (a tabela de "Ditar no celular").
 - Exceção (ADR-017): a variante que o painel aprende é um trecho de até 4 palavras do que o ASR

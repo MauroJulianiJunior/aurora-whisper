@@ -818,7 +818,12 @@ foram refeitos. Com os testes novos, **os 48 mutantes do segundo passe morrem**,
 
 Emenda de 30-set-2026. A ligação no Agent está em `internal/agent/winruntime/polish.go` (o prazo,
 a goroutine, o histórico, o log e o último motivo) e em `cmd/agent/polish.go` (a chave, o cliente
-e a política de esforço). **O núcleo (`internal/agent/dictation`) não mudou uma linha** (ADR-007;
+e a política de esforço). **[Nota de 11-out-2026, ADR-021, C5a: o cliente, a política de esforço e o
+prazo moram agora em `internal/polish` (`polish.Prazo`, `polish.PoliticaEsforco` e
+`polish.Montagem{...}.Abrir()`), que o servidor usa igual no ditado do celular. O
+`cmd/agent/polish.go` só liga a chave do Gerenciador de Credenciais, e o `winruntime/polish.go` chama
+`polish.Prazo`. O comportamento do Agent não mudou: os testes do Polish do PC passam sem mudança.]**
+**O núcleo (`internal/agent/dictation`) não mudou uma linha** (ADR-007;
 ADR-011, "Consequência que governa tudo"). Contratos em `18-tool-contract.md`; a linha de log, em
 `11-observability.md`.
 
@@ -1108,7 +1113,9 @@ runtime: o núcleo é folha e não importa o `winruntime`, e o watchdog dele pre
 acréscimo. O núcleo arma o `TimerResolveTimeout` com `dictation.PrazoDeResolucao(e.Result.Text)`
 em `onTranscribeResult` (nota no ADR-007); o runtime calcula `prazoPolish(req.ASRResult.Text)` =
 `pisoPrazoPolish` (3,5 s) + o acréscimo (`winruntime/polish.go`). O núcleo continua sem saber do
-Polish.
+Polish. (Nota de 11-out-2026, ADR-021, C5a: `prazoPolish` e `pisoPrazoPolish` viraram `polish.Prazo` e
+`polish.PisoPrazo`, em `internal/polish/prazo.go`, e o acréscimo continua sendo o do núcleo,
+`dictation.AcrescimoPeloTexto`, chamado de lá, e não repetido.)
 
 **As corridas.**
 
@@ -1147,7 +1154,8 @@ benchmark conta um `prazo` a mais nelas, do lado conservador. Sem retry, como an
 `gofmt -l .` limpos. Testes novos: em `internal/agent/dictation`, a tabela do acréscimo e do
 prazo (com os casos do incidente), runas e não bytes, nunca diminui, um minuto de fala entre 6,5 e
 8 s no Polish, e o timer da máquina igual ao prazo do texto do `ResolveEffect`; no aceite, as cinco
-corridas acima com o relógio falso; em `winruntime`, a tabela do `prazoPolish`, os casos do
+corridas acima com o relógio falso; em `winruntime`, a tabela do `prazoPolish` (hoje `polish.Prazo`; o teste antigo continua em
+`winruntime`, com o nome antigo guardado em `polish_paridade_test.go`), os casos do
 incidente (as curtas com 3,5 s exatos, as longas com pelo menos 1 s de sobra), a folga de 1,5 s
 em 14 tamanhos, o `prazo_ms` e o prazo do `ctx` sem ajuste de teste, o prazo medido no texto do
 `ResolveEffect` e não no do Smart (um texto que o Smart encolhe de 720 para 479 caracteres), e os
