@@ -26,7 +26,9 @@ pipeline).
 
 A revisão de privacidade (LGPD; ver `docs/ai-spec/09-security-privacy.md` e `docs/lgpd-dossie.md`)
 foi aprovada pelo mantenedor em 10-out-2026, e vale também para distribuir o Setup. Até o primeiro
-release publicado, o usuário é o mantenedor.
+release publicado, o usuário é o mantenedor. **Essa aprovação não cobre o ditado no celular
+(ADR-021):** a política e o dossiê foram reescritos com ele, e nenhum áudio real sai do aparelho antes
+do OK do mantenedor neles.
 
 ## Product Purpose
 
@@ -40,7 +42,12 @@ a pessoa quase nunca precisar abri-lo.
 ## Positioning
 
 - **Local-first.** O ASR roda na própria máquina, em CPU (whisper.cpp `small` q4_0). Áudio nunca é
-  persistido, nem em disco nem na nuvem. Contexto de outras janelas é efêmero e nunca sincronizado.
+  persistido, nem em disco nem na nuvem. O áudio **do PC** não sai do PC. Contexto de outras janelas é
+  efêmero e nunca sincronizado.
+- **O celular, quando ditar (ADR-021, decidido e ainda não implementado), é um caminho à parte e
+  opcional.** A voz vai, só em memória, ao provedor de transcrição que a pessoa escolhe (OpenAI ou
+  Groq), com a chave dela, pelo servidor da nuvem dela. Começa com um aceite específico, é descartada ao
+  fim e nunca é gravada. A chave dela fica cifrada no servidor. Não muda o PC.
 - **Português primeiro, com dicionário pessoal que aprende.** Termos do domínio de quem usa são
   corrigidos, e o dicionário aprende de correções **confirmadas** — nunca sozinho. A confirmação é o
   clique no PC onde a pessoa aprende; os outros PCs dela recebem a troca pelo sync, com as mesmas
@@ -88,7 +95,8 @@ Disponível hoje pela API local:
 
 Restrições:
 
-- nunca mostrar, guardar ou registrar áudio;
+- nunca mostrar, guardar ou registrar áudio (no celular, ADR-021, o áudio fica só numa variável, na
+  memória, e nunca vai a disco, a log nem a uma resposta);
 - texto ditado não vai para log;
 - a API só aceita `127.0.0.1`/`localhost` na porta certa (DNS rebinding) e origem do próprio painel;
 - o painel funciona em modo local e em modo nuvem (`CLAUDE.md`: "Dashboard React deve ser
@@ -111,7 +119,13 @@ Ainda não existe (não inventar na interface):
 - o celular com os ditados de verdade. A nuvem e o celular estão decididos na ADR-019 (etapa 5): o
   servidor (F1 a F3), o app da nuvem (F4), que já se instala (F5), a conexão do PC (F6), o sync do
   histórico (F7) e do que o painel aprendeu (F8) e a retenção (F9 e F10) existem, mas só contra a
-  nuvem de teste do PC: nada roda num servidor de verdade (F11).
+  nuvem de teste do PC: nada roda num servidor de verdade (F11);
+- **ditar pelo celular** (ADR-021, aprovada em 10-out-2026, sem código ainda). O passo 1 é um botão de
+  microfone no app (toque para começar e toque para parar), discreto e no estilo do painel; o texto
+  entra no histórico e desce aos PCs. A voz vai ao provedor que a pessoa escolhe, com a chave dela, só
+  depois de um aceite específico (veja `docs/politica-de-privacidade.md`). O passo 2, o app nativo do
+  Android com a bolha flutuante ou o teclado, é outra ADR. Não inventar na interface nada disso antes de
+  existir.
 
 ## Brand Commitments
 
