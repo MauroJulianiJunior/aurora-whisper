@@ -1,0 +1,40 @@
+# Configuração do gitleaks para o Aurora Whisper.
+#
+# Herda TODAS as regras padrão e acrescenta um allowlist deliberadamente
+# estreito: ele libera alguns VALORES LITERAIS específicos, não um arquivo e
+# não um diretório. Qualquer outro achado, inclusive no mesmo arquivo,
+# continua quebrando o build.
+#
+# Por que existe: internal/context/snapshot_test.go prova o AC-027 — que o
+# ContextSnapshot nunca revela o conteúdo capturado. Para isso ele precisa
+# de fixtures que PAREÇAM sensíveis, e a regra generic-api-key do gitleaks
+# marcou duas delas por entropia. São strings inventadas em português,
+# nunca foram credencial de nada.
+#
+# O allowlist é por valor (e não por caminho) de propósito: liberar o
+# arquivo inteiro esconderia um segredo real que fosse parar ali depois.
+#
+# ADR-019, F3: cmd/server/serve_test.go prova que o "serve" nunca mostra um
+# valor da configuração (a mensagem diz só o nome da variável). Para isso ele
+# precisa de valores que PAREÇAM segredos, e a regra generic-api-key marcou
+# quatro deles. São strings inventadas, nunca foram credencial de nada.
+#
+# ADR-019: cmd/server/segredos_test.go (TestMigrate_DatabaseURLPorArquivo)
+# prova que o "migrate" nunca mostra a senha da URL do banco lida por
+# arquivo. A senha é inventada, numa URL para 127.0.0.1 com a porta
+# inválida de propósito, e a regra generic-api-key a marcou.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Fixtures de teste (AC-027, o serve da F3 e o migrate) — strings falsas que provam que nada vaza"
+regexes = [
+  '''senha-do-banco-1234''',
+  '''numero-do-cartao-5678''',
+  '''SEGREDO-DE-SESSAO-DO-TESTE-0123456789abcdef''',
+  '''SENHA-DO-BANCO-DO-TESTE-987''',
+  '''CURTO-DEMAIS-123''',
+  '''CURTO-DEMAIS-456''',
+  '''SENHA_SECRETA_DO_ARQUIVO_456''',
+]

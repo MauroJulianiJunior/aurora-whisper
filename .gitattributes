@@ -1,0 +1,24 @@
+# Finais de linha determinísticos.
+# O repositório tem um componente nativo Windows e um CI que roda em Linux;
+# sem isto, CRLF do Windows entra no repo e gera diffs e falhas cruzadas.
+* text=auto eol=lf
+
+# Scripts que só funcionam com CRLF no Windows
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binários — nunca normalizar
+*.png  binary
+*.jpg  binary
+*.ico  binary
+*.syso binary
+*.exe  binary
+*.dll  binary
+*.gguf binary
+*.onnx binary
+*.bin  binary
+*.ttf  binary
+
+# Lockfile: tratar como texto, mas sem merge automático
+web/pnpm-lock.yaml -merge linguist-generated=true

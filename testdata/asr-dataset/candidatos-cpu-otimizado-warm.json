@@ -1,0 +1,33 @@
+{
+  "_comentario": [
+    "WARM com a configuracao otimizada, para comparar com o cold em igualdade.",
+    "",
+    "O '--' antes de -ac/-t NAO e decoracao: sem ele o pacote flag do Go tenta",
+    "parsear -ac como flag do proprio adaptador, imprime 'flag provided but not",
+    "defined', e o harness registra 46 falhas sem causa visivel. Aconteceu aqui."
+  ],
+  "candidates": [
+    {
+      "name": "small-q4_0-t12-ac750-warm",
+      "executable": "bin/whisperwarm.exe",
+      "coldArgs": [],
+      "warmArgs": [
+        "-server",
+        "thirdparty/whisper/Release/whisper-server.exe",
+        "-model",
+        "models/quant/small-q4_0.bin",
+        "-lang",
+        "pt",
+        "-ready-timeout",
+        "120s",
+        "--",
+        "-ac",
+        "750",
+        "-t",
+        "12"
+      ],
+      "timeout": "60s",
+      "startupTimeout": "120s"
+    }
+  ]
+}

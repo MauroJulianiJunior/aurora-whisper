@@ -1,0 +1,836 @@
+# UI/UX Spec — Aurora Whisper
+
+## Superfícies
+- tray;
+- overlay;
+- dashboard local;
+- dashboard cloud;
+- installer/update;
+- futuro Android/IME. **Etapa 5 (ADR-019):** o celular Android entra como PWA instalável, que é o
+  dashboard cloud (seção "Celular (PWA)"); app nativo e teclado continuam futuros.
+
+## Overlay
+Default: centro inferior.
+
+### Recording
+- waveform;
+- duração;
+- microfone;
+- "Gravando".
+
+### Processing
+- spinner/onda congelada;
+- "Processando".
+
+### Success
+- check curto;
+- "Inserido".
+
+### Error
+- "Não consegui transcrever. Tente novamente."
+
+### Blocked
+- "Ditado desativado em campo protegido."
+
+#### Blocked — janela de administrador
+Acrescentado em 29-set-2026 (decisão do Mauro; ADR-011, nota de 29-set-2026).
+
+- "O Windows não deixa ditar em janela de administrador."
+
+Quando a janela em primeiro plano roda com nível de integridade maior que o do Agent (o
+Gerenciador de Tarefas, por exemplo), o ditado é bloqueado como em qualquer campo protegido — o
+Windows não deixa um programa comum escrever ali (UIPI) —, mas a pílula diz o motivo verdadeiro em
+vez de "campo protegido". Só aparece quando o nível foi lido e comparado; se não der para ler, fica
+a mensagem de "campo protegido". Mesmo ponto vermelho do bloqueio, mesmo tempo na tela.
+
+A sugestão original ("Janela de administrador: o Windows não deixa ditar aqui.") foi escrita para a
+fonte de bitmap, em que precisaria de quatro linhas; o texto acima cabe em duas.
+
+**Na prática, quase nunca aparece** (teste manual do Mauro, 29-set-2026, roteiro B14): com o
+Gerenciador de Tarefas em primeiro plano, segurar o atalho não fez nada — nem pílula, nem bipe. O
+gancho de teclado de baixo nível de um processo comum não recebe as teclas quando a janela da
+frente é elevada (a mesma UIPI). É seguro: o ditado nem começa, e nada é digitado. A mensagem
+continua definida para o caso de o atalho chegar ao Agent com a janela de administrador marcada
+(ADR-011, nota do B14).
+
+### Texto que chegou depois do prazo (01-out-2026)
+- "O texto demorou e ficou no histórico."
+
+Quando a transcrição estoura o prazo (proporcional ao áudio, `07-flows.md`, "Timeouts"), a pílula
+de erro sai como sempre. Se o texto chega depois, ele vai para a linha do histórico daquela
+tentativa (status de erro, texto pelo Smart), **não é inserido**, e esta pílula aparece, com ponto
+cinza, como a da área de transferência: o ditado não se perdeu, mas não entrou no campo. Só aparece
+se nenhum outro ditado estiver em curso; com um em curso, a linha no histórico basta
+(`docs/defeito-ditado-longo.md`). O painel mostra a linha com a etiqueta "falhou" e a nota de que
+o texto pode não ter entrado no campo.
+
+### Repetição removida (01-out-2026)
+- "Removi uma repetição. Confira o texto."
+
+Quando o ASR entra em laço (a mesma frase várias vezes seguidas no lugar da fala), o Agent deixa
+uma ocorrência antes de resolver e inserir (`internal/asr/repeticao`). O ditado é inserido, e em
+vez de "Inserido" a pílula pede para conferir, com o ponto verde do sucesso: o laço costuma tomar
+o lugar de parte da fala, e só quem ditou sabe o que faltou.
+
+O que fica de fora: palavra repetida ("não, não, não", "muito muito", menos de 8 vezes), itens de
+lista diferentes entre si, números sozinhos, e frase de 3 a 9 palavras repetida menos de 6 vezes
+seguidas (uma aula, "Repitam comigo: ...", ou o mesmo item de lista ditado algumas vezes). Frase de
+10 palavras ou mais repetida 4 vezes seguidas é tratada como laço, e uma frase curta dita de
+propósito 6 vezes ou mais também, mesmo sendo fala: é o falso positivo que a regra aceita. Por isso
+o texto do ASR como chegou, com as cópias, fica no histórico como `raw_text`, e o editor do painel
+mostra a diferença entre ele e o texto final; o `final_text` e o que foi inserido saem sem as
+cópias.
+
+### Aparência (29-set-2026)
+Identidade da paleta do projeto (cores, contorno e ponto de estado: ver ADR-014, "Atualização
+de 29-set-2026").
+
+- Gravação e processamento: cápsula de 128x20 px, só a onda.
+- Mensagens (Success, Error, Blocked, janela de administrador, falha de inserção, área de
+  transferência, texto no histórico, repetição removida): IBM Plex Mono Medium, 13 px, off-white,
+  com o ponto de estado antes do texto — verde em sucesso e na repetição removida, vermelho em erro
+  e bloqueio, cinza na área de transferência e no texto que ficou no histórico. A pílula tem o
+  tamanho do texto: de 128 px (a largura da cápsula de gravação; "Inserido") a 280 px de largura,
+  32 px de altura com uma linha e 48 com duas. Texto que não cabe numa linha quebra em duas de
+  larguras parecidas, nunca no meio de palavra e nunca truncado.
+- Centralizada embaixo: o centro da pílula fica sempre no mesmo ponto, a 76 px da borda inferior
+  da tela, e a janela muda de tamanho junto com a pílula, sem piscar.
+
+Não rouba foco, não entra no Alt+Tab, não bloqueia cliques.
+
+## Tray
+- Abrir Aurora Whisper;
+- status;
+- provider ativo;
+- pausar;
+- reconectar;
+- configurações;
+- sair.
+
+## Dashboard
+
+### Início
+- status Agent;
+- sync;
+- provider/model;
+- modo;
+- última latência;
+- últimos ditados;
+- testar microfone.
+
+### Histórico
+Colunas/cards:
+- texto;
+- data;
+- device;
+- app (nunca preenchido: o Agent não guarda o app em foco, e a ADR-019 o tira da nuvem);
+- modo;
+- provider/model;
+- duração;
+- processing time;
+- status.
+
+Ações:
+- copiar;
+- editar;
+- excluir;
+- detalhes.
+
+Filtros:
+- busca;
+- período;
+- device;
+- modo;
+- provider;
+- trash.
+
+### Detalhe
+- raw_text;
+- final_text;
+- diff;
+- metadata;
+- editar;
+- aprender correção;
+- copiar;
+- excluir.
+
+Nunca mostrar áudio/contexto.
+
+**Aprender correção (ADR-017, fatia F4).** Não é tela nem janela nova: usa o **aviso que já existe** no
+rodapé, o mesmo de "Texto salvo.". Fonte da verdade: `web/src/aprendizado.tsx`, `Aviso.tsx` e
+`Painel.tsx`.
+- Salvou uma edição que é uma troca curta de termo: `Texto salvo. Aprender “SF” → “ECF”?`, com o
+  botão **Aprender**. Com 2 trocas, as duas aparecem no mesmo texto (`“SF” → “ECF” e “RJ” → “RF”`) e
+  um clique aprende as duas (um pedido por troca, na ordem do texto). Se o aviso some sozinho, a
+  sugestão foi ignorada, e **nada é aprendido sem o clique** (AC-022). O clique é no PC de origem:
+  os outros PCs recebem o par pelo sync, sem clique lá, com as mesmas checagens do Aprender
+  (ADR-019, "Decisões da F8", D2).
+- Se o "de" aparece em outros ditados da pessoa, o aviso diz, discretamente (cor secundária da
+  pílula), quantos: `“SF” aparece em 3 ditados.` (com duas trocas: `“SF” aparece em 3 ditados, “RJ” em
+  1.`). Com 0, não diz nada. O botão **Aprender** tem no `title` o efeito: "A troca vale para todo
+  ditado daqui para frente, em qualquer aplicativo. Dá para desfazer."
+  A seta é só para os olhos (`aria-hidden`); o leitor de tela ouve `“SF” vira “ECF”`, como na lista
+  das Configurações.
+- Depois do clique: `Aprendido: “SF” vira “ECF” no próximo ditado.`, com **Desfazer** (e Ctrl+Z, como
+  nos outros avisos). O foco que estava no botão passa para o **texto** da pílula nova
+  (`tabIndex=-1`), e **não** para o Desfazer: um Espaço ou Enter a mais, por exemplo para rolar a
+  página, desfaria o que acabou de ser aprendido. O Desfazer fica a um Tab. A pílula espera enquanto
+  o foco estiver nela, como toda pílula. Se o Agent gravou mas não conseguiu trocar o dicionário em
+  memória, a pílula diz `Aprendido: “SF” vira “ECF”, mas só depois de reiniciar o Agent.` (e o mesmo
+  no Desfazer), e nunca `Não deu para aprender`: a lista das Configurações já mostra o par. A
+  ressalva é de cada troca: com duas, e só uma ficou para o reinício, a frase separa as duas
+  (`Aprendido: “SF” vira “ECF” no próximo ditado; “RJ” vira “RF”, mas só depois de reiniciar o Agent.`).
+- Se o Agent recusa, o aviso traz a frase dele, sem inventar: `Não deu para aprender. "SF" já vira
+  "ECD" no dicionário.` Com duas trocas em que uma vale e a outra não, o aviso diz as duas coisas
+  (`Aprendido: “SF” vira “ECF” no próximo ditado. "RJ" já vira "RZ" no dicionário.`), e o **Desfazer**
+  é só do que valeu.
+- Visual do painel (`PRODUCT.md`): IBM Plex Mono nos termos (`.termo`), entre aspas tipográficas; o
+  verde (`--acento`) só nos termos do "Aprendido:", que é o que foi confirmado; a sugestão fica no
+  off-white da pílula. O atalho vai na própria pílula, em mono pequena, como o do Desfazer; some nas
+  telas estreitas.
+- **Tempo e foco (F4).** O aviso já esperava enquanto o ponteiro **ou** o foco estivessem nele (dois
+  estados, não um), e passava o foco para a pílula nova. Confere-se, e muda: o aviso que só informa
+  some em **4 s**; o com **Desfazer**, em **8 s**; o com **Aprender**, em **30 s** (`tempoDoAviso.ts`).
+  Sumir em 8 s tiraria a sugestão de quem usa só o teclado, que chegaria ao botão (no fim da página)
+  por dezenas de Tabs, ou de quem usa leitor de tela, que ouve e depois decide (a pílula está numa
+  região `role="status"` `aria-live="polite"`). Por isso **Alt+A**, fora de campo de texto, faz o
+  mesmo que o botão enquanto o aviso existe (o mesmo desenho do Ctrl+Z do Desfazer), com
+  `aria-keyshortcuts`. Só o Alt: Ctrl+Alt é o AltGr dos teclados com ele, e Ctrl+Enter, que salva no
+  editor, repetido viraria "aprender". A tecla segurada (`repeat`) e um segundo disparo antes da
+  resposta não aprendem de novo. Com foco ou ponteiro em cima, nenhum tempo vale (WCAG 2.2.1).
+  Conferido no navegador de verdade (Alt+A).
+- Conflito de versão (`409`) no salvar não mostra o aviso de aprender: não há sugestão. Um `409` do
+  próprio aprendizado (variante de outro termo, sugestão vencida) **não** é esse conflito: o cliente
+  não o trata como versão velha, e mostra a frase.
+
+### Dicionário
+- canonical;
+- idioma;
+- domínio;
+- prioridade;
+- aliases;
+- origem;
+- create/edit/delete/enable.
+
+**Pendente.** A tela completa de Dicionário (idioma, domínio, prioridade, ligar e desligar qualquer
+termo) segue pendente; a curadoria do resto é pelo `cmd/dictlearn`. Já existem, em Configurações: a
+lista "Aprendido no painel" (ADR-017) e a seção **Dicionário** (ADR-020), em que a pessoa cria um
+termo com as grafias erradas, liga e desliga a dica dele para o reconhecimento de voz, e remove o que
+pôs (abaixo).
+
+### Correções
+- from → to;
+- uso;
+- remover aprendizado.
+
+**Pendente.** A tela completa de Correções segue pendente: a Correction não é guardada nesta etapa
+(ADR-017; volta com o sync, na etapa 5). O "remover aprendizado" vale, por ora, como o **Desfazer** da
+lista "Aprendido no painel".
+
+### Configurações
+
+#### Ditado
+- tecla;
+- threshold 300–2000 ms;
+- beep;
+- microfone;
+- microfone sempre pronto (ADR-015; padrão desligado);
+- max duration;
+- overlay.
+
+#### Texto
+- Literal/Smart/Polish (o Smart é o padrão; o Polish preserva e organiza o texto — pontuação,
+  parágrafos, listas — e é opcional: ADR-016);
+- Polish: seção IA, com provedor, modelo e chave. A tela mostra, numa linha, por que o último
+  Polish não agiu (por exemplo, "sem crédito na OpenAI"): só o motivo, nunca o texto. O modelo
+  vencedor do benchmark pode aparecer pré-selecionado, quando existe na lista da conta; nunca é
+  obrigatório;
+  - **Como ficou (S5, ADR-016).** O modo Polish diz o que faz: "Organiza o texto com IA:
+    pontuação, parágrafos e listas, sem trocar as suas palavras. Envia o texto ao provedor de IA
+    escolhido abaixo. Se algo falhar, entra o texto do Smart." Ele só pode ser escolhido com
+    provedor e a chave dele guardada (e `polish_disponivel: true`); antes disso o motivo do
+    bloqueio aparece embaixo do modo.
+  - **A linha do motivo** é a primeira coisa da seção IA depois da introdução: uma frase do Agent
+    (`polish_ultimo_motivo`, ver `06`), no estilo discreto da ajuda — `role="status"`, sem cor de
+    risco, sem `role="alert"`: é informação, não erro (o ditado saiu, só sem o Polish). Vazia
+    quando não há motivo a mostrar. A região existe sempre, para o leitor de tela anunciar o motivo
+    que entrar quando a tela lê de novo.
+  - **O modelo sugerido** vem em `POST /api/ia/testar` (`modelo_sugerido`): na lista da conta ele
+    leva "(sugerido)" (o `label` da opção), a ajuda do campo diz "Sugerido: … , o que se saiu
+    melhor nos testes do Aurora Whisper.", e, **se nenhum modelo foi escolhido** (o rascunho está
+    vazio quando o teste volta) e ele consta na lista, entra no **rascunho** — a tela mostra "não
+    salvo" e o Salvar segue da pessoa. O que a pessoa escreveu, ou o modelo já salvo, nunca é
+    trocado; o rascunho de outro provedor, que ela passou a ver enquanto o teste ia e voltava,
+    também não. Sem sugestão do Agent, ou com a sugestão fora da lista da conta, nada é marcado
+    nem preenchido.
+- dictionary;
+- context;
+- cloud context resolve. **Depois (ADR-019):** o contexto não vai para a nuvem na etapa 5.
+
+#### Dicionário (Adicionar termo)
+ADR-020 (`web/src/Termos.tsx`), depois do botão Salvar configurações e antes de "Aprendido no painel":
+age na hora, como o Desfazer, e por isso fica fora do formulário das configurações. O menor que
+funciona, nos tokens do `index.css`, claro e escuro.
+- introdução: "Palavras que o reconhecimento de voz escreve errado. Valem já no próximo ditado.";
+- o formulário, que no celular fica um campo embaixo do outro:
+  - **Palavra certa** (exemplo "RAG");
+  - **Como sai errado (opcional)** (exemplo "rague, hage"), com a ajuda "Separe por vírgula.";
+  - a caixa **Dica para o reconhecimento de voz**, **marcada por padrão** (decisão 1 da ADR-020), e
+    marcada de novo depois de cada Adicionar, com a ajuda "Sobram 98 de 140 caracteres para dicas.";
+    sem espaço, "Não sobra espaço: desmarque aqui ou desligue a dica de outro termo." (os dois
+    caminhos; revisão de 01-out-2026). A ajuda só aparece com a conta: até a lista chegar, nem o
+    parágrafo nem o `aria-describedby` existem;
+  - **Adicionar** ("Adicionando…" enquanto vai); Enter num campo também adiciona;
+- a lista **Adicionados por você** (`h3`; some quando está vazia): uma linha por termo, `RAG ← rague,
+  hage` na IBM Plex Mono (o leitor de tela ouve "RAG, sai errado como rague, hage"), a caixa "dica" e
+  **Remover**. O termo que já era do dicionário leva a etiqueta "do dicionário", não tem a caixa (a
+  dica dele não muda pelo painel), e o Remover tira só as grafias dela;
+- os avisos, na pílula: "“RAG” adicionado. Vale no próximo ditado." ("atualizado" quando o termo já
+  existia), mais "Saiu das dicas: DCTFWeb." quando a dica empurrou termos para fora do prompt; "A dica
+  não muda por aqui: “DCTFWeb” já era do dicionário." quando a caixa estava marcada num termo do
+  dicionário (`dica_ignorada`); "Dica ligada para “RAG”." e "Dica desligada para “RAG”."; "“RAG”
+  removido." (e "Grafias de “DCTFWeb” removidas." no termo do dicionário, de que só as grafias dela
+  saem); e "Vale depois de reiniciar o Agent." no caso `vale_ao_reiniciar`;
+- os erros ficam na seção, num `role="alert"`: "Não deu para adicionar: {frase do Agent}" (e "Não deu
+  para mudar a dica:", "Não deu para remover:"); o que foi digitado fica nos campos. A ligação perdida
+  vai para a faixa do Painel, como nas outras seções. A lista que o Agent não consegue dar (sem
+  dicionário) mostra a frase dele no lugar do formulário; o Agent de antes do "Adicionar termo" (a
+  rota responde `404` sem frase: o painel foi recompilado com o Agent velho aberto) mostra "Este Agent
+  ainda não tem o Adicionar termo. Reinicie o Agent.";
+- o foco: depois de adicionar, volta para a palavra certa; depois de remover, vai para o Remover da
+  linha que ocupou o lugar, ou para a palavra certa quando a lista some.
+
+#### Aprendido no painel
+ADR-017, fatia F4 (`web/src/AprendidoNoPainel.tsx`), depois das seções Ditado, Texto, IA e Sistema,
+do botão Salvar configurações e da seção Dicionário (ADR-020), e antes de Privacidade: o Desfazer age
+na hora, e o Salvar de cima não tem nada a ver com ele.
+- uma linha por par, `sf → ECF`, com **Desfazer** (para o leitor de tela: "sf vira ECF");
+- só o que tem a origem "painel" (o que o `cmd/dictlearn` ou a mão puseram no arquivo não aparece);
+- sem nada aprendido, a seção **não aparece**; lista que não carregou também não;
+- IBM Plex Mono nos termos; sem janela nem modal;
+- a lista é lida quando a tela aparece e quando o aviso do histórico aprende ou desfaz algo (o Painel
+  sobe um contador), para não mostrar o que já não é verdade;
+- o Desfazer de uma linha avisa ("Desfeito: “SF” não vira mais “ECF”.") e leva o foco para a linha
+  que ocupou o lugar; ao desfazer a última, a seção some e o foco vai para o Salvar configurações. Se
+  o Agent recusa (outra aba já desfez), a frase dele aparece na seção, num alerta, e a linha fica.
+
+**As linhas de estado do sync (F8h, 07-out-2026; ADR-019, "Decisões da F8").** Com a nuvem, o Agent
+manda também, no mesmo `GET /api/aprendizado`, as linhas de estado (`situacao` e `motivo`, opcionais;
+`06`). Cada uma é a troca (`sf → ECF`, como as outras) seguida de uma **etiqueta cinza**, a `.etiqueta`
+de sempre (mono, 11 px, `nowrap`, sem cor de erro: nada se perdeu), e **nunca tem Desfazer**: não está
+no dicionário deste PC, e, para mudar, a pessoa aprende de novo.
+- **"não aplicado neste PC":** a troca chegou da nuvem e não vale aqui. Embaixo, o motivo numa frase
+  pequena (12 px, `--texto-3`): "O domínio da troca não existe aqui." (`dominio_ausente`); "A troca
+  valeria em mais lugares do que no PC onde foi aprendida." (`restricao_nao_cabe`); "A palavra não existe
+  aqui, e a troca é presa a um domínio." (`palavra_ausente_com_dominio`); "Aqui essa grafia já pertence a
+  outra palavra." (`variante_de_outro_termo`); "A palavra está desligada." (`termo_desligado`); "O
+  dicionário não aplicaria a troca." (`nao_agiria`); "A grafia é comum demais para virar troca."
+  (`palavra_comum`); "O dicionário está indisponível." (`arquivo_indisponivel`). A etiqueta já diz "neste
+  PC", e por isso as frases não o repetem (revisão da F8h, 08-out-2026). Um motivo que o painel não
+  conhece fica sem a frase.
+- **"desfeito em outro aparelho"** e **"trocado em outro aparelho":** uma troca deste PC que perdeu na
+  nuvem (D4); só a etiqueta. Somem quando a pessoa aprende de novo, ou em 30 dias (o Agent para de
+  mandar).
+- A seção **aparece também quando só há linhas de estado**. Uma `situacao` que o painel não conhece não
+  vira linha, e não faz a seção aparecer. Um Agent de antes da F8 não manda nada disso, e a lista é a de
+  sempre.
+- A etiqueta fica logo depois da troca, na mesma linha; se não cabe, desce inteira (a mais comprida, "desfeito em
+  outro aparelho", tem 188 px, e o `estilo.test.ts` confere que cada uma cabe sozinha em 320 px). O
+  foco depois de um Desfazer é calculado pelos **botões**, e não pelas linhas (as de estado não têm): vai
+  para o botão que ocupou o lugar, ou para o anterior se era o último; sem botão nenhum e com linhas de
+  estado, para o título da seção; sem linha nenhuma, a seção some e o foco vai para o Salvar
+  configurações.
+
+#### ASR
+- policy;
+- provider/model local;
+- cloud provider informativo (**depois**, ADR-019: não há ASR na nuvem na etapa 5);
+- language;
+- model status;
+- benchmark.
+
+#### Sistema
+- autostart;
+- porta local advanced;
+- logs;
+- update.
+
+#### Privacidade
+- áudio não armazenado;
+- contexto não armazenado;
+- Polish: "No modo Polish, o texto ditado (nunca o áudio nem o que está nas outras janelas) vai ao
+  provedor de IA escolhido, com a sua chave; OpenAI e Anthropic podem guardá-lo por até 30 dias e
+  dizem não usá-lo para treinar modelos." (texto de ADR-016; a tela o traz desde a S5, como o
+  quarto item da lista da Privacidade, sempre — também antes de o Polish estar liberado: é aviso,
+  não recurso);
+- cloud toggles;
+- apagar histórico;
+- devices.
+
+Na etapa 5 (ADR-019), "cloud toggles" é a seção **Nuvem** (abaixo), e entra na Privacidade a frase
+da nuvem, só depois de conectar (texto final na F6, quando o PC conectar; a F4 fez a Privacidade do
+app da nuvem, em "Configurações do celular"): "Com a nuvem conectada, o texto dos seus
+ditados e o que você aprendeu vão para a sua nuvem, em `<endereço>`. O áudio e o que está nas outras
+janelas nunca vão."
+
+#### Nuvem (no PC; ADR-019, F6 e F7c)
+O menor que funciona, no estilo das outras seções.
+- Desconectado: o campo **Endereço da nuvem** (vazio por padrão) e o botão **Conectar à nuvem**. Uma
+  linha de ajuda: "Opcional. Sem conectar, nenhum ditado sai deste PC, fora o Polish, se ligado."
+- Conectando: o código de conferência, em IBM Plex Mono, e "Confira se a página da nuvem mostra o
+  mesmo código. Só aprove lá se foi você que clicou aqui."
+- Antes do primeiro envio: "Vão subir N ditados dos últimos 6 meses. A lixeira não vai. Antes, é
+  feita uma cópia do banco." com **Enviar** e **Agora não**.
+- Conectado: "Conectado como `<e-mail>`. Último envio: há 2 min." e **Desconectar**.
+- Revogado ou sem token: "Desconectado. O Aurora Whisper continua funcionando neste PC." com
+  **Conectar de novo**. A bandeja mostra o mesmo estado no item **Reconectar** (`Tray`).
+- Um aprendido que não vale neste PC aparece em **Aprendido no painel** como "não aplicado neste PC",
+  com o motivo numa frase curta.
+
+**Como a F6 fez (05-out-2026; `web/src/NuvemNoPC.tsx`).** A seção **Nuvem** fica depois do
+Dicionário e do Aprendido no painel, antes da Privacidade, e age na hora (fora do **Salvar
+configurações**). Os textos do plano da F6 trocaram os de cima, que eram proposta; o envio inicial e o
+"último envio" são da F7.
+- **Desconectado:** "Desligada. Nada vai para a nuvem até você conectar." (o plano dizia "Nada sai deste
+  PC": com o Polish ligado, o texto vai ao provedor de IA, e a frase não pode prometer menos do que
+  sai), o campo **Endereço da nuvem** (modelo `https://…`, vazio na primeira vez e, depois, com a URL
+  da instalação) e **Conectar à nuvem** (Enter no campo também; desligado com o campo vazio).
+- **Conectando:** "Aprove no navegador e confira o código **K7QM**." (o código em IBM Plex Mono,
+  espaçado), com **Abrir de novo** (um link para a página de aprovação, numa aba nova; só um endereço
+  `https://` ou `http://localhost` vira link) e **Cancelar**. O foco vai para o **Abrir de novo**.
+- **Conectado:** "Conectado como **{e-mail}**." e "Na nuvem, este PC aparece como {nome}.", com
+  **Desconectar** e, embaixo, "Desconectar tira o acesso deste PC, aqui e na nuvem." Desconectar
+  avisa "Este PC foi desconectado da nuvem." e devolve o foco ao campo.
+- **Os avisos**, logo abaixo do título, antes do resto: "Este PC foi desconectado na nuvem." (revogado,
+  ou o token vencido); "Desconectado neste PC. A nuvem não respondeu: revogue-o em Aparelhos, no
+  app."; "A nuvem não respondeu agora. O PC continua conectado." (os três como informação) e, numa
+  nota de erro: "O pedido venceu. Clique em Conectar à nuvem de novo.", "Este PC já está ligado a outra
+  conta.", "Não deu para conectar. Clique em Conectar à nuvem de novo." e "O navegador não abriu. Use
+  Abrir de novo.".
+- **As recusas do Conectar**, numa nota de erro, com a frase do Agent: "Use um endereço https://.", "Use
+  https:// ou http://localhost.", "Este build de teste só conecta da pasta bin\ (modo portátil).",
+  "Não deu para falar com a nuvem. Confira o endereço.", "Este PC já está ligado a outra conta.".
+- **Um Agent de antes da nuvem** (o painel novo com o Agent velho): "Este Agent ainda não tem a nuvem.
+  Reinicie o Agent."
+- **Sem laço:** o painel pergunta ao Agent quando as Configurações aparecem e quando a aba volta a
+  ficar à vista; o Agent fala com a nuvem no máximo a cada 30 s.
+- **A página que o navegador vê no 127.0.0.1** (servida pelo Agent, fontes do sistema, claro ou escuro
+  pelo sistema): "PC conectado" / "Pode fechar esta aba e voltar ao painel.", ou "Não deu para
+  conectar" / "Volte ao painel do PC e clique em Conectar à nuvem de novo."
+- A Privacidade do PC ainda não ganhou a frase da nuvem: nada sobe antes da F7, e a frase entra com o
+  envio.
+- A bandeja não mostra o estado da nuvem na F6 (o item **Reconectar** é da F7b, com o laço).
+
+**Como a F7c fez (06-out-2026; ADR-019, "Decisões da F7c"; `web/src/NuvemNoPC.tsx` e
+`web/src/textosDaNuvem.ts`).** Os textos do plano da F7c trocaram os de cima ("Enviar" e "Agora não",
+"Último envio: há 2 min."), que eram proposta. Os números levam o ponto do milhar ("7.000").
+- **Conectado, antes do envio** (só depois da primeira rodada com a conexão; até lá, "Conferindo a
+  nuvem…", ou a frase da falha, e a seção relê a cada 2 s até ela terminar): "Vão subir {N} ditados dos últimos 6 meses. A lixeira não vai. Antes,
+  uma cópia do histórico fica neste PC." (com 1: "Vai subir 1 ditado dos últimos 6 meses.") e
+  **Enviar o histórico**. Depois de um esquecer, antes dela: "Alguns destes ditados podem já estar na
+  nuvem que este PC esqueceu." (revisão de 06-out-2026: era "Estes ditados já foram para outra nuvem
+  e vão subir também para esta.", inexata de volta à mesma conta, quando o que sobra são os que a
+  nuvem recusou). Sem nada a enviar, não pergunta.
+- **Durante:** o botão diz "Copiando o histórico…" enquanto a cópia é feita; depois, "Enviando o
+  histórico: {feitos} de {total}." (num `role="status"`), relido a cada 2 s só enquanto envia e com
+  a seção à vista.
+- **No fim**, no aviso: "O histórico subiu para a nuvem." e, se algum não subiu, "{k} ditados não
+  subiram para a nuvem." (com 1: "1 ditado não subiu para a nuvem.").
+- **Depois** (num `role="status"`): "Em dia com a nuvem. Conferido às {HH:MM}.", "{n} para enviar." e
+  "A última tentativa não deu certo. O PC tenta de novo sozinho." (as duas últimas juntas, se for o
+  caso) e, enquanto houver, "{k} ditados não subiram para a nuvem." (revisão de 06-out-2026: antes, o
+  número só aparecia no aviso do fim, e sumia com ele).
+- **A cópia que falha**, numa nota: "Não deu para copiar o histórico. Nada foi enviado." e, quando se
+  sabe o motivo, "Já há 3 cópias de antes do envio ao lado do histórico: apague as que não quiser." ou
+  "Falta espaço no disco." O botão volta, e o próximo clique tenta de novo.
+- **Esquecer esta nuvem** (desconectado, com uma nuvem gravada, embaixo do Conectar): o botão e a ajuda
+  "Para ligar este PC a outra nuvem ou conta." O clique abre a pergunta na própria linha, sem janela:
+  "**Esquecer {url}?** Este PC deixa de saber dessa nuvem e da conta {e-mail}. Os ditados continuam
+  aqui; na nuvem, nada muda." e, se há mudanças que não subiram, "{n} mudanças feitas aqui ainda não
+  subiram. Elas ficam neste PC." (com 1: "1 mudança feita aqui ainda não subiu. Ela fica neste PC.";
+  revisão de 06-out-2026: era "… e não vão mais para lá.", mas, de volta à mesma conta, elas sobem
+  pela reconciliação). O {n} é o `historico.mudancas`: a mudança num ditado que a nuvem tem (a
+  edição, a lixeira, o restaurar, a escolha do selo, a reconciliação) e, desde a F8, a troca aprendida
+  que foi desfeita ou trocada aqui e que a nuvem ainda não confirmou; o histórico do envio inicial e o
+  ditado novo que ainda não subiram não contam (reconferência de 06-out-2026: a frase contava a fila
+  inteira). Um PC sem nenhum ditado editado e com 2 trocas desfeitas aqui, ainda não enviadas, diz "2
+  mudanças feitas aqui ainda não subiram". Com **Esquecer** (botão de risco) e **Cancelar**; o foco vai para o Cancelar, o Esc cancela, e
+  cancelar devolve o foco ao **Esquecer esta nuvem**. Esquecido: o aviso "Este PC esqueceu a nuvem.",
+  o campo vazio e o foco nele. As recusas do Agent, numa nota: "Desconecte antes de esquecer a
+  nuvem.", "Cancele o pedido em curso antes de esquecer a nuvem.", "Conecte o PC à nuvem antes de
+  enviar o histórico." e "O PC ainda está conferindo a nuvem. Tente de novo em alguns segundos."
+- **A Privacidade do PC**, com o PC conectado, ganha: "Com a nuvem conectada, o texto dos seus ditados
+  vai para a sua nuvem, em {endereço}. O áudio e o que está nas outras janelas nunca vão." (o aprendido
+  entra na frase na F8: ver "Como a F8h fez", abaixo).
+- **A bandeja:** "Nuvem: enviando {feitos} de {total}" enquanto o envio inicial corre (também no
+  `429`); "sem conexão", "desconectada" e "resposta inesperada" vencem.
+- **O selo no PC:** o mesmo do app (abaixo, "O selo de conflito"), agora com os botões.
+
+**Como a F8h fez (07-out-2026; ADR-019, "Decisões da F8", D3; `web/src/NuvemNoPC.tsx` e
+`web/src/textosDaNuvem.ts`).** Nada aprendido sobe antes do clique em **Enviar o histórico**, e a
+pergunta conta as trocas aprendidas (o `previa_trocas` do `06`, o M).
+- **A pergunta** (só depois da primeira rodada com a conexão, como a de antes): "Vão subir {N} ditados
+  dos últimos 6 meses e {M} trocas aprendidas. A lixeira não vai. Antes, uma cópia do histórico fica
+  neste PC." O singular de cada um ("1 ditado", "1 troca aprendida"); o verbo no singular só quando é
+  uma coisa só ("Vai subir 1 ditado…", "Vai subir 1 troca aprendida."). Com M = 0, é a frase de antes,
+  palavra por palavra (e um Agent de antes da F8, que não manda o M, também).
+- **Com N = 0 e M > 0** a pergunta aparece do mesmo jeito, e é só "Vão subir {M} trocas aprendidas.":
+  sem a lixeira e sem a cópia (a cópia é do histórico, e não há ditado a enviar), e sem "Alguns destes
+  ditados podem já estar na nuvem…" (não há ditado na frase). O botão é o mesmo, **Enviar o histórico**
+  (durante o clique, "Enviando…" no lugar de "Copiando o histórico…", porque não há cópia); depois, as
+  trocas contam no "{n} para enviar." e não no progresso "Enviando o histórico: {feitos} de {total}.",
+  que é só dos ditados.
+- **O aviso do freio** (conectado, abaixo da linha do envio e acima do Desconectar, num `role="status"`,
+  como uma linha de ajuda e não como nota de erro: não houve falha): quando o `historico.freio_trocas`
+  (`06`) é maior que 0, "{n} trocas aprendidas saíram do dicionário de uma vez. Por segurança, nada do
+  aprendido sobe para a nuvem até elas voltarem." (com 1, só por robustez: "1 troca aprendida saiu do
+  dicionário de uma vez. Por segurança, nada do aprendido sobe para a nuvem até ela voltar."). Sem o
+  campo, ou com 0, não aparece; desconectado, também não (a varredura só roda conectada). É o aviso
+  que a ADR prometia ("nada sobe, e o painel avisa"); o botão de confirmar a remoção à mão continua
+  sendo decisão do Mauro (ADR-019, desvio 16).
+- **A Privacidade do PC**, com o PC conectado: "Com a nuvem conectada, o texto dos seus ditados e as
+  trocas que você aprendeu vão para a sua nuvem, em {endereço}. O áudio e o que está nas outras janelas
+  nunca vão." (o `08` do plano dizia "e o que você aprendeu"; "as trocas que você aprendeu" é o que a D1
+  limita: só o botão Aprender). A do app do celular: "Vão para a nuvem: o texto dos ditados, com a data,
+  o PC de origem e os detalhes da transcrição, e as trocas aprendidas."
+- **Para ver as telas** sem Agent nem nuvem: `pnpm -C web dev` e `/telas-dev.html?cenario=estados` (o
+  painel do PC; também `so-estados`, `pergunta`, `so-trocas`, `conectado` e `freio`) ou
+  `/telas-dev-nuvem.html?cenario=lista` (o app da nuvem; também `vazio`, `teto`, `erro` e `longa`). São
+  só do `pnpm dev`: nenhum build as inclui.
+- **O teste manual** (F8i, 08-out-2026): `docs/teste-manual-nuvem-f8.md` confere, no `bin\` e no app, com
+  a nuvem de teste, a pergunta do envio com a troca e o **Desfazer** do **Aprendido** do app e do
+  **Aprendido no painel**, nos dois sentidos. É um PC só: as etiquetas de estado e o "não aplicado neste
+  PC" ficam para os testes automáticos (ADR-019, "O fechamento da F8g").
+
+#### Histórico (os 6 meses no PC; ADR-019, F10)
+**Decidido em 08-out-2026 (ADR-019, "Decisões da F10") e implementado na F10d e na F10e**
+(`web/src/HistoricoNoPC.tsx`). O menor que funciona, no estilo das outras seções. Fica em **Configurações**, logo antes da
+Privacidade (depois da Nuvem), age na hora (fora do **Salvar configurações**) e **só aparece quando
+há o que decidir**: com ditados de mais de 6 meses (a contagem do `GET /api/retencao`), com a regra
+ligada, ou com cópias do banco ao lado dele. Nada fora das Configurações: sem faixa, sem janela, sem
+aviso na bandeja. Os números levam o ponto do milhar. Os textos abaixo são proposta, a confirmar na
+entrega.
+- **A pergunta** (N maior que 0, regra desligada): "{N} ditados têm mais de 6 meses. Ao confirmar,
+  eles saem deste PC de vez, e daqui em diante o que fizer 6 meses sai sozinho. Antes, uma cópia do
+  histórico fica neste PC." (com 1: "1 ditado tem mais de 6 meses. Ao confirmar, ele sai deste PC de
+  vez, e daqui em diante o que fizer 6 meses sai sozinho. Antes, uma cópia do histórico fica neste
+  PC."), com o botão **Apagar os mais antigos**. Com a cópia de um OK anterior ao lado do banco
+  (`copia_dos_6_meses`; a cópia dos 6 meses é uma só), a última frase vira "Não se faz outra cópia: a
+  que já está neste PC é de antes, e o que nasceu depois dela não está nela." (revisão da F10: a frase
+  de antes prometia uma cópia com tudo o que sai, e o que nasceu depois da primeira cópia não está
+  nela). Só quando maiores que 0, em linhas discretas embaixo: "{M} deles estão na lixeira.", "{K} têm
+  duas versões, e as duas saem." (o selo sai sem a escolha de quem usa) e "{J} são de outro dono e
+  ficam." (as linhas de outro `user_id` que o painel não mostra). Com N = 1, as duas primeiras falam
+  dele: "Ele está na lixeira." e "Ele tem duas versões, e as duas saem."
+- **A confirmação na própria linha** (o padrão do **Esquecer esta nuvem**, sem janela): o clique no
+  botão abre, logo abaixo das linhas e com o respiro da linha de botões que ela substitui,
+  "**Apagar {N} ditados?** Não dá para desfazer." com **Apagar** (botão de risco) e **Cancelar** (a
+  cópia fica na pergunta, acima; "só a cópia guarda" seria falso para o que nasceu depois da cópia de
+  um OK anterior); o foco vai para o Cancelar, o Esc cancela, e cancelar devolve o foco ao botão.
+  Durante o OK o botão diz "Copiando e apagando…" (o Agent responde uma vez só, e a tela não vê a
+  fronteira entre a cópia e o apagar), ou só "Apagando…" quando a cópia de antes já está lá. Pronto: o
+  aviso "{N} ditados saíram deste PC." (a cópia já está na linha das cópias do bloco) e o histórico é
+  relido.
+- **O OK que ligou mas não terminou** (um lote seguinte caiu: `"incompleto": true`): não é falha. O
+  aviso diz "{n} ditados saíram deste PC. Os outros {M} saem na próxima rodada, em até 1 hora.", o
+  histórico é relido e o foco vai ao **Desligar**. Se a resposta do OK falhou mas a releitura mostra a
+  regra ligada (o OK foi gravado antes da falha), o aviso diz "Os 6 meses estão ligados. O que ainda não
+  saiu sai na próxima rodada, em até 1 hora.", sem "Tente de novo" (não há o que tentar), com o mesmo
+  histórico relido e o foco no **Desligar**.
+- **Se a contagem mudou** entre o que a pessoa viu e o clique (o Agent recusa com o número novo): a
+  frase troca para o número novo, o aviso diz "A contagem mudou." e a pessoa confirma de novo; nada
+  foi apagado. **Se não há mais nada a apagar**: "Não há nada a apagar agora." e o bloco some.
+- **Ligado:** "Os 6 meses estão ligados: o que fizer 6 meses sai sozinho deste PC, em até 1 hora." e
+  **Desligar** (um clique, sem pergunta: não apaga nada), com a ajuda "Desligar volta ao de antes: o PC
+  guarda tudo. O que já saiu não volta." Desligado, o bloco volta a oferecer a regra enquanto houver o
+  que apagar.
+- **Pausada pelo freio** (o Agent ficou mais de 7 dias parado, ou o relógio do PC pulou): o bloco volta
+  com a pergunta de sempre e, **antes dela**, uma linha discreta: "A regra foi pausada: o Agent ficou
+  parado por mais de 7 dias, ou o relógio do PC mudou. Nada foi apagado." Sem nada a apagar e sem
+  cópias, o bloco não aparece, e a pausa fica só no registro do programa (contagens, nunca texto). Sem
+  nada a apagar mas com cópias (depois de um OK, a dos 6 meses fica), o bloco aparece pelas cópias e a
+  linha da pausa vem no topo, com "A pergunta volta quando houver o que apagar." no fim (revisão da
+  F10: antes, a linha só existia junto da pergunta, e nada dizia que a regra tinha desligado).
+- **As cópias** (F10e): "Há {C} cópias do histórico ao lado do banco, com o texto de antes." (com 1: "Há
+  1 cópia…") e **Apagar as cópias**, com a pergunta na linha: "**Apagar as {C} cópias?** Elas guardam
+  o texto que os 6 meses apagam. Não dá para desfazer." com **Apagar** e **Cancelar**. O Agent nunca as
+  apaga sozinho. A cópia de um envio do histórico que ainda não terminou fica: o bloco diz "1 delas é
+  a do envio do histórico à nuvem, que fica até o envio terminar." (só ela: "Ela é a do envio…"), a
+  pergunta conta só as que saem (`copias_apagaveis`), e sem nenhuma que saia o botão não aparece. O
+  aviso diz: "{n} cópias apagadas. 1 fica: o envio do histórico à nuvem ainda não terminou." Depois de
+  apagadas, o bloco some, se não há mais o que decidir; se fica só a do envio, o foco vai ao **Salvar
+  configurações**.
+- **As recusas do Agent**, numa nota de erro: "Não deu para copiar o histórico. Nada foi apagado." e,
+  quando se sabe o motivo, "Já há 3 cópias de antes dos 6 meses ao lado do histórico: apague as que não
+  quiser." (que o botão acima resolve) ou "Falta espaço no disco."; "O histórico deste PC ainda não
+  está pronto para isso. Reinicie o Agent."; e, de um Agent de antes da F10, "Este Agent ainda não tem
+  os 6 meses. Reinicie o Agent."
+- **A Privacidade do PC**, com os 6 meses ligados, ganha: "O que completa 6 meses é apagado deste
+  computador." O comentário de `web/src/ambiente.ts` deixa de dizer que a lixeira "some em 30 dias":
+  no PC, ela sai em 30 dias, ou depois de a nuvem saber, no máximo até os 6 meses do ditado.
+- **Para ver a tela** sem Agent: `pnpm -C web dev` e `/telas-dev.html?cenario=…`: `historico` (a
+  pergunta com 1.240 ditados, as três linhas de baixo e 2 cópias), `historico-simples` (12 ditados, sem as
+  linhas), `historico-1` (o singular), `historico-ligado`, `historico-pausado`, `historico-copias` (só as
+  3 cópias), `historico-envio` (3 cópias, 1 delas a do envio à nuvem que não terminou, que fica),
+  `historico-so-envio` (só a do envio, sem o botão), `historico-de-novo` (a pergunta com a cópia de um
+  OK anterior) e `historico-velho` (o Agent de antes da F10). O Apagar liga a regra no Agent de mentira, e a Privacidade
+  ganha a linha. São só do `pnpm dev`: nenhum build as inclui.
+- **O teste manual** (F10f, 08-out-2026): `docs/teste-manual-nuvem-f10.md` monta o Agent novo no
+  `bin\`, mostra o bloco e a contagem e deixa a decisão com quem usa (pode parar na contagem). Sem
+  ditado com mais de 6 meses (o caso provável até março de 2027), o bloco só aparece pelas cópias, ou
+  nem aparece, e o roteiro manda aos cenários acima para ver a pergunta e o OK.
+
+### Modelos
+- installed;
+- version;
+- size;
+- checksum;
+- benchmark;
+- activate/remove/download.
+
+### Dispositivos
+- name;
+- platform;
+- version;
+- last seen;
+- revoke.
+
+### Trash
+- texto;
+- deleted_at;
+- days to purge;
+- restore;
+- delete permanently.
+
+## Celular (PWA) e o painel em modo nuvem (ADR-019)
+Etapa 5, Android primeiro. É o mesmo painel, no build da nuvem, com as telas reduzidas para o
+celular. "O menor que funciona" (`PRODUCT.md`): a referência é o Wispr Flow, sem janela nova nem
+modal onde um aviso basta. Mesma paleta, mesmas fontes, o símbolo como ícone. **Textos finais da F4
+(05-out-2026), abaixo**; o código é a fonte da verdade (`web/src/nuvem/`, `web/src/Painel.tsx` e
+`web/src/ItemDitado.tsx`), e o roteiro de quem testa é o `docs/teste-manual-nuvem-f4.md`. O app
+instalado (F5): "O app instalado (F5)", abaixo, e o `docs/teste-manual-nuvem-f5.md`.
+
+**Como a F4 fez (ADR-019, "Decisões da F4"):** o mesmo código em dois builds (`vite build` e `vite
+build --mode nuvem`); o Painel recebe um "ambiente" do modo (`web/src/ambiente.ts`) com o cliente, a
+tela de Configurações, a faixa e os textos que mudam. Visual: os tokens do `index.css`, claro e escuro;
+Inter no corpo, Space Grotesk nos títulos, IBM Plex Mono só em hora, data e etiqueta; verde só no botão
+principal e na vista escolhida; vermelho só no risco, sempre com a palavra. De 320 a 430 px e no PC;
+com ponteiro de toque, os botões (as abas inclusive) e a busca têm 44 px.
+
+### O que tem
+- **Histórico**, com busca, editar, apagar e **Lixeira** (restaurar e **Excluir definitivamente**).
+- **Aprendido:** a lista do que os PCs aprenderam, com **Desfazer**. Não tem botão Aprender: aprender
+  continua só no PC (ADR-017). Entrou na F8h (07-out-2026), nas Configurações do celular
+  (`web/src/nuvem/AprendidoNaNuvem.tsx`; "Configurações do celular", abaixo).
+- **Configurações do celular** (abaixo).
+- Não tem: ditar, chave de API, atalho, microfone, modelo de voz, modo de texto, preferências.
+- Salvar uma edição só diz "Texto salvo.": a nuvem nunca sugere aprender.
+- O histórico vazio diz "Nenhum ditado ainda." e "O que você ditar num PC conectado aparece aqui."
+
+### Abrindo
+- Enquanto a nuvem não diz quem está entrando (`GET /api/v1/me`), nada; se demorar mais de 300 ms
+  (o celular numa rede lenta), a Aurora e "Abrindo…", num `role="status"`. Sem título nem foco: a
+  tela que vier depois leva o foco ao título dela.
+
+### Entrar
+- Tela única, numa coluna no meio: **a Aurora** (96 px, como a tela de abrir pela bandeja), "Aurora
+  Whisper", "Entre para ver o que você ditou." e o botão **Entrar com o Google** ("Abrindo o Google…"
+  enquanto vai; quem volta do Google pelo Voltar, com a página vinda do cache, acha o botão valendo
+  de novo). **[Decisão 3 do plano da F4: a ilustração da Aurora no lugar do símbolo que este
+  documento citava; a confirmar pelo Mauro.]** Sem o logo do Google: o app não carrega nada de fora.
+- Erro, num `role="alert"`: "Não deu para entrar. Tente de novo." (rede, servidor ou recusa); no
+  limite de tentativas (`429`), "Muitas tentativas. Espere um minuto e tente de novo."
+- Recusada (conta fora da lista): a página fixa do servidor, no mesmo visual, "Esta conta não tem
+  acesso a esta nuvem.", "Nada foi criado com ela." e **Entrar com outra conta**. O login que venceu,
+  foi cancelado ou falhou: "Não deu para entrar.", "O login venceu, foi cancelado ou não terminou." e
+  **Tentar de novo**.
+- **Só no servidor de teste** (build tag `logindeteste`, só no PC): o botão **Entrar com a conta de
+  teste**, com a ajuda "Só neste PC, sem Google.". A tela pergunta uma vez (`GET /auth/teste`), e só
+  com a página em `localhost` (o servidor de teste só sobe nele); a resposta `404` quer dizer que o
+  botão não existe. Fora de `localhost` (todo servidor de verdade), a tela nem pergunta, e o botão do
+  Google aparece junto com o título. No servidor de teste sem o Google, o botão do Google some.
+
+### Sem conexão
+- Na abertura (a página carregou, mas a nuvem não respondeu): a tela inteira, "Sem conexão.", "O que
+  você ditou continua no PC." e **Tentar de novo** ("Tentando…" enquanto vai). Outro erro na abertura:
+  "Não deu para abrir.", "Tente de novo daqui a pouco." e **Tentar de novo**.
+- No meio do uso: a faixa do topo, "**Sem conexão.** O que você ditou continua no PC.", com **Tentar
+  de novo**; a lista e os editores ficam na tela. Nenhum texto ditado fica guardado no aparelho.
+- Uma edição que não chegou ao servidor não é guardada: o editor diz "Sem conexão: a edição não foi
+  salva." e mantém o texto na tela até a pessoa tentar de novo ou sair.
+- **F5 (05-out-2026):** o app abre também sem rede nenhuma: o service worker sobe a casca guardada, o
+  `GET /api/v1/me` falha, e a tela é a de cima, "Sem conexão.", no lugar da página de erro do
+  navegador. Nenhum ditado aparece: o celular não guarda ditado.
+
+### O app instalado (F5)
+- **Nome:** "Aurora Whisper" no Iniciar do Windows, na janela e nas listas de apps; **"Whisper"**
+  embaixo do ícone, na tela inicial do celular (o `short_name`: muitos launchers cortam nomes longos).
+  **[Decisão do Mauro, 05-out-2026.]**
+- **Ícone:** o mesmo do .exe, da aba e da bandeja: o ladrilho escuro (`#070a09`) com o Pico estourado
+  (os colchetes verdes e a barra off-white). No Android, a versão "maskable": o quadrado cheio, que o
+  launcher recorta no formato dele (círculo, squircle, quadrado arredondado), com o símbolo dentro da
+  zona segura (raio de 40%), para nada sair cortado. **[Decisão do Mauro, 05-out-2026.]**
+- **Cores:** a tela de abertura e a cor do app instalado são `#070a09` nos dois temas (no tema claro,
+  a abertura pisca escura antes de o app claro aparecer); a barra do sistema segue o tema do aparelho
+  (`#f5f7f5` no claro, `#070a09` no escuro), pelas metas `theme-color` da página. **[Decisão do
+  Mauro, 05-out-2026.]**
+- **Janela própria** (`standalone`), sem barra de endereço. Abre na lista (o `start_url` é `/`), ou em
+  Entrar, sem sessão.
+- **Versão nova:** com rede, a página vem sempre do servidor, então abrir o app já traz a versão nova.
+  Não há aviso de "nova versão" (UI pequena); uma janela aberta há dias continua na versão de quando
+  abriu, até ser reaberta.
+- O painel do PC nunca é instalável: sem manifest e sem service worker (o Agent responde `404` em
+  `/sw.js`).
+
+### Sessão expirada
+- Um `401` no meio do uso, **sem texto não salvo na tela**, troca a tela inteira por: "Sua sessão
+  terminou.", "Entre de novo para ver seu histórico." e **Entrar com o Google** (e, no servidor de
+  teste, o da conta de teste).
+- **Com um texto não salvo na tela** (o editor aberto com uma mudança, ou uma linha com "não salvo";
+  decisão do Mauro, 05-out-2026: "Guarda até entrar de novo"), a tela fica, com o editor e o texto, e
+  a faixa do topo diz "**Sua sessão terminou.** Seu texto continua aqui; entre de novo para salvar.",
+  com **Entrar de novo**. O texto fica só na memória da página, nunca no aparelho. O editor aberto
+  sem mexer não conta.
+  - **Entrar de novo** abre o login numa janela à parte (no Android, outra aba), no endereço do
+    próprio app, que vai ao Google. Na volta, a janela diz "Você entrou de novo." / "Pode fechar esta
+    janela e voltar ao seu texto." e se fecha sozinha quando o navegador deixa. A página do texto não
+    sai do lugar.
+  - Quando a mesma conta volta (a aba confere ao ganhar o foco, ao voltar a ficar à vista e com o
+    aviso da janela), a faixa sai, o aviso diz "Você entrou de novo. Pode salvar.", e o foco vai
+    para o editor (ou para a linha com "não salvo"). **Salvar** funciona.
+  - Outra conta na janela: "**Você entrou em outra conta.** Este texto é de {e-mail}: entre com ela
+    para salvar." Enquanto a faixa está na tela, o painel não fala com a nuvem.
+  - Janela bloqueada: "**Seu navegador bloqueou a janela.** Copie o texto antes de entrar de novo nesta
+    aba.", com o foco em **Copiar o texto** (depois, "Texto copiado. Agora pode entrar de novo nesta
+    aba." ou "Não consegui copiar. Selecione o texto e copie antes de entrar de novo nesta aba.") e
+    **Entrar nesta aba** (a página vai ao Google; o texto que não foi copiado se perde).
+  - No servidor de teste, **Entrar com a conta de teste** fica na faixa e entra sem janela (sem o
+    Google no servidor, só ele).
+  - A frase da faixa é um `role="alert"` (anuncia ao aparecer e a cada troca); o foco não sai do
+    editor quando ela aparece; com o toque, os botões da faixa têm 44 px.
+  - **A pergunta do navegador antes de sair.** Com a faixa na tela e texto nela, recarregar, fechar
+    a aba, o puxar para atualizar do Android ou um navegador que abre a janela de entrar na mesma
+    aba fazem o navegador perguntar antes de a página sair (o diálogo é dele, sem texto nosso). Sem
+    nada a perder (a pessoa apagou o texto) e depois de entrar de novo, a página sai sem perguntar.
+    **Entrar nesta aba** é a exceção: é a escolha de perder o texto, e a faixa disse antes.
+  - **Pouca altura** (até 560 px: o teclado aberto numa janela que encolhe com ele, o celular
+    deitado): a faixa com a frase de sempre fica numa linha só, o título e o botão (58 px em vez de
+    117 num celular de 375 px); a frase continua para o leitor de tela. A da janela bloqueada, a da
+    outra conta e a do erro dizem o que fazer, e ficam inteiras.
+  - A página da janela, "Você entrou de novo.", tem o link **Abrir o histórico**, para quando o
+    navegador não a fechar (ou a abriu na mesma aba).
+- Cada tela inteira leva o foco ao título dela, para o leitor de tela anunciar a troca. Ao entrar,
+  ou quando o **Tentar de novo** abre o histórico, o botão some com a tela, e o foco vai para o
+  título do histórico ("Histórico", que só o leitor de tela vê). Aberto com a sessão do cookie, o
+  foco fica onde o navegador o pôs.
+
+### Configurações do celular
+- **Conta:** "Entrou como {e-mail}." e **Sair** (volta para Entrar). Com um texto não salvo na tela,
+  o **Sair** pergunta antes, ali mesmo: "**Sair com texto não salvo** / Há texto que você escreveu e
+  não salvou. Se você sair, ele se perde.", com **Sair e descartar o texto** e **Cancelar** (o foco
+  vai para o Cancelar, e o Esc cancela). Com a faixa da sessão na tela, o Sair passa por fora do
+  portão: o `POST /auth/logout` chega ao servidor.
+- **Aparelhos** (F6, entre a Conta e as Sessões abertas): uma linha por PC, "{nome}" e
+  "Windows · versão {v} · último uso {data}", com **Revogar**, que pergunta na própria linha:
+  "Revogar {nome}? O PC para de sincronizar e continua funcionando nele.", com **Revogar** (botão de
+  risco) e **Cancelar** (o foco vai para o Cancelar; o Esc cancela e devolve o foco ao Revogar da
+  linha). Feito: o aviso "PC revogado.", e o foco vai para o Revogar que ficou no lugar, ou para o
+  título da seção. Sem nenhum: "Nenhum PC conectado." O revogado some da lista (decisão 3 da F6). O
+  "apagar meus dados" relê a lista.
+- **A página de aprovação de um PC** (`/device/authorize?pedido=…`, F6), no estilo das telas inteiras
+  (a Aurora, o título, uma linha): "Conectar este PC?" e "{nome} · Windows"; num quadro, "Código
+  **K7QM**" (grande, em IBM Plex Mono), "Confira se é o mesmo do painel do PC.", "Este PC vai ficar
+  ligado à conta **{e-mail da sessão}**." (o e-mail quebra em qualquer ponto no celular; quem está na
+  conta errada vê antes de aprovar, porque o PC recusa trocar de conta depois) e, em texto forte, "Só
+  aprove se você clicou em Conectar neste PC agora."; **Aprovar** (durante, "Aprovando…"; a página vai
+  ao PC) e **Agora não** (depois: "Nada foi conectado." / "Pode fechar esta aba."; o pedido não é
+  invalidado: recarregar mostra o Aprovar de novo até ele vencer, em 10 minutos). O pedido vencido,
+  usado ou desconhecido: "Este pedido venceu ou já foi usado." / "Volte ao PC e clique em Conectar à
+  nuvem de novo." Sem sessão: Entrar, com a linha "Entre para aprovar a conexão do PC.", e o login
+  volta à aprovação. Os erros do Aprovar: "Sem conexão. Tente de novo." e "Não deu para aprovar. Tente
+  de novo."
+- **Aprendido** (F8h, entre os Aparelhos e as Sessões abertas): "Trocas que os PCs aprenderam ao
+  corrigir ditados." e uma linha por troca, a variante e o termo na IBM Plex Mono, `sf → ECF` (para o
+  leitor de tela: "sf vira ECF"), do mais recente para o mais antigo. Com domínio, uma segunda linha,
+  pequena e cinza, "domínio contabilidade" (a troca presa a ele diz "só no domínio contabilidade"); sem
+  domínio, nada. Cada linha tem **Desfazer**, que pergunta na própria linha (o padrão do Revogar, porque
+  do celular não dá para aprender de novo): "Desfazer? A troca deixa de valer em todos os PCs.", com
+  **Desfazer** (botão de risco) e **Cancelar** (o foco vai para o Cancelar; o Esc cancela e devolve o
+  foco ao Desfazer da linha). Para o leitor de tela, o grupo da pergunta se chama "sf vira ECF.
+  Desfazer? A troca deixa de valer em todos os PCs.": o foco cai no Cancelar, e o botão da linha, que
+  dizia qual troca era, sai de cena (o texto que se vê não muda). Com o pedido no ar ("Desfazendo…"), o
+  Cancelar e o Esc esperam (o Cancelar fica `aria-disabled`): desistir não aborta o POST, e a pergunta
+  sumiria antes de a troca sair da lista; o Revogar dos Aparelhos é igual. Feito: o aviso "Desfeito em todos os aparelhos.", a linha sai, e o foco vai
+  para o Desfazer que ficou no lugar, ou para o título da seção. Sem Aprender, e sem nenhuma troca:
+  "Nada aprendido ainda." O texto da troca nunca vai na URL (o `id` vai no corpo do POST).
+  - **O teto:** passou do que o servidor manda (`has_more`), uma linha, "Só as mais recentes aparecem.",
+    em texto comum, sem alarme; a lista é lida de novo quando a tela aparece.
+  - **Os erros**, no molde das outras seções: "Não deu para ver o aprendido: …" (a lista, num alerta, sem
+    o "Carregando…" nem o "Nada aprendido ainda.", que seriam mentira) e "Não deu para desfazer: …" (a
+    linha e a pergunta ficam, e dá para tentar de novo); a rede fora e a sessão que acabou vão para a faixa
+    e a tela de sessão expirada, como em toda parte. O `404` com a frase do servidor ("troca aprendida não
+    encontrada": a troca já não está aí, por exemplo desfeita em outro aparelho) tira a linha do mesmo
+    jeito, com o mesmo aviso; um `404` sem essa frase (o painel publicado antes do binário do servidor,
+    um proxy) é erro comum: "Não deu para desfazer: …", a linha e a pergunta ficam.
+- **Sessões abertas:** "Perdeu o celular? Encerre a sessão dele aqui." Uma linha por sessão (por
+  exemplo, "Android · Chrome", com "último uso 05/10, 14:32"); a atual leva a etiqueta "este
+  aparelho" e não tem botão; as outras têm **Encerrar** (o aviso: "Sessão encerrada."). Sem outra:
+  "Nenhuma outra sessão aberta."
+- **Privacidade:** "Vão para a nuvem: o texto dos ditados, com a data, o PC de origem e os detalhes da
+  transcrição, e as trocas aprendidas." (as trocas entraram na F8h) e "Nunca vão: o áudio, o que está nas outras janelas, a chave do Polish e as
+  configurações dos PCs." Depois, **Apagar meus dados da nuvem** (botão de risco), que abre ali mesmo:
+  "Apaga tudo desta conta na nuvem e desconecta os PCs. Os PCs ficam com a cópia deles.", o campo
+  "Para confirmar, digite apagar", **Apagar tudo** (só funciona com "apagar" digitado) e **Cancelar**
+  (Esc também). Feito: o aviso "Seus dados foram apagados da nuvem.", e o histórico lê de novo.
+
+### O selo de conflito
+- Quando o mesmo ditado foi mudado em dois lugares antes de sincronizar, a linha mostra a etiqueta
+  discreta **"2 versões"**, a de sempre (texto secundário e borda de linha; nunca o vermelho de erro:
+  nada se perdeu). O leitor de tela ouve "2 versões, abra para escolher". Só no Histórico: na
+  Lixeira, a pessoa restaura antes.
+- Com a linha aberta, em cima do editor: "Mudou em dois lugares. Ficou esta; a outra está guardada.",
+  as duas versões, **"Ficou"** e **"A outra · {data e hora}"**, com as palavras que só uma tem
+  sublinhadas (o `diff.ts`, sem cor), e **Ficar com esta** e **Ficar com a outra** (lado a lado no
+  PC, um embaixo do outro no celular). Embaixo dos botões, "A que você não escolher é descartada.",
+  que é também a descrição dos dois para o leitor de tela: a escolha não tem Desfazer, e "guardada"
+  só vale até ela. O nome do aparelho entra na F6, com os aparelhos.
+- Escolher é um `PATCH` com `resolver_conflito` (`06`); o aviso diz "Ficou a versão escolhida.", o
+  selo some em todos os aparelhos (o PC recebe pelo pull), e o foco vai para o texto. Se outra aba ou
+  aparelho mudou o ditado antes (`409`), ele é lido de novo, e o aviso diz "Este ditado mudou em outro
+  lugar. Confira as versões e escolha de novo." (ou "A versão já foi escolhida em outro lugar.").
+  **[Decisão 1 do plano da F4: escolher já na F4; a confirmar pelo Mauro.]**
+- No PC, o mesmo selo, no histórico do painel: o componente é o mesmo, e os botões aparecem quando o
+  Agent tiver a escolha (F7c). **F7c (06-out-2026):** os botões aparecem no PC, com os mesmos textos;
+  a escolha vale na hora no PC e sobe pela fila; se outro aparelho escolheu antes (ou o texto mudou),
+  ela cai na nuvem, e o pull traz de volta o que vale (com o selo, se ele ainda existe).
+
+### Lixeira na nuvem
+- Cada linha tem **Restaurar** e **Excluir definitivamente**. Excluir pergunta na própria linha, sem
+  janela: "Excluir para sempre? Não dá para desfazer.", com **Excluir** (botão de risco) e
+  **Cancelar**, e o foco já no Cancelar (Esc também cancela). Excluído: a linha some, o foco vai para
+  a vizinha, e o aviso diz "Ditado excluído para sempre." Se não deu (restaurado em outro lugar), a
+  pergunta fica e o aviso diz o porquê.
+
+### Instalar
+- No Android: o menu do Chrome, **Instalar app**. Sem prompt próprio na v1.
+- No iPhone: **depois do MVP** (Compartilhar, depois "Adicionar à Tela de Início").
+
+## Local x cloud
+Local: Agent runtime, mic, hotkey, modelos, logs locais.
+Cloud: histórico consolidado, dictionary, corrections, devices, syncable settings.
+
+**Etapa 5 (ADR-019):** a nuvem tem o histórico consolidado, o aprendido (só o par curto), os
+aparelhos e as sessões. Dicionário completo, correções e preferências ficam em cada PC; a nuvem
+delas é "depois".
+
+## Estados
+Toda tela: loading, empty, error, success, offline, unauthorized.
+
+No celular (ADR-019), `offline` é "Sem conexão" e `unauthorized` é "Sessão expirada" (acima).
+
+## Acessibilidade
+- teclado;
+- foco visível;
+- labels;
+- contraste;
+- aria-live para status.

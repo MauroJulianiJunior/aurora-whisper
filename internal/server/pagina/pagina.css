@@ -1,0 +1,106 @@
+/* As duas páginas fixas do login que não deu (recusado.html e falhou.html),
+   no visual da tela Entrar do app (web/src/index.css, .tela): a Aurora,
+   o título, uma linha e o botão, numa coluna no meio da tela. Os tokens são
+   os do painel, claro e escuro; verde só no botão. As fontes do painel vêm
+   com o build dele (nomes com hash), então aqui valem as de reserva do
+   sistema quando a Inter e a Space Grotesk não estão instaladas. */
+
+:root {
+  color-scheme: light dark;
+  --fonte: Inter, Aptos, 'Segoe UI', Arial, sans-serif;
+  --fonte-titulo: 'Space Grotesk', 'Aptos Display', 'Segoe UI', Arial, sans-serif;
+  --tinta: #00e676;
+  --tinta-forte: #3ded8f;
+  --tinta-texto: #070a09;
+  --moldura: #00e676;
+  --fundo: #f5f7f5;
+  --texto: #101512;
+  --texto-2: #4f5c56;
+  --traco: #070a09;
+  --foco: #0f3d2e;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fundo: #070a09;
+    --texto: #f5f7f5;
+    --texto-2: #aeb9b4;
+    --traco: #f5f7f5;
+    --foco: #00e676;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--fundo);
+  color: var(--texto);
+  font: 14px/1.5 var(--fonte);
+  -webkit-font-smoothing: antialiased;
+}
+
+.tela {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  min-height: 100dvh;
+  max-width: 22rem;
+  margin: 0 auto;
+  padding: 32px 16px 56px;
+  text-align: center;
+}
+
+.aurora {
+  display: block;
+  color: var(--traco);
+}
+
+.aurora-moldura {
+  stroke: var(--moldura);
+}
+
+h1 {
+  margin: 18px 0 6px;
+  font-family: var(--fonte-titulo);
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  text-wrap: balance;
+}
+
+p {
+  margin: 0 0 28px;
+  color: var(--texto-2);
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+
+/* O link que leva de volta ao app tem a cara do botão principal dele. */
+.botao {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: stretch;
+  height: 44px;
+  padding: 0 14px;
+  border-radius: 6px;
+  background: var(--tinta);
+  color: var(--tinta-texto);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.botao:hover {
+  background: var(--tinta-forte);
+}
+
+.botao:focus-visible {
+  outline: 2px solid var(--foco);
+  outline-offset: 2px;
+}

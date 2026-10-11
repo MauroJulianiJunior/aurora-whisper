@@ -1,0 +1,6 @@
+# O contexto do build da imagem do backup e deploy/scripts (o comando esta em
+# deploy/backup/Dockerfile). Lista de permissao: so o backup.sh e o
+# agendar-backup.sh entram.
+*
+!backup.sh
+!agendar-backup.sh

@@ -1,0 +1,37 @@
+{
+  "_comentario": [
+    "Candidatos do Sprint 3, caminho SO CPU (decisao de Mauro em 17-set-2026:",
+    "medir CPU primeiro; se passar, a GPU nunca precisa entrar e o instalador",
+    "fica em 8,6 MB em vez de 674,5 MB).",
+    "",
+    "Binario: whisper.cpp tag de BUILD b5130 (as tags semver nao tem assets),",
+    "whisper-bin-x64.zip. Modelos ggml do repositorio HuggingFace do projeto.",
+    "",
+    "warmArgs esta VAZIO de proposito nos dois. O harness fala protocolo de",
+    "LINHA por stdin/stdout, e o whisper-server fala HTTP — nao encaixam. O",
+    "warm entra quando o adaptador estiver pronto. Deixar vazio faz o harness",
+    "reportar 'warm nao medido' em vez de inventar numero.",
+    "",
+    "-np suprime tudo que nao for resultado, -nt tira timestamps: o harness le",
+    "stdout cru como transcricao.",
+    "",
+    "timeout folgado de proposito: o custo COLD inclui carregar o modelo, que",
+    "medido nesta maquina foi 3,9 s no small e 18,9 s no large-v3-turbo-q5_0",
+    "para uma frase de 1,6 s. Um timeout apertado transformaria medicao em",
+    "falha e esconderia justamente o numero que interessa."
+  ],
+  "candidates": [
+    {
+      "name": "whisper-cpp-small-cpu",
+      "executable": "thirdparty/whisper/Release/whisper-cli.exe",
+      "coldArgs": ["-m", "models/ggml-small.bin", "-l", "pt", "-np", "-nt", "-f", "{{audio}}"],
+      "timeout": "120s"
+    },
+    {
+      "name": "whisper-cpp-large-v3-turbo-q5_0-cpu",
+      "executable": "thirdparty/whisper/Release/whisper-cli.exe",
+      "coldArgs": ["-m", "models/ggml-large-v3-turbo-q5_0.bin", "-l", "pt", "-np", "-nt", "-f", "{{audio}}"],
+      "timeout": "180s"
+    }
+  ]
+}

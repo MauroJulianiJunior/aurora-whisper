@@ -1,0 +1,108 @@
+# ─── Segredos e ambiente ────────────────────────────────────────────────
+# NFR-009: nenhum secret pode entrar no git.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+credentials.json
+client_secret*.json
+
+# Backup da nuvem (ADR-019, F11): a chave do age (o *.key acima cobre o nome
+# padrão, aurora-whisper-backup.key), os dumps em claro ou cifrados, o envio
+# pela metade, a configuração da VPS e as pastas de segredos e de backup, se um
+# dia alguém as criar dentro do repositório (os scripts recusam).
+AGE-SECRET-KEY*
+*.age
+*.dump
+*.dump.age
+*.partial
+config.env
+rclone.conf
+/backup/
+/segredos/
+**/segredos/
+
+# O JSON do client do Google com o nome que os roteiros usam (o baixado,
+# client_secret*.json, já está acima), a pasta de entrada da VPS, a saída do
+# age-keygen redirecionada para um .txt e o arquivo da chave do B2 do
+# b2-chave-do-backup.ps1, se um dia alguém os puser dentro do repositório.
+google-client*.json
+/recebido/
+**/recebido/
+age-key*.txt
+keys.txt
+b2-chave-do-backup*.txt
+
+# ─── Go ─────────────────────────────────────────────────────────────────
+/bin/
+/dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+go.work
+go.work.sum
+
+# ─── Node / web ─────────────────────────────────────────────────────────
+node_modules/
+web/dist/
+web/.vite/
+.pnpm-store/
+*.tsbuildinfo
+
+# ─── Estado local do Agent (nunca versionar) ────────────────────────────
+# SQLite local guarda histórico/dicionário do usuário.
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# ─── Áudio ──────────────────────────────────────────────────────────────
+# Invariante da spec (AC-028): áudio nunca persiste. Nenhum arquivo de áudio
+# deve existir no repositório — nem em runtime, nem como fixture.
+# O dataset de voz do benchmark (19-eval-plan.md) vive FORA do git e é
+# referenciado por hash no relatório de benchmark.
+*.wav
+*.pcm
+*.mp3
+*.flac
+*.ogg
+*.m4a
+*.opus
+*.aac
+*.wma
+*.webm
+*.aiff
+
+# ─── Binarios de terceiros (whisper.cpp etc., baixados para o benchmark) ─
+# Nao sao nossos, pesam centenas de MB, e a versao exata fica registrada no
+# relatorio de benchmark — nao no git.
+/thirdparty/
+
+# ─── Modelos de ASR (grandes, baixados pelo model manager) ──────────────
+/models/
+*.gguf
+*.onnx
+*.bin
+
+# ─── Artefatos locais ───────────────────────────────────────────────────
+/tmp/
+/coverage/
+*.log
+
+# ─── Ferramentas de agente ──────────────────────────────────────────────
+# Configuração, permissões e cópias de trabalho locais de agentes: nada disso é do projeto.
+.claude/
+
+# ─── IDE / OS ───────────────────────────────────────────────────────────
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+.DS_Store

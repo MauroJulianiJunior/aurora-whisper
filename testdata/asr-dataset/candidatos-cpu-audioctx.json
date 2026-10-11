@@ -1,0 +1,62 @@
+{
+  "_comentario": [
+    "Varredura de audio-ctx no small, em cold. Mede o custo em QUALIDADE da",
+    "reducao da janela do encoder, que numa amostra so reduziu 43% da latencia",
+    "sem estragar a transcricao. Uma amostra nao decide: a degradacao observada",
+    "foi NAO MONOTONA (ac=500 errou, ac=350 acertou), o que e sinal de ruido, e",
+    "so os 46 mostram o efeito real."
+  ],
+  "candidates": [
+    {
+      "name": "whisper-cpp-small-cpu-ac1000",
+      "executable": "thirdparty/whisper/Release/whisper-cli.exe",
+      "coldArgs": [
+        "-m",
+        "models/ggml-small.bin",
+        "-l",
+        "pt",
+        "-np",
+        "-nt",
+        "-ac",
+        "1000",
+        "-f",
+        "{{audio}}"
+      ],
+      "timeout": "120s"
+    },
+    {
+      "name": "whisper-cpp-small-cpu-ac750",
+      "executable": "thirdparty/whisper/Release/whisper-cli.exe",
+      "coldArgs": [
+        "-m",
+        "models/ggml-small.bin",
+        "-l",
+        "pt",
+        "-np",
+        "-nt",
+        "-ac",
+        "750",
+        "-f",
+        "{{audio}}"
+      ],
+      "timeout": "120s"
+    },
+    {
+      "name": "whisper-cpp-small-cpu-ac500",
+      "executable": "thirdparty/whisper/Release/whisper-cli.exe",
+      "coldArgs": [
+        "-m",
+        "models/ggml-small.bin",
+        "-l",
+        "pt",
+        "-np",
+        "-nt",
+        "-ac",
+        "500",
+        "-f",
+        "{{audio}}"
+      ],
+      "timeout": "120s"
+    }
+  ]
+}

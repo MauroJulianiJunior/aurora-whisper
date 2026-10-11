@@ -1,0 +1,5 @@
+{"samples":[
+  {"id":"smoke-01","audio":"smoke-audio/smoke-01.wav","category":"pt-br-geral","reference":"Testando o microfone depois da correção.","entities":[]},
+  {"id":"smoke-02","audio":"smoke-audio/smoke-02.wav","category":"contabilidade","reference":"Precisa transmitir a DCTFWeb antes do dia quinze.","entities":["DCTFWeb"]},
+  {"id":"smoke-03","audio":"smoke-audio/smoke-03.wav","category":"numeros-datas-valores","reference":"O valor é de R$ 1.530,40 e vence em 03/10/2026.","entities":[]}
+]}

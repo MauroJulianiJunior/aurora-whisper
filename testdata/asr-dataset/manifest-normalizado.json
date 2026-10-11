@@ -1,0 +1,401 @@
+{
+  "samples": [
+    {
+      "id": "geral-01",
+      "audio": "audio-normalizado/geral-01.wav",
+      "category": "pt-br-geral",
+      "reference": "Depois do almoço eu volto e a gente termina isso.",
+      "entities": []
+    },
+    {
+      "id": "geral-02",
+      "audio": "audio-normalizado/geral-02.wav",
+      "category": "pt-br-geral",
+      "reference": "Anota aí que amanhã cedo eu preciso passar no escritório.",
+      "entities": []
+    },
+    {
+      "id": "geral-03",
+      "audio": "audio-normalizado/geral-03.wav",
+      "category": "pt-br-geral",
+      "reference": "Não esquece de responder aquele e-mail que chegou ontem à tarde.",
+      "entities": []
+    },
+    {
+      "id": "geral-04",
+      "audio": "audio-normalizado/geral-04.wav",
+      "category": "pt-br-geral",
+      "reference": "Acho melhor deixar para segunda-feira, hoje já está tarde.",
+      "entities": []
+    },
+    {
+      "id": "ingles-01",
+      "audio": "audio-normalizado/ingles-01.wav",
+      "category": "ingles",
+      "reference": "Please send me the updated report by the end of the day.",
+      "entities": []
+    },
+    {
+      "id": "ingles-02",
+      "audio": "audio-normalizado/ingles-02.wav",
+      "category": "ingles",
+      "reference": "The meeting was moved to next Tuesday afternoon.",
+      "entities": []
+    },
+    {
+      "id": "ingles-03",
+      "audio": "audio-normalizado/ingles-03.wav",
+      "category": "ingles",
+      "reference": "I need to check the logs before we deploy anything.",
+      "entities": []
+    },
+    {
+      "id": "cs-01",
+      "audio": "audio-normalizado/cs-01.wav",
+      "category": "code-switching",
+      "reference": "Faz o deploy em staging antes de mandar para produção.",
+      "entities": [
+        "deploy",
+        "staging"
+      ]
+    },
+    {
+      "id": "cs-02",
+      "audio": "audio-normalizado/cs-02.wav",
+      "category": "code-switching",
+      "reference": "Abre um pull request e deixa como draft até eu revisar.",
+      "entities": [
+        "pull request",
+        "draft"
+      ]
+    },
+    {
+      "id": "cs-03",
+      "audio": "audio-normalizado/cs-03.wav",
+      "category": "code-switching",
+      "reference": "O endpoint está retornando timeout, confere o log do backend.",
+      "entities": [
+        "endpoint",
+        "timeout",
+        "log",
+        "backend"
+      ]
+    },
+    {
+      "id": "cs-04",
+      "audio": "audio-normalizado/cs-04.wav",
+      "category": "code-switching",
+      "reference": "Esse commit quebrou o pipeline do CI.",
+      "entities": [
+        "commit",
+        "pipeline",
+        "CI"
+      ]
+    },
+    {
+      "id": "cont-01",
+      "audio": "audio-normalizado/cont-01.wav",
+      "category": "contabilidade",
+      "reference": "Precisa transmitir a DCTFWeb da competência de agosto antes do dia quinze.",
+      "entities": [
+        "DCTFWeb"
+      ]
+    },
+    {
+      "id": "cont-02",
+      "audio": "audio-normalizado/cont-02.wav",
+      "category": "contabilidade",
+      "reference": "O PGDAS desse cliente ainda não foi gerado, o Simples Nacional vence sexta.",
+      "entities": [
+        "PGDAS",
+        "Simples Nacional"
+      ]
+    },
+    {
+      "id": "cont-03",
+      "audio": "audio-normalizado/cont-03.wav",
+      "category": "contabilidade",
+      "reference": "Manda o eSocial e o EFD-Reinf junto, o SPED já foi entregue.",
+      "entities": [
+        "eSocial",
+        "EFD-Reinf",
+        "SPED"
+      ]
+    },
+    {
+      "id": "cont-04",
+      "audio": "audio-normalizado/cont-04.wav",
+      "category": "contabilidade",
+      "reference": "Esse aqui é Lucro Presumido, não é MEI, então o DAS não se aplica.",
+      "entities": [
+        "Lucro Presumido",
+        "MEI",
+        "DAS"
+      ]
+    },
+    {
+      "id": "cont-05",
+      "audio": "audio-normalizado/cont-05.wav",
+      "category": "contabilidade",
+      "reference": "Falta a guia do INSS e o recibo de entrega da ECD.",
+      "entities": [
+        "INSS",
+        "ECD"
+      ]
+    },
+    {
+      "id": "dev-01",
+      "audio": "audio-normalizado/dev-01.wav",
+      "category": "desenvolvimento",
+      "reference": "O workflow do n8n está travando no nó de webhook.",
+      "entities": [
+        "n8n",
+        "webhook"
+      ]
+    },
+    {
+      "id": "dev-02",
+      "audio": "audio-normalizado/dev-02.wav",
+      "category": "desenvolvimento",
+      "reference": "Sobe a migration no Supabase e confere se o PostgreSQL aceitou.",
+      "entities": [
+        "Supabase",
+        "PostgreSQL"
+      ]
+    },
+    {
+      "id": "dev-03",
+      "audio": "audio-normalizado/dev-03.wav",
+      "category": "desenvolvimento",
+      "reference": "Essa goroutine não está fechando o canal, por isso o teste trava.",
+      "entities": [
+        "goroutine"
+      ]
+    },
+    {
+      "id": "dev-04",
+      "audio": "audio-normalizado/dev-04.wav",
+      "category": "desenvolvimento",
+      "reference": "Roda o build do Vite e vê se o TypeScript reclama de alguma tipagem.",
+      "entities": [
+        "Vite",
+        "TypeScript"
+      ]
+    },
+    {
+      "id": "dev-05",
+      "audio": "audio-normalizado/dev-05.wav",
+      "category": "desenvolvimento",
+      "reference": "O container do Docker caiu no cluster do Kubernetes de madrugada.",
+      "entities": [
+        "Docker",
+        "Kubernetes"
+      ]
+    },
+    {
+      "id": "nome-01",
+      "audio": "audio-normalizado/nome-01.wav",
+      "category": "nomes-proprios",
+      "reference": "Liga para a Metalúrgica Toffanetti e confirma o balancete.",
+      "entities": [
+        "Metalúrgica Toffanetti"
+      ]
+    },
+    {
+      "id": "nome-02",
+      "audio": "audio-normalizado/nome-02.wav",
+      "category": "nomes-proprios",
+      "reference": "A Rosângela Bittencourt pediu o relatório do trimestre.",
+      "entities": [
+        "Rosângela Bittencourt"
+      ]
+    },
+    {
+      "id": "nome-03",
+      "audio": "audio-normalizado/nome-03.wav",
+      "category": "nomes-proprios",
+      "reference": "Marca reunião com o Thiago Vasconcelos na quinta.",
+      "entities": [
+        "Thiago Vasconcelos"
+      ]
+    },
+    {
+      "id": "nome-04",
+      "audio": "audio-normalizado/nome-04.wav",
+      "category": "nomes-proprios",
+      "reference": "Manda para o Claude Code e para a Aurora o mesmo contexto.",
+      "entities": [
+        "Claude Code",
+        "Aurora"
+      ]
+    },
+    {
+      "id": "num-01",
+      "audio": "audio-normalizado/num-01.wav",
+      "category": "numeros-datas-valores",
+      "reference": "O valor é de R$ 1.530,40 e vence em 03/10/2026.",
+      "entities": []
+    },
+    {
+      "id": "num-02",
+      "audio": "audio-normalizado/num-02.wav",
+      "category": "numeros-datas-valores",
+      "reference": "A alíquota subiu de 6% para 8,5% neste mês.",
+      "entities": []
+    },
+    {
+      "id": "num-03",
+      "audio": "audio-normalizado/num-03.wav",
+      "category": "numeros-datas-valores",
+      "reference": "Competência 08, vencimento dia 20, valor de R$ 2.300,00.",
+      "entities": []
+    },
+    {
+      "id": "num-04",
+      "audio": "audio-normalizado/num-04.wav",
+      "category": "numeros-datas-valores",
+      "reference": "Transferi R$ 450,00 no dia 17/09/2026.",
+      "entities": []
+    },
+    {
+      "id": "num-05",
+      "audio": "audio-normalizado/num-05.wav",
+      "category": "numeros-datas-valores",
+      "reference": "São 12 notas fiscais, totalizando R$ 8.740,25.",
+      "entities": []
+    },
+    {
+      "id": "corr-01",
+      "audio": "audio-normalizado/corr-01.wav",
+      "category": "self-corrections",
+      "reference": "Manda para a Rosângela... não, na verdade manda para o Thiago.",
+      "intended": "Manda para o Thiago.",
+      "entities": [
+        "Thiago"
+      ]
+    },
+    {
+      "id": "corr-02",
+      "audio": "audio-normalizado/corr-02.wav",
+      "category": "self-corrections",
+      "reference": "O vencimento é dia dez, desculpa, dia doze.",
+      "intended": "O vencimento é dia doze.",
+      "entities": []
+    },
+    {
+      "id": "corr-03",
+      "audio": "audio-normalizado/corr-03.wav",
+      "category": "self-corrections",
+      "reference": "Sobe no Supabase, quer dizer, no PostgreSQL local mesmo.",
+      "intended": "Sobe no PostgreSQL local mesmo.",
+      "entities": [
+        "PostgreSQL"
+      ]
+    },
+    {
+      "id": "corr-04",
+      "audio": "audio-normalizado/corr-04.wav",
+      "category": "self-corrections",
+      "reference": "São três mil reais... não, três mil e quinhentos.",
+      "intended": "São três mil e quinhentos reais.",
+      "entities": []
+    },
+    {
+      "id": "ruido-01",
+      "audio": "audio-normalizado/ruido-01.wav",
+      "category": "ruido-moderado",
+      "reference": "Consegue me passar o telefone do contador da Toffanetti?",
+      "entities": [
+        "Toffanetti"
+      ]
+    },
+    {
+      "id": "ruido-02",
+      "audio": "audio-normalizado/ruido-02.wav",
+      "category": "ruido-moderado",
+      "reference": "O arquivo está na pasta compartilhada, dá uma olhada.",
+      "entities": []
+    },
+    {
+      "id": "ruido-03",
+      "audio": "audio-normalizado/ruido-03.wav",
+      "category": "ruido-moderado",
+      "reference": "Preciso do relatório até o fim do dia.",
+      "entities": []
+    },
+    {
+      "id": "rapida-01",
+      "audio": "audio-normalizado/rapida-01.wav",
+      "category": "fala-rapida",
+      "reference": "Manda o balancete, a DRE e o razão do mês passado, tudo junto.",
+      "entities": [
+        "DRE"
+      ]
+    },
+    {
+      "id": "rapida-02",
+      "audio": "audio-normalizado/rapida-02.wav",
+      "category": "fala-rapida",
+      "reference": "Confere se o webhook, o worker e o banco estão todos de pé.",
+      "entities": [
+        "webhook",
+        "worker"
+      ]
+    },
+    {
+      "id": "rapida-03",
+      "audio": "audio-normalizado/rapida-03.wav",
+      "category": "fala-rapida",
+      "reference": "Amanhã tem DCTFWeb, PGDAS e eSocial, tudo no mesmo dia.",
+      "entities": [
+        "DCTFWeb",
+        "PGDAS",
+        "eSocial"
+      ]
+    },
+    {
+      "id": "curta-01",
+      "audio": "audio-normalizado/curta-01.wav",
+      "category": "1-3s",
+      "reference": "Confirma para mim, por favor.",
+      "entities": []
+    },
+    {
+      "id": "curta-02",
+      "audio": "audio-normalizado/curta-02.wav",
+      "category": "1-3s",
+      "reference": "Já mandei o arquivo.",
+      "entities": []
+    },
+    {
+      "id": "curta-03",
+      "audio": "audio-normalizado/curta-03.wav",
+      "category": "1-3s",
+      "reference": "Vamos deixar para amanhã.",
+      "entities": []
+    },
+    {
+      "id": "media-01",
+      "audio": "audio-normalizado/media-01.wav",
+      "category": "3-10s",
+      "reference": "Preciso que você revise o contrato inteiro antes da reunião de amanhã, principalmente a cláusula de rescisão.",
+      "entities": []
+    },
+    {
+      "id": "media-02",
+      "audio": "audio-normalizado/media-02.wav",
+      "category": "3-10s",
+      "reference": "Se o cliente não mandar os documentos até quarta, a gente não consegue fechar o mês no prazo.",
+      "entities": []
+    },
+    {
+      "id": "media-03",
+      "audio": "audio-normalizado/media-03.wav",
+      "category": "3-10s",
+      "reference": "Abre o dashboard, filtra pelo último trimestre e me manda um resumo do que mudou.",
+      "entities": [
+        "dashboard"
+      ]
+    }
+  ]
+}

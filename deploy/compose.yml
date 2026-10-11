@@ -1,0 +1,315 @@
+# A nuvem do Aurora Whisper numa VPS com um Traefik que ja roda (ADR-019,
+# "Decisoes da F11", D1 confirmada pelo Mauro em 09-out-2026; Parte 2, F11i).
+#
+# Tres servicos, todos com o prefixo aurora-whisper-* (o nome do servico vira
+# apelido de DNS na rede em que ele entra, e um "api" ou "db" nosso numa rede
+# compartilhada entraria no rodizio de quem ja usa o nome):
+#
+#   aurora-whisper-postgres  o Postgres 18, SO na rede aurora-whisper-interna
+#                            (internal: true, sem saida e sem porta publicada);
+#   aurora-whisper-api       o servidor (serve), na rede interna e na rede "web"
+#                            do Traefik que ja roda na VPS. Quem atende o https
+#                            e o Traefik, pelos rotulos daqui, no molde dos
+#                            outros servicos do servidor: a rede web, o
+#                            entrypoint websecure, o
+#                            resolvedor letsencrypt, e o servico exposto so pelo
+#                            rotulo (o Traefik roda com exposedbydefault=false).
+#                            O log de acesso do Traefik fica DESLIGADO so no
+#                            nosso router (observability.accesslogs=false, a
+#                            observabilidade por router do Traefik v3; conferida
+#                            na documentacao do Traefik v3): ele gravaria o code e o
+#                            state do callback do Google e o IP de cada pedido.
+#                            Sem um middleware de cabecalhos dos outros sites: a
+#                            CSP e o HSTS sao os do proprio servidor;
+#   aurora-whisper-backup    o agendador do backup (agendar-backup.sh), na rede
+#                            interna e numa rede de saida so dele (o rclone fala
+#                            com o B2). Nada de cron no host.
+#
+# NADA do Traefik nem dos outros servicos do servidor e editado ou reiniciado:
+# a nuvem entra so com os rotulos do proprio conteiner. Nenhum servico publica
+# porta, e nenhum monta o socket do Docker.
+#
+# Os segredos sao ARQUIVOS (a pasta 0700 com os arquivos 0444 do
+# deploy/scripts/gerar-segredos.sh), montados em /run/secrets/<nome> e lidos
+# pelas variaveis *_FILE; nenhum segredo vai por variavel de ambiente (o
+# provider docker do Traefik le o Config.Env de todo conteiner, e o "docker
+# inspect" o mostra). O que nao e segredo vem do config.env (o
+# gerar-segredos.sh grava PUBLIC_BASE_URL, DOMINIO, CONTAS_PERMITIDAS e
+# B2_BUCKET; o subir.sh grava PROXY_CONFIAVEL, a sub-rede da rede web lida na
+# hora do deploy).
+#
+# Quem sobe e o Mauro, pelo roteiro (docs/deploy-f11.md), com o
+# deploy/scripts/subir.sh, que passa o --project-name e o --env-file e tira do
+# ambiente as variaveis que o compose le antes do --env-file (uma exportada na
+# sessao valeria mais que o config.env). Para olhar a mao, na VPS, sempre com
+# o --project-name (um COMPOSE_PROJECT_NAME exportado vale mais que o name:
+# daqui):
+#
+#   docker compose --project-name aurora-whisper --env-file ~/aurora-whisper/config.env -f ~/aurora-whisper/deploy/compose.yml ps
+#
+# As variaveis AW_* sao so do teste do PC (scripts\deploy-teste.ps1, com o
+# deploy/compose.teste.yml): no servidor ficam nos padroes, que sao os nomes
+# que os scripts da VPS usam (restaurar.sh, conferir-postgres.sh, backup.sh).
+# Os caminhos relativos sao relativos a esta pasta (deploy/): o ../segredos e
+# o ~/aurora-whisper/segredos da VPS.
+#
+# deploy/compose_test.go confere tudo isto lendo este arquivo.
+
+name: aurora-whisper
+
+services:
+  aurora-whisper-postgres:
+    image: postgres:18.6-trixie
+    container_name: ${AW_PREFIXO:-aurora-whisper}-postgres
+    restart: unless-stopped
+    environment:
+      # O superusuario da imagem fica so para administrar (criar e renomear
+      # bancos na restauracao, conferir os ajustes). A API e o migrate usam o
+      # papel aurora, sem superusuario, que o init cria; o backup, o
+      # aurora_backup, so de leitura. Tres senhas diferentes.
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres-superusuario-senha
+      AURORA_SENHA_FILE: /run/secrets/postgres-aurora-senha
+      AURORA_BACKUP_SENHA_FILE: /run/secrets/postgres-backup-senha
+    secrets:
+      - postgres-superusuario-senha
+      - postgres-aurora-senha
+      - postgres-backup-senha
+    # Os cinco ajustes de log da ADR (o log do Postgres sem texto ditado; o
+    # auto_explain fica fora porque nada o carrega). O
+    # deploy/postgres/conferir-postgres.sh os confere por SHOW.
+    command:
+      - postgres
+      - -c
+      - log_error_verbosity=terse
+      - -c
+      - log_statement=none
+      - -c
+      - log_min_duration_statement=-1
+      - -c
+      - log_parameter_max_length_on_error=0
+    volumes:
+      # No Postgres 18 o volume e /var/lib/postgresql (e nao mais .../data).
+      - aurora-whisper-postgres:/var/lib/postgresql
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - aurora-whisper-interna
+    # Pelo TCP, e nao pelo socket: o servidor temporario da inicializacao so
+    # escuta no socket, e a API e o migrate chegam pelo TCP.
+    healthcheck:
+      test:
+        - CMD
+        - pg_isready
+        - -q
+        - -h
+        - 127.0.0.1
+        - -U
+        - postgres
+        - -d
+        - postgres
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 60s
+      start_interval: 2s
+    mem_limit: 512m
+    # A CPU: o teto (cpus) so impede um servico de passar dele, e os tres
+    # somam 2,5 CPUs, mais do que uma VPS pequena tem, que pode ja estar
+    # ocupada pelos outros servicos do servidor. O que da a vez a eles na
+    # disputa e o PESO: 256, um quarto do padrao (1024) que os outros
+    # conteineres tem (no cgroup v2, menos ainda). Com a CPU livre, a nuvem
+    # usa ate o teto; com a CPU disputada, os outros servicos levam a maior
+    # parte. So os nossos servicos mudam.
+    cpus: 1.0
+    cpu_shares: 256
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  aurora-whisper-api:
+    image: aurora-whisper-server:producao
+    # A imagem vem do PC (docker save | ssh | docker load; D4): nunca de um
+    # registro.
+    pull_policy: never
+    # O nome fixo garante o stop-first: o compose para o conteiner velho antes
+    # de criar o novo, e nunca ha dois serve de pe (a retencao nao tem trava
+    # entre processos; escolha menor 2 da F11).
+    container_name: ${AW_PREFIXO:-aurora-whisper}-api
+    restart: unless-stopped
+    command:
+      - serve
+    environment:
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?falta o PUBLIC_BASE_URL no config.env}
+      HTTP_ADDR: 0.0.0.0:8080
+      CONTAS_PERMITIDAS: ${CONTAS_PERMITIDAS:?falta o CONTAS_PERMITIDAS no config.env}
+      # A sub-rede da rede web: so dela o X-Forwarded-For vale. Errar o valor
+      # poe todo mundo no mesmo balde do limite de tentativas; o servidor avisa
+      # (um WARN) quando o X-Forwarded-For chega de fora dela.
+      PROXY_CONFIAVEL: ${PROXY_CONFIAVEL:?falta o PROXY_CONFIAVEL no config.env (o subir.sh o grava)}
+      DATABASE_URL_FILE: /run/secrets/database-url
+      SESSION_SECRET_FILE: /run/secrets/session-secret
+      DEVICE_TOKEN_PEPPER_FILE: /run/secrets/device-token-pepper
+      GOOGLE_CLIENT_SECRET_FILE: /run/secrets/google-client.json
+      PAINEL_DIR: /painel
+      # info: com warn ou error, a linha "retencao" do job some.
+      LOG_LEVEL: info
+      # O coletor do Go segura o uso abaixo do limite do conteiner.
+      GOMEMLIMIT: 200MiB
+    secrets:
+      - database-url
+      - session-secret
+      - device-token-pepper
+      - google-client.json
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - aurora-whisper-interna
+      - web
+    depends_on:
+      aurora-whisper-postgres:
+        condition: service_healthy
+    # So o de vida (o mesmo HEALTHCHECK da imagem), e NUNCA o -retencao: o
+    # provider docker do Traefik tira do roteamento todo conteiner com
+    # healthcheck que nao esteja healthy (o allowEmptyServices vem desligado,
+    # e ligar e editar o Traefik). Com o -retencao aqui, uma rodada da
+    # retencao com falha de banco derrubaria o router e o endereco inteiro por
+    # ate 1 h, com o log de acesso do Traefik aberto (um pedido sem router
+    # entra nele). A saude do job e conferida por fora do roteamento, por
+    # docker exec: no subir.sh e na conferencia do mes (docs/deploy-f11.md).
+    # O start_period cobre a primeira rodada de Arrumar e Reter, que roda
+    # ANTES de a porta abrir.
+    healthcheck:
+      test:
+        - CMD
+        - /usr/local/bin/aurora-whisper-server
+        - healthcheck
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 2m
+      start_interval: 5s
+    mem_limit: 256m
+    # O peso baixo, como o do Postgres (acima).
+    cpus: 1.0
+    cpu_shares: 256
+    # O desligamento limpo leva ate 15 s (cmd/server/serve.go).
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=${AW_REDE_DO_PROXY:-web}
+      - traefik.http.routers.aurora-whisper-api.rule=Host(`${DOMINIO:?falta o DOMINIO no config.env}`)
+      - traefik.http.routers.aurora-whisper-api.entrypoints=websecure
+      - traefik.http.routers.aurora-whisper-api.tls.certresolver=letsencrypt
+      - traefik.http.routers.aurora-whisper-api.service=aurora-whisper-api
+      - traefik.http.routers.aurora-whisper-api.observability.accesslogs=false
+      - traefik.http.services.aurora-whisper-api.loadbalancer.server.port=8080
+
+  aurora-whisper-backup:
+    image: aurora-whisper-backup:producao
+    pull_policy: never
+    container_name: ${AW_PREFIXO:-aurora-whisper}-backup
+    restart: unless-stopped
+    # O backup.sh todo dia, na hora de AW_HORA_DO_BACKUP (UTC): 06 e 03:00 em
+    # Sao Paulo. O primeiro e a mao, pelo roteiro.
+    command:
+      - agendar-backup.sh
+    environment:
+      B2_BUCKET: ${B2_BUCKET:?falta o B2_BUCKET no config.env}
+      AW_HORA_DO_BACKUP: "06"
+    secrets:
+      - postgres-backup-senha
+      - backup-chave-publica
+      - rclone.conf
+    volumes:
+      - aurora-whisper-backup:/backup
+    networks:
+      - aurora-whisper-interna
+      - aurora-whisper-saida
+    depends_on:
+      aurora-whisper-postgres:
+        condition: service_healthy
+    # unhealthy se o ultimo backup que subiu ao B2 tem mais de 26 h (ou se
+    # ainda nao houve nenhum). No compose comum o unhealthy nao reinicia nada:
+    # aparece no docker ps.
+    healthcheck:
+      test:
+        - CMD
+        - agendar-backup.sh
+        - saude
+      interval: 5m
+      timeout: 10s
+      retries: 1
+      start_period: 1m
+    mem_limit: 128m
+    # O peso baixo, como o do Postgres (acima).
+    cpus: 0.5
+    cpu_shares: 256
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+networks:
+  # So o Postgres, a API e o backup; sem rota para fora.
+  aurora-whisper-interna:
+    name: ${AW_PREFIXO:-aurora-whisper}-interna
+    internal: true
+  # A saida do backup (o rclone para o B2), so dele.
+  aurora-whisper-saida:
+    name: ${AW_PREFIXO:-aurora-whisper}-saida
+  # A rede do Traefik, criada pelo compose dele: nao e nossa.
+  web:
+    name: ${AW_REDE_DO_PROXY:-web}
+    external: true
+
+volumes:
+  aurora-whisper-postgres:
+    name: ${AW_PREFIXO:-aurora-whisper}-postgres
+  aurora-whisper-backup:
+    name: ${AW_PREFIXO:-aurora-whisper}-backup
+
+# Os arquivos do gerar-segredos.sh. O compose comum os monta em
+# /run/secrets/<nome>, so leitura, com o dono e o modo do host: por isso 0444
+# numa pasta 0700 (a API roda como nonroot, uid 65532; o backup como postgres,
+# uid 70).
+secrets:
+  postgres-superusuario-senha:
+    file: ${AW_SEGREDOS:-../segredos}/postgres-superusuario-senha
+  postgres-aurora-senha:
+    file: ${AW_SEGREDOS:-../segredos}/postgres-aurora-senha
+  postgres-backup-senha:
+    file: ${AW_SEGREDOS:-../segredos}/postgres-backup-senha
+  database-url:
+    file: ${AW_SEGREDOS:-../segredos}/database-url
+  session-secret:
+    file: ${AW_SEGREDOS:-../segredos}/session-secret
+  device-token-pepper:
+    file: ${AW_SEGREDOS:-../segredos}/device-token-pepper
+  google-client.json:
+    file: ${AW_SEGREDOS:-../segredos}/google-client.json
+  backup-chave-publica:
+    file: ${AW_SEGREDOS:-../segredos}/backup-chave-publica
+  rclone.conf:
+    file: ${AW_SEGREDOS:-../segredos}/rclone.conf

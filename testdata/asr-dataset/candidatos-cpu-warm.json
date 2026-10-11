@@ -1,0 +1,56 @@
+{
+  "_comentario": [
+    "Modo WARM, caminho so CPU. Complementa candidatos-cpu.json, que mede cold.",
+    "",
+    "coldArgs esta VAZIO de proposito nos dois. cmd/whisperwarm nao tem modo de",
+    "um tiro: ele sempre sobe o whisper-server residente e fala protocolo de",
+    "linha. Inventar um coldArgs para ele faria o RunCold nao escrever nada em",
+    "stdin, o adaptador leria EOF na hora e devolveria stdout vazio — que o",
+    "harness contaria como transcricao ruim em vez de falha. O loader aceita",
+    "coldArgs vazio desde que warmArgs nao esteja, e a guarda de transcricao",
+    "vazia no harness e a segunda camada contra esse mesmo erro.",
+    "",
+    "O adaptador acrescenta UM SALTO DE PROCESSO que producao nao teria: o",
+    "Agent falaria HTTP direto com o servidor. O custo esta medido em",
+    "docs/benchmarks/transporte-2026-09-17.md — pipe warm p95 = 607 us, tres",
+    "ordens de grandeza abaixo da meta de 500 ms. Nao e o que decide nada aqui,",
+    "mas esta escrito para ninguem confundir com o custo do modelo.",
+    "",
+    "O RSS reportado soma a ARVORE de processos (internal/benchmark/rss:",
+    "SampleTree). Sem isso o gate mediria os ~10 MB do adaptador em vez dos",
+    "~800 MB do whisper-server que segura o modelo, e passaria pelo motivo",
+    "errado.",
+    "",
+    "timeout folgado porque a PRIMEIRA transcricao de cada sessao paga o",
+    "carregamento do modelo. O harness nao esconde isso numa media: o custo",
+    "aparece no primeiro WallTime."
+  ],
+  "candidates": [
+    {
+      "name": "whisper-cpp-small-cpu-warm",
+      "executable": "bin/whisperwarm.exe",
+      "coldArgs": [],
+      "warmArgs": [
+        "-server", "thirdparty/whisper/Release/whisper-server.exe",
+        "-model", "models/ggml-small.bin",
+        "-lang", "pt",
+        "-ready-timeout", "120s"
+      ],
+      "timeout": "120s",
+      "startupTimeout": "120s"
+    },
+    {
+      "name": "whisper-cpp-large-v3-turbo-q5_0-cpu-warm",
+      "executable": "bin/whisperwarm.exe",
+      "coldArgs": [],
+      "warmArgs": [
+        "-server", "thirdparty/whisper/Release/whisper-server.exe",
+        "-model", "models/ggml-large-v3-turbo-q5_0.bin",
+        "-lang", "pt",
+        "-ready-timeout", "180s"
+      ],
+      "timeout": "180s",
+      "startupTimeout": "180s"
+    }
+  ]
+}

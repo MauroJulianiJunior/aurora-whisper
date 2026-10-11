@@ -1,0 +1,43 @@
+# O contexto do build da imagem do servidor (deploy/Dockerfile) e a raiz do
+# repositorio, e este arquivo e uma LISTA DE PERMISSAO (ADR-019, "Decisoes da
+# F11", F11e): tudo fica de fora, menos o que o build usa. Assim o bin\ (com o
+# historico.db de verdade), o dist\, o models\, o thirdparty\, os .exe, o
+# deploy\ e qualquer banco, chave ou dump local nunca entram no contexto nem no
+# cache do build.
+#
+# deploy/deploy_test.go aplica estas regras como o Docker aplica (a ultima que
+# casa vence; um padrao que casa com uma pasta vale para tudo dentro dela) e
+# confere o que fica de fora e o que entra.
+*
+!cmd/
+!internal/
+!migrations/
+!web/
+!go.mod
+!go.sum
+
+# Dentro do que entrou, o que nao e do build.
+web/node_modules
+web/dist
+web/dist-*
+web/.vite
+**/node_modules
+**/*.db
+**/*.db-shm
+**/*.db-wal
+**/*.sqlite
+**/*.sqlite3
+**/*.exe
+**/*.dll
+**/*.test
+**/*.log
+**/.env
+**/.env.*
+**/*.key
+**/*.pem
+**/*.age
+**/*.dump
+**/*.partial
+**/*.gguf
+**/*.onnx
+**/*.wav

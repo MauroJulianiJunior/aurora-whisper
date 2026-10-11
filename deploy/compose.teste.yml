@@ -1,0 +1,56 @@
+# O compose do TESTE DO PC (ADR-019, "Decisoes da F11", Parte 2): por cima do
+# deploy/compose.yml, so no Docker Desktop do PC, pelo scripts\deploy-teste.ps1.
+# Nunca no servidor (sem o AW_PREFIXO do teste, ele nem passa do "config").
+#
+# O deploy/compose.yml e o MESMO da VPS; o teste muda so as variaveis (o
+# prefixo aurora-whisper-teste nos conteineres, nas redes e nos volumes, a
+# pasta dos segredos de mentira e a rede do proxy do teste) e acrescenta a
+# borda: um Traefik de teste, na versao fixada abaixo (mantenha-a igual a do
+# Traefik do servidor), com o log de acesso ligado para todos (como la) e
+# desligado so no nosso router.
+#
+# A borda de teste nao usa o socket do Docker: le os roteadores de um arquivo
+# (deploy/teste/traefik-dinamico.yml), com os mesmos valores dos rotulos do
+# compose (o deploy/compose_test.go confere que batem). O que isso nao prova: a
+# leitura dos rotulos pelo provider docker do Traefik da VPS, e o certificado
+# do Let's Encrypt; o scripts\conferir-nuvem.ps1 confere os dois, de fora,
+# depois do deploy.
+#
+# A borda escuta so em 127.0.0.1 (a unica porta publicada do teste), e o nome
+# da nuvem de teste e aurora-whisper.exemplo.test, que nao existe no DNS: o
+# curl do deploy-teste.ps1 chega a ela pelo --connect-to.
+#
+# Os caminhos relativos sao relativos ao primeiro arquivo (deploy/).
+
+services:
+  aurora-whisper-borda-teste:
+    image: traefik:v3.6.21
+    container_name: ${AW_PREFIXO:?so no teste do PC}-borda
+    command:
+      - --providers.file.filename=/etc/traefik/dinamico.yml
+      - --entrypoints.web.address=:8080
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      - --entrypoints.websecure.address=:8443
+      - --accesslog=true
+      - --log.level=INFO
+    ports:
+      - 127.0.0.1:${AW_PORTA_HTTPS_TESTE:-18443}:8443
+      - 127.0.0.1:${AW_PORTA_HTTP_TESTE:-18080}:8080
+    volumes:
+      - ./teste/traefik-dinamico.yml:/etc/traefik/dinamico.yml:ro
+    networks:
+      - web
+    depends_on:
+      - aurora-whisper-api
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 128m
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"

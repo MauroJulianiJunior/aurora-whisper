@@ -1,0 +1,300 @@
+{
+  "usuario": "mauro",
+  "dominios": {
+    "contabil": [
+      "SistemaContabil.exe",
+      "SistemaFiscal.exe",
+      "SistemaFolha.exe"
+    ],
+    "dev": [
+      "Code.exe",
+      "devenv.exe",
+      "WindowsTerminal.exe",
+      "pwsh.exe",
+      "cmd.exe",
+      "goland64.exe",
+      "idea64.exe"
+    ]
+  },
+  "alias_origem": {
+    "Cloud Code": "nome-04",
+    "DAAS": "cont-04",
+    "DRA": "rapida-01",
+    "EFDRinf": "cont-03",
+    "FDRInf": "cont-03",
+    "Metalúrgica Tofanete": "nome-01",
+    "PGDAAS": "cont-02",
+    "Postgre": "corr-03",
+    "Rosângela Bittencurt": "nome-02",
+    "Supabaese": "dev-02",
+    "SuperBase": "dev-02",
+    "Tiago Vasconcelos": "nome-03",
+    "Tofanete": "ruido-01",
+    "comite": "cs-04",
+    "postgres": "dev-02"
+  },
+  "entradas": [
+    {
+      "canonica": "DCTFWeb",
+      "prioridade": 100,
+      "dominio": "contabil"
+    },
+    {
+      "canonica": "EFD-Reinf",
+      "prioridade": 100,
+      "dominio": "contabil",
+      "alias": [
+        "EFDRinf",
+        "FDRInf"
+      ]
+    },
+    {
+      "canonica": "PGDAS",
+      "prioridade": 95,
+      "dominio": "contabil",
+      "alias": [
+        "PGDAAS"
+      ]
+    },
+    {
+      "canonica": "eSocial",
+      "prioridade": 95,
+      "dominio": "contabil"
+    },
+    {
+      "canonica": "SPED",
+      "prioridade": 95,
+      "dominio": "contabil"
+    },
+    {
+      "canonica": "ECD",
+      "prioridade": 90,
+      "dominio": "contabil"
+    },
+    {
+      "canonica": "DAS",
+      "prioridade": 90,
+      "dominio": "contabil",
+      "alias": [
+        "DAAS"
+      ]
+    },
+    {
+      "canonica": "DRE",
+      "prioridade": 90,
+      "dominio": "contabil",
+      "alias_restrito": [
+        "DRA"
+      ]
+    },
+    {
+      "canonica": "INSS",
+      "prioridade": 85,
+      "dominio": "contabil"
+    },
+    {
+      "canonica": "MEI",
+      "prioridade": 85,
+      "dominio": "contabil"
+    },
+    {
+      "canonica": "Simples Nacional",
+      "prioridade": 85,
+      "dominio": "contabil"
+    },
+    {
+      "canonica": "Lucro Presumido",
+      "prioridade": 80,
+      "dominio": "contabil"
+    },
+    {
+      "canonica": "PostgreSQL",
+      "prioridade": 100,
+      "dominio": "dev",
+      "alias": [
+        "Postgre"
+      ],
+      "alias_restrito": [
+        "postgres"
+      ]
+    },
+    {
+      "canonica": "Supabase",
+      "prioridade": 100,
+      "dominio": "dev",
+      "alias": [
+        "Supabaese",
+        "SuperBase"
+      ]
+    },
+    {
+      "canonica": "TypeScript",
+      "prioridade": 90,
+      "dominio": "dev"
+    },
+    {
+      "canonica": "Vite",
+      "prioridade": 90,
+      "dominio": "dev"
+    },
+    {
+      "canonica": "Docker",
+      "prioridade": 85,
+      "dominio": "dev"
+    },
+    {
+      "canonica": "n8n",
+      "prioridade": 85,
+      "dominio": "dev"
+    },
+    {
+      "canonica": "goroutine",
+      "prioridade": 80,
+      "dominio": "dev"
+    },
+    {
+      "canonica": "webhook",
+      "prioridade": 80,
+      "dominio": "dev"
+    },
+    {
+      "canonica": "endpoint",
+      "prioridade": 80,
+      "dominio": "dev"
+    },
+    {
+      "canonica": "timeout",
+      "prioridade": 80,
+      "dominio": "dev"
+    },
+    {
+      "canonica": "commit",
+      "prioridade": 75,
+      "dominio": "dev",
+      "alias_restrito": [
+        "comite"
+      ]
+    },
+    {
+      "canonica": "pipeline",
+      "prioridade": 75,
+      "dominio": "dev"
+    },
+    {
+      "canonica": "deploy",
+      "prioridade": 70,
+      "dominio": "dev"
+    },
+    {
+      "canonica": "staging",
+      "prioridade": 70,
+      "dominio": "dev"
+    },
+    {
+      "canonica": "backend",
+      "prioridade": 70,
+      "dominio": "dev"
+    },
+    {
+      "canonica": "dashboard",
+      "prioridade": 65,
+      "dominio": "dev"
+    },
+    {
+      "canonica": "worker",
+      "prioridade": 65,
+      "dominio": "dev"
+    },
+    {
+      "canonica": "draft",
+      "prioridade": 60,
+      "dominio": "dev"
+    },
+    {
+      "canonica": "pull request",
+      "prioridade": 60,
+      "dominio": "dev"
+    },
+    {
+      "canonica": "log",
+      "prioridade": 55,
+      "dominio": "dev"
+    },
+    {
+      "canonica": "CI",
+      "prioridade": 55,
+      "dominio": "dev"
+    },
+    {
+      "canonica": "VPS",
+      "prioridade": 55,
+      "dominio": "dev"
+    },
+    {
+      "canonica": "Kubernetes",
+      "prioridade": 50,
+      "dominio": "dev"
+    },
+    {
+      "canonica": "Metalúrgica Toffanetti",
+      "prioridade": 40,
+      "alias": [
+        "Metalúrgica Tofanete"
+      ]
+    },
+    {
+      "canonica": "Rosângela Bittencourt",
+      "prioridade": 40,
+      "alias": [
+        "Rosângela Bittencurt"
+      ]
+    },
+    {
+      "canonica": "Thiago Vasconcelos",
+      "prioridade": 40,
+      "alias": [
+        "Tiago Vasconcelos"
+      ]
+    },
+    {
+      "canonica": "Toffanetti",
+      "prioridade": 95,
+      "alias": [
+        "Tofanete"
+      ]
+    },
+    {
+      "canonica": "Rosângela",
+      "prioridade": 95
+    },
+    {
+      "canonica": "Thiago",
+      "prioridade": 95
+    },
+    {
+      "canonica": "Claude Code",
+      "prioridade": 90,
+      "alias": [
+        "Cloud Code"
+      ]
+    },
+    {
+      "canonica": "Aurora",
+      "prioridade": 90
+    },
+    {
+      "canonica": "Wispr",
+      "prioridade": 50,
+      "alias": [
+        "Wissper"
+      ]
+    },
+    {
+      "canonica": "Wispr Flow",
+      "prioridade": 50,
+      "alias": [
+        "Whisperflow"
+      ]
+    }
+  ]
+}

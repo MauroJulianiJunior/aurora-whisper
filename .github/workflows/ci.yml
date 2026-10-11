@@ -1,0 +1,111 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    name: go (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.x'
+          cache: true
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        run: go test ./...
+
+      # O servidor de teste (login de teste, conta de id fixo) só existe com a
+      # build tag logindeteste; sem este passo, os testes dele nunca rodam no CI.
+      - name: go test (servidor de teste)
+        run: go test -tags logindeteste ./cmd/server/... ./internal/server/...
+
+      - name: go build
+        run: go build ./...
+
+  web:
+    name: web
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          # Precisa acompanhar o pnpm que gerou o web/pnpm-lock.yaml (11.5.1).
+          # Com pnpm 10 lendo um lockfile v11, o --frozen-lockfile abaixo quebra.
+          version: 11
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'pnpm'
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+  secrets:
+    name: secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Nao usamos a gitleaks-action: ela deriva um intervalo de commits do
+      # evento de push (before..after) e quebra quando o "before" nao existe
+      # — caso do primeiro push de um repo, de force-push e de rebase. Pior,
+      # nesses casos ela escaneia zero byte e mesmo assim parece ter rodado.
+      # Instalar o binario e escanear o historico inteiro e deterministico e
+      # independente do formato do evento.
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.x'
+          cache: false
+
+      # go install valida o download contra a checksum database do Go
+      # (sum.golang.org), entao a versao fixada aqui e verificada
+      # criptograficamente — sem curl para shell.
+      #
+      # ATENCAO ao caminho: o projeto migrou para github.com/gitleaks/gitleaks
+      # no GitHub, mas o go.mod dele ainda declara o modulo como
+      # zricethezav/gitleaks/v8. Usar o caminho novo falha com
+      # "module declares its path as". Nao "corrija" isto.
+      - name: Install gitleaks
+        run: go install github.com/zricethezav/gitleaks/v8@v8.24.3
+
+      - name: Scan full git history for secrets
+        run: gitleaks detect --source . --redact --verbose --exit-code 1

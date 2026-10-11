@@ -1,0 +1,68 @@
+{
+  "_comentario": [
+    "Configuracao OTIMIZADA do caminho CPU, depois de tres achados medidos:",
+    "1. q4_0 e 48% mais rapido que f16 no MESMO modelo, e q5_0 (que eu tinha",
+    "   escolhido para o turbo) e patologico: menor que q8_0 e MAIS LENTO.",
+    "2. audio-ctx 750 corta 40% sem estragar a transcricao.",
+    "3. threads default e 4 numa maquina de 20; 12 satura e ganha mais 22%.",
+    "Flash attention fica LIGADO: medido, ajuda 22% nesta maquina, ao contrario",
+    "do que relatos de outros backends sugeriam."
+  ],
+  "candidates": [
+    {
+      "name": "small-q4_0-t12-semac",
+      "executable": "thirdparty/whisper/Release/whisper-cli.exe",
+      "coldArgs": [
+        "-m",
+        "models/quant/small-q4_0.bin",
+        "-l",
+        "pt",
+        "-np",
+        "-nt",
+        "-t",
+        "12",
+        "-f",
+        "{{audio}}"
+      ],
+      "timeout": "60s"
+    },
+    {
+      "name": "small-q4_0-t12-ac1000",
+      "executable": "thirdparty/whisper/Release/whisper-cli.exe",
+      "coldArgs": [
+        "-m",
+        "models/quant/small-q4_0.bin",
+        "-l",
+        "pt",
+        "-np",
+        "-nt",
+        "-t",
+        "12",
+        "-ac",
+        "1000",
+        "-f",
+        "{{audio}}"
+      ],
+      "timeout": "60s"
+    },
+    {
+      "name": "small-q4_0-t12-ac750",
+      "executable": "thirdparty/whisper/Release/whisper-cli.exe",
+      "coldArgs": [
+        "-m",
+        "models/quant/small-q4_0.bin",
+        "-l",
+        "pt",
+        "-np",
+        "-nt",
+        "-t",
+        "12",
+        "-ac",
+        "750",
+        "-f",
+        "{{audio}}"
+      ],
+      "timeout": "60s"
+    }
+  ]
+}

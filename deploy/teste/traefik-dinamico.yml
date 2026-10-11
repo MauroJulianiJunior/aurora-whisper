@@ -1,0 +1,23 @@
+# Os roteadores da borda do TESTE DO PC (deploy/compose.teste.yml), pelo
+# provider de arquivo do Traefik, sem o socket do Docker. Sao os mesmos valores
+# dos rotulos do aurora-whisper-api no deploy/compose.yml (o
+# deploy/compose_test.go confere): o entrypoint websecure, o servico na porta
+# 8080, e o log de acesso DESLIGADO so neste router. Muda o nome (o da nuvem de
+# teste, aurora-whisper.exemplo.test) e o certificado (o padrao do Traefik, sem
+# o Let's Encrypt).
+
+http:
+  routers:
+    aurora-whisper-api:
+      rule: "Host(`aurora-whisper.exemplo.test`)"
+      entryPoints:
+        - websecure
+      service: aurora-whisper-api
+      tls: {}
+      observability:
+        accessLogs: false
+  services:
+    aurora-whisper-api:
+      loadBalancer:
+        servers:
+          - url: "http://aurora-whisper-api:8080"

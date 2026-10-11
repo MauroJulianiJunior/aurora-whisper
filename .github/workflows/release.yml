@@ -1,0 +1,235 @@
+name: Release (rascunho)
+
+# Monta o Setup do Aurora Whisper quando alguém empurra uma tag v* e cria um
+# release RASCUNHO com ele (ADR-018, decisão 10). Este workflow NUNCA publica:
+# o rascunho só vira release quando o Mauro o publica, à mão, na página do
+# GitHub. A revisão de LGPD que o PRODUCT.md pedia foi aprovada em 10-out-2026 e
+# vale também para o Setup; o que segura a publicação é o portão abaixo.
+#
+# O que ele faz, nesta ordem:
+#   0. o portão da F2 (F2_PRONTA, abaixo): enquanto for 'false', o job falha aqui;
+#   1. baixa o zip do whisper.cpp e o modelo, CADA UM com SHA-256 fixo (um arquivo
+#      que não bate derruba o job);
+#   2. monta o pacote e compila o Setup com scripts/montar-instalador.ps1 (o mesmo
+#      script que roda na máquina de quem desenvolve) e o ISCC do runner;
+#   3. guarda o Setup como artefato do job e cria o release rascunho.
+#
+# Nada aqui roda o Agent nem o Setup: o hook de teclado e a injeção de entrada
+# não vão para o runner (e o teste de instalar e desinstalar no runner é uma
+# fatia à parte, ADR-018 F5).
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+# Só o job de release escreve (para criar o rascunho). Nenhum outro token tem
+# mais que leitura.
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # --- O portão da F2 ----------------------------------------------------------
+  # TODO(Mauro): a ADR-018 diz que este workflow (F5) DEPENDE da F2 (o
+  # whisper-server com cmd.Dir na pasta do programa e o modelo pelo nome
+  # relativo). Sem ela, o whisper-server.log do programa instalado traz o caminho
+  # do modelo com o nome do usuário, e um perfil com acento é risco. Enquanto
+  # valer 'false', o primeiro passo do job falha, e nenhuma tag v* gera Setup.
+  # Quando a F2 entrar, mude para 'true' (e confira o roteiro manual).
+  F2_PRONTA: 'false'
+  # --- O zip do whisper.cpp (servidor de voz e DLLs) -------------------------
+  # Tag de build b5130 (as tags semver não têm este arquivo). O SHA-256 é o do
+  # zip que foi medido e que está em docs/adr/ADR-018-instalador.md.
+  # NÃO TESTADO: o endereço abaixo não foi baixado quando este arquivo foi escrito.
+  WHISPER_ZIP_URL: https://github.com/ggml-org/whisper.cpp/releases/download/b5130/whisper-bin-x64.zip
+  WHISPER_ZIP_SHA256: f9ec6c52a2e949b62ab51fa21d0d497958f9e41c3010c157c4e42932d5316f3c
+  # --- O modelo de voz (ggml-small-q4_0.bin) ---------------------------------
+  # TODO(Mauro): o release fixo do projeto que guarda o modelo AINDA NÃO EXISTE.
+  # Subir o modelo é publicar um arquivo: decisão do Mauro (ADR-018, "Modelo
+  # embutido e de onde ele vem"). O nome abaixo é a sugestão da ADR; crie o
+  # release com este nome (ou troque aqui) e suba nele:
+  #   - ggml-small-q4_0.bin  (145.458.015 bytes, SHA-256 abaixo)
+  #   - ggml-small-q4_0.bin.sha256 e uma nota de procedência
+  #   - (espelho, opcional) whisper-bin-x64.zip, caso o upstream suma: o job
+  #     tenta o espelho se o endereço acima falhar.
+  # Até lá este job FALHA no passo do modelo, de propósito.
+  MODELO_RELEASE: modelo-small-q4_0-v1
+  MODELO_ARQUIVO: ggml-small-q4_0.bin
+  # Os mesmos valores de internal/asr/model.SmallQ4_0 (um teste confere).
+  MODELO_BYTES: '145458015'
+  MODELO_SHA256: f6099c17a4305c6d173ef90ab6f15150dcbb85332b7831313bf36a378d7c5a85
+
+jobs:
+  setup:
+    name: Setup (windows-latest)
+    runs-on: windows-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write   # criar o release RASCUNHO; nada além disso
+    # O GH_TOKEN (com a escrita acima) NÃO fica no env do job: só os três passos que
+    # chamam o gh o recebem. O pnpm install e o vite build rodam código de terceiros
+    # (plugins), e não podem ver um token que edita releases. Pelo mesmo motivo o
+    # checkout não deixa a credencial no .git/config.
+    steps:
+      - name: Portão da F2 (ADR-018)
+        shell: powershell
+        run: |
+          if ($env:F2_PRONTA -ne 'true') {
+            throw 'A F2 da ADR-018 (o whisper-server com cmd.Dir e o modelo pelo nome relativo) ainda não entrou. Sem ela o whisper-server.log instalado leva o caminho com o nome do usuário. Veja F2_PRONTA no topo deste arquivo.'
+          }
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.x'
+          cache: true
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          # Precisa acompanhar o pnpm que gerou o web/pnpm-lock.yaml (ver ci.yml).
+          version: 11
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'pnpm'
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - name: Versão da tag
+        shell: powershell
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          if ($tag -notmatch '^v(\d+\.\d+\.\d+(-[0-9A-Za-z][0-9A-Za-z.-]*)?)$') {
+            throw "A tag '$tag' não é uma versão (v0.1.0 ou v0.1.0-rc.1)."
+          }
+          "VERSAO=$($Matches[1])" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "Versão: $($Matches[1])"
+
+      - name: Baixar o zip do whisper.cpp (SHA-256 fixo)
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}   # só para o espelho (gh release download)
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force -Path thirdparty | Out-Null
+          $zip = 'thirdparty\whisper-bin-x64.zip'
+          $esperado = $env:WHISPER_ZIP_SHA256
+          $ok = $false
+          try {
+            Invoke-WebRequest -UseBasicParsing -Uri $env:WHISPER_ZIP_URL -OutFile $zip
+            $ok = ((Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash -ieq $esperado)
+            if (-not $ok) { Write-Host "O zip do upstream tem outro SHA-256: $((Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash)" }
+          } catch {
+            Write-Host "Não consegui baixar do upstream: $_"
+          }
+          if (-not $ok) {
+            Write-Host "Tentando o espelho no release '$env:MODELO_RELEASE' deste repositório."
+            gh release download $env:MODELO_RELEASE --repo $env:GITHUB_REPOSITORY --pattern 'whisper-bin-x64.zip' --dir thirdparty --clobber
+            if ($LASTEXITCODE -eq 0) {
+              $ok = ((Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash -ieq $esperado)
+            }
+          }
+          if (-not $ok) { throw "O zip do whisper.cpp não veio de lugar nenhum com o SHA-256 $esperado." }
+          # O zip traz a pasta Release\ : fica thirdparty\whisper\Release\whisper-server.exe.
+          Expand-Archive -LiteralPath $zip -DestinationPath 'thirdparty\whisper' -Force
+          if (-not (Test-Path -LiteralPath 'thirdparty\whisper\Release\whisper-server.exe')) {
+            throw 'O zip não trouxe Release\whisper-server.exe.'
+          }
+
+      - name: Baixar o modelo (release fixo do projeto, SHA-256 fixo)
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}   # gh release download
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force -Path 'models\quant' | Out-Null
+          gh release download $env:MODELO_RELEASE --repo $env:GITHUB_REPOSITORY --pattern $env:MODELO_ARQUIVO --dir 'models\quant' --clobber
+          if ($LASTEXITCODE -ne 0) {
+            throw "Não consegui baixar $env:MODELO_ARQUIVO do release '$env:MODELO_RELEASE'. Esse release existe? (TODO no topo deste arquivo)"
+          }
+          # O asrstage procura models\quant\small-q4_0.bin.
+          $baixado = Join-Path 'models\quant' $env:MODELO_ARQUIVO
+          $destino = 'models\quant\small-q4_0.bin'
+          Move-Item -LiteralPath $baixado -Destination $destino -Force
+          $tamanho = (Get-Item -LiteralPath $destino).Length
+          $hash = (Get-FileHash -LiteralPath $destino -Algorithm SHA256).Hash
+          if ($tamanho -ne [int64]$env:MODELO_BYTES) { throw "O modelo tem $tamanho bytes; esperado $env:MODELO_BYTES." }
+          if ($hash -ine $env:MODELO_SHA256) { throw "O modelo tem SHA-256 $hash; esperado $env:MODELO_SHA256." }
+          Write-Host "Modelo conferido: $tamanho bytes, SHA-256 $hash"
+
+      - name: Conferir o Inno Setup do runner
+        shell: powershell
+        run: |
+          $caminho = $null
+          $comando = Get-Command ISCC.exe -ErrorAction SilentlyContinue
+          if ($comando) {
+            $caminho = $comando.Source
+          } else {
+            foreach ($c in @("${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe", "$env:ProgramFiles\Inno Setup 6\ISCC.exe")) {
+              if (Test-Path -LiteralPath $c) { $caminho = $c; break }
+            }
+          }
+          if (-not $caminho) { throw 'O Inno Setup 6 não está neste runner (a ADR-018 conta com a versão 6.7.1 da imagem windows-latest).' }
+          Write-Host "ISCC: $caminho"
+          Write-Host (Get-Item -LiteralPath $caminho).VersionInfo.ProductVersion
+
+      - name: Montar o pacote e compilar o Setup
+        shell: powershell
+        run: .\scripts\montar-instalador.ps1 -Versao $env:VERSAO -ExigirIscc
+
+      - name: Guardar o Setup como artefato do job
+        uses: actions/upload-artifact@v4
+        with:
+          name: AuroraWhisper-Setup-${{ env.VERSAO }}
+          path: |
+            dist/AuroraWhisper-Setup-*.exe
+            dist/AuroraWhisper-Setup-*.exe.sha256
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Criar o release RASCUNHO (nunca publica)
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}   # gh release create --draft
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $setup = "dist\AuroraWhisper-Setup-$($env:VERSAO).exe"
+          $hash = (Get-FileHash -LiteralPath $setup -Algorithm SHA256).Hash.ToLowerInvariant()
+          $notas = @"
+          Aurora Whisper $($env:VERSAO) - **previa, sem assinatura digital**.
+
+          SHA-256 do Setup: ``$hash``
+
+          O Windows vai mostrar o aviso do SmartScreen ("O Windows protegeu o computador"): escolha **Mais informacoes** e depois **Executar assim mesmo**. O Setup nao pede administrador, a menos que falte o runtime do Visual C++ (ele baixa o oficial da Microsoft e o Windows pede permissao uma vez). Os dados ficam em ``%LOCALAPPDATA%\AuroraWhisper``.
+
+          ---
+          Este release e um RASCUNHO, criado pelo workflow, e **nao foi publicado**. Antes de publicar (decisao do Mauro): o roteiro de teste do instalador (conta nova, maquina sem Visual C++) e a ADR-018.
+          "@
+          # Sem BOM: o gh leva o arquivo como esta.
+          [IO.File]::WriteAllText("$PWD\dist\notas.md", $notas, (New-Object System.Text.UTF8Encoding $false))
+          $argsDoRelease = @(
+            $env:GITHUB_REF_NAME,
+            $setup,
+            "$setup.sha256",
+            '--repo', $env:GITHUB_REPOSITORY,
+            '--verify-tag',
+            '--draft',
+            '--title', "Aurora Whisper $($env:VERSAO) (previa)",
+            '--notes-file', 'dist\notas.md'
+          )
+          # 0.x e prerelease: "rotuladas como previa" (ADR-018, decisao 2).
+          if ($env:VERSAO.StartsWith('0.') -or $env:VERSAO.Contains('-')) { $argsDoRelease += '--prerelease' }
+          gh release create @argsDoRelease
+          if ($LASTEXITCODE -ne 0) { throw 'gh release create falhou (o release da tag já existe?).' }
+          Write-Host 'Release RASCUNHO criado. Publicar é com o Mauro, na página do GitHub.'

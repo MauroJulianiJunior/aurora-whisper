@@ -1,0 +1,1768 @@
+/*
+  Painel do Aurora Whisper, na paleta do projeto. Decisão do mantenedor,
+  29-set-2026: cores, fontes e detalhes visuais do sistema — o logo e o nome
+  do autor, não.
+
+  Antes o painel era cinza, no mundo da pílula do overlay. Agora é o
+  sistema, nos dois modos, que seguem o do Windows (prefers-color-scheme):
+  escuro = System (preto #070A09, texto off-white #F5F7F5, superfícies
+  #0C1210 e #111916, bordas #24322D); claro = Clear (off-white #F5F7F5 no
+  fundo, texto #101512, borda #DDE4E0; branco só no cartão do editor e na
+  busca).
+
+  Os valores são os do sistema (tokens.css da v1.1); estilo.test.ts confere
+  a paleta valor por valor, e o contraste de cada par de tokens e de cada
+  regra que pinta fundo e texto.
+
+  Cada cor diz uma coisa só (estilo.test.ts confere as duas listas):
+  - verde #00E676: ação e estado válido — o botão principal, a vista
+    escolhida, o foco, os colchetes do editor aberto e das marcas. Nunca
+    enfeite. No claro, o foco e o anel da vista escolhida são o verde
+    profundo #0F3D2E: o verde vivo tem 1,6:1 sobre fundo claro e sumiria.
+    Os colchetes das MARCAS ficam no verde vivo nos dois temas, como nos
+    arquivos claros da própria paleta (decisão do mantenedor, 29-set-2026):
+    são logo, não controle, e o traço preto ao lado carrega a forma.
+  - vermelho #FF3B3B: erro, risco, revisão humana — a etiqueta "falhou", a
+    faixa de Agent fora do ar, as notas de erro e de conflito. Sempre com o
+    texto que diz o que houve, nunca só a cor. No claro, o vermelho de
+    texto escurece para #C62828 (o #FF3B3B dá 3,5:1 sobre branco).
+  - o resto é preto, off-white e os cinzas esverdeados do sistema.
+
+  Fontes (fontes.css, embutidas no build): Space Grotesk no nome do produto
+  e nos títulos; IBM Plex Mono em hora, datas, etiquetas de estado e
+  microcopy técnica; Inter no resto. Raios da escala do sistema: 6, 10, 16 e
+  pílula. Botões de 36 px, o botão pequeno do sistema. A assinatura do
+  sistema — colchetes de canto arredondados — está nas marcas e no cartão
+  do editor aberto, e em mais lugar nenhum. Nada de gradiente, brilho ou
+  neon.
+
+  Marcas (docs/marca; marca.test.tsx confere contra os arquivos e os
+  tamanhos): o pico estourado no cabeçalho (Marca.tsx, 16 px, o tamanho em
+  que o traço cai em pixel inteiro), nas cores de cada modo; a Aurora
+  grande (Aurora.tsx, 96 px) quando o painel fala de si — histórico vazio,
+  lixeira vazia, abrir pela bandeja —, sempre sobre um título, e pequena
+  (32 px) na faixa.
+
+  O aviso e a faixa são escuros nos dois modos: o aviso é a pílula do
+  overlay, embaixo da tela; a faixa é o modo "revisão humana" do sistema,
+  vermelho e preto.
+*/
+
+:root {
+  color-scheme: light dark;
+
+  --fonte: Inter, Aptos, 'Segoe UI', Arial, sans-serif;
+  --fonte-titulo: 'Space Grotesk', 'Aptos Display', 'Segoe UI', Arial, sans-serif;
+  --fonte-mono: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace;
+
+  --raio-sm: 6px;
+  --raio-md: 10px;
+  --raio-lg: 16px;
+  --raio-pilula: 999px;
+  --curva: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  /* Ação: o verde do sistema com texto preto (11,9:1), nos dois modos. */
+  --tinta: #00e676;
+  --tinta-forte: #3ded8f;
+  --tinta-texto: #070a09;
+  --moldura: #00e676;
+
+  /* Escuros nos dois modos: o aviso (a pílula do overlay) e a faixa. */
+  --pilula: #111916;
+  --pilula-borda: #24322d;
+  --pilula-acao-borda: #3a4943;
+  --pilula-texto: #f5f7f5;
+  --pilula-texto-2: #aeb9b4;
+  --acento: #00e676;
+  --risco-fundo: #120606;
+  --risco-borda: rgb(255 59 59 / 0.55);
+
+  /* Clear. Contraste (WCAG 2.2 AA), conferido em estilo.test.ts:
+     --texto-2 e --texto-3 são texto de 11 a 15 px, 4,5:1 sobre --fundo,
+     --superficie e --realce (a linha sob o ponteiro); --contorno é a borda
+     dos campos, 3:1 contra o fundo dos dois lados; --foco, 3:1 contra tudo
+     em que ele encosta. */
+  --fundo: #f5f7f5;
+  --superficie: #ffffff;
+  --realce: #eaefec;
+  --texto: #101512;
+  --texto-2: #4f5c56;
+  --texto-3: #5b6962;
+  --contorno: #7a8781;
+  --linha: #dde4e0;
+  --linha-forte: #c4cec9;
+  --foco: #0f3d2e;
+  --entrou: #d3f5e2;
+  --selecao: #c2f2d8;
+  --risco-texto: #c62828;
+  --risco-tinta: #fdeeee;
+  /* As marcas nas cores das variantes claras dos arquivos (mark-light.svg
+     de cada pasta de docs/marca); marca.test.tsx confere. */
+  --marca-traco: #070a09;
+  --marca-moldura: #00e676;
+  --sombra: 0 1px 2px rgb(7 10 9 / 0.05), 0 8px 24px rgb(7 10 9 / 0.08);
+}
+
+/* System. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fundo: #070a09;
+    --superficie: #0c1210;
+    --realce: #111916;
+    --texto: #f5f7f5;
+    --texto-2: #aeb9b4;
+    --texto-3: #9aa4a0;
+    --contorno: #627069;
+    --linha: #24322d;
+    --linha-forte: #3a4943;
+    --foco: #00e676;
+    --entrou: #0f3d2e;
+    --selecao: #1d5a43;
+    --risco-texto: #ff3b3b;
+    --risco-tinta: #120606;
+    --marca-traco: #f5f7f5;
+    --marca-moldura: #00e676;
+    --sombra: 0 1px 2px rgb(0 0 0 / 0.4), 0 18px 50px rgb(0 0 0 / 0.22);
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scrollbar-color: var(--linha-forte) transparent;
+  scrollbar-gutter: stable;
+  /* A linha que recebe o foco não fica sob o cabeçalho fixo nem sob a
+     pílula do aviso (WCAG 2.4.11, revisão de 29-set-2026). --altura-topo
+     é medida pelo Painel: a faixa de problema e as telas estreitas mudam
+     a altura do cabeçalho. */
+  scroll-padding-top: calc(var(--altura-topo, 8rem) + 8px);
+  scroll-padding-bottom: 88px;
+}
+
+body {
+  margin: 0;
+  background: var(--fundo);
+  color: var(--texto);
+  font-family: var(--fonte);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--selecao);
+  color: var(--texto);
+}
+
+:focus-visible {
+  outline: 2px solid var(--foco);
+  outline-offset: 2px;
+}
+
+/* O select entra aqui também: sem ele, o Provedor saía em Arial e em
+   branco ou preto puro, fora do design system (revisão de 29-set-2026). */
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled,
+button[aria-disabled='true'] {
+  cursor: default;
+}
+
+/* Negrito é o 600 que vem embutido: 700 da Inter não está no build. */
+strong {
+  font-weight: 600;
+}
+
+kbd {
+  font-family: var(--fonte-mono);
+}
+
+.so-leitor,
+.diff del::before,
+.diff ins::before,
+.do-asr::before {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Prefixos só para o leitor de tela. Vêm do CSS, e não de um span, para
+   não entrarem no texto que a pessoa seleciona e copia (revisão de
+   29-set-2026). */
+.diff del::before {
+  content: 'saiu: ';
+}
+
+.diff ins::before {
+  content: 'entrou: ';
+}
+
+.do-asr::before {
+  content: 'bruto do ASR: ';
+}
+
+/* ─── Estrutura ─────────────────────────────────────────────────────── */
+
+.painel {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 0 24px 112px;
+}
+
+.topo {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 18px 0 12px;
+  background: var(--fundo);
+}
+
+.barra {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.nome {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--fonte-titulo);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.marca {
+  display: block;
+  flex: none;
+}
+
+.marca-moldura {
+  stroke: var(--marca-moldura);
+}
+
+.marca-pico {
+  stroke: var(--marca-traco);
+}
+
+/* Seletor de vista: as abas do sistema. A escolhida é verde; no claro,
+   ganha o anel verde profundo, porque o verde vivo sozinho não se separa
+   do fundo claro (3:1, WCAG 1.4.11). */
+.vistas {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--linha);
+  border-radius: var(--raio-md);
+}
+
+.vistas button {
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: var(--raio-sm);
+  background: transparent;
+  color: var(--texto-2);
+  font-size: 13px;
+  font-weight: 500;
+  transition: background-color 160ms var(--curva), color 160ms var(--curva);
+}
+
+.vistas button:hover {
+  background: var(--realce);
+  color: var(--texto);
+}
+
+.vistas button[aria-pressed='true'] {
+  border-color: var(--foco);
+  background: var(--tinta);
+  color: var(--tinta-texto);
+}
+
+.busca {
+  display: block;
+  width: 100%;
+  height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--contorno);
+  border-radius: var(--raio-md);
+  background: var(--superficie);
+  caret-color: var(--foco);
+  font-size: 14px;
+  transition: border-color 160ms var(--curva);
+}
+
+.busca::placeholder {
+  color: var(--texto-3);
+  opacity: 1;
+}
+
+.busca:hover {
+  border-color: var(--texto-3);
+}
+
+/* O contorno transparente não aparece no tema normal, mas vira cor do
+   sistema em Temas de Contraste, onde a sombra some (revisão de
+   29-set-2026). */
+.entrada:focus-visible,
+.busca:focus-visible,
+.campo:focus-visible {
+  outline: 2px solid transparent;
+  outline-offset: 1px;
+  border-color: var(--foco);
+  box-shadow: 0 0 0 1px var(--foco);
+}
+
+/* ─── Lista ─────────────────────────────────────────────────────────── */
+
+.grupo + .grupo {
+  margin-top: 8px;
+}
+
+/* O dia é dado, não título de seção: vai na mono, discreto. */
+.dia {
+  margin: 22px 0 4px;
+  padding: 0 12px;
+  font-family: var(--fonte-mono);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--texto-3);
+}
+
+.itens {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.linha {
+  display: grid;
+  grid-template-columns: 3.25rem minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: var(--raio-md);
+  background: transparent;
+  text-align: left;
+  transition: background-color 120ms var(--curva);
+}
+
+/* Só a linha que abre alguma coisa ganha fundo sob o ponteiro. A da
+   Lixeira não abre nada (revisão de 29-set-2026). */
+.item:hover > button.linha {
+  background: var(--realce);
+}
+
+/* Copiar direto da linha. O botão fica por cima da ponta direita da
+   linha, e a linha abre espaço para ele (padding) — as etiquetas não
+   ficam embaixo. Aparece com o ponteiro na linha ou com o foco nele; em
+   tela de toque, onde não existe "passar por cima", fica sempre. */
+.item.com-copia {
+  position: relative;
+}
+
+.item.com-copia > .linha {
+  padding-right: 52px;
+}
+
+.copiar-linha {
+  position: absolute;
+  top: 5px;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--raio-sm);
+  background: transparent;
+  color: var(--texto-2);
+  opacity: 0;
+  transition: opacity 120ms var(--curva), background-color 120ms var(--curva), color 120ms var(--curva);
+}
+
+.item:hover > .copiar-linha,
+.item:focus-within > .copiar-linha {
+  opacity: 1;
+}
+
+.copiar-linha:hover {
+  background: var(--linha);
+  color: var(--texto);
+}
+
+@media (hover: none) {
+  .copiar-linha {
+    opacity: 1;
+  }
+}
+
+.hora {
+  color: var(--texto-3);
+  font-family: var(--fonte-mono);
+  font-size: 12px;
+}
+
+.texto {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  font-size: 15px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+/* Na Lixeira não há editor para ler o resto: o texto vai inteiro. */
+.linha.estatica .texto {
+  display: block;
+  overflow: visible;
+  -webkit-line-clamp: none;
+  line-clamp: none;
+  white-space: pre-wrap;
+}
+
+/* O bruto do ASR, quando o texto final não chegou a existir. */
+.do-asr {
+  color: var(--texto-2);
+}
+
+.texto-e-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.desde {
+  color: var(--texto-3);
+  font-family: var(--fonte-mono);
+  font-size: 12px;
+}
+
+.vazio {
+  color: var(--texto-3);
+  font-family: var(--fonte-mono);
+  font-size: 13px;
+}
+
+/* Etiquetas de estado: o "status" do sistema, na mono. */
+.etiquetas {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.etiqueta {
+  padding: 1px 7px;
+  border: 1px solid var(--linha-forte);
+  border-radius: var(--raio-sm);
+  color: var(--texto-2);
+  font-family: var(--fonte-mono);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.etiqueta.forte {
+  border-color: var(--texto);
+  color: var(--texto);
+}
+
+.etiqueta.risco {
+  border-color: var(--risco-borda);
+  color: var(--risco-texto);
+}
+
+/* ─── Editor ────────────────────────────────────────────────────────── */
+
+.item.aberto {
+  margin: 8px 0;
+}
+
+.editor {
+  position: relative;
+  display: grid;
+  grid-template-columns: 3.25rem minmax(0, 1fr);
+  gap: 12px;
+  padding: 16px 14px 14px 12px;
+  border: 1px solid var(--linha);
+  border-radius: var(--raio-lg);
+  background: var(--superficie);
+  box-shadow: var(--sombra);
+  animation: abrir 200ms var(--curva);
+}
+
+/* Os colchetes de canto do sistema marcam o cartão que está aberto — o
+   ditado em que a pessoa está mexendo. Seguem a curva do próprio cartão,
+   como os colchetes arredondados das marcas. */
+.editor::before,
+.editor::after {
+  content: '';
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  border: 0 solid var(--moldura);
+  pointer-events: none;
+}
+
+.editor::before {
+  top: -1px;
+  left: -1px;
+  border-top-width: 2px;
+  border-left-width: 2px;
+  border-top-left-radius: var(--raio-lg);
+}
+
+.editor::after {
+  right: -1px;
+  bottom: -1px;
+  border-right-width: 2px;
+  border-bottom-width: 2px;
+  border-bottom-right-radius: var(--raio-lg);
+}
+
+.editor .hora {
+  padding-top: 1px;
+}
+
+.corpo {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.rotulo {
+  margin-bottom: 6px;
+  color: var(--texto-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.igual {
+  font-weight: 400;
+}
+
+.campo {
+  width: 100%;
+  min-height: 3lh;
+  field-sizing: content;
+  padding: 9px 12px;
+  border: 1px solid var(--contorno);
+  border-radius: var(--raio-md);
+  background: var(--fundo);
+  caret-color: var(--foco);
+  font-size: 15px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.bruto {
+  display: flex;
+  flex-direction: column;
+  margin-top: 14px;
+}
+
+.diff {
+  position: relative;
+  margin: 0;
+  color: var(--texto-2);
+  font-size: 14px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.diff del {
+  color: var(--texto-3);
+  text-decoration-thickness: 1px;
+}
+
+/* O que entrou precisa se distinguir sem depender de cor: o fundo fica
+   abaixo de 3:1. O sublinhado é a marca que não some (WCAG 1.4.1, revisão
+   de 29-set-2026) — no verde do foco, porque é a correção que valeu. */
+.diff ins {
+  padding: 1px 4px;
+  border-radius: var(--raio-sm);
+  background: var(--entrou);
+  color: var(--texto);
+  text-decoration: underline 2px var(--foco);
+  text-underline-offset: 3px;
+  font-weight: 500;
+}
+
+/* Toda nota do editor é erro ou conflito: o ditado falhou, ou outra aba
+   mexeu nele. Vermelho do sistema, com o texto que diz o que houve. */
+.nota {
+  margin: 12px 0 0;
+  padding: 9px 12px;
+  border: 1px solid var(--risco-borda);
+  border-radius: var(--raio-md);
+  background: var(--risco-tinta);
+  color: var(--texto);
+  font-size: 13px;
+}
+
+.meta {
+  margin: 12px 0 0;
+  color: var(--texto-3);
+  font-family: var(--fonte-mono);
+  font-size: 12px;
+}
+
+.acoes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.empurra {
+  flex: 1;
+}
+
+/* O lembrete dos atalhos vai numa linha só dele, embaixo dos botões. Na
+   mesma linha, com a Inter 600 dos botões e a IBM Plex Mono do lembrete,
+   a barra passava da largura do cartão (uns 28 px, medidos com as fontes
+   do build, fora do navegador), e "Mover para a lixeira" quebrava sozinho
+   para a linha de baixo, longe do Copiar (revisão de 29-set-2026). */
+.atalhos {
+  order: 1;
+  flex-basis: 100%;
+  color: var(--texto-3);
+  font-family: var(--fonte-mono);
+  font-size: 11px;
+}
+
+/* ─── Botões ────────────────────────────────────────────────────────── */
+
+/* 36 px: o botão pequeno do sistema. O de 44 px inflaria um painel que
+   fica aberto ao lado do trabalho; 36 passa folgado do mínimo do WCAG
+   2.5.8 (24 px). */
+.botao {
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--linha-forte);
+  border-radius: var(--raio-sm);
+  background: transparent;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background-color 120ms var(--curva), border-color 120ms var(--curva);
+}
+
+.botao:hover:not(:disabled, [aria-disabled='true']) {
+  border-color: var(--foco);
+  background: var(--realce);
+}
+
+.botao.primario {
+  border-color: transparent;
+  background: var(--tinta);
+  color: var(--tinta-texto);
+}
+
+.botao.primario:hover:not(:disabled, [aria-disabled='true']) {
+  border-color: transparent;
+  background: var(--tinta-forte);
+}
+
+/* aria-disabled é o desligado que guarda o foco (Configurações). */
+.botao:disabled,
+.botao[aria-disabled='true'] {
+  opacity: 0.45;
+}
+
+.botao.mais {
+  display: block;
+  margin: 20px auto 0;
+}
+
+/* O botão que é um link (Abrir o histórico, na janela de entrar que não se
+   fechou sozinha). */
+a.botao {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: inherit;
+  text-decoration: none;
+}
+
+/* ─── Estados ───────────────────────────────────────────────────────── */
+
+.estado {
+  padding: 48px 12px;
+  color: var(--texto-2);
+  text-align: center;
+}
+
+.estado .aurora {
+  display: block;
+  margin: 0 auto 16px;
+}
+
+.estado p {
+  margin: 0 auto 12px;
+  max-width: 34rem;
+}
+
+.estado-titulo {
+  color: var(--texto);
+  font-family: var(--fonte-titulo);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* "Carregando…" só aparece se demorar: a API é local e quase sempre
+   responde antes de a mensagem valer a piscada. */
+.estado.atrasado {
+  animation: aparecer 1ms 400ms both;
+}
+
+/* A Aurora é o traço do tema: off-white no escuro, preto no claro. */
+.aurora {
+  flex: none;
+  color: var(--marca-traco);
+}
+
+.aurora-moldura {
+  stroke: var(--moldura);
+}
+
+.bloqueio {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  max-width: 30rem;
+  margin: 16vh auto 0;
+  padding: 0 24px;
+}
+
+.bloqueio h1 {
+  margin: 16px 0 8px;
+  font-family: var(--fonte-titulo);
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  text-wrap: balance;
+}
+
+.bloqueio p {
+  margin: 0 0 10px;
+  color: var(--texto-2);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.bloqueio strong {
+  color: var(--texto);
+}
+
+/* Faixa: a ligação com o Agent caiu no meio do uso. Fica no cabeçalho
+   fixo, sempre à vista, no modo "revisão humana" do sistema — preto e
+   vermelho, nos dois temas —, com a Aurora ao lado do texto; o resto da
+   tela não sai do lugar. */
+.faixa {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 10px 10px 10px 12px;
+  border: 1px solid var(--risco-borda);
+  border-radius: var(--raio-md);
+  background: var(--risco-fundo);
+  color: var(--pilula-texto);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.faixa p {
+  margin: 0;
+  flex: 1;
+}
+
+.faixa .aviso-acao {
+  flex: none;
+  border-radius: var(--raio-sm);
+}
+
+/* A faixa da sessão que acabou com um texto não salvo (nuvem): até dois
+   botões, lado a lado, que descem juntos para baixo do texto no celular. */
+.faixa-acoes {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.faixa-acoes:empty {
+  display: none;
+}
+
+/* ─── Configurações ─────────────────────────────────────────────────── */
+
+/* Seções separadas por uma linha fina, sem cartão: é uma lista de
+   ajustes, lida de cima para baixo. Os controles são os nativos (faixa,
+   caixa, opção, lista), no verde do foco: o verde profundo no claro, onde
+   o vivo teria 1,6:1 sobre o branco, e o vivo no escuro. */
+.secao {
+  padding: 22px 0 26px;
+  border-top: 1px solid var(--linha);
+}
+
+.config > .secao:first-child {
+  border-top: 0;
+  padding-top: 10px;
+}
+
+.secao-titulo {
+  margin: 0;
+  font-family: var(--fonte-titulo);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.secao-intro {
+  margin: 4px 0 0;
+  max-width: 38rem;
+  color: var(--texto-2);
+  font-size: 13px;
+}
+
+.ajuste {
+  margin-top: 18px;
+  max-width: 34rem;
+}
+
+.ajuste-nome {
+  display: block;
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.ajuda {
+  margin: 6px 0 0;
+  color: var(--texto-2);
+  font-size: 13px;
+}
+
+/* O que só vale no próximo início, e por que o Polish não pode ser
+   escolhido: informação que muda o que a pessoa espera, no texto forte. */
+.pendente {
+  margin: 6px 0 0;
+  color: var(--texto);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.teclas {
+  margin: 0;
+  color: var(--texto-2);
+}
+
+.teclas kbd {
+  display: inline-block;
+  padding: 1px 7px;
+  border: 1px solid var(--linha-forte);
+  border-radius: var(--raio-sm);
+  color: var(--texto);
+  font-size: 12px;
+}
+
+.regua {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.regua input {
+  flex: 1;
+  max-width: 20rem;
+  margin: 0;
+  accent-color: var(--foco);
+}
+
+.valor {
+  min-width: 7ch;
+  font-family: var(--fonte-mono);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.marcar {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.marcar:has(input:disabled) {
+  color: var(--texto-2);
+  cursor: default;
+}
+
+.marcar input,
+.modo input {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--foco);
+}
+
+/* A ajuda da caixa começa onde começa o texto dela, não sob a caixa. */
+.marcar ~ .ajuda,
+.marcar ~ .pendente {
+  padding-left: 26px;
+}
+
+.modos {
+  display: grid;
+  gap: 14px;
+  margin-top: 16px;
+  max-width: 38rem;
+}
+
+.modo {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  column-gap: 10px;
+}
+
+.modo input {
+  margin-top: 3px;
+}
+
+.modo label {
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.modo input:disabled + label {
+  color: var(--texto-2);
+  cursor: default;
+}
+
+.modo .ajuda,
+.modo .pendente {
+  grid-column: 2;
+  margin-top: 2px;
+}
+
+/* Campo de texto e lista: o mesmo contorno da busca e do editor. */
+.entrada {
+  display: block;
+  width: 100%;
+  max-width: 22rem;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--contorno);
+  border-radius: var(--raio-md);
+  background: var(--superficie);
+  caret-color: var(--foco);
+  font-size: 14px;
+  transition: border-color 160ms var(--curva);
+}
+
+.entrada::placeholder {
+  color: var(--texto-3);
+  opacity: 1;
+}
+
+.entrada:hover {
+  border-color: var(--texto-3);
+}
+
+.estado-chave {
+  margin: 0 0 8px;
+  color: var(--texto-2);
+  font-size: 13px;
+}
+
+.final {
+  color: var(--texto);
+  font-family: var(--fonte-mono);
+  font-size: 13px;
+}
+
+/* O código de conferência do pareamento (ADR-019, F6): o mesmo no painel do
+   PC e na página de aprovação da nuvem. Mono e espaçado, para ler e comparar
+   letra a letra. */
+.codigo {
+  color: var(--texto);
+  font-family: var(--fonte-mono);
+  font-weight: 500;
+  letter-spacing: 0.12em;
+}
+
+.com-botao {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.com-botao .entrada {
+  flex: 1 1 14rem;
+}
+
+.salvar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 0 24px;
+  border-top: 1px solid var(--linha);
+}
+
+.salvar .nota {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+.fatos {
+  margin: 12px 0 0;
+  padding-left: 18px;
+  max-width: 38rem;
+  color: var(--texto-2);
+  font-size: 13px;
+}
+
+.fatos li + li {
+  margin-top: 6px;
+}
+
+/* ─── Aviso: a pílula do overlay ────────────────────────────────────── */
+
+.aviso-regiao {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 24px;
+  display: flex;
+  justify-content: center;
+  padding: 0 16px;
+  pointer-events: none;
+}
+
+.aviso {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 40px;
+  padding: 5px 5px 5px 18px;
+  border: 1px solid var(--pilula-borda);
+  border-radius: var(--raio-pilula);
+  background: var(--pilula);
+  color: var(--pilula-texto);
+  font-size: 13px;
+  box-shadow: 0 8px 28px rgb(0 0 0 / 0.28);
+  pointer-events: auto;
+  animation: surgir 220ms var(--curva);
+}
+
+.aviso:not(:has(.aviso-acao)) {
+  padding-right: 18px;
+}
+
+/* A ação dentro do escuro (Desfazer, Tentar de novo): texto verde, que é
+   a cor de ação do sistema — 10,7:1 sobre a pílula. */
+.aviso-acao {
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--pilula-acao-borda);
+  border-radius: var(--raio-pilula);
+  background: transparent;
+  color: var(--acento);
+  font-size: 13px;
+  font-weight: 600;
+  transition: border-color 120ms var(--curva);
+}
+
+.aviso-acao:hover {
+  border-color: var(--acento);
+}
+
+/* O foco do claro é o verde profundo, que some no escuro do aviso. */
+.aviso-acao:focus-visible {
+  outline-color: var(--acento);
+}
+
+/* O texto da pílula recebe o foco depois de um clique (Aviso.tsx, focoNoTexto).
+   Só o anel de quem navega pelo teclado, no mesmo verde da ação; com o mouse o
+   navegador não o mostra. */
+.aviso-texto:focus-visible {
+  outline-color: var(--acento);
+  border-radius: 4px;
+}
+
+/* O atalho do Desfazer e do Aprender, dito na própria pílula. */
+.aviso-atalho {
+  color: var(--pilula-texto-2);
+  font-family: var(--fonte-mono);
+  font-size: 11px;
+}
+
+/* ─── Aprendizado (ADR-017) ─────────────────────────────────────────── */
+
+/* Os termos do dicionário são dado técnico: vão na mono, um pouco menor que
+   o texto em volta para não pesar, e herdam a cor de onde estão. */
+.termo {
+  font-family: var(--fonte-mono);
+  font-size: 0.92em;
+}
+
+/* "aparece em 3 ditados": discreto, na cor secundária da pílula. */
+.aviso-nota {
+  margin-left: 2px;
+  color: var(--pilula-texto-2);
+}
+
+/* O verde é do que foi confirmado: só os termos do "Aprendido:". A sugestão
+   ainda não é nada, e fica no off-white da pílula. */
+.confirmado .termo {
+  color: var(--acento);
+}
+
+/* A seção "Aprendido no painel" das Configurações: uma linha por par, com o
+   Desfazer ao lado, e nada mais. */
+.aprendidas {
+  max-width: 38rem;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.aprendidas li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+  border-top: 1px solid var(--linha);
+}
+
+.aprendidas li:first-child {
+  border-top: 0;
+}
+
+.aprendidas .troca {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+
+/* A linha de estado do sync (F8): a troca, a etiqueta cinza logo depois (nowrap:
+   se não cabe na linha, desce inteira, e no celular de 320 px cabe sozinha) e,
+   no "não aplicado", o motivo numa frase pequena embaixo. Sem Desfazer. */
+.aprendidas .troca .etiqueta {
+  margin-left: 4px;
+}
+
+.aprendidas .motivo {
+  display: block;
+  margin-top: 2px;
+  color: var(--texto-3);
+  font-size: 12px;
+}
+
+/* ─── Dicionário: Adicionar termo (ADR-020) ─────────────────────────── */
+
+/* Os dois campos lado a lado, e embaixo a caixa da dica com o Adicionar. No
+   celular, um embaixo do outro. Os campos são os .entrada das Configurações,
+   sem o teto de largura: quem limita é a grade. */
+.termo-form {
+  display: grid;
+  grid-template-columns: minmax(0, 11rem) minmax(0, 1fr);
+  gap: 14px 14px;
+  max-width: 38rem;
+  margin-top: 16px;
+}
+
+.termo-campo .ajuste-nome {
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+
+.termo-campo .entrada {
+  max-width: none;
+}
+
+.opcional {
+  color: var(--texto-2);
+  font-weight: 400;
+}
+
+.termo-rodape {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px 16px;
+}
+
+.termo-form .nota {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+/* "Adicionados por você": um subtítulo discreto, e a lista no desenho da do
+   Aprendido no painel, com a caixa da dica entre o termo e o Remover. */
+.secao-sub {
+  margin: 22px 0 0;
+  font-family: var(--fonte-titulo);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.termos .troca {
+  flex: 1 1 auto;
+}
+
+.termos .marcar {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+@media (max-width: 520px) {
+  .termo-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ─── App da nuvem (ADR-019, F4) ────────────────────────────────────── */
+
+/* Entrar, Sessão expirada, Sem conexão e Não abriu: uma coluna estreita no
+   meio da tela, a Aurora em cima, o título, uma linha e o botão. A mesma
+   família da tela de abrir pela bandeja (.bloqueio), centrada, porque aqui a
+   tela é só isso, no celular e no PC. */
+.tela {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  min-height: 100dvh;
+  max-width: 22rem;
+  margin: 0 auto;
+  padding: 32px 16px 56px;
+  text-align: center;
+}
+
+/* O título recebe o foco quando a tela troca (tabIndex -1), para o leitor de
+   tela anunciar a tela nova. Não é controle: sem o anel do foco. */
+.tela h1:focus {
+  outline: none;
+}
+
+.tela h1 {
+  margin: 18px 0 6px;
+  font-family: var(--fonte-titulo);
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  text-wrap: balance;
+}
+
+.tela > p {
+  margin: 0 0 28px;
+  color: var(--texto-2);
+  font-size: 14px;
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+
+/* Abrindo: a Aurora e a linha, no lugar do título das outras telas. */
+.tela.abrindo > p {
+  margin: 18px 0 0;
+}
+
+.tela-acoes {
+  display: flex;
+  flex-direction: column;
+  align-self: stretch;
+  gap: 10px;
+}
+
+/* 44 px: o alvo de toque do celular (WCAG 2.5.5), que aqui é o caso comum. */
+.tela-acoes .botao {
+  width: 100%;
+  height: 44px;
+  font-size: 14px;
+}
+
+.tela-acoes .ajuda {
+  margin: -4px 0 0;
+}
+
+.tela-acoes .nota {
+  margin: 4px 0 0;
+}
+
+/* Ação de risco (Excluir definitivamente, Apagar meus dados): o vermelho do
+   sistema no texto e na borda, sempre com a palavra que diz o que faz. */
+.botao.risco {
+  border-color: var(--risco-borda);
+  color: var(--risco-texto);
+}
+
+.botao.risco:hover:not(:disabled, [aria-disabled='true']) {
+  border-color: var(--risco-texto);
+  background: var(--risco-tinta);
+}
+
+/* Configurações da nuvem: a conta numa linha, com o Sair ao lado. */
+.conta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  max-width: 38rem;
+  margin-top: 12px;
+}
+
+.conta .secao-intro {
+  margin: 0;
+  min-width: 0;
+}
+
+.email {
+  color: var(--texto);
+  overflow-wrap: anywhere;
+}
+
+/* As sessões abertas, no desenho da lista do Aprendido no painel. */
+.sessoes {
+  max-width: 38rem;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sessoes li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 48px;
+  padding: 6px 0;
+  border-top: 1px solid var(--linha);
+}
+
+.sessoes li:first-child {
+  border-top: 0;
+}
+
+.sessao {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.sessao-nome {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.sessao-uso {
+  color: var(--texto-3);
+  font-family: var(--fonte-mono);
+  font-size: 12px;
+}
+
+/* Os aparelhos (F6) e o aprendido (F8), no desenho das sessões. O Revogar e o
+   Desfazer perguntam na própria linha: a pergunta desce para uma linha
+   inteira, embaixo do nome. */
+.aparelhos li,
+.aprendidos li {
+  flex-wrap: wrap;
+}
+
+.aparelhos .confirmar,
+.aprendidos .confirmar {
+  flex-basis: 100%;
+  margin: 2px 0 6px;
+}
+
+/* A variante é texto ditado e pode ser longa: o texto encolhe e quebra em
+   qualquer ponto, e o Desfazer fica ao lado dele (320 px), em vez de descer
+   para uma linha só dele quando o texto é largo. */
+.aprendidos .sessao {
+  flex: 1 1 8rem;
+}
+
+.aprendidos .sessao-nome,
+.aprendidos .sessao-uso {
+  overflow-wrap: anywhere;
+}
+
+/* A aprovação de um PC (F6): o código grande, para comparar letra a letra
+   com o do painel do PC, e o aviso no texto forte, num quadro de linha. */
+.aprovar {
+  align-self: stretch;
+  margin: 0 0 24px;
+  padding: 14px 16px 16px;
+  border: 1px solid var(--linha-forte);
+  border-radius: var(--raio-md);
+}
+
+.aprovar-codigo {
+  margin: 0;
+  color: var(--texto-2);
+  font-size: 13px;
+}
+
+.aprovar-codigo .codigo {
+  display: block;
+  margin-top: 4px;
+  font-size: 28px;
+}
+
+.aprovar .ajuda {
+  margin: 4px 0 0;
+}
+
+/* A conta que aprova: um e-mail longo quebra em qualquer ponto, sem passar
+   da largura no celular. */
+.aprovar-conta {
+  margin: 14px 0 0;
+  color: var(--texto-2);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.aprovar-conta strong {
+  color: var(--texto);
+  font-weight: 600;
+}
+
+.aprovar-aviso {
+  margin: 14px 0 0;
+  color: var(--texto);
+  font-size: 13px;
+  font-weight: 600;
+  text-wrap: balance;
+}
+
+/* Apagar meus dados: o botão abre a confirmação ali mesmo, sem janela. */
+.apagar {
+  margin-top: 22px;
+}
+
+.confirmar {
+  display: grid;
+  gap: 8px;
+  max-width: 34rem;
+  padding: 14px;
+  border: 1px solid var(--linha-forte);
+  border-radius: var(--raio-md);
+}
+
+.confirmar .ajuste-nome,
+.confirmar .ajuda,
+.confirmar .nota {
+  margin: 0;
+}
+
+.confirmar .acoes {
+  margin-top: 4px;
+}
+
+/* A confirmação dentro de um ajuste, depois do texto dele (o bloco Histórico,
+   F10), toma o lugar da linha de botões que ela substitui, com o mesmo respiro
+   (.acoes), em vez de colar na última linha do texto. A que é a primeira coisa
+   do ajuste já tem o respiro dele. */
+.ajuste > * + .confirmar {
+  margin-top: 14px;
+}
+
+.rotulo-campo {
+  margin-top: 4px;
+  font-size: 13px;
+}
+
+/* O selo de conflito aberto, em cima do editor: as duas versões lado a lado
+   (uma embaixo da outra no celular), com as palavras que mudam sublinhadas, e
+   a escolha. Cor secundária e borda de linha: nada se perdeu, não é erro. */
+.selo {
+  margin: 0 0 16px;
+  padding: 12px 14px 14px;
+  border: 1px solid var(--linha-forte);
+  border-radius: var(--raio-md);
+}
+
+.selo-titulo {
+  margin: 0 0 12px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.versoes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: 12px 16px;
+}
+
+.versao {
+  min-width: 0;
+}
+
+.versao .rotulo {
+  margin: 0 0 4px;
+}
+
+.versao time {
+  font-family: var(--fonte-mono);
+  font-weight: 400;
+}
+
+.versao-texto {
+  margin: 0;
+  color: var(--texto);
+  font-size: 14px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* A palavra que só um lado tem: sublinhado e peso, sem cor (WCAG 1.4.1). */
+.difere {
+  font-weight: 600;
+  text-decoration: underline 2px var(--contorno);
+  text-underline-offset: 3px;
+}
+
+.selo .acoes {
+  margin-top: 12px;
+}
+
+/* As duas escolhas dividem a linha; no celular, uma embaixo da outra, na
+   largura do selo. */
+.selo .acoes .botao {
+  flex: 1 1 9rem;
+}
+
+/* A Lixeira na nuvem: Restaurar e Excluir definitivamente lado a lado, e a
+   pergunta embaixo da linha, alinhada com o texto. */
+.acoes-linha {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.confirmar-linha {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 12px 10px calc(3.25rem + 24px);
+  padding: 10px 12px;
+  border: 1px solid var(--linha-forte);
+  border-radius: var(--raio-md);
+}
+
+.confirmar-linha p {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+@media (max-width: 520px) {
+  .confirmar-linha {
+    margin-left: calc(2.75rem + 24px);
+  }
+
+  /* No celular, os botões vão embaixo do texto, alinhados com ele. */
+  .acoes-linha {
+    justify-content: flex-start;
+  }
+}
+
+/* No toque, os alvos crescem para 44 px (WCAG 2.5.5): o celular é o caso do
+   app da nuvem, e um PC com tela de toque ganha o mesmo. */
+@media (pointer: coarse) {
+  .botao {
+    height: 44px;
+  }
+
+  .busca {
+    height: 44px;
+  }
+
+  /* As abas também: são os alvos mais usados do celular. O cabeçalho
+     cresce 6 px, e o Painel mede a altura dele (--altura-topo). */
+  .vistas button {
+    height: 44px;
+  }
+
+  /* Os botões da faixa (Tentar de novo, Entrar de novo, Copiar o texto). */
+  .faixa .aviso-acao {
+    height: 44px;
+  }
+
+  .copiar-linha {
+    width: 44px;
+    height: 44px;
+    top: 0;
+    right: 4px;
+  }
+
+  .item.com-copia > .linha {
+    padding-right: 52px;
+  }
+}
+
+@keyframes abrir {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+}
+
+@keyframes surgir {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.96);
+  }
+}
+
+@keyframes aparecer {
+  from {
+    visibility: hidden;
+  }
+}
+
+/* Temas de Contraste do Windows: o navegador troca cores e fundos pelas
+   do sistema e apaga as sombras. Sem isto, a vista escolhida (só fundo) e
+   o foco da busca e do campo (borda e sombra) sumiam (revisão de
+   29-set-2026). O que entrou no diff já tem o sublinhado. */
+@media (forced-colors: active) {
+  .vistas button[aria-pressed='true'] {
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
+  }
+
+  .entrada:focus-visible,
+  .busca:focus-visible,
+  .campo:focus-visible {
+    outline: 2px solid Highlight;
+  }
+
+  .diff ins {
+    text-decoration-color: CanvasText;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .editor,
+  .aviso {
+    animation: none;
+  }
+}
+
+@media (max-width: 520px) {
+  .painel {
+    padding: 0 16px 112px;
+  }
+
+  .linha,
+  .editor {
+    grid-template-columns: 2.75rem minmax(0, 1fr);
+  }
+
+  .linha .etiquetas,
+  .linha.estatica .acoes-linha {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .atalhos,
+  .aviso-atalho {
+    display: none;
+  }
+
+  .faixa {
+    flex-wrap: wrap;
+  }
+
+  /* Os dois botões da faixa da sessão descem para uma linha deles: ao lado
+     do texto, espremiam a frase em poucas palavras por linha. */
+  .faixa-acoes {
+    flex-basis: 100%;
+  }
+
+  /* Com as três vistas, o nome e o seletor não cabem numa linha só. */
+  .barra {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+}
+
+/* Pouca altura (o teclado aberto numa janela que encolhe com ele, o celular
+   deitado): o cabeçalho é fixo, e a faixa da sessão, com a frase e o botão em
+   duas linhas, deixava uns 90 px do editor à vista num celular de 375 x 440.
+   Ela fica numa linha só, o título e o botão; a frase continua para o
+   leitor de tela (a mesma técnica do .so-leitor). */
+@media (max-height: 560px) {
+  .faixa-compactavel {
+    flex-wrap: nowrap;
+    padding-block: 6px;
+  }
+
+  .faixa-compactavel .faixa-frase {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .faixa-compactavel .faixa-acoes {
+    flex-basis: auto;
+  }
+}
