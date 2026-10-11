@@ -1127,3 +1127,210 @@ func TestPostgres_IndicesDaRetencao(t *testing.T) {
 		}
 	}
 }
+
+// ---------------------------------------------------------------------------
+// O ditado no celular (ADR-021, C3b): a 0018 e a 0019
+// ---------------------------------------------------------------------------
+
+// As migrations do ditado no celular são SÓ ADITIVAS (ADR-021, "As
+// migrations"): aplicadas sobre um banco que já está em produção, com dados nas
+// tabelas de antes, criam as duas tabelas novas, vazias, e não mudam uma linha
+// das que existiam. O banco de antes é o das 0001 a 0017 (o da C3a, o último
+// que o Mauro tem no ar), com uma conta, um PC, ditados, eventos, uma lápide, um
+// aprendido e uma chave da IA cifrada.
+func TestPostgres_AsMigrationsDoDitadoNoCelularAplicamSobreUmBancoComDados(t *testing.T) {
+	url := pgtest.NewDB(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	t.Cleanup(cancel)
+	migs, err := pgmigrate.Load(migrations.FS)
+	if err != nil {
+		t.Fatalf("Load(migrations.FS): %v", err)
+	}
+	const emProducao = 17
+	if len(migs) < emProducao+2 || migs[emProducao].File != "0018_dictation_settings_table.sql" || migs[emProducao+1].File != "0019_dictation_consents_table.sql" {
+		t.Fatalf("a 0018 e a 0019 não são as migrations depois da 0017: %d migrations", len(migs))
+	}
+	conn := pgtest.Connect(t, url)
+	if res, err := pgmigrate.Run(ctx, conn, migs[:emProducao]); err != nil || len(res.Applied) != emProducao {
+		t.Fatalf("aplicar as 0001 a 0017: %+v, %v", res, err)
+	}
+	p := &pg{t: t, ctx: ctx, conn: conn, url: url}
+
+	// Os dados de antes.
+	a, b := p.newUser(), p.newUser()
+	device := p.newDevice(a)
+	p.accept("ditado 1", tRow(a, 1))
+	p.accept("ditado 2", tRow(a, 2))
+	p.accept("ditado do outro", tRow(b, 1))
+	p.accept("evento", eventRow(a, 3))
+	p.accept("lápide", newRow("tombstones").val("user_id", a).lit("entity_type", "'transcription'").lit("entity_id", "gen_random_uuid()").
+		lit("reason", "'apagado'").lit("dictated_at", "now() - interval '10 days'").val("seq", int64(4)))
+	p.accept("aprendido", newRow("learned_pairs").lit("id", "gen_random_uuid()").val("user_id", a).val("variant", "SF").
+		val("normalized_variant", "sf").lit("term", "'ECF'").val("last_seq", int64(5)))
+	p.exec(`INSERT INTO ai_provider_keys (user_id, provider, cipher_key_id, nonce, ciphertext, key_suffix, created_at, updated_at)
+		VALUES ($1, 'openai', decode('0102030405060708', 'hex'), decode('010203040506070809101112', 'hex'), decode(repeat('ab', 40), 'hex'), 'WXYZ', now(), now())`, a)
+
+	// A foto do que existe: por tabela, a contagem e um resumo de todas as linhas.
+	tabelas := func() []string {
+		rows, err := p.conn.Query(p.ctx, `SELECT table_name::text FROM information_schema.tables
+			WHERE table_schema = 'public' AND table_type = 'BASE TABLE' ORDER BY 1`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rows.Close()
+		var out []string
+		for rows.Next() {
+			var name string
+			if err := rows.Scan(&name); err != nil {
+				t.Fatal(err)
+			}
+			out = append(out, name)
+		}
+		if err := rows.Err(); err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+	foto := func() map[string]string {
+		out := map[string]string{}
+		for _, tabela := range tabelas() {
+			if tabela == "schema_migrations" {
+				continue // ganha as duas linhas novas, de propósito
+			}
+			var n int
+			var resumo *string
+			p.scan(&n, "SELECT count(*) FROM "+pgx.Identifier{tabela}.Sanitize())
+			p.scan(&resumo, "SELECT md5(string_agg(t::text, '|' ORDER BY t::text)) FROM "+pgx.Identifier{tabela}.Sanitize()+" t")
+			out[tabela] = fmt.Sprintf("%d:%v", n, resumo != nil)
+			if resumo != nil {
+				out[tabela] += ":" + *resumo
+			}
+		}
+		return out
+	}
+	antes := foto()
+	if len(antes) != emProducao {
+		t.Fatalf("a foto viu %d tabelas, quero %d (uma por migration): %v", len(antes), emProducao, antes)
+	}
+	if !strings.HasPrefix(antes["ai_provider_keys"], "1:true") || !strings.HasPrefix(antes["transcriptions"], "3:true") {
+		t.Fatalf("o banco de antes não tem os dados que o teste pôs: %v", antes)
+	}
+
+	// Agora as duas migrations novas.
+	res, err := pgmigrate.Run(ctx, conn, migs)
+	if err != nil {
+		t.Fatalf("aplicar a 0018 e a 0019 sobre o banco com dados: %v", err)
+	}
+	if len(res.Applied) != len(migs)-emProducao || res.AlreadyApplied != emProducao {
+		t.Fatalf("aplicou %d e já havia %d; quero %d e %d", len(res.Applied), res.AlreadyApplied, len(migs)-emProducao, emProducao)
+	}
+	if res.Applied[0].File != "0018_dictation_settings_table.sql" || res.Applied[1].File != "0019_dictation_consents_table.sql" {
+		t.Errorf("as aplicadas: %s, %s", res.Applied[0].File, res.Applied[1].File)
+	}
+
+	// Nenhuma linha de antes mudou.
+	depois := foto()
+	for tabela, quero := range antes {
+		if depois[tabela] != quero {
+			t.Errorf("a tabela %s mudou com as migrations novas: %s -> %s", tabela, quero, depois[tabela])
+		}
+	}
+	// As duas tabelas novas existem, vazias, e aceitam linhas das contas de antes.
+	for _, tabela := range []string{"dictation_settings", "dictation_consents"} {
+		if depois[tabela] != "0:false" {
+			t.Errorf("a %s nasceu com %s, quero vazia", tabela, depois[tabela])
+		}
+	}
+	var versoes int
+	p.scan(&versoes, "SELECT count(*) FROM schema_migrations WHERE version IN (18, 19)")
+	if versoes != 2 {
+		t.Errorf("schema_migrations tem %d das duas novas", versoes)
+	}
+	p.exec(`INSERT INTO dictation_settings (user_id, asr_provider, asr_model, use_hint, polish_enabled, polish_provider, polish_model, created_at, updated_at)
+		VALUES ($1, 'openai', 'gpt-4o-mini-transcribe', false, false, 'openai', '', now(), now())`, a)
+	p.exec(`INSERT INTO dictation_consents (id, user_id, notice_version, asr_provider, polish_provider, accepted_at)
+		VALUES ($1, $2, 1, 'openai', NULL, now())`, p.newID(), a)
+	// A chave de antes continua legível, e o PC dela também.
+	var final string
+	p.scan(&final, "SELECT key_suffix FROM ai_provider_keys WHERE user_id = $1", a)
+	if final != "WXYZ" {
+		t.Errorf("a chave de antes: %q", final)
+	}
+	var devices int
+	p.scan(&devices, "SELECT count(*) FROM devices WHERE id = $1", device)
+	if devices != 1 {
+		t.Error("o PC de antes sumiu")
+	}
+
+	// Rodar de novo não faz nada.
+	if res, err := pgmigrate.Run(ctx, conn, migs); err != nil || len(res.Applied) != 0 || res.AlreadyApplied != len(migs) {
+		t.Errorf("rodar de novo: %+v, %v", res, err)
+	}
+}
+
+// Os CHECKs, a PK e o índice único das duas tabelas novas, no Postgres de
+// verdade. (A suíte do ditado, em internal/server/pgstore, prova o
+// comportamento; aqui, o esquema.)
+func TestPostgres_PreferenciasEAceiteDoDitado(t *testing.T) {
+	p := newPG(t)
+	a, b := p.newUser(), p.newUser()
+	prefs := func(user string) *row {
+		return newRow("dictation_settings").
+			val("user_id", user).
+			lit("asr_provider", "'groq'").
+			lit("asr_model", "'whisper-large-v3-turbo'").
+			lit("use_hint", "false").
+			lit("polish_enabled", "false").
+			lit("polish_provider", "'anthropic'").
+			lit("polish_model", "''").
+			lit("created_at", "now()").
+			lit("updated_at", "now()")
+	}
+	p.accept("preferências válidas", prefs(a))
+	p.reject(uniqueViolation, "duas linhas de preferências da mesma conta", prefs(a))
+	p.accept("as preferências de outra conta", prefs(b))
+	p.reject(foreignKeyViolation, "preferências de um usuário que não existe", prefs(p.newID()))
+	p.reject(checkViolation, "transcrição pela anthropic", prefs(p.newUser()).lit("asr_provider", "'anthropic'"))
+	p.reject(checkViolation, "Polish pela groq", prefs(p.newUser()).lit("polish_provider", "'groq'"))
+	p.reject(checkViolation, "modelo vazio", prefs(p.newUser()).lit("asr_model", "''"))
+	p.reject(checkViolation, "modelo com espaço", prefs(p.newUser()).lit("asr_model", "'a b'"))
+	p.reject(checkViolation, "modelo com quebra de linha no fim", prefs(p.newUser()).lit("asr_model", "E'gpt\\n'"))
+	p.reject(checkViolation, "modelo de 101 caracteres", prefs(p.newUser()).lit("asr_model", "repeat('m', 101)"))
+	p.accept("modelo de 100 caracteres", prefs(p.newUser()).lit("asr_model", "repeat('m', 100)"))
+	p.reject(checkViolation, "Polish ligado sem modelo", prefs(p.newUser()).lit("polish_enabled", "true"))
+	p.accept("Polish ligado com modelo", prefs(p.newUser()).lit("polish_enabled", "true").lit("polish_model", "'claude-x'"))
+	p.reject(checkViolation, "a troca antes da criação", prefs(p.newUser()).lit("updated_at", "now() - interval '1 second'"))
+	p.reject(notNullViolation, "sem a flag da dica (sem DEFAULT)", prefs(p.newUser()).drop("use_hint"))
+	p.reject(notNullViolation, "sem a data de criação (sem DEFAULT)", prefs(p.newUser()).drop("created_at"))
+
+	consent := func(user string) *row {
+		return newRow("dictation_consents").
+			val("id", p.newID()).
+			val("user_id", user).
+			lit("notice_version", "1").
+			lit("asr_provider", "'openai'").
+			lit("accepted_at", "now()")
+	}
+	c := p.newUser()
+	p.accept("aceite válido, sem Polish", consent(c))
+	p.reject(uniqueViolation, "um segundo aceite em aberto da mesma conta (o índice único parcial)", consent(c).lit("asr_provider", "'groq'"))
+	p.accept("o aceite em aberto de outra conta", consent(p.newUser()))
+	p.reject(foreignKeyViolation, "aceite de um usuário que não existe", consent(p.newID()))
+	p.reject(checkViolation, "versão zero", consent(p.newUser()).lit("notice_version", "0"))
+	p.reject(checkViolation, "transcrição pela anthropic", consent(p.newUser()).lit("asr_provider", "'anthropic'"))
+	p.reject(checkViolation, "Polish pela groq", consent(p.newUser()).lit("polish_provider", "'groq'"))
+	p.accept("Polish pela anthropic", consent(p.newUser()).lit("polish_provider", "'anthropic'"))
+	p.reject(notNullViolation, "sem a data do aceite", consent(p.newUser()).drop("accepted_at"))
+	terminado := func(user string) *row {
+		return consent(user).lit("accepted_at", "now() - interval '2 hour'").lit("ended_at", "now() - interval '1 hour'").lit("end_reason", "'revogado'")
+	}
+	d := p.newUser()
+	p.accept("aceite revogado", terminado(d))
+	p.accept("outro aceite terminado da mesma conta (só um em aberto, vários terminados)", terminado(d).lit("end_reason", "'substituido'"))
+	p.accept("e um em aberto ao lado dos terminados", consent(d))
+	p.reject(checkViolation, "fim sem motivo", consent(p.newUser()).lit("accepted_at", "now() - interval '2 hour'").lit("ended_at", "now()"))
+	p.reject(checkViolation, "motivo sem fim", consent(p.newUser()).lit("end_reason", "'revogado'"))
+	p.reject(checkViolation, "motivo fora da lista", terminado(p.newUser()).lit("end_reason", "'expirado'"))
+	p.reject(checkViolation, "fim antes do começo", terminado(p.newUser()).lit("ended_at", "now() - interval '3 hour'"))
+	p.reject(uniqueViolation, "o mesmo id de aceite duas vezes", consent(p.newUser()).val("id", p.newID()).lit("id", "(SELECT id FROM dictation_consents LIMIT 1)"))
+}

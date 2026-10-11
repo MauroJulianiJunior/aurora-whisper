@@ -53,14 +53,15 @@ const (
 const maxCorpoDaChave = 16 << 10
 
 // AceiteDoDitado diz se a conta tem um aceite vigente do ditado no celular
-// que inclui o provedor (ADR-021, decisão H). A C3b o implementa sobre a
-// dictation_consents; sem ele (CloudConfig.Aceite nil), ninguém tem aceite e
-// o PUT da chave recusa com SEM_ACEITE (falha fechada).
+// que inclui o provedor (ADR-021, decisão H). O de produção é o
+// aceitePeloStore (ditado_celular.go), sobre a dictation_consents; sem ele
+// nem o Ditado (CloudConfig), ninguém tem aceite e o PUT da chave recusa com
+// SEM_ACEITE (falha fechada).
 type AceiteDoDitado interface {
 	AceiteVigente(ctx context.Context, userID, provedor string) (bool, error)
 }
 
-// semAceite é o AceiteDoDitado de quando a C3b ainda não ligou o dela.
+// semAceite é o AceiteDoDitado de quando nada guarda o aceite (falha fechada).
 type semAceite struct{}
 
 func (semAceite) AceiteVigente(context.Context, string, string) (bool, error) { return false, nil }
@@ -109,9 +110,10 @@ func (m ModelosPelaRede) ListarModelos(ctx context.Context, provedor, chave stri
 }
 
 // rotasDoDitado são as rotas que só existem com a chave de cifra (ADR-021,
-// decisão O): hoje, as das chaves da IA; a C3b e a C5b acrescentam as dela
-// aqui. Sem o cofre, nenhuma é montada, e todas caem no 404 de rota não
-// montada.
+// decisão O): as das chaves da IA (C3a) e as das preferências e do aceite
+// (/dictation, C3b); a C5b acrescenta a de ditar aqui. Sem o cofre, nenhuma é
+// montada, e todas caem no 404 de rota não montada. Todas só da sessão do
+// navegador.
 func (c *Cloud) rotasDoDitado() []rota {
 	if c.cofre == nil {
 		return nil
@@ -120,6 +122,11 @@ func (c *Cloud) rotasDoDitado() []rota {
 		{"PUT /api/v1/ai-keys/{provedor}", AcessoSessao, c.handleGravarChaveDeIA},
 		{"DELETE /api/v1/ai-keys/{provedor}", AcessoSessao, c.handleApagarChaveDeIA},
 		{"GET /api/v1/ai-keys/{provedor}/models", AcessoSessao, c.handleModelosDaChaveDeIA},
+
+		{"GET /api/v1/dictation", AcessoSessao, c.handleEstadoDoDitado},
+		{"PUT /api/v1/dictation/settings", AcessoSessao, c.handleGravarPreferenciasDoDitado},
+		{"POST /api/v1/dictation/consent", AcessoSessao, c.handleGravarAceiteDoDitado},
+		{"DELETE /api/v1/dictation/consent", AcessoSessao, c.handleRevogarAceiteDoDitado},
 	}
 }
 
@@ -292,10 +299,21 @@ func (c *Cloud) conferirAceite(w http.ResponseWriter, r *http.Request, userID, p
 // decodificação tem a mesma frase fixa (FraseDoCorpoDaChave), e o corpo acima
 // do teto, a dele: a mensagem do decodificador nunca vai para a resposta.
 func lerCorpoDaChave(w http.ResponseWriter, r *http.Request) (string, bool) {
-	r.Body = http.MaxBytesReader(w, r.Body, maxCorpoDaChave)
+	body, ok := lerCorpoEstrito[chaveDeIARequest](w, r, maxCorpoDaChave, FraseDoCorpoDaChave, FraseDoCorpoGrande)
+	return body.Chave, ok
+}
+
+// lerCorpoEstrito lê um objeto JSON de T e nada mais: campo desconhecido, tipo
+// errado, corpo vazio e um segundo valor depois do objeto são o mesmo erro, e a
+// resposta é SEMPRE a frase fixa que o chamador deu (400 BAD_REQUEST): a
+// mensagem do decodificador nunca vai para a resposta, porque pode trazer um
+// pedaço do que foi mandado. O corpo acima do teto é 413, com a frase dele.
+// Em caso de erro, já escreve a resposta e devolve ok=false.
+func lerCorpoEstrito[T any](w http.ResponseWriter, r *http.Request, teto int64, fraseInvalida, fraseGrande string) (T, bool) {
+	var body T
+	r.Body = http.MaxBytesReader(w, r.Body, teto)
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
-	var body chaveDeIARequest
 	err := dec.Decode(&body)
 	if err == nil {
 		// Nada depois do objeto (só espaço).
@@ -308,13 +326,14 @@ func lerCorpoDaChave(w http.ResponseWriter, r *http.Request) (string, bool) {
 	if err != nil {
 		var grande *http.MaxBytesError
 		if errors.As(err, &grande) {
-			writeError(w, http.StatusRequestEntityTooLarge, codeTooLarge, FraseDoCorpoGrande)
-			return "", false
+			writeError(w, http.StatusRequestEntityTooLarge, codeTooLarge, fraseGrande)
+		} else {
+			writeError(w, http.StatusBadRequest, codeBadRequest, fraseInvalida)
 		}
-		writeError(w, http.StatusBadRequest, codeBadRequest, FraseDoCorpoDaChave)
-		return "", false
+		var zero T
+		return zero, false
 	}
-	return body.Chave, true
+	return body, true
 }
 
 // writeErroDaValidacao responde ao erro de chavedeapi.Validar com as frases do

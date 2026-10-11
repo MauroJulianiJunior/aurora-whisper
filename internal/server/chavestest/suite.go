@@ -44,6 +44,22 @@ func Run(t *testing.T, b Backend) {
 		{"Chaves_ValidarComoOPainelDoPC", testValidar},
 		{"Chaves_SemOArquivoAsRotasDao404", testSemOArquivo},
 		{"Chaves_OStoreGuardaLeListaEApaga", testStore},
+
+		// O aceite e as preferências do ditado no celular (C3b; ditado.go).
+		{"Ditado_EstadoInicialSemAceiteComOsPadroes", testEstadoInicial},
+		{"Ditado_AceiteGravaAVersaoEOsProvedoresELigaOPutDasChaves", testAceiteGravaELigaAsChaves},
+		{"Ditado_AceiteSoComAVersaoAtual", testAceiteSoComAVersaoAtual},
+		{"Ditado_AceiteNovoSubstituiOAnterior", testAceiteNovoSubstitui},
+		{"Ditado_AvisoNovoPedeAceiteNovo", testAvisoNovoPedeAceiteNovo},
+		{"Ditado_PreferenciasRecusamProvedorForaDoAceite", testPreferenciasForaDoAceite},
+		{"Ditado_PreferenciasValidam", testPreferenciasValidam},
+		{"Ditado_RevogarEncerraOAceiteEApagaAsChaves", testRevogar},
+		{"Ditado_ChaveQueNaoValeMaisPedeColarDeNovo", testChaveQueNaoVale},
+		{"Ditado_ApagarMeusDadosApagaAsTresTabelas", testApagarAsTres},
+		{"Ditado_SoComSessao", testDitadoSoComSessao},
+		{"Ditado_SemOArquivoAsRotasDao404", testDitadoSemOArquivo},
+		{"Ditado_OStoreGuardaLeELista", testDitadoStore},
+		{"Ditado_GravacoesAoMesmoTempoNaoDeixamDoisAceitesEmAberto", testDitadoConcorrencia},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) { c.fn(t, novoMundo(t, b)) })
@@ -364,8 +380,8 @@ func testTrocarAChaveDeCifra(t *testing.T, m *mundo) {
 
 // Sem o aceite vigente daquele provedor, o PUT recusa antes de ler o corpo e
 // sem chamar o provedor; o GET dos modelos também (a chave iria ao provedor).
-// Sem o AceiteDoDitado configurado (a C3b ainda não ligou o dela), ninguém
-// tem aceite.
+// Aqui o aceite é o dublê da suíte; o de verdade (a dictation_consents) é
+// provado em ditado.go.
 func testSemAceite(t *testing.T, m *mundo) {
 	exigirErro(t, m.put(celA, "openai", canario), http.StatusForbidden, "SEM_ACEITE")
 	// O corpo nem é lido: o JSON quebrado também é SEM_ACEITE.
@@ -405,12 +421,14 @@ func testSemAceite(t *testing.T, m *mundo) {
 	}
 	m.aceite.falhar(nil)
 
-	// Sem o AceiteDoDitado (nil na configuração): ninguém tem aceite.
-	m.semAceiteNaNuvem = true
+	// Sem o AceiteDoDitado dublê (nil na configuração), o aceite é o de
+	// verdade, o da dictation_consents: o dublê não vale, e a conta que nunca
+	// aceitou não tem aceite.
+	m.aceiteDeVerdade = true
 	m.montar(ChaveDeCifraA)
 	exigirErro(t, m.put(celA, "openai", canario), http.StatusForbidden, "SEM_ACEITE")
 	if m.prov.quantas() != 1 {
-		t.Fatal("sem o AceiteDoDitado, o PUT chamou o provedor")
+		t.Fatal("sem o aceite de verdade, o PUT chamou o provedor")
 	}
 }
 

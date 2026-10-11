@@ -115,12 +115,21 @@ nova, só aditiva**, uma tabela por arquivo.
 | Arquivo | Tabela | O quê |
 |---|---|---|
 | 0017 | `ai_provider_keys` | **C3a (10-out-2026):** a chave de API do provedor de IA colada no app do celular, **só cifrada** (o id da chave de cifra, o nonce, o cifrado com a etiqueta do GCM e o fim de até 4 caracteres que a tela mostra); uma por pessoa e por provedor (`openai`, `groq`, `anthropic`) |
+| 0018 | `dictation_settings` | **C3b (11-out-2026):** as preferências do ditado no celular, uma linha por conta: quem transcreve (`openai` ou `groq`) e o modelo, a dica dos termos aprendidos, o Polish ligado, quem faz o Polish (`openai` ou `anthropic`) e o modelo. Nunca descem aos PCs |
+| 0019 | `dictation_consents` | **C3b (11-out-2026):** o aceite do ditado no celular, **uma linha por aceite**: a versão do aviso, os provedores aceitos, quando aceitou e, depois, quando e por que terminou (`revogado` ou `substituido`). Um índice único parcial deixa no máximo um aceite em aberto por conta |
 
 A chave de cifra nunca entra no banco (`AI_KEYS_SECRET_FILE`, `docs/ai-spec/10-env-and-secrets.md`).
-`schema_test.go` lê a 0017 (as colunas, os tamanhos fixos, a lista dos provedores, nenhuma coluna de
-áudio), o `internal/server/pgstore` confere a lista e os tamanhos contra o Go
-(`TestSQL_AsChavesDaIAConferemComA0017`) e cada `CHECK` no Postgres
-(`TestPostgres_AsChavesDaIANoBanco`).
+`schema_test.go` lê a 0017, a 0018 e a 0019 (as colunas, os tamanhos fixos, as listas dos provedores, os
+`CHECK`s, o índice único do aceite em aberto, nenhuma coluna de áudio); o `internal/server/pgstore` confere
+as colunas, as listas de provedores e a forma do nome do modelo contra o Go
+(`TestSQL_AsChavesDaIAConferemComA0017`, `TestSQL_AsPreferenciasEOAceiteConferemComAs0018E0019` e
+`TestSQL_AFormaDoModeloEIgualNoSQLENoGo`) e cada `CHECK` no Postgres
+(`TestPostgres_AsChavesDaIANoBanco`, `TestPostgres_AsPreferenciasEOAceiteNoBanco`,
+`TestPostgres_PreferenciasEAceiteDoDitado`). Como são **só aditivas**,
+`TestPostgres_AsMigrationsDoDitadoNoCelularAplicamSobreUmBancoComDados` aplica as 0001 a 0017 num banco,
+põe dados nas tabelas de antes (inclusive uma chave da IA cifrada), roda a 0018 e a 0019 e prova que nenhuma
+linha de antes mudou. O "apagar meus dados" apaga as três tabelas do ditado no celular
+(`TestSQL_ApagarMeusDadosCobreToda_TabelaComUserID` falha se uma tabela com `user_id` ficar de fora).
 
 ## Como rodar o `migrate`
 
@@ -192,7 +201,7 @@ fim, e os testes recusam um servidor que não seja a própria máquina (`interna
   planejador (alterada, ausente, renomeada, fora de ordem).
 
 **Roda só contra um Postgres de verdade** (com `AURORA_TEST_POSTGRES_URL`):
-- `postgres_test.go`: o Postgres aceita as 16 migrations e as tabelas são exatamente as do modelo;
+- `postgres_test.go`: o Postgres aceita todas as migrations e as tabelas são exatamente as do modelo;
   o mesmo `mutation_id` (e o mesmo id de ditado) em dois usuários é aceito e repetido no mesmo é
   recusado; a mutação sem entidade ou sem aparelho é recusada; o `seq` é único por usuário; o
   aparelho de outro usuário é recusado; o contador (`UPDATE ... RETURNING`) não pula número

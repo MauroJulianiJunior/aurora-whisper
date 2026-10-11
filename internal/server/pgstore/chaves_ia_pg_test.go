@@ -11,15 +11,15 @@ import (
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/server/chavestest"
 )
 
-// TestChaves_Postgres roda a suíte das chaves da IA (ADR-021, C3a) contra o
-// Postgres: a mesma de internal/server (TestChaves_Memoria). O canário varre
-// o texto de TODAS as tabelas do banco (o bytea em hex), a ai_provider_keys
-// inclusive.
+// TestChaves_Postgres roda a suíte das chaves da IA (C3a) e do aceite e das
+// preferências do ditado no celular (C3b) contra o Postgres: a mesma de
+// internal/server (TestChaves_Memoria). O canário varre o texto de TODAS as
+// tabelas do banco (o bytea em hex), a ai_provider_keys inclusive.
 func TestChaves_Postgres(t *testing.T) {
 	e := newPG(t)
 	s := New(e.pool)
 	chavestest.Run(t, chavestest.Backend{
-		Store: s, Accounts: s, Chaves: s,
+		Store: s, Accounts: s, Chaves: s, Ditado: s,
 		NewDevice: e.newDeviceWithToken,
 		Despejo:   e.despejoDeTudo,
 	})

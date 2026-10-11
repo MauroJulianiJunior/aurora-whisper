@@ -207,6 +207,25 @@ var wantTables = []tableSpec{
 			"key_suffix", "created_at", "updated_at",
 		},
 	},
+	// ADR-021, C3b: as preferências e o aceite do ditado no celular
+	// (docs/ai-spec/05-data-model.md, "As preferências do ditado no celular"
+	// e "O aceite do ditado no celular").
+	{
+		file:  "0018_dictation_settings_table.sql",
+		table: "dictation_settings",
+		columns: []string{
+			"user_id", "asr_provider", "asr_model", "use_hint", "polish_enabled",
+			"polish_provider", "polish_model", "created_at", "updated_at",
+		},
+	},
+	{
+		file:  "0019_dictation_consents_table.sql",
+		table: "dictation_consents",
+		columns: []string{
+			"id", "user_id", "notice_version", "asr_provider", "polish_provider",
+			"accepted_at", "ended_at", "end_reason",
+		},
+	},
 }
 
 // TestSchema_EveryMigrationIsCoveredBySpec garante que a lista acima e os
@@ -297,6 +316,11 @@ func TestSchema_UniqueConstraints(t *testing.T) {
 		// Uma chave por provedor e por pessoa (ADR-021, C3a): trocar é gravar
 		// por cima.
 		{"0017_ai_provider_keys_table.sql", "PRIMARY KEY (user_id, provider)"},
+		// No máximo um aceite em aberto por conta (C3b): o índice único
+		// parcial, que também é a busca do vigente. (A PK de user_id das
+		// preferências e a do id do aceite estão em sqlContracts.)
+		{"0019_dictation_consents_table.sql",
+			"CREATE UNIQUE INDEX idx_dictation_consents_open ON dictation_consents (user_id) WHERE ended_at IS NULL"},
 	}
 	for _, c := range cases {
 		// Sem os comentários: eles explicam as constraints, e citam o texto delas.
@@ -519,6 +543,11 @@ func TestSchema_OptimisticConcurrencyVersionColumn(t *testing.T) {
 		// ADR-021, C3a: a chave cifrada é trocada inteira (gravar por cima),
 		// sem concorrência otimista.
 		"0017_ai_provider_keys_table.sql": false,
+		// ADR-021, C3b: as preferências são gravadas inteiras (um PUT que
+		// troca tudo) e o aceite é uma linha por aceite, que só ganha o fim:
+		// nenhuma das duas tem concorrência otimista.
+		"0018_dictation_settings_table.sql": false,
+		"0019_dictation_consents_table.sql": false,
 	}
 
 	re := regexp.MustCompile(`(?im)^\s*version\s+BIGINT`)
@@ -765,6 +794,39 @@ var sqlContracts = []struct {
 		"created_at TIMESTAMPTZ NOT NULL,",
 		"updated_at TIMESTAMPTZ NOT NULL,",
 		"CHECK (updated_at >= created_at)",
+	}},
+	// ADR-021, C3b: as preferências do ditado no celular. Quem transcreve
+	// (openai ou groq) e quem faz o Polish (openai ou anthropic) são listas
+	// fechadas e diferentes; o modelo é texto livre dentro de uma forma; o
+	// Polish ligado exige modelo; as duas flags não têm DEFAULT (a linha só
+	// existe depois de a pessoa escolher); as datas vêm de quem grava.
+	{"0018_dictation_settings_table.sql", "dictation_settings", []string{
+		"user_id UUID PRIMARY KEY REFERENCES users (id)",
+		"asr_provider TEXT NOT NULL CHECK (asr_provider IN ('openai', 'groq'))",
+		"asr_model TEXT NOT NULL CHECK (asr_model ~ '^[A-Za-z0-9._:/@-]{1,100}$')",
+		"use_hint BOOLEAN NOT NULL,",
+		"polish_enabled BOOLEAN NOT NULL,",
+		"polish_provider TEXT NOT NULL CHECK (polish_provider IN ('openai', 'anthropic'))",
+		"polish_model TEXT NOT NULL CHECK (polish_model ~ '^[A-Za-z0-9._:/@-]{0,100}$')",
+		"created_at TIMESTAMPTZ NOT NULL,",
+		"updated_at TIMESTAMPTZ NOT NULL,",
+		"CHECK (NOT polish_enabled OR polish_model <> '')",
+		"CHECK (updated_at >= created_at)",
+	}},
+	// O aceite: uma linha por aceite, com a versão do aviso, os provedores
+	// aceitos e o fim (a data e o motivo, sempre juntos). Provedor fora da
+	// lista, versão zero e fim antes do começo o banco recusa.
+	{"0019_dictation_consents_table.sql", "dictation_consents", []string{
+		"id UUID PRIMARY KEY",
+		"user_id UUID NOT NULL REFERENCES users (id)",
+		"notice_version INTEGER NOT NULL CHECK (notice_version >= 1)",
+		"asr_provider TEXT NOT NULL CHECK (asr_provider IN ('openai', 'groq'))",
+		"polish_provider TEXT CHECK (polish_provider IN ('openai', 'anthropic'))",
+		"accepted_at TIMESTAMPTZ NOT NULL,",
+		"ended_at TIMESTAMPTZ,",
+		"end_reason TEXT CHECK (end_reason IN ('revogado', 'substituido'))",
+		"CHECK ((ended_at IS NULL) = (end_reason IS NULL))",
+		"CHECK (ended_at IS NULL OR ended_at >= accepted_at)",
 	}},
 }
 

@@ -388,6 +388,9 @@ func (s *MemoryStore) ApagarDadosDaConta(_ context.Context, userID, keepSessionI
 	// As chaves da IA (ADR-021, C3a): o DELETE FROM ai_provider_keys do
 	// Postgres.
 	u.chavesDeIA = nil
+	// As preferências e os aceites do ditado no celular (C3b): os DELETE FROM
+	// dictation_settings e dictation_consents do Postgres.
+	u.preferenciasDoDitado, u.aceitesDoDitado = nil, nil
 	for deviceID := range u.devices {
 		delete(s.devices, deviceID)
 	}
@@ -545,6 +548,15 @@ func (s *MemoryStore) Despejo() string {
 		for p, k := range u.chavesDeIA {
 			b.WriteString(id + "|" + p + "|" + key(k.IDDaCifra) + "|" + key(k.Nonce) + "|" + key(k.Cifrado) + "|" +
 				string(k.Cifrado) + "|" + k.Final + "\n")
+		}
+		// As preferências e os aceites do ditado no celular (C3b): provedores,
+		// modelos e datas, nada que seja segredo ou texto ditado.
+		if p := u.preferenciasDoDitado; p != nil {
+			b.WriteString(id + "|" + p.Transcricao.Provedor + "|" + p.Transcricao.Modelo + "|" + p.Polish.Provedor + "|" +
+				p.Polish.Modelo + "\n")
+		}
+		for _, a := range u.aceitesDoDitado {
+			b.WriteString(id + "|" + a.ID + "|" + a.Transcricao + "|" + a.Polish + "|" + a.Motivo + "\n")
 		}
 	}
 	return b.String()

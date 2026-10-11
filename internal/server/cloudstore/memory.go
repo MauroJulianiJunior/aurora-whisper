@@ -51,6 +51,12 @@ type memUser struct {
 	// chavesDeIA são as linhas de ai_provider_keys, pelo provedor (ADR-021,
 	// C3a; chaves_ia.go). Nil até a primeira gravação.
 	chavesDeIA map[string]ChaveDeIA
+	// preferenciasDoDitado é a linha de dictation_settings (nil: a conta nunca
+	// gravou, e vale PreferenciasPadrao) e aceitesDoDitado, as de
+	// dictation_consents, do mais velho ao mais novo; só o último pode estar
+	// em aberto (ADR-021, C3b; ditado_celular.go).
+	preferenciasDoDitado *PreferenciasDoDitado
+	aceitesDoDitado      []Aceite
 
 	// A conta (vazios num usuário de AddUser).
 	sub      string

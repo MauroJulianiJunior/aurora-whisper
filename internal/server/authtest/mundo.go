@@ -149,13 +149,15 @@ func (m *mundo) montar(contas string) {
 	if err != nil {
 		m.t.Fatal(err)
 	}
-	// As rotas das chaves da IA (ADR-021, C3a) montadas, para o escopo, o
-	// CSRF e o Host as percorrerem com as outras. Sem o aceite (nil), nenhum
-	// pedido chega ao provedor.
+	// As rotas das chaves da IA (ADR-021, C3a) e as do aceite e das
+	// preferências (C3b) montadas, para o escopo, o CSRF e o Host as
+	// percorrerem com as outras. Com o aceite de verdade e nenhuma conta
+	// aceitando, nenhum pedido chega ao provedor.
 	chaves, _ := m.b.Store.(cloudstore.ChavesDeIA)
+	ditado, _ := m.b.Store.(cloudstore.DitadoNoCelular)
 	cofreDaSuite, err := cofre.Novo(strings.Repeat("5a", 32))
-	if err != nil || chaves == nil {
-		m.t.Fatalf("o cofre ou as chaves da suíte: %v", err)
+	if err != nil || chaves == nil || ditado == nil {
+		m.t.Fatalf("o cofre, as chaves ou o ditado da suíte: %v", err)
 	}
 	m.cloud, err = server.NewCloud(server.CloudConfig{
 		Store: m.b.Store, Accounts: m.b.Accounts, BaseURL: m.opcoes.base,
@@ -163,7 +165,7 @@ func (m *mundo) montar(contas string) {
 		Google: m.g.Client(), Proxy: proxy, Now: m.clk.Now, Painel: contracttest.PainelDeTeste(),
 		Logger:  slog.New(slog.NewTextHandler(m.logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
 		Limites: m.opcoes.limites,
-		Cofre:   cofreDaSuite, ChavesDeIA: chaves, Modelos: provedorQueNaoPodeSerChamado{m.t},
+		Cofre:   cofreDaSuite, ChavesDeIA: chaves, Ditado: ditado, Modelos: provedorQueNaoPodeSerChamado{m.t},
 	})
 	if err != nil {
 		m.t.Fatalf("NewCloud: %v", err)

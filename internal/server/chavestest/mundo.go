@@ -1,12 +1,16 @@
-// Package chavestest é a suíte das chaves da IA do ditado no celular (ADR-021,
-// C3a): o cofre, a ai_provider_keys e as três rotas /api/v1/ai-keys, pela API
-// HTTP e direto no cloudstore.ChavesDeIA. Os mesmos casos rodam contra o
-// MemoryStore (internal/server) e contra o Postgres (internal/server/pgstore),
-// como a contracttest e a authtest.
+// Package chavestest é a suíte do ditado no celular que vive na conta
+// (ADR-021): as chaves da IA (C3a: o cofre, a ai_provider_keys e as três rotas
+// /api/v1/ai-keys) e o aceite e as preferências (C3b: a dictation_consents, a
+// dictation_settings e as quatro rotas /api/v1/dictation), pela API HTTP e
+// direto no cloudstore (ChavesDeIA e DitadoNoCelular). Os mesmos casos rodam
+// contra o MemoryStore (internal/server) e contra o Postgres
+// (internal/server/pgstore), como a contracttest e a authtest.
 //
 // Nenhum caso chama um provedor de verdade: o provedor é um dublê que conta as
-// chamadas e anota a chave que recebeu. O aceite do ditado (a C3b) também é
-// um dublê. As chaves de cifra e as chaves das pessoas são de mentira.
+// chamadas e anota a chave que recebeu. Os casos das chaves usam um dublê do
+// aceite, que dá e tira o aceite à vontade; os casos do aceite (ditado.go) usam
+// o de verdade, o da dictation_consents. As chaves de cifra e as chaves das
+// pessoas são de mentira.
 //
 // Este pacote é só para testes: nenhum binário o importa.
 package chavestest
@@ -36,6 +40,8 @@ type Backend struct {
 	Store    cloudstore.Store
 	Accounts cloudstore.Accounts
 	Chaves   cloudstore.ChavesDeIA
+	// Ditado guarda as preferências e o aceite (C3b).
+	Ditado cloudstore.DitadoNoCelular
 	// NewDevice cria um aparelho do usuário com o HMAC do token dele (o 403
 	// das rotas com o token de um PC).
 	NewDevice func(t *testing.T, userID string, tokenHMAC []byte) string
@@ -59,8 +65,9 @@ var (
 
 var agora0 = time.Date(2026, 10, 10, 12, 0, 0, 0, time.UTC)
 
-// aceiteFalso é o AceiteDoDitado da suíte (o de verdade é da C3b): o aceite
-// vigente por conta e provedor, que o caso dá e tira.
+// aceiteFalso é o AceiteDoDitado dos casos das chaves (o de verdade, o da
+// dictation_consents, é dos casos do aceite, em ditado.go): o aceite vigente
+// por conta e provedor, que o caso dá e tira.
 type aceiteFalso struct {
 	mu       sync.Mutex
 	vigente  map[string]bool
@@ -158,9 +165,11 @@ type mundo struct {
 	cloud *server.Cloud
 	h     http.Handler
 	cofre *cofre.Cofre
-	// semAceiteNaNuvem monta a nuvem sem o AceiteDoDitado (nil na
-	// configuração: como o serve até a C3b ligar o dela).
-	semAceiteNaNuvem bool
+	// aceiteDeVerdade monta a nuvem sem o AceiteDoDitado dublê (nil na
+	// configuração): o aceite vem do Ditado, a dictation_consents, como no
+	// serve. É o modo dos casos do aceite; nos das chaves, o dublê dá e tira o
+	// aceite à vontade.
+	aceiteDeVerdade bool
 
 	userA, userB string
 	creds        map[string]credencial
@@ -236,7 +245,7 @@ func (m *mundo) montar(chaveDeCifra string) {
 		m.cofre = c
 	}
 	var aceite server.AceiteDoDitado = m.aceite
-	if m.semAceiteNaNuvem {
+	if m.aceiteDeVerdade {
 		aceite = nil
 	}
 	cloud, err := server.NewCloud(server.CloudConfig{
@@ -245,7 +254,7 @@ func (m *mundo) montar(chaveDeCifra string) {
 		Google: cloudauth.NovoGoogle("cliente-da-suite", "segredo-da-suite", contracttest.BaseURL+"/auth/google/callback"),
 		Painel: contracttest.PainelDeTeste(), Now: m.clk.Now,
 		Logger: slog.New(slog.NewTextHandler(m.logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
-		Cofre:  m.cofre, ChavesDeIA: m.b.Chaves, Modelos: m.prov, Aceite: aceite,
+		Cofre:  m.cofre, ChavesDeIA: m.b.Chaves, Ditado: m.b.Ditado, Modelos: m.prov, Aceite: aceite,
 	})
 	if err != nil {
 		m.t.Fatalf("NewCloud: %v", err)

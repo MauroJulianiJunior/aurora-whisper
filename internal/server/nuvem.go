@@ -130,9 +130,16 @@ type CloudConfig struct {
 	// ModelosPelaRede; os testes, um dublê (nenhum teste chama um provedor de
 	// verdade).
 	Modelos ModelosDoProvedor
+	// Ditado guarda as preferências e o aceite do ditado no celular (C3b; o
+	// próprio Store, nos dois). Obrigatório com o Cofre: as rotas /dictation
+	// sobem com as das chaves.
+	Ditado cloudstore.DitadoNoCelular
 	// Aceite diz se a conta tem o aceite vigente do ditado no celular para um
-	// provedor (decisão H; a C3b liga o dela). Nil: ninguém tem aceite, e o
-	// PUT da chave recusa com SEM_ACEITE.
+	// provedor (decisão H). Nil é o normal: o aceite vem do Ditado (a
+	// dictation_consents, o aceite em aberto da versão atual do aviso que
+	// inclui o provedor). Sem o Ditado também, ninguém tem aceite, e o PUT da
+	// chave recusa com SEM_ACEITE (falha fechada). Só os testes o trocam, por
+	// um dublê que dá e tira o aceite.
 	Aceite AceiteDoDitado
 }
 
@@ -204,11 +211,14 @@ func NewCloud(cfg CloudConfig) (*Cloud, error) {
 	case cfg.Google.RedirectURL != RedirectURL(base):
 		return nil, errors.New("server: o redirect do Google não é PUBLIC_BASE_URL + /auth/google/callback")
 	}
-	if cfg.Cofre != nil && (cfg.ChavesDeIA == nil || cfg.Modelos == nil) {
-		return nil, errors.New("server: com a chave de cifra, a nuvem precisa do ChavesDeIA e do Modelos")
+	if cfg.Cofre != nil && (cfg.ChavesDeIA == nil || cfg.Modelos == nil || cfg.Ditado == nil) {
+		return nil, errors.New("server: com a chave de cifra, a nuvem precisa do ChavesDeIA, do Modelos e do Ditado")
 	}
 	if cfg.Aceite == nil {
 		cfg.Aceite = semAceite{}
+		if cfg.Ditado != nil {
+			cfg.Aceite = aceitePeloStore{cfg.Ditado}
+		}
 	}
 	app, err := carregarPainel(cfg.Painel)
 	if err != nil {

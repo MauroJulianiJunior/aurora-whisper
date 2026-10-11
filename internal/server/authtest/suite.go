@@ -734,6 +734,18 @@ func testEscopo(t *testing.T, b Backend) {
 			t.Errorf("%s na tabela: %v (montada: %v), quero só a sessão", padrao, acesso, ok)
 		}
 	}
+	// O aceite e as preferências do ditado no celular (ADR-021, C3b): só a
+	// sessão, sem parâmetro de caminho, percorridas acima do mesmo jeito.
+	for _, padrao := range []string{
+		"GET /api/v1/dictation", "PUT /api/v1/dictation/settings", "POST /api/v1/dictation/consent", "DELETE /api/v1/dictation/consent",
+	} {
+		if acesso, ok := porPadrao[padrao]; !ok || acesso != server.AcessoSessao {
+			t.Errorf("%s na tabela: %v (montada: %v), quero só a sessão", padrao, acesso, ok)
+		}
+		if strings.ContainsAny(padrao, "{}?") {
+			t.Errorf("%s tem parâmetro na URL", padrao)
+		}
+	}
 	for padrao := range porPadrao {
 		if strings.Contains(padrao, "/learned") && padrao != "GET /api/v1/learned" && padrao != "POST /api/v1/learned/undo" {
 			t.Errorf("%s: o celular não aprende nem muda o aprendido, só lista e desfaz", padrao)
@@ -818,6 +830,12 @@ func testCSRF(t *testing.T, b Backend) {
 	// O PUT e o DELETE das chaves da IA (ADR-021, C3a) também.
 	if !visto["PUT /api/v1/ai-keys/{provedor}"] || !visto["DELETE /api/v1/ai-keys/{provedor}"] {
 		t.Error("as rotas das chaves da IA não foram conferidas contra o pedido de outra origem")
+	}
+	// O PUT, o POST e o DELETE do aceite e das preferências (C3b) também.
+	for _, padrao := range []string{"PUT /api/v1/dictation/settings", "POST /api/v1/dictation/consent", "DELETE /api/v1/dictation/consent"} {
+		if !visto[padrao] {
+			t.Errorf("%s não foi conferida contra o pedido de outra origem", padrao)
+		}
 	}
 	if status, _ := n.me(); status != http.StatusOK {
 		t.Fatal("um pedido de outra origem derrubou a sessão")
@@ -950,7 +968,10 @@ func testHost(t *testing.T, b Backend) {
 	if rotas < 20 {
 		t.Errorf("só %d rotas conferidas", rotas)
 	}
-	for _, padrao := range []string{"GET /api/v1/learned", "POST /api/v1/learned/undo"} {
+	for _, padrao := range []string{
+		"GET /api/v1/learned", "POST /api/v1/learned/undo",
+		"GET /api/v1/dictation", "PUT /api/v1/dictation/settings", "POST /api/v1/dictation/consent", "DELETE /api/v1/dictation/consent",
+	} {
 		if !conferidas[padrao] {
 			t.Errorf("%s não foi conferida com o Host estranho", padrao)
 		}

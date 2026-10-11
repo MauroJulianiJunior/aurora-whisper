@@ -15,13 +15,14 @@ import (
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/server/contracttest"
 )
 
-// TestChaves_Memoria roda a suíte das chaves da IA (ADR-021, C3a) contra o
-// MemoryStore. A mesma suíte roda contra o Postgres em internal/server/pgstore
-// (TestChaves_Postgres, com AURORA_TEST_POSTGRES_URL).
+// TestChaves_Memoria roda a suíte das chaves da IA (ADR-021, C3a) e do aceite
+// e das preferências do ditado no celular (C3b) contra o MemoryStore. A mesma
+// suíte roda contra o Postgres em internal/server/pgstore (TestChaves_Postgres,
+// com AURORA_TEST_POSTGRES_URL).
 func TestChaves_Memoria(t *testing.T) {
 	mem := cloudstore.NewMemoryStore()
 	chavestest.Run(t, chavestest.Backend{
-		Store: mem, Accounts: mem, Chaves: mem,
+		Store: mem, Accounts: mem, Chaves: mem, Ditado: mem,
 		NewDevice: func(_ *testing.T, userID string, tokenHMAC []byte) string {
 			id := contracttest.NewID()
 			mem.AddDevice(userID, id)

@@ -379,7 +379,7 @@ ADR-017) e `UserSettings` (preferências não sincronizam na v1).
 
 ### O ditado no celular: o que entra no Postgres (ADR-021)
 As tabelas do ditado no celular são **só aditivas** (as 0001 a 0016 já estão em produção): uma por
-arquivo, a partir da 0017. Nenhuma sincroniza com os PCs, nenhuma passa pelo contador nem gera evento,
+arquivo, a partir da 0017 (a 0017 é da C3a, a 0018 e a 0019 são da C3b). Nenhuma sincroniza com os PCs, nenhuma passa pelo contador nem gera evento,
 e nenhuma guarda áudio (o `schema_test.go` confere).
 
 - **As chaves da IA** (`ai_provider_keys`, a 0017; **C3a, 10-out-2026**): a chave de API do provedor
@@ -409,6 +409,57 @@ e nenhuma guarda áudio (o `schema_test.go` confere).
   as linhas da conta (`pgstore.apagarDaConta`). As cópias cifradas de uma chave trocada ou removida
   ficam nos backups (cerca de 30 dias) e no banco da restauração (7 dias): a tela manda revogar a chave
   antiga no provedor (ADR-021, "As chaves").
+
+- **As preferências do ditado no celular** (`dictation_settings`, a 0018; **C3b, 11-out-2026**): uma
+  linha por conta (PK `user_id`), gravada inteira a cada `PUT`. Moram só na nuvem e **nunca descem aos
+  PCs** (as preferências do PC continuam no PC; não é a `UserSettings`). Sem a linha, a conta tem os
+  padrões (`cloudstore.PreferenciasPadrao`): transcrição pela OpenAI com o `gpt-4o-mini-transcribe`, sem
+  dica, sem Polish. Colunas:
+  - `asr_provider`: quem transcreve, `openai` ou `groq` (a Anthropic não transcreve); `asr_model`: o
+    modelo, de 1 a 100 caracteres entre letras, dígitos e `. _ : / @ -` (o nome vem do provedor, e a
+    nuvem não o valida contra uma lista fixa, só contra a forma; a mesma expressão mora em
+    `cloudstore.ModeloValido`, e um teste confere as duas);
+  - `use_hint`: manda os termos aprendidos da conta como dica (decisão E); começa desligada até a C8
+    medir. `polish_enabled`: o Polish no celular (decisão N); começa desligado. As duas sem `DEFAULT`;
+  - `polish_provider`: quem faz o Polish, `openai` ou `anthropic`, guardado mesmo com o Polish desligado
+    (é só a escolha, e o aceite do provedor vale quando ele liga); `polish_model`: o modelo (de 0 a 100
+    caracteres da mesma forma), vazio só enquanto o Polish está desligado
+    (`CHECK (NOT polish_enabled OR polish_model <> '')`);
+  - `created_at` (a primeira gravação) e `updated_at` (a última), do relógio de quem grava, sem
+    `DEFAULT`, com `CHECK (updated_at >= created_at)`.
+
+- **O aceite do ditado no celular** (`dictation_consents`, a 0019; **C3b, 11-out-2026**; ADR-021, decisão
+  H): **cada aceite é uma linha**, e nenhuma some quando termina, porque provar o consentimento é do
+  controlador (LGPD, art. 8º, §2º). PK `id` (UUID v7 gerado pela aplicação). Colunas:
+  - `notice_version`: a versão do texto do aviso que a pessoa viu (inteiro a partir de 1). O aceite só
+    **vale** com a versão atual, `cloudstore.VersaoDoAviso`; mudar o texto do aviso é subir o número, e o
+    servidor passa a pedir o aceite de novo (o aceite velho continua gravado, e não vale). **A mesma
+    versão mora no app**, em `web/src/nuvem/avisoDoDitado.ts` (`VERSAO_DO_AVISO`), e o app manda a
+    versão do texto que mostrou; um teste do Go (`TestVersaoDoAviso_AppEServidorConferem`) lê esse arquivo
+    e prende os dois números;
+  - `asr_provider` (`openai` ou `groq`) e `polish_provider` (`openai` ou `anthropic`, **nulo** quando o
+    aviso que a pessoa viu não incluía o Polish): os provedores que ela aceitou. O aceite cobre quem
+    está em qualquer um dos dois (`Aceite.Inclui`);
+  - `accepted_at`: quando aceitou, do relógio do servidor;
+  - `ended_at` e `end_reason`, sempre juntos (`CHECK ((ended_at IS NULL) = (end_reason IS NULL))`, e o
+    fim nunca antes do começo): `revogado` (a pessoa desligou o ditado no celular, e as chaves dela
+    saíram na mesma transação) ou `substituido` (ela aceitou de novo: outro provedor, o Polish com um
+    provedor novo, ou outra versão do aviso);
+  - **um índice único parcial** (`idx_dictation_consents_open`, `(user_id) WHERE ended_at IS NULL`)
+    garante no máximo **um aceite em aberto por conta**, o candidato a vigente. Gravar e revogar travam a
+    linha do usuário, então duas gravações ao mesmo tempo se enfileiram.
+
+  **O aceite vigente** é o aceite em aberto da versão atual do aviso: é ele que o `PUT /ai-keys`, o
+  `GET /ai-keys/{provedor}/models` e o `PUT /dictation/settings` conferem (a rota de ditar, da C5b,
+  confere de novo na hora de chamar). **Quando pede de novo:** trocar de provedor, ligar o Polish com um
+  provedor que o aceite não cobre, ou mudar o texto do aviso; **mudar só o modelo não pede**. Aceitar de
+  novo exatamente o mesmo (a mesma versão e os mesmos provedores) não grava outra linha: a data fica a
+  da primeira vez.
+
+  O "apagar meus dados" apaga as **três** tabelas do ditado no celular da conta, `ai_provider_keys`,
+  `dictation_settings` e `dictation_consents` (os aceites que terminaram também), e só as dela
+  (`pgstore.apagarDaConta`; um teste lê as migrations e falha se uma tabela com `user_id` ficar fora do
+  apagar). Nenhuma das duas guarda áudio, texto ditado nem chave (`schema_test.go` confere).
 
 ## SQLite
 
