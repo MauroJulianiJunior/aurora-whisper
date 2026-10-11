@@ -21,6 +21,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MauroJulianiJunior/aurora-whisper/internal/asr/nuvem"
+	"github.com/MauroJulianiJunior/aurora-whisper/internal/ia"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/server"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/server/cloudauth"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/server/cloudstore"
@@ -166,6 +168,11 @@ func (m *mundo) montar(contas string) {
 		Logger:  slog.New(slog.NewTextHandler(m.logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
 		Limites: m.opcoes.limites,
 		Cofre:   cofreDaSuite, ChavesDeIA: chaves, Ditado: ditado, Modelos: provedorQueNaoPodeSerChamado{m.t},
+		// A rota de ditar (C5b) também montada; nenhum pedido daqui chega à
+		// transcrição nem ao Polish (sem o aceite, ela recusa antes), e, se
+		// chegasse, o transporte falha o caso em vez de sair para a rede.
+		Voz:    &nuvem.Cliente{HTTP: &http.Client{Transport: redeQueNaoPodeSerUsada{m.t}}},
+		Polish: &ia.Cliente{HTTP: &http.Client{Transport: redeQueNaoPodeSerUsada{m.t}}},
 	})
 	if err != nil {
 		m.t.Fatalf("NewCloud: %v", err)
@@ -179,6 +186,15 @@ type provedorQueNaoPodeSerChamado struct{ t *testing.T }
 
 func (p provedorQueNaoPodeSerChamado) ListarModelos(context.Context, string, string) ([]string, error) {
 	p.t.Error("um pedido da suíte de login chegou ao provedor da IA")
+	return nil, context.Canceled
+}
+
+// redeQueNaoPodeSerUsada é o transporte da transcrição e do Polish da suíte:
+// nenhum caso daqui chega a eles.
+type redeQueNaoPodeSerUsada struct{ t *testing.T }
+
+func (r redeQueNaoPodeSerUsada) RoundTrip(*http.Request) (*http.Response, error) {
+	r.t.Error("um pedido da suíte de login chegou a um provedor da transcrição ou do Polish")
 	return nil, context.Canceled
 }
 

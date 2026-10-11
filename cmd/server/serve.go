@@ -25,7 +25,8 @@ import (
 // nenhuma (decisão 13): com migration pendente, recusa subir e manda rodar o
 // migrate. Roda a primeira rodada da arrumação e da retenção ANTES de abrir a
 // porta (F11c; abrir, abaixo). Para no SIGINT (Ctrl+C) e no SIGTERM com um
-// desligamento limpo de até 15 segundos.
+// desligamento limpo de até 15 segundos e, depois dele, a espera de até 70 s
+// pelos ditados do celular em andamento (ADR-021, escolha menor 22).
 //
 // O log é slog em JSON no stderr: o de acesso (método, padrão da rota,
 // status, ms, bytes e contagens), o login recusado (só o motivo), a
@@ -204,13 +205,39 @@ func servir(ctx context.Context, cloud *server.Cloud, ln net.Listener, logger *s
 	logger.Info("desligando")
 	shutCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
-	if err := srv.Shutdown(shutCtx); err != nil {
-		return fail(1, "o desligamento não terminou em %s: %v", shutdownTimeout, err)
+	errShut := srv.Shutdown(shutCtx)
+	// Os ditados em andamento (ADR-021, escolha menor 22): o trabalho solto de
+	// um ditado (o provedor, o Smart, o Polish e a gravação) não acaba com a
+	// conexão, e grava no Store. O servir o espera até esperaDosDitados depois
+	// do Shutdown, e só então volta (e o serve fecha o pool). Nenhum ditado novo
+	// pega vaga nesse tempo.
+	ditCtx, cancelDit := context.WithTimeout(context.Background(), esperaDosDitados)
+	defer cancelDit()
+	if n := cloud.DitadosEmAndamento(); n > 0 {
+		logger.Info("esperando os ditados em andamento", "ditados", n)
+	}
+	errDit := cloud.EsperarDitados(ditCtx)
+	if errShut != nil {
+		// O Shutdown parou no prazo com pedidos abertos (os que esperavam um
+		// ditado): com os ditados terminados, eles respondem agora, no mesmo
+		// prazo da espera dos ditados.
+		errShut = srv.Shutdown(ditCtx)
+	}
+	if errDit != nil {
+		return fail(1, "os ditados em andamento não terminaram em %s depois do desligamento", esperaDosDitados)
+	}
+	if errShut != nil {
+		return fail(1, "o desligamento não terminou em %s: %v", shutdownTimeout, errShut)
 	}
 	esperarArrumacao()
 	logger.Info("desligado")
 	return 0
 }
+
+// esperaDosDitados é quanto o desligamento espera os ditados em andamento depois
+// do Shutdown (ADR-021, escolha menor 22: 70 s, com o stop_grace_period da API
+// em 90 s, que a C5c põe no compose). É variável para os testes.
+var esperaDosDitados = 70 * time.Second
 
 // erroDoServidor é o ErrorLog do http.Server: as mensagens dele trazem o
 // endereço de quem pediu ("http: TLS handshake error from 1.2.3.4:5678"), e o

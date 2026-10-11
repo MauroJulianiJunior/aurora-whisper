@@ -63,13 +63,46 @@ type ChaveDeIA struct {
 	AtualizadaEm time.Time
 }
 
+// CondicaoDaChave é o que o PUT da chave leu ANTES de chamar o provedor e que a
+// gravação confere DE NOVO, dentro da transação que trava a conta
+// (GravarChaveDeIAConferindo). O provedor demora até 10 s para responder, e
+// nesse tempo a pessoa pode apagar os dados ou desligar o ditado em outro
+// aparelho: sem esta conferência sob a trava, a chave seria gravada depois do
+// apagar, e sobreviveria a ele.
+type CondicaoDaChave struct {
+	// Epoch é o sync_epoch da conta lido no começo do pedido (EpochDaConta).
+	// Se a conta trocou os dados desde então (o "apagar meus dados", ou um
+	// backup restaurado), é ErrEpochChanged e nada é gravado. Vazio nunca
+	// confere.
+	Epoch string
+	// ExigeAceite pede, sob a mesma trava, o aceite em aberto da versão atual
+	// do aviso que cobre o provedor da chave (Aceite.Cobre). Sem ele, é
+	// ErrSemAceite e nada é gravado: a pessoa revogou o aceite, ou aceitou um
+	// aviso que não inclui o provedor, enquanto o provedor respondia.
+	ExigeAceite bool
+}
+
 // ChavesDeIA guarda as chaves da IA, uma por pessoa e por provedor. O
 // MemoryStore e o Store do Postgres a implementam, e a mesma suíte
 // (internal/server/chavestest) roda contra os dois.
 type ChavesDeIA interface {
+	// EpochDaConta devolve o sync_epoch da conta agora, para o PUT da chave
+	// guardá-lo no começo e a gravação conferi-lo de novo (CondicaoDaChave).
+	// O usuário sem contador é ErrUnknownUser.
+	EpochDaConta(ctx context.Context, userID string) (string, error)
+	// GravarChaveDeIAConferindo é o GravarChaveDeIA da rota: grava a chave na
+	// mesma transação que trava a conta (a linha do usuário e o contador de
+	// sync, na ordem do "apagar meus dados" e do revogar), e só depois de
+	// conferir de novo a condição, já sob a trava. Um "apagar meus dados" ou um
+	// revogar que esteja no meio espera esta transação terminar, ou termina
+	// antes dela e é visto aqui: a chave nunca sobrevive a eles. ErrEpochChanged
+	// e ErrSemAceite não gravam nada. Fora a condição, é o GravarChaveDeIA.
+	GravarChaveDeIAConferindo(ctx context.Context, userID string, cond CondicaoDaChave, k ChaveDeIA, now time.Time) (ChaveDeIA, error)
 	// GravarChaveDeIA grava a chave do provedor por cima da que houver, com
 	// now como AtualizadaEm (e como CriadaEm, se é a primeira). A linha passa
 	// por ConferirChaveDeIA antes. O usuário que não existe é ErrUnknownUser.
+	// NÃO confere o epoch nem o aceite, nem trava a conta: é a gravação crua
+	// (a montagem dos testes). A rota usa GravarChaveDeIAConferindo.
 	GravarChaveDeIA(ctx context.Context, userID string, k ChaveDeIA, now time.Time) (ChaveDeIA, error)
 	// LerChaveDeIA devolve a linha do provedor, ou ErrChaveDeIAAusente.
 	LerChaveDeIA(ctx context.Context, userID, provedor string) (ChaveDeIA, error)
@@ -122,7 +155,29 @@ func copiarChaveDeIA(k ChaveDeIA) ChaveDeIA {
 
 var _ ChavesDeIA = (*MemoryStore)(nil)
 
+func (s *MemoryStore) EpochDaConta(_ context.Context, userID string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	u, ok := s.users[userID]
+	if !ok {
+		return "", ErrUnknownUser
+	}
+	return u.epoch, nil
+}
+
 func (s *MemoryStore) GravarChaveDeIA(_ context.Context, userID string, k ChaveDeIA, now time.Time) (ChaveDeIA, error) {
+	return s.gravarChaveDeIA(userID, nil, k, now)
+}
+
+func (s *MemoryStore) GravarChaveDeIAConferindo(_ context.Context, userID string, cond CondicaoDaChave, k ChaveDeIA, now time.Time) (ChaveDeIA, error) {
+	return s.gravarChaveDeIA(userID, &cond, k, now)
+}
+
+// gravarChaveDeIA é a gravação sob o mutex do Store, que na memória faz o papel
+// da trava da conta: o "apagar meus dados" e o revogar também o seguram, então
+// a condição (cond, se houver) é conferida e a chave gravada sem janela entre
+// as duas coisas.
+func (s *MemoryStore) gravarChaveDeIA(userID string, cond *CondicaoDaChave, k ChaveDeIA, now time.Time) (ChaveDeIA, error) {
 	if err := ConferirChaveDeIA(k); err != nil {
 		return ChaveDeIA{}, err
 	}
@@ -131,6 +186,18 @@ func (s *MemoryStore) GravarChaveDeIA(_ context.Context, userID string, k ChaveD
 	u, ok := s.users[userID]
 	if !ok {
 		return ChaveDeIA{}, ErrUnknownUser
+	}
+	if cond != nil {
+		if cond.Epoch == "" || cond.Epoch != u.epoch {
+			return ChaveDeIA{}, ErrEpochChanged
+		}
+		if cond.ExigeAceite {
+			// O aceite em aberto é sempre o último da lista (GravarAceite
+			// encerra o anterior antes de pôr o novo).
+			if n := len(u.aceitesDoDitado); n == 0 || !u.aceitesDoDitado[n-1].Cobre(k.Provedor) {
+				return ChaveDeIA{}, ErrSemAceite
+			}
+		}
 	}
 	if u.chavesDeIA == nil {
 		u.chavesDeIA = make(map[string]ChaveDeIA)

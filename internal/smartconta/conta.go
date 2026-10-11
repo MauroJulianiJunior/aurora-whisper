@@ -147,24 +147,71 @@ type Ditado struct {
 // Se o Smart falha, segue o texto do ASR sem o laço (SmartFalhou), como no PC.
 // Não loga nada: o texto é o que a pessoa ditou.
 func (c *Conta) Resolver(ctx context.Context, bruto string) Ditado {
-	d := Ditado{Bruto: bruto, Texto: bruto}
-	if r := repeticao.Colapsar(bruto); r.Colapsou() {
-		d.Texto = r.Texto
-		d.Lacos = len(r.Colapsos)
-		d.PalavrasRemovidas = r.PalavrasRemovidas
+	return c.ResolverParaPolir(ctx, bruto).Ditado
+}
+
+// Resolvido é o Ditado e o que o Smart recebeu e devolveu, para o Polish
+// (Reescrever) partir do MESMO resultado, com as trocas que o Smart fez: as
+// guardas do Polish protegem os termos trocados. Carrega texto ditado: não vai
+// a log, e vive só enquanto o ditado é resolvido.
+type Resolvido struct {
+	Ditado
+	pedido    resolver.ResolveRequest
+	resultado resolver.ResolveResult
+}
+
+// ResolverParaPolir é o Resolver de quem vai passar o ditado pelo Polish depois
+// (Reescrever): o mesmo Ditado, mais o pedido e o resultado do Smart.
+func (c *Conta) ResolverParaPolir(ctx context.Context, bruto string) Resolvido {
+	r := Resolvido{Ditado: Ditado{Bruto: bruto, Texto: bruto}}
+	if col := repeticao.Colapsar(bruto); col.Colapsou() {
+		r.Texto = col.Texto
+		r.Lacos = len(col.Colapsos)
+		r.PalavrasRemovidas = col.PalavrasRemovidas
 	}
-	out, err := c.smart.Resolve(ctx, resolver.ResolveRequest{
+	r.pedido = resolver.ResolveRequest{
 		UserID: c.usuario,
 		// O idioma é o do PC (winruntime): o Smart não o lê hoje, e a
 		// paridade fica de pé se ele passar a ler.
-		ASRResult:   asr.ASRResult{Text: d.Texto, Language: "pt-BR"},
+		ASRResult:   asr.ASRResult{Text: r.Texto, Language: "pt-BR"},
 		CloudPolicy: resolver.CloudDisabled,
-	})
-	if err != nil {
-		d.SmartFalhou = true
-		return d
 	}
-	d.Texto = out.FinalText
-	d.Substituicoes = len(out.AppliedReplacements)
-	return d
+	out, err := c.smart.Resolve(ctx, r.pedido)
+	if err != nil {
+		r.SmartFalhou = true
+		return r
+	}
+	r.resultado = out
+	r.Texto = out.FinalText
+	r.Substituicoes = len(out.AppliedReplacements)
+	return r
+}
+
+// Smart devolve o resolver do Smart da conta, para o Polish montar as guardas
+// sobre ele (polish.Montagem.Smart): elas consultam o aprendido da conta
+// localmente, e nada dele vai ao provedor.
+func (c *Conta) Smart() *resolver.SmartResolver { return c.smart }
+
+// Reescrever passa pelo Polish o ditado que ResolverParaPolir devolveu, como o PC
+// passa o resultado do Smart (resolver.PolishResolver.Reescrever, com o mesmo
+// pedido e as trocas que o Smart fez). pr é o Polish do ditado, montado sobre
+// Smart() (no servidor, polish.Montagem.Abrir); o prazo é o do ctx, de quem
+// chama.
+//
+// Devolve o resultado do Polish: FinalText é o do Polish quando Reescrito, e o do
+// Smart com o MotivoFallback quando não. Se o Smart falhou (SmartFalhou), o
+// Polish nem é chamado: sem como conferir os termos da pessoa, o texto não sai,
+// e o motivo é resolver.MotivoDicionario, como no PC quando a consulta local
+// falha. Sem Polish montado (pr nil), o motivo é resolver.MotivoSemCliente. Não
+// loga nada.
+func (c *Conta) Reescrever(ctx context.Context, pr *resolver.PolishResolver, d Resolvido) resolver.ResolveResult {
+	if d.SmartFalhou || pr == nil {
+		res := resolver.ResolveResult{RawText: d.Bruto, FinalText: d.Texto, Mode: resolver.ModePolish}
+		res.MotivoFallback = resolver.MotivoDicionario
+		if pr == nil {
+			res.MotivoFallback = resolver.MotivoSemCliente
+		}
+		return res
+	}
+	return pr.Reescrever(ctx, d.pedido, d.resultado)
 }

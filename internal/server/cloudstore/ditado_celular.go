@@ -189,6 +189,13 @@ func (a Aceite) Inclui(provedor string) bool {
 	return provedor != "" && (a.Transcricao == provedor || a.Polish == provedor)
 }
 
+// Cobre diz se o aceite deixa usar o provedor agora: vigente (em aberto e do
+// texto atual do aviso) e com o provedor no conjunto. É a conferência de todo
+// uso do provedor com a chave da conta: a do AceiteDoDitado do servidor e a da
+// gravação da chave sob a trava da conta (GravarChaveDeIAConferindo), que têm
+// de ser a mesma.
+func (a Aceite) Cobre(provedor string) bool { return a.Vigente() && a.Inclui(provedor) }
+
 // mesmoAceite diz se n é o que o aceite em aberto já registra (a versão e os
 // dois provedores): aceitar de novo o mesmo não grava uma linha nova.
 func (a Aceite) mesmoAceite(n NovoAceite) bool {

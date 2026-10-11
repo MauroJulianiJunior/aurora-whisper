@@ -30,6 +30,12 @@ const (
 	// AcessoQualquer: a sessão ou o token (o GET /me e o DELETE
 	// /devices/{id}, que com o token só alcança o próprio aparelho).
 	AcessoQualquer
+	// AcessoDitar: quem pode ditar (o POST /dictations; ADR-021, decisão A).
+	// No passo 1, só a sessão do navegador; o token de um PC é 403. O passo 2
+	// (o app nativo) acrescenta aqui o token de um aparelho Android com o
+	// escopo de ditar. NUNCA vira AcessoQualquer, que admitiria o token de um
+	// PC.
+	AcessoDitar
 )
 
 func (a Acesso) String() string {
@@ -42,6 +48,8 @@ func (a Acesso) String() string {
 		return "aparelho"
 	case AcessoQualquer:
 		return "qualquer"
+	case AcessoDitar:
+		return "ditar"
 	}
 	return "?"
 }
@@ -167,6 +175,9 @@ func (c *Cloud) proteger(rt rota) http.Handler {
 		case rt.acesso == AcessoSessao && p.Kind != KindSessao:
 			writeError(w, http.StatusForbidden, codeForbidden, "esta rota exige a sessão do navegador")
 			return
+		case rt.acesso == AcessoDitar && !podeDitar(p):
+			writeError(w, http.StatusForbidden, codeForbidden, "esta rota exige a sessão do navegador")
+			return
 		case rt.acesso == AcessoAparelho && p.Kind != KindAparelho:
 			writeError(w, http.StatusForbidden, codeForbidden, "esta rota exige o token de um aparelho")
 			return
@@ -174,6 +185,11 @@ func (c *Cloud) proteger(rt rota) http.Handler {
 		rt.h(w, r.WithContext(context.WithValue(r.Context(), principalCtxKey{}, p)))
 	})
 }
+
+// podeDitar é o AcessoDitar: no passo 1 da ADR-021, só a sessão do navegador.
+// O token de um aparelho, que hoje é sempre um PC, não dita: ele tem o push e o
+// pull do histórico inteiro, e não é ele quem grava a voz.
+func podeDitar(p Principal) bool { return p.Kind == KindSessao }
 
 // Nomes dos cookies (ADR-019, D6). O prefixo __Host- obriga Secure, Path=/ e
 // nenhum Domain: o cookie é só desta origem.

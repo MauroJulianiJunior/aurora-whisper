@@ -18,6 +18,9 @@ Base: `https://exemplo.com/api/v1` (o domínio real vem de `PUBLIC_BASE_URL`)
 - `Cache-Control: no-store` em toda resposta de `/api/v1`. Nenhum cabeçalho de CORS.
 - Proteção contra CSRF por `http.CrossOriginProtection` em todo pedido que não é `GET` nem `HEAD`
   (só `Sec-Fetch-Site` `same-origin` ou `none`). Nenhum `GET` muda estado, fora o callback do Google.
+  **Um `GET` tem efeito colateral** (ADR-021, C3-correções): `GET /ai-keys/{provedor}/models` chama o
+  provedor com a chave da conta e gasta uma ficha do limite. Como a proteção acima não o alcança, a
+  própria rota recusa o que o navegador diz não ser da própria origem (ver "As chaves da IA").
 - Com `Authorization: Bearer`, o cookie é ignorado; Bearer inválido é `401`, sem cair no cookie.
 - Texto ditado nunca vai na URL: a busca é por `POST` (abaixo).
 - Log do servidor: método, padrão da rota, status, duração e contagens. Nunca a URL crua, a query, o
@@ -29,7 +32,8 @@ Base: `https://exemplo.com/api/v1` (o domínio real vem de `PUBLIC_BASE_URL`)
   marcadas "depois".
 - **F3 (05-out-2026), o que o servidor faz** (`internal/server`, `Cloud`; ADR-019, "Decisões da F3"):
   - **Quem pode cada rota** sai de uma tabela só (`internal/server/rotas.go`): `sessão` (o cookie
-    `__Host-sessao`), `aparelho` (o Bearer do PC), `qualquer` ou `público`. Sem credencial, `401`;
+    `__Host-sessao`), `aparelho` (o Bearer do PC), `qualquer` ou `público`; e, desde a ADR-021 (C5b),
+    `ditar`, só do `POST /dictations` (no passo 1, a sessão; nunca o token de um PC). Sem credencial, `401`;
     credencial do tipo errado, `403`. O e-mail do usuário tem de estar em `CONTAS_PERMITIDAS` em toda
     credencial: fora da lista, `401`.
   - **O que não está na tabela é `404`, com qualquer método** (os padrões `/api/v1/`, `/auth/` e `/`
@@ -38,8 +42,14 @@ Base: `https://exemplo.com/api/v1` (o domínio real vem de `PUBLIC_BASE_URL`)
     o `PATCH /devices/{id}`, o renomear, continua sem montar).
   - **Cabeçalhos em toda resposta:** `Content-Security-Policy: default-src 'self'; base-uri 'none';
     object-src 'none'; frame-ancestors 'none'; form-action 'self'`, `X-Content-Type-Options: nosniff`,
-    `Referrer-Policy: no-referrer`, `Cross-Origin-Opener-Policy: same-origin`; `Strict-Transport-Security:
-    max-age=31536000` só com `PUBLIC_BASE_URL` em `https`; `Cache-Control: no-store` em `/api` e `/auth`.
+    `Referrer-Policy: no-referrer`, `Cross-Origin-Opener-Policy: same-origin`,
+    `Permissions-Policy: microphone=(self)` (**ADR-021, escolha menor 18**: o app grava o ditado do
+    celular, e o microfone fica só para a própria origem, mesmo que um dia o `frame-ancestors` deixe de
+    barrar uma moldura; é o único recurso que o app pede, e os outros ficam como o navegador os deixa);
+    `Strict-Transport-Security: max-age=31536000` só com `PUBLIC_BASE_URL` em `https`; `Cache-Control:
+    no-store` em `/api` e `/auth`. O `Permissions-Policy` sai em **toda** resposta, a do app, a das
+    páginas fixas e a da API, e o teste do PC (`scripts\deploy-teste.ps1`) confere que ele chega pela
+    borda do Traefik, sem um segundo.
   - **Host:** um `Host` diferente do de `PUBLIC_BASE_URL` é `400` (`host inválido`), menos em
     `/api/v1/health/*`.
   - **Origem cruzada:** `POST`, `PATCH`, `DELETE` com `Sec-Fetch-Site` `cross-site` ou `same-site`, ou com
@@ -50,7 +60,10 @@ Base: `https://exemplo.com/api/v1` (o domínio real vem de `PUBLIC_BASE_URL`)
     reiniciar zera. O pull, o CRUD, o `/me` e as sessões não têm limite de taxa (ADR-019, "Decisões da
     F3", riscos). **ADR-021, C3a:** as rotas das chaves da IA que chamam o provedor (o `PUT` e o `GET`
     dos modelos, juntos) têm 10 por minuto **por conta**, com o código `LIMITE` (a lista fechada do
-    ditado no celular; "As chaves da IA", abaixo).
+    ditado no celular; "As chaves da IA", abaixo). **ADR-021, C5b:** a rota de ditar tem, por conta,
+    1 ditado de cada vez (`UM_POR_VEZ`), 10 por minuto e 200 por dia (`LIMITE`), e, no total, 3 ao
+    mesmo tempo (`OCUPADO`, `503`); todos conferidos antes de ler o corpo, com `Retry-After` ("Ditar
+    pelo celular", abaixo).
 
 Erro:
 ```json
@@ -355,9 +368,9 @@ Todas só com sessão (o token do PC não alcança o CRUD).
 
 ### O ditado que nasce na nuvem (ADR-021, C1)
 O ditado do celular não vem de um PC: o servidor o transcreve e o grava. Esta seção é o contrato do
-`Store` que a rota `POST /api/v1/dictations` (C5b) vai chamar; **a rota ainda não existe**, e nada
-aqui muda o que a API responde hoje. A suíte `internal/server/contracttest` (`criar.go`) é o contrato
-executável, contra o Store em memória e o Postgres.
+`Store` que a rota `POST /api/v1/dictations` chama (**C5b**, em "Ditar pelo celular", abaixo). A
+suíte `internal/server/contracttest` (`criar.go`) é o contrato executável, contra o Store em memória e
+o Postgres.
 - **`Store.Create`** grava pelo ponto único de gravação, com a regra de criar do push (`decideCreate`)
   sobre o payload validado pelas mesmas regras do push (a lista fechada, o teto de 64 KiB, `mode`,
   `status`, `confidence`): uma linha da versão 1, o `seq` do contador e o evento `upsert` **sem
@@ -443,18 +456,30 @@ contrato executável, contra o Store em memória e o Postgres.
 
 - **Só existem com a chave de cifra** (`AI_KEYS_SECRET_FILE`, `10`; decisão O): sem ela, as três rotas
   não são montadas e caem no `404` de rota não montada (`NOT_FOUND`, "rota não encontrada"), como as
-  do aceite e das preferências (`/dictation`, abaixo) e as do ditado que vêm depois.
+  do aceite e das preferências (`/dictation`, abaixo) e a de ditar (`POST /dictations`, C5b, em "Ditar
+  pelo celular").
 - **Só com a sessão do navegador:** o token de um PC recebe `403` (`FORBIDDEN`); sem credencial, `401`.
-  O `PUT` e o `DELETE` passam pela proteção contra CSRF, como o resto.
+  O `PUT` e o `DELETE` passam pela proteção contra CSRF, como o resto. O `GET` dos modelos, que a
+  proteção não alcança, tem a regra própria de origem (abaixo).
 - **`{provedor}`** é exatamente `openai`, `groq` ou `anthropic`, em minúsculas. Outro valor é `404`
   (`NOT_FOUND`, "provedor desconhecido"), sem eco do valor, antes de qualquer outra conferência.
+- **O limite é da conta, e não da sessão:** o balde de 10 por minuto (o `PUT` e o `GET` dos modelos
+  juntos) é por `user_id`. Duas sessões da mesma conta (dois aparelhos) gastam as mesmas fichas; o 11º
+  pedido somando as duas é `429`.
+- **No servidor de teste do PC** (`aurora-whisper-server teste`, só com a build tag `logindeteste`), estas
+  rotas e as de `/dictation` existem (não são `404`): o cofre nasce com a chave de cifra aleatória do
+  processo, como o `SESSION_SECRET`, e o provedor é de mentira (sem rede; ver `10`). No build normal
+  nada disso existe, e as rotas só sobem com `AI_KEYS_SECRET_FILE`.
 - **A chave nunca vai a log, a erro, a resposta nem a URL.** O log de acesso tem só o padrão da rota, o
   status, os milissegundos, os bytes e, num erro, um motivo da lista fechada (`sem_aceite`, `sem_chave`,
-  `limite`, `provedor`, e `aviso` no `AVISO_DESATUALIZADO`); o `GET` dos modelos acrescenta a contagem
-  `modelos`, e o `DELETE /dictation/consent`, `chaves_apagadas`.
+  `limite`, `provedor`, `aviso` no `AVISO_DESATUALIZADO`, `conta_mudou` no `409` do `PUT` cuja conta
+  apagou os dados no meio e `origem_cruzada` no `GET` dos modelos de outra origem); o `GET` dos modelos
+  acrescenta a contagem `modelos`, e o `DELETE /dictation/consent`, `chaves_apagadas`.
 
 ### PUT `/ai-keys/{provedor}`
 Corpo `{ "chave": "..." }`, e nada mais. Nesta ordem:
+0. **O epoch da conta** (`sync_epoch`) é lido primeiro, antes de qualquer conferência ou chamada ao
+   provedor (a gravação, no passo 6, o confere de novo).
 1. **O aceite**, antes de ler o corpo: sem um aceite vigente do ditado no celular que inclua aquele
    provedor (decisão H), `403` `SEM_ACEITE`, sem chamar o provedor. **O aceite é o de verdade, o da
    `dictation_consents`** (C3b, `POST /dictation/consent`, abaixo): o aceite em aberto da versão atual
@@ -475,7 +500,18 @@ Corpo `{ "chave": "..." }`, e nada mais. Nesta ordem:
    seguir redirecionamento, sem repassar o corpo de erro; a Groq pela API compatível com a da OpenAI,
    `https://api.groq.com/openai/v1/models`). A falha vira um código da lista abaixo, e nada é gravado (a
    chave de antes, se havia, continua).
-6. **A cifra e a gravação** por cima da anterior.
+6. **A cifra e a gravação** por cima da anterior, **numa transação que trava a conta** (a linha do
+   usuário e o contador de sync, `05`), e só depois de conferir DE NOVO, já sob a trava, o epoch lido no
+   passo 0 e o aceite vigente do provedor. O provedor leva até 10 s para responder, e nesse tempo a
+   pessoa pode apagar os dados ou desligar o ditado em outro aparelho: a chave **nunca sobrevive** a um
+   "Apagar meus dados" nem a um revogar, nem aos que terminam durante a chamada ao provedor. Um deles
+   que esteja no meio faz a gravação esperar, ou termina antes e é visto por ela. Se a conferência
+   recusa, nada é gravado (a chave de antes, se havia, é a que o apagar ou o revogar deixou):
+   - o **epoch mudou** (a conta apagou os dados, ou o banco foi restaurado, depois do passo 0): **`409`
+     `CONFLICT`**, "os dados da conta mudaram enquanto a chave era conferida: nada foi guardado" (motivo
+     `conta_mudou` no log). A pessoa vê o estado de agora ao tentar de novo (e, sem aceite, o `403`);
+   - o **aceite deixou de valer** (revogado, de uma versão velha do aviso, ou trocado por um que não
+     cobre o provedor): **`403` `SEM_ACEITE`**, a mesma resposta do passo 1.
 
 `200` com `{ "provedor": "openai", "configurada": true, "final": "WXYZ" }`. `final` tem no máximo 4
 caracteres e nunca mais que um quarto da chave (uma chave de 8 caracteres sai com 2).
@@ -488,27 +524,53 @@ pode). `204`. As cópias cifradas nos backups ficam: a tela manda revogar a chav
 A lista de modelos que a chave **guardada** alcança, perguntada ao provedor: `200` com
 `{ "provedor": "openai", "modelos": ["...", "..."] }` (a ordem do provedor, do mais novo para o mais
 antigo; `modelos` nunca é `null`). Pede o aceite do provedor (a chave vai a ele: `403` `SEM_ACEITE`) e
-conta no limite por conta. Sem chave guardada, `409` `SEM_CHAVE` ("nenhuma chave guardada para este
+conta no limite por conta.
+
+**Só da própria origem.** É um `GET` com efeito colateral (chama o provedor com a chave guardada e gasta
+uma ficha do limite), e o `http.CrossOriginProtection` só barra os métodos que mudam estado, enquanto o
+cookie da sessão é `SameSite=Lax` (o navegador o manda numa navegação de topo vinda de outro site). Então
+a rota recusa com **`403` `FORBIDDEN`** ("pedido de outra origem", motivo `origem_cruzada` no log) o
+pedido (o `GET` e o `HEAD`, que o mux casa com o `GET`) cujo **`Sec-Fetch-Site` vem e não é exatamente
+`same-origin`**: `cross-site`, `same-site`, `none`, vazio, mais de um valor ou qualquer outro. **Sem o
+cabeçalho, passa**, para os clientes que não o mandam (o navegador de hoje sempre manda). A recusa vem
+antes do aceite, da chave, do limite e do provedor: não gasta ficha nem chama ninguém. O `fetch` do app,
+que é da própria origem, não é afetado. Sem chave guardada, `409` `SEM_CHAVE` ("nenhuma chave guardada para este
 provedor"); com a chave cifrada por outra chave de cifra (o arquivo trocou, ou o backup voltou sem ele),
 ou que não decifra com esta conta e este provedor, `409` `SEM_CHAVE` ("a chave guardada não vale mais
 neste servidor: cole a chave de novo"). Nos dois, o provedor não é chamado.
 
 ### Os códigos (a lista fechada do ditado no celular, ADR-021)
-O app decide pelo `error.code`, nunca pela frase. Os desta subfatia, com o status fixado aqui; a C5b
-fixa os da rota de ditar e usa a mesma tradução da falha do provedor (`server.FalhaDoProvedor`):
+O app decide pelo `error.code`, nunca pela frase. Os status são os mesmos em todas as rotas do ditado no
+celular (as chaves, o aceite, as preferências e a de ditar); a tradução da falha do provedor é uma só
+(`server.FalhaDoProvedor`, para o `*ia.Erro` da lista de modelos e o `*nuvem.Erro` da transcrição):
 
 | Código | Status | Quando |
 |---|---|---|
-| `SEM_ACEITE` | 403 | sem aceite vigente daquele provedor (as chaves, a lista de modelos e as preferências) |
-| `SEM_CHAVE` | 409 | sem chave guardada, ou a guardada não decifra mais |
-| `LIMITE` | 429, com `Retry-After` | o limite por conta |
-| `PROVEDOR_RECUSOU_CHAVE` | 422 | o provedor recusou a chave (`401`) ou negou a lista de modelos (`403`) |
+| `SEM_ACEITE` | 403 | sem aceite vigente daquele provedor (as chaves, a lista de modelos, as preferências e o ditado: o provedor da transcrição e, com o Polish ligado, o do Polish); **no ditado**, também o aceite revogado ou a conta que apagou os dados **durante** o ditado (o provedor foi chamado, e nada foi gravado) |
+| `SEM_CHAVE` | 409 | sem chave guardada, ou a guardada não decifra mais (no ditado, a de qualquer provedor que as preferências usam) |
+| `LIMITE` | 429, com `Retry-After` | o limite por conta (o das chaves; no ditado, o do minuto e o do dia) |
+| `UM_POR_VEZ` | 429, com `Retry-After` | **C5b:** a conta já tem um ditado em andamento (com outro id) |
+| `OCUPADO` | 503, com `Retry-After` | **C5b:** sem vaga no total (3 ditados de todas as contas ao mesmo tempo), ou o servidor desligando |
+| `PAYLOAD_TOO_LARGE` | 413 | **C5b:** o corpo acima de 1 MiB (pelo `Content-Length`, ou cortado no teto sem ele) ou a duração acima do teto |
+| `FORMATO` | 415 | **C5b:** o `Content-Type` não é `audio/webm`, o corpo é vazio, ou os primeiros bytes não são os de um webm |
+| `SEM_FALA` | 422 | **C5b:** a fala medida pelo app abaixo de 300 ms (sem chamar o provedor), ou o provedor não devolveu texto (chamado) |
+| `APAGADO` | 410 | **C5b:** o id tem lápide (o ditado foi apagado de vez) |
+| `PROVEDOR_RECUSOU_CHAVE` | 422 | o provedor recusou a chave (`401`) ou negou o acesso (`403`) |
 | `PROVEDOR_LIMITE` | 502 | o provedor recusou por limite de uso ou falta de crédito (`429`) |
-| `PROVEDOR_FORA` | 502 | qualquer outra falha do provedor: `5xx`, prazo, rede, redirecionamento, resposta inesperada |
+| `PROVEDOR_FORA` | 502 | qualquer outra falha do provedor: `5xx`, prazo, rede, redirecionamento, resposta inesperada, o `413` do provedor |
 | `AVISO_DESATUALIZADO` | 409 | **C3b:** o aceite veio com uma versão do aviso que não é a atual (o app tem o texto velho) |
 
-A lista inteira do ditado no celular (a da ADR-021, "A rota") ainda ganha, na C5b, `UM_POR_VEZ`,
-`OCUPADO`, `FORMATO`, `SEM_FALA` e `APAGADO`, e o status dos que a ADR deixa para ela.
+Fora desta lista, dois códigos do contrato geral aparecem nestas rotas (**C3-correções**): `CONFLICT`
+(`409`) no `PUT` da chave cuja conta apagou os dados enquanto o provedor respondia, e `FORBIDDEN` (`403`)
+no `GET` dos modelos de outra origem. O `409` quer dizer "releia o estado" (`GET /dictation`) e tente de
+novo; o `403` nunca acontece com o `fetch` do app, que é da própria origem. A mensagem do servidor não
+vai à tela.
+
+Na rota de ditar aparecem também, do contrato geral, `UNAUTHORIZED` (`401`), `FORBIDDEN` (`403`, o token
+de um PC), `BAD_REQUEST` (`400`: o `Ditado-Id` ou as medidas fora da forma, o corpo que não chegou
+inteiro) e `INTERNAL` (`500`: entre eles, o ditado que o provedor transcreveu e a gravação não guardou,
+que o reenvio com o mesmo id grava sem pagar de novo). A lista inteira, com a ordem das conferências,
+está em "Ditar pelo celular" (a antiga seção "ASR cloud").
 
 ## O aceite e as preferências do ditado no celular (ADR-021, C3b)
 Quem dita pelo celular **aceita um aviso específico antes de colar a chave** (decisão H): a voz de cada
@@ -1072,30 +1134,174 @@ o desfazer de um par que a nuvem já tem, que não leva texto: escolha menor 5 d
   o cursor anda; o arquivo indisponível nunca segura o cursor. O epoch e o pareamento são conferidos
   antes de o `dicionario.json` ser tocado. O detalhe está na ADR-019, "Decisões da F8".
 
-## ASR cloud
-**Depois (ADR-019):** não montada na etapa 5 (o áudio não sai do PC). Um teste prova que a rota dá
-`404`.
-### POST `/asr/transcribe`
+## Ditar pelo celular (ADR-021, C5b; a antiga "ASR cloud")
+O ditado do celular é a única forma de áudio chegar à nuvem: o app manda a voz, o servidor a repassa ao
+provedor de transcrição que a pessoa escolheu (OpenAI ou Groq, com a chave **dela**), passa o texto pelo
+Smart da conta e, se ela ligou, pelo Polish, e grava o ditado no histórico, que desce aos PCs pelo sync.
+O servidor **não transcreve** (nenhum modelo nem decodificador roda nele) e o áudio **nunca vai a
+disco, a log nem ao banco**. Código: `internal/server/ditar.go` (a rota), `ditar_trabalho.go` (o
+trabalho solto: o provedor, o Smart, o Polish e a gravação), `ditar_registro.go` (a memória: o
+andamento, o "sem fala", o pago e não gravado, as vagas e os limites) e `modelos_conhecidos.go`. A
+suíte `internal/server/chavestest` (os casos `Ditar_*`) é o contrato executável, contra o Store em
+memória e o Postgres; o desligamento é provado em `cmd/server/servir_test.go`.
 
-- multipart/stream;
-- áudio em memória/stream;
-- não persistir;
-- limite de tamanho/duração;
-- timeout;
-- provider server-side.
+**O que continua `404`:** `POST /asr/transcribe` (o gateway antigo, multipart de PCM, sem
+idempotência; o código **saiu na C5c**, junto do servidor em memória da F1-D, e o `404` é travado pelas
+suítes `authtest` e `contracttest`), `POST /resolve` e `POST /transcriptions`: o texto nunca vem do
+cliente, e o ditado só nasce pela rota abaixo. `GET`, `PUT` e `DELETE /dictations`, e qualquer coisa
+depois de `/dictations/`, também são `404`.
 
-Response:
+### POST `/dictations`
+- **Só existe com a chave de cifra** (`AI_KEYS_SECRET_FILE`, `10`), como as rotas das chaves e do
+  aceite; sem ela, `404` de rota não montada.
+- **Acesso:** o `AcessoDitar` da tabela de rotas. No passo 1, **só a sessão do navegador**; o token de
+  um PC é `403` (`FORBIDDEN`), sem credencial `401`. Nunca o "qualquer": o token de um PC tem o push e o
+  pull do histórico inteiro e não dita. O passo 2 (o app nativo) acrescenta o token de um aparelho
+  Android com o escopo de ditar. Passa pela proteção contra CSRF, como todo `POST`.
+- **O corpo é o áudio cru**, `Content-Type: audio/webm` (os parâmetros, como `;codecs=opus`, valem),
+  até **1 MiB**. Nunca multipart nem JSON. O tipo de verdade sai dos **primeiros bytes** (o cabeçalho
+  EBML e o DocType `webm`), nunca só do `Content-Type`.
+- **Os cabeçalhos** (um valor só cada; nada disso vai na URL):
+
+| Cabeçalho | O quê |
+|---|---|
+| `Ditado-Id` | o UUID v7 que o app gerou (a versão 7 e a variante do RFC 9562; maiúsculas valem e viram minúsculas). Com a conta, é a chave da idempotência; o reenvio leva sempre o mesmo |
+| `Ditado-Duracao-Ms` | a duração medida no app, em milissegundos inteiros. Vai ao ditado (`duration_ms`); acima de 125.000 (os 120 s do PC e 5 s de folga) é `413` |
+| `Ditado-Fala-Ms` | quanto do áudio o app achou que era fala, em milissegundos inteiros, até a duração. Abaixo de 300 é `422` `SEM_FALA`, sem ler o corpo nem chamar o provedor. O servidor não tem como conferir o número: é defesa contra defeito do app, não contra ataque (quem paga é a própria pessoa) |
+
+**A ordem**, com tudo o que vem antes do corpo **sem lê-lo**:
+1. A credencial (o portão da tabela de rotas).
+2. **O aceite** vigente do provedor da transcrição e, com o Polish ligado, do provedor do Polish
+   (as preferências da conta, `GET /dictation`): `403` `SEM_ACEITE`.
+3. **As chaves** desses provedores, sem decifrar (só o id da chave de cifra que cifrou a linha):
+   `409` `SEM_CHAVE` ("nenhuma chave guardada para o provedor das preferências", ou "a chave guardada
+   não vale mais neste servidor: cole a chave de novo").
+4. **O `Ditado-Id`**: `400` `BAD_REQUEST` fora da forma.
+5. **O que a nuvem tem com o id na conta** (`Store.Situacao`, que também lê o `sync_epoch`): o ditado
+   (também na lixeira) é **`200` com ele, sem chamar nada**; a lápide é **`410` `APAGADO`**.
+6. **O que a memória tem com o id na conta:** o mesmo id **em andamento** é esperado (abaixo); o mesmo
+   id que deu `SEM_FALA` nos últimos 10 minutos é `422` sem chamar o provedor; o **desfecho pago e não
+   gravado** dos últimos 10 minutos, do mesmo epoch, **só é gravado** (sem chamar o provedor nem o
+   Polish), e a resposta é `201`.
+7. **As medidas, o tipo e o tamanho:** `400` (as medidas fora da forma), `413` (a duração ou o
+   `Content-Length` acima do teto), `422` `SEM_FALA` (a fala medida), `415` `FORMATO` (o
+   `Content-Type`, ou o corpo vazio).
+8. **A vaga e os limites** (só quem pega a vaga gasta ficha; a resposta idempotente não conta): outro
+   ditado da conta em andamento é `429` `UM_POR_VEZ`; 10 por minuto e 200 por dia por conta, `429`
+   `LIMITE`; 3 ao mesmo tempo no total (os corpos na memória), `503` `OCUPADO`. Todos com `Retry-After`
+   (5 s no `UM_POR_VEZ` e no `OCUPADO`; no `LIMITE`, o tempo até a próxima ficha). Em memória: reiniciar
+   zera, como os limites do login. Os baldes são de fichas, como os outros limites (o "por dia" enche
+   200 fichas em 24 h). **Quem pega a vaga lê de novo o que a nuvem e a memória têm com o id** (os
+   passos 5 e 6): o primeiro com o mesmo id pode ter terminado entre aquelas leituras e a vaga, e o
+   reenvio não paga o provedor de novo. O ditado já gravado é `200`, a lápide é `410`, e a ficha volta
+   à conta; o `SEM_FALA` ou o pago de agora seguem o passo 6.
+9. **O corpo**, sob o prazo dele (abaixo), com `http.MaxBytesReader` (sem `Content-Length`, o que passa
+   de 1 MiB é `413`); o corpo que não chega inteiro é `400`. **Os primeiros bytes:** não é webm (outro
+   formato, ou o Matroska), `415` `FORMATO`. Nenhum dos dois chama o provedor.
+10. **O trabalho solto**, desligado da conexão (`context.WithoutCancel`): o celular cair não perde o que
+    já foi pago, e o ditado é gravado mesmo assim.
+    - O aprendido da conta (`ListLearned`): com a dica ligada nas preferências, os termos dele vão ao
+      provedor no `prompt` (`smartconta.Dica`, até 140 runas, sem par preso a domínio).
+    - **O provedor** (`internal/asr/nuvem`, montado a cada ditado, com a chave decifrada **só durante a
+      chamada**; o idioma `pt`; o multipart com `Content-Length`, sem `chunked`). A falha vira o código
+      da lista fechada; o provedor que não devolve texto é `422` `SEM_FALA` (e o reenvio em 10 minutos
+      não o chama de novo); nenhum ditado é criado.
+    - **O Smart da conta** (`smartconta`, do cache por conta; a versão do cache é um resumo dos pares
+      que o montam): o `Colapsar` e as trocas do aprendido, com o par preso a um domínio fora. Sem o
+      aprendido, segue o texto do ASR (sem o laço de repetição), e o Polish não roda.
+    - **O Polish**, com ele ligado: antes, o aceite e o epoch são conferidos **de novo** (revogado, ou a
+      conta que apagou os dados no meio: `403` `SEM_ACEITE`, sem chamar o Polish e sem gravar). O modelo
+      tem de ser um que o provedor listou (`GET /ai-keys/{provedor}/models`, o `PUT` da chave, ou uma
+      pergunta à lista feita aqui, com prazo de 3 s): senão o Polish nem é chamado
+      (`modelo_inexistente`). O adaptador é o do PC (`internal/polish`, a mesma política de esforço,
+      uma por processo), com o prazo `polish.Prazo` do texto (de 3,5 s a 8 s). O Polish que falha, ou que
+      as guardas recusam, deixa o texto do Smart, com `mode` `smart` e o `aviso`.
+    - **A gravação** (5 s): o aceite conferido de novo, e o `Store.Create` (o ponto único de gravação,
+      `Actor` sem aparelho) com o epoch lido quando o pedido pegou a vaga (a releitura do passo 8),
+      conferido **dentro** da transação que trava o
+      contador: a conta que apagou os dados no meio não grava (`403` `SEM_ACEITE`). A janela entre a
+      conferência do aceite e o `Create` é de milissegundos (ADR-021, risco 16). A gravação que falha por
+      outro motivo (o banco fora) é `500` `INTERNAL`, e **o desfecho pago fica 10 minutos na memória**:
+      o reenvio com o mesmo id só grava.
+
+**A resposta** é **`201`** com o ditado como o histórico o mostra (o mesmo item do
+`GET /transcriptions/{id}`), e o **`aviso`** quando o Polish caiu para o Smart:
 ```json
 {
-  "text": "transcrição",
-  "language": "pt-BR",
-  "confidence": 0.93,
-  "provider": "cloud-provider-id",
-  "model": "model-id",
-  "processing_ms": 380,
-  "segments": []
+  "id": "0192f6a0-...-7...", "device_id": null, "source_platform": "web",
+  "raw_text": "o texto do provedor", "final_text": "O texto final.", "mode": "polish",
+  "language": "pt-BR", "asr_provider": "openai", "asr_model": "gpt-4o-mini-transcribe",
+  "duration_ms": 4000, "processing_ms": 1830, "status": "done",
+  "created_at": "2026-10-11T12:00:00Z", "updated_at": "2026-10-11T12:00:00Z",
+  "deleted_at": null, "version": 1, "versao_em_conflito": null,
+  "aviso": "prazo"
 }
 ```
+- `source_platform` é `web` (o app nativo do passo 2 será `android`), `device_id` é nulo, `created_at`
+  é o relógio do servidor, `processing_ms` é o tempo do servidor depois do corpo, `duration_ms` é a do
+  app, `mode` é o que valeu de fato (`polish` só se a resposta do Polish passou nas guardas; senão
+  `smart`), e `asr_provider` e `asr_model` são os das preferências. `confidence` não vem (o provedor
+  não a dá).
+- **`aviso`** só vem quando o Polish estava ligado e não valeu, com o motivo da lista fechada do Polish
+  (`resolver.MotivoFallback`: `prazo`, `sem_chave`, `chave_recusada`, `sem_credito`, `limite`,
+  `modelo_inexistente`, `modelo_incompativel`, `sobrecarga`, `transporte`, `pedido_recusado`, `recusa`,
+  `truncada`, `resposta_invalida`, `json`, `formato`, `numeros`, `siglas_termos`, `palavras`, `caixa`,
+  `trecho_novo`, `dicionario`), nunca texto. O texto curto (menos de 4 palavras), que nem vai ao
+  Polish, não tem aviso.
+- **O reenvio** de um id que já está gravado é **`200`** com o ditado, sem `aviso`; o reenvio que
+  esperou o mesmo id em andamento é `200` com o `aviso` do primeiro; o que só gravou o desfecho pago é
+  `201`.
+
+**A idempotência**, por `(user_id, id)`, nunca só pelo id (o mesmo id em duas contas são dois ditados, e
+uma conta nunca espera nem recebe a resposta da outra):
+- **Em andamento:** o pedido com o mesmo id espera o primeiro terminar, **estendendo o próprio prazo de
+  escrita** (o `writeTimeout` dele conta do fim dos cabeçalhos dele), sem ler o corpo nem chamar o
+  provedor, e recebe o mesmo ditado (`200`) ou a mesma recusa. Se o primeiro parou antes do provedor (o
+  corpo dele não chegou, ou não era webm), quem esperava tenta com o próprio corpo.
+- **O que fica na memória:** o andamento e o "sem fala" guardam só o desfecho (o status, o código, o
+  aviso); o desfecho pago e não gravado guarda o que seria gravado (os textos, o modo, o provedor, o
+  modelo), porque é isso que o reenvio grava. Some em 10 minutos, no reinício, quando o epoch da conta
+  muda, no "Apagar meus dados" e no "Desligar o ditado". Nunca vai a log. Uma instância só da API
+  (ADR-021, risco 11). O Smart da conta no cache (montado com o aprendido dela) também sai no "Apagar
+  meus dados" e no "Desligar o ditado", e de novo no fim do ditado que um deles fez acabar em
+  `SEM_ACEITE`: esse trabalho leu o aprendido antes e montou o Smart depois do esquecer.
+- **O que ainda paga de novo** (ADR-021, risco 4): o prazo de 20 s que corta uma transcrição já
+  cobrada; o reinício além da espera do desligamento; o pago que passou dos 10 minutos.
+
+**Os prazos** (ADR-021, "Prazos"):
+
+| Trecho | Prazo |
+|---|---|
+| O corpo | 30 s a partir de quando o pedido pega a vaga (`SetReadDeadline` no handler; o `readTimeout` de 30 s do servidor conta do começo do pedido) |
+| A transcrição | 20 s |
+| O Smart | 5 s para ler o aprendido, e 5 s para montar (a primeira montagem de 500 pares leva cerca de 1 s) e resolver |
+| A lista de modelos do Polish | 3 s, só quando o modelo ainda não é conhecido |
+| O Polish | `polish.Prazo` do texto do Smart: de 3,5 s a 8 s |
+| A gravação | 5 s (o aceite e o `Create`) |
+| A resposta | 45 s depois do fim do corpo (`SetWriteDeadline` no handler); o trabalho solto tem o teto de 44 s, e o que passar dele depois de o provedor cobrar vira o desfecho pago e não gravado |
+| Quem espera o mesmo id | o próprio prazo de escrita estendido em 80 s (o corpo, a resposta e 5 s de folga) |
+| O desligamento | o `Shutdown` de 15 s e, depois, **até 70 s pelos trabalhos soltos** em andamento (o `serve`; escolha menor 22). Nesse tempo nenhum ditado novo pega vaga (`OCUPADO`), e as respostas que esperavam saem. O `stop_grace_period` de 90 s da API é da C5c |
+
+**O log.** A linha de acesso de sempre (o padrão da rota, o status, os ms, os bytes), com um motivo da
+lista fechada quando o pedido parou: `sem_aceite`, `sem_chave`, `id`, `cabecalho`, `duracao`,
+`sem_fala`, `formato`, `corpo_grande`, `corpo`, `um_por_vez`, `limite`, `ocupado`, `desligando`,
+`reenvio`, `regravar`, `apagado`, ou o desfecho do trabalho. E **uma linha `ditado`** por trabalho
+solto, só com contagens e códigos: `desfecho` (`criado`, `ja_existia`, `regravado`, `sem_fala`,
+`sem_aceite`, `apagado`, `sem_chave`, `formato`, `provedor_recusou_chave`, `provedor_limite`,
+`provedor_fora`, `nao_gravado`, `erro_interno`, `panico`), `duracao_ms`, `fala_ms`, `bytes`, `provedor`,
+`modelo` (o nome só se o provedor o listou; senão `outro`), `provedor_ms`, `motivo_provedor` (o motivo
+do `internal/asr/nuvem`), `termos_na_dica`, as contagens do Smart (`pares`, `pares_aplicados`,
+`pares_com_dominio`, `smart_falhou`, `lacos`, `palavras_removidas`, `substituicoes`), `polish`
+(`desligado`, `aceito`, `regravado` ou o motivo) e, com o Polish ligado, `polish_provedor`,
+`polish_modelo` (como o `modelo`), `esforco`, `tokens_entrada`, `tokens_saida` e `polish_ms`, e `ms`.
+**Nunca** o áudio, o texto, a chave, o id, o corpo de erro do provedor (a OpenAI devolve um pedaço da
+chave no `401`) nem o valor de um pânico.
+
+**A memória da API.** Com 3 vagas e o corpo de até 1 MiB, o pico de áudio fica em poucos MiB (o teste
+manda 10 ao mesmo tempo e mede: 3 corpos lidos). O corpo é lido num slice do tamanho do
+`Content-Length` (sem as cópias do crescimento de um buffer), vai ao provedor sem segunda cópia (o
+multipart de partes prontas, `internal/asr/nuvem`) e sai de escopo no fim; nenhuma estrutura de vida
+longa (a memória do registro, um erro, um pânico) o guarda.
 
 ## Resolve cloud
 **Depois (ADR-019):** não montada na etapa 5. O contexto (`context.app`, `nearby_text`) nunca vai
@@ -1177,6 +1383,9 @@ contêiner (`10-env-and-secrets.md`). Sem credencial, com qualquer `Host` (como 
 - transcription aceita ID client-side;
 - ASR `request_id` só para tracing;
 - retries não podem duplicar records.
+- **ADR-021, C5b:** o ditado do celular usa o `Ditado-Id` (UUID v7 do app) com a conta: o reenvio não
+  chama o provedor de novo se o ditado está gravado, em andamento, sem fala nos últimos 10 minutos, ou
+  pago e não gravado nos últimos 10 minutos ("Ditar pelo celular", acima).
 
 ## Android futuro
 Nenhuma rota depende de Win32.
@@ -1186,6 +1395,10 @@ Device auth/sync/ASR são cross-platform.
 **Etapa 5 (ADR-019):** o celular Android entra como PWA, o app servido pela própria nuvem, que usa as
 rotas acima com a sessão do navegador. Ele não pareia como aparelho nem usa o sync: lê e edita pelo
 CRUD.
+
+**ADR-021, C5b:** o PWA dita pelo `POST /dictations`, com a sessão. O app nativo do passo 2 (outra ADR)
+usa a mesma rota: o `AcessoDitar` passa a aceitar também o token de um aparelho Android com o escopo de
+ditar, e o ditado dele sai com `source_platform` `android` e `device_id` nulo.
 
 ## App (ADR-019)
 Fora de `/api/v1`, na mesma origem: o build da nuvem do painel (`index.html`, `/assets/*`), o

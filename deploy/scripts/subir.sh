@@ -12,7 +12,8 @@
 #
 #   1. o que tem de existir: o Docker e o compose, as duas imagens que vieram
 #      do PC (aurora-whisper-server e aurora-whisper-backup, por docker load),
-#      a pasta segredos/ (0700, com os nove arquivos) e o config.env. Um JSON
+#      a pasta segredos/ (0700, com os dez arquivos, entre eles o ai-keys-secret,
+#      que numa VPS ja no ar o criar-chave-de-cifra.sh cria) e o config.env. Um JSON
 #      do Google em recebido/ (para trocar o client, pelo roteiro) e
 #      conferido como no gerar-segredos.sh: se for o mesmo de segredos/, sai;
 #      se for outro, troca o atual no passo 8, depois do SIM, com a API
@@ -89,7 +90,7 @@ BINARIO_DA_API='/usr/local/bin/aurora-whisper-server'
 ESPERA_POSTGRES="${AW_ESPERA_POSTGRES:-120}"
 ESPERA_API="${AW_ESPERA_API:-300}"
 ESPERA_HTTPS="${AW_ESPERA_HTTPS:-180}"
-SEGREDOS_ESPERADOS='postgres-superusuario-senha postgres-aurora-senha postgres-backup-senha database-url session-secret device-token-pepper google-client.json backup-chave-publica rclone.conf'
+SEGREDOS_ESPERADOS='postgres-superusuario-senha postgres-aurora-senha postgres-backup-senha database-url session-secret device-token-pepper google-client.json ai-keys-secret backup-chave-publica rclone.conf'
 
 falhou() {
   printf 'FALHOU: %s\n' "$*" >&2
@@ -176,7 +177,14 @@ ok "o Docker, o compose e as duas imagens que vieram do PC"
 [ "$(stat -c %a "$SEGREDOS")" = 700 ] ||
   falhou "a pasta $SEGREDOS nao esta 0700 (os arquivos 0444 dentro dela ficariam visiveis para os outros usuarios)"
 for f in $SEGREDOS_ESPERADOS; do
-  [ -f "$SEGREDOS/$f" ] && [ -r "$SEGREDOS/$f" ] || falhou "falta $SEGREDOS/$f (rode o gerar-segredos.sh pelo roteiro)"
+  if ! { [ -f "$SEGREDOS/$f" ] && [ -r "$SEGREDOS/$f" ]; }; then
+    if [ "$f" = ai-keys-secret ]; then
+      # O compose declara este segredo (ADR-021, C5c): numa VPS que ja estava no
+      # ar, o gerar-segredos.sh nao o criou, e quem o cria e este passo a parte.
+      falhou "falta $SEGREDOS/$f, a chave de cifra das chaves da IA do celular: rode antes o criar-chave-de-cifra.sh pelo roteiro (bash $DEPLOY/scripts/criar-chave-de-cifra.sh). Nada foi mudado"
+    fi
+    falhou "falta $SEGREDOS/$f (rode o gerar-segredos.sh pelo roteiro)"
+  fi
 done
 [ -r "$CONFIG" ] || falhou "nao achei $CONFIG: rode antes o gerar-segredos.sh"
 url="$(do_config PUBLIC_BASE_URL)"
@@ -392,4 +400,5 @@ printf '\nOK: a nuvem esta no ar em https://%s.\n' "$dominio"
 printf 'Agora, pelo roteiro (docs/deploy-f11.md):\n'
 printf '  1. no PC, a conferencia de fora: scripts\\conferir-nuvem.ps1;\n'
 printf '  2. aqui, o primeiro backup: docker exec %s backup.sh\n' "$CONTEINER_BACKUP"
-printf '  3. se ainda nao fez, a copia do DEVICE_TOKEN_PEPPER no gerenciador de senhas.\n'
+printf '  3. se ainda nao fez, a copia do DEVICE_TOKEN_PEPPER no gerenciador de senhas;\n'
+printf '  4. ANTES do primeiro audio do celular, so lendo: o proxy e a swap (passo 10.3 e 10.4).\n'

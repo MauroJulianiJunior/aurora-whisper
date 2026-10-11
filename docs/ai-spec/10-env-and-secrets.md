@@ -25,7 +25,7 @@
 | PAINEL_DIR | Sim | **F4 (ADR-019):** a pasta do build da nuvem do painel (o app), com o `index.html` (`pnpm build:nuvem`, que sai em `web/dist-nuvem`). O servidor a lê para a memória na subida. Vazia, não é pasta, ou sem o `index.html`: saída 2, sem o caminho na mensagem. No servidor de teste do PC (`teste`, build tag `logindeteste`) também é obrigatória |
 | AI_KEYS_SECRET | Não (ou o `_FILE`) | **ADR-021, C3a:** a chave de cifra das chaves da IA que as pessoas colam no app do celular: 64 caracteres hexadecimais (32 bytes). Sem ela, o servidor sobe **sem** as rotas do ditado no celular (`404`). Ver "A chave de cifra das chaves da IA", abaixo |
 | AI_KEYS_SECRET_FILE | Não | **ADR-021, C3a:** o caminho do arquivo com o `AI_KEYS_SECRET` (o segredo montado no contêiner, `segredos/ai-keys-secret`). É a forma de produção |
-| ASR_CLOUD_PROVIDER | Não | provider. **Não usada na etapa 5** (ADR-019: ASR na nuvem é "depois") |
+| ASR_CLOUD_PROVIDER | Não | provider. **Não usada na etapa 5** (ADR-019: ASR na nuvem é "depois"). **ADR-021:** o ditado pelo celular usa o provedor e a chave **de cada pessoa**, das preferências dela, e não estas variáveis |
 | ASR_CLOUD_MODEL | Não | model. **Não usada na etapa 5** |
 | ASR_CLOUD_API_KEY | Condicional | secret. **Não usada na etapa 5** |
 | CONTEXT_PROVIDER | Não | resolver. **Não usada na etapa 5** (contexto não vai para a nuvem) |
@@ -56,7 +56,10 @@
 - **O servidor de teste (F4, 05-out-2026).** `aurora-whisper-server teste`, que só existe no binário com
   a build tag `logindeteste`, lê só `PAINEL_DIR` e, opcional, `HTTP_ADDR` (padrão `127.0.0.1:8080`,
   só loopback): guarda tudo na memória, não tem o Google nem o Postgres, e gera as duas chaves dentro
-  do processo, a cada subida, sem nunca imprimi-las. O atalho é `scripts/nuvem-local-teste.ps1`; o
+  do processo, a cada subida, sem nunca imprimi-las. **ADR-021 (C3-correções):** gera também a chave
+  de cifra das chaves da IA (a terceira, aleatória, só do processo) e usa um provedor de modelos de
+  mentira, sem rede, para as rotas `/api/v1/dictation` e `/api/v1/ai-keys` existirem no `pnpm dev`
+  (ver "A chave de cifra das chaves da IA", abaixo). O atalho é `scripts/nuvem-local-teste.ps1`; o
   roteiro, `docs/teste-manual-nuvem-f4.md`.
 - **O `serve` (F3, 05-out-2026).** `aurora-whisper-server serve` lê as variáveis acima. Uma que falta
   ou está errada encerra com saída 2 e uma linha `serve: <VARIÁVEL>: ...` que diz o que está errado,
@@ -85,9 +88,11 @@
   pasta `~/aurora-whisper/segredos/` (0700, arquivos 0444, do `gerar-segredos.sh`), montados pelo compose
   em `/run/secrets/<nome>`: `DATABASE_URL_FILE=/run/secrets/database-url`,
   `SESSION_SECRET_FILE=/run/secrets/session-secret`,
-  `DEVICE_TOKEN_PEPPER_FILE=/run/secrets/device-token-pepper` e
+  `DEVICE_TOKEN_PEPPER_FILE=/run/secrets/device-token-pepper`,
   `GOOGLE_CLIENT_SECRET_FILE=/run/secrets/google-client.json` (o JSON que o
-  `enviar-para-servidor.ps1` manda e o `gerar-segredos.sh` confere e move). O Postgres lê
+  `enviar-para-servidor.ps1` manda e o `gerar-segredos.sh` confere e move) e, **desde a C5c da ADR-021**,
+  `AI_KEYS_SECRET_FILE=/run/secrets/ai-keys-secret` (a chave de cifra das chaves da IA, abaixo; são dez
+  os arquivos de `segredos/`). O Postgres lê
   `POSTGRES_PASSWORD_FILE` (o superusuário, só para administrar), `AURORA_SENHA_FILE` e
   `AURORA_BACKUP_SENHA_FILE` (os dois papéis, pelo init). O que não é segredo vem do
   `~/aurora-whisper/config.env` (0600, fora do repositório), que o compose lê pelo `--env-file`:
@@ -95,7 +100,13 @@
   `gerar-segredos.sh`) e `PROXY_CONFIAVEL` (a sub-rede da rede `web` do Traefik, que o `subir.sh` lê
   na hora do deploy e grava ali). No contêiner, `HTTP_ADDR=0.0.0.0:8080` (a rede é só a interna e a do
   Traefik; nenhuma porta é publicada), `PAINEL_DIR=/painel`, `LOG_LEVEL=info` e `GOMEMLIMIT=200MiB`
-  (abaixo do limite de 256 MB do contêiner). O contêiner do backup recebe `B2_BUCKET`, a hora
+  (abaixo do limite de 256 MB do contêiner). **Só na API, desde a C5c (ADR-021, decisão L):** o
+  `memswap_limit` de 256 MB, igual ao `mem_limit` (sem swap: o áudio do ditado do celular passa pela
+  memória e não vai ao disco), o `ulimits` com `core: 0` (sem core dump) e o `stop_grace_period` de 90 s
+  (o `Shutdown` de 15 s mais a espera de até 70 s pelos ditados em andamento). O `memswap_limit` só vale
+  se o kernel da VPS contar a swap no cgroup, e isso se lê na VPS antes do primeiro áudio
+  (`docs/deploy-f11.md`, passo 10.4); nenhum desses valores é segredo nem variável de ambiente. O
+  contêiner do backup recebe `B2_BUCKET`, a hora
   `AW_HORA_DO_BACKUP` (06, em UTC: 03:00 em São Paulo) e os arquivos `postgres-backup-senha`,
   `backup-chave-publica` e `rclone.conf`; os padrões do `backup.sh` (`PGHOST`, `PGUSER`,
   `AW_SENHA_FILE`, `AW_CHAVE_PUBLICA`, `RCLONE_CONFIG`) já são os caminhos do compose. As variáveis
@@ -119,9 +130,44 @@
   Trocar o arquivo leva toda chave guardada a `SEM_CHAVE` (a pessoa cola de novo); duas chaves de
   cifra ao mesmo tempo ficam fora. Ela **nunca entra no banco nem no backup**, e não tem cópia fora da
   VPS (escolha menor 11): perdê-la faz cada pessoa colar a chave de novo. Na VPS, quem a cria é o
-  `deploy/scripts/criar-chave-de-cifra.sh` (`deploy/README.md`), com a saída suprimida; o compose a
-  monta em `/run/secrets/ai-keys-secret` a partir da C5c. O servidor de teste do PC (`teste`) não a
-  tem: lá, as rotas do ditado no celular são `404`.
+  `deploy/scripts/gerar-segredos.sh`, junto dos outros segredos, numa VPS **nova**, e o
+  `deploy/scripts/criar-chave-de-cifra.sh` (`deploy/README.md`), numa VPS que **já está no ar**, antes do
+  `subir.sh`; os dois com a saída suprimida. **Desde a C5c, o compose a declara e a monta em
+  `/run/secrets/ai-keys-secret`, e o `subir.sh` a exige** (ela está no `SEGREDOS_ESPERADOS`; sem o
+  arquivo ele para e aponta o `criar-chave-de-cifra.sh`): no compose de referência ela deixa de ser
+  opcional, e o `404` das rotas do ditado no celular fica só para o binário rodado sem o arquivo (um
+  compose antigo com a imagem nova). O teste do PC (`scripts\deploy-teste.ps1`) grava uma de mentira e
+  confere que `GET /api/v1/dictation` responde `401` (e não `404`) atrás da borda.
+  **O servidor de teste do PC** (`teste`, só com a build tag `logindeteste`) não lê `AI_KEYS_SECRET`
+  nem o `_FILE`: cria um cofre **por processo**, com uma chave de cifra aleatória (32 bytes, gerada a
+  cada subida como o `SESSION_SECRET` dele, nunca impressa, nunca em arquivo), e o provedor de modelos é
+  de mentira (`modelosDeTeste`, em `cmd/server/teste.go`): devolve uma lista fixa por provedor e não faz
+  chamada de rede. Uma chave que começa com `recusada`, `sem-credito` ou `fora-do-ar` faz o provedor de
+  mentira recusar a chave, ficar sem crédito ou cair (`PROVEDOR_RECUSOU_CHAVE`, `PROVEDOR_LIMITE`,
+  `PROVEDOR_FORA`), para a tela mostrar cada erro sem rede. As chaves e o aceite moram na memória do
+  processo e somem com ele. Assim as rotas do ditado no celular respondem no `pnpm dev` em vez de `404`.
+  **C5b:** a rota de ditar (`POST /api/v1/dictations`) também responde lá, com a transcrição e o Polish
+  de mentira (`vozDeMentira` e `polishDeMentira`, os transportes dos clientes, sem rede): o áudio é lido
+  na memória e jogado fora, o texto é sempre o mesmo, inventado (`TextoDeMentira`), o Polish devolve o
+  texto com a primeira letra maiúscula e um ponto no fim, e as mesmas chaves de mentira fazem cada
+  provedor recusar, ficar sem crédito ou cair.
+  **Nada disso existe no build normal:** o cofre aleatório e os provedores de mentira estão num arquivo
+  que só compila com a tag, o `serve` só sobe as rotas com `AI_KEYS_SECRET_FILE` e fala com os
+  provedores de verdade (`server.ModelosPelaRede`, e os clientes da transcrição e do Polish no valor
+  zero), e `cmd/server/teste_off_test.go` (que roda sem a tag) lê o código e falha se um arquivo do
+  build normal declarar um deles.
+- **O ditado pelo celular (ADR-021, C5b, 11-out-2026).** Nenhuma variável nova: a rota de ditar existe
+  com a mesma chave de cifra das chaves da IA (sem ela, `404`). Ela fala, **com a chave de cada pessoa**
+  (decifrada só durante a chamada, nunca guardada em claro, em variável de ambiente nem em log), com
+  `api.openai.com` ou `api.groq.com` (a transcrição) e com `api.openai.com` ou `api.anthropic.com` (o
+  Polish), sempre por HTTPS e HTTP/1.1, sem seguir redirecionamento: o contêiner da API precisa de saída
+  para esses endereços. As antigas `ASR_CLOUD_*` continuam sem uso (o servidor não tem chave de
+  provedor própria). Os limites (1 ditado de cada vez, 10 por minuto e 200 por dia por conta, 3 ao mesmo
+  tempo no total) e os prazos (o corpo em 30 s, a transcrição em 20 s, a resposta em 45 s depois do
+  corpo) são constantes do código, não configuração. **O desligamento** do `serve` espera, depois do
+  `Shutdown` de 15 s, até **70 s** pelos ditados em andamento (o provedor, o Smart, o Polish e a
+  gravação, que seguem sem a conexão), e só então fecha o pool: o `stop_grace_period` da API passa a
+  90 s na C5c (escolha menor 22).
 - **O `healthcheck` (F11c).** `aurora-whisper-server healthcheck` faz `GET` no `/api/v1/health/live`
   em `127.0.0.1` (ou no loopback de `HTTP_ADDR`), na porta de `HTTP_ADDR`, com prazo de 3 s, sem proxy e
   sem seguir redirecionamento, e sai com 0 ou 1 (nunca 2, que o Docker reserva): a imagem não tem shell

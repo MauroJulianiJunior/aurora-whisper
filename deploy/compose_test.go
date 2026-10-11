@@ -203,7 +203,7 @@ func TestCompose_Segredos(t *testing.T) {
 	}
 	for svc, quero := range map[string]string{
 		svcPostgres: "postgres-aurora-senha postgres-backup-senha postgres-superusuario-senha",
-		svcAPI:      "database-url device-token-pepper google-client.json session-secret",
+		svcAPI:      "ai-keys-secret database-url device-token-pepper google-client.json session-secret",
 		svcBackup:   "backup-chave-publica postgres-backup-senha rclone.conf",
 	} {
 		if got := strings.Join(ordenar(listaYAML(t, raiz, "services", svc, "secrets")), " "); got != quero {
@@ -301,6 +301,7 @@ func TestCompose_API(t *testing.T) {
 		"SESSION_SECRET_FILE":       "/run/secrets/session-secret",
 		"DEVICE_TOKEN_PEPPER_FILE":  "/run/secrets/device-token-pepper",
 		"GOOGLE_CLIENT_SECRET_FILE": "/run/secrets/google-client.json",
+		"AI_KEYS_SECRET_FILE":       "/run/secrets/ai-keys-secret",
 	} {
 		if env[k] != v {
 			t.Errorf("%s=%q, quero %q", k, env[k], v)
@@ -314,7 +315,8 @@ func TestCompose_API(t *testing.T) {
 	for k := range env {
 		switch k {
 		case "PUBLIC_BASE_URL", "CONTAS_PERMITIDAS", "PROXY_CONFIAVEL", "HTTP_ADDR", "PAINEL_DIR", "LOG_LEVEL",
-			"DATABASE_URL_FILE", "SESSION_SECRET_FILE", "DEVICE_TOKEN_PEPPER_FILE", "GOOGLE_CLIENT_SECRET_FILE", "GOMEMLIMIT":
+			"DATABASE_URL_FILE", "SESSION_SECRET_FILE", "DEVICE_TOKEN_PEPPER_FILE", "GOOGLE_CLIENT_SECRET_FILE",
+			"AI_KEYS_SECRET_FILE", "GOMEMLIMIT":
 		default:
 			t.Errorf("variável inesperada na API: %s", k)
 		}
@@ -350,14 +352,112 @@ func TestCompose_API(t *testing.T) {
 	if inicio == nil || duracao(t, api("healthcheck", "start_period")) < duracao(t, inicio[1]) {
 		t.Error("o start_period da API cobre a primeira rodada (pelo menos o da imagem)")
 	}
-	if duracao(t, api("stop_grace_period")) < 20*time.Second {
-		t.Error("o desligamento limpo leva até 15 s: stop_grace_period de 20 s ou mais")
-	}
+	// O stop_grace_period tem teste próprio (TestCompose_DesligamentoDaAPI):
+	// ele cobre também a espera dos ditados em andamento.
 	if api("mem_limit") != "256m" {
 		t.Error("a API com ~256 MB")
 	}
 	if !strings.HasPrefix(env["GOMEMLIMIT"], "200") {
 		t.Error("o GOMEMLIMIT abaixo do limite do contêiner")
+	}
+}
+
+// A chave de cifra das chaves da IA do celular (ADR-021, decisão O e C5c): o
+// segredo é declarado como os outros e montado SÓ na API, que lê o caminho por
+// AI_KEYS_SECRET_FILE. Com o arquivo as rotas do ditado no celular existem; sem
+// ele o servidor as deixaria em 404, e por isso o compose o exige. Os três
+// lugares que sabem o nome do arquivo (o gerar-segredos.sh de uma VPS nova, o
+// criar-chave-de-cifra.sh de uma VPS que já está no ar e o SEGREDOS_ESPERADOS
+// do subir.sh) têm de dizer o mesmo que o compose.
+func TestCompose_ChaveDeCifraDaIA(t *testing.T) {
+	raiz := compose(t)
+	const nome = "ai-keys-secret"
+	if f := textoYAML(t, raiz, "secrets", nome, "file"); f != "${AW_SEGREDOS:-../segredos}/"+nome {
+		t.Errorf("o segredo %s vem de %q", nome, f)
+	}
+	for _, svc := range []string{svcPostgres, svcBackup} {
+		for _, s := range listaYAML(t, raiz, "services", svc, "secrets") {
+			if s == nome {
+				t.Errorf("%s monta a chave de cifra: só a API a lê", svc)
+			}
+		}
+	}
+	montada := false
+	for _, s := range listaYAML(t, raiz, "services", svcAPI, "secrets") {
+		montada = montada || s == nome
+	}
+	if !montada {
+		t.Errorf("a API não monta o segredo %s", nome)
+	}
+	if got := ambiente(t, raiz, svcAPI)["AI_KEYS_SECRET_FILE"]; got != "/run/secrets/"+nome {
+		t.Errorf("AI_KEYS_SECRET_FILE=%q, quero /run/secrets/%s", got, nome)
+	}
+	// O servidor lê esta variável (com o sufixo _FILE) e cria o cofre com ela.
+	exigirContem(t, "cmd/server/config.go", ler(t, "cmd/server/config.go"), `envAIKeysSecret = "AI_KEYS_SECRET"`)
+	// Os três lugares que falam do arquivo dizem o mesmo nome.
+	if got := constanteDoScript(t, criarChaveDeCifra, "NOME"); got != nome {
+		t.Errorf("o criar-chave-de-cifra.sh grava %q, o compose monta %q", got, nome)
+	}
+	exigirContem(t, gerarSegredos, ler(t, gerarSegredos), "gravar "+nome+` "$chave_de_cifra"`)
+	achou := false
+	for _, f := range strings.Fields(constanteDoScript(t, subirSh, "SEGREDOS_ESPERADOS")) {
+		achou = achou || f == nome
+	}
+	if !achou {
+		t.Errorf("o subir.sh não exige o %s", nome)
+	}
+}
+
+// A API não manda o áudio nem a chave decifrada para o disco (ADR-021, decisão
+// L): sem swap no contêiner (memswap_limit igual ao mem_limit) e sem core dump
+// (ulimits core 0). O memswap_limit só vale se o kernel da VPS contar a swap
+// no cgroup: quem confere isso é a leitura do roteiro, antes do primeiro
+// áudio (docs/deploy-f11.md, passo 10.4); aqui se confere o que o compose pede.
+func TestCompose_APISemSwapNemCoreDump(t *testing.T) {
+	raiz := compose(t)
+	api := func(c ...string) string { return textoYAML(t, raiz, append([]string{"services", svcAPI}, c...)...) }
+	mem, swap := api("mem_limit"), api("memswap_limit")
+	if !regexp.MustCompile(`^\d+m$`).MatchString(mem) || swap != mem {
+		t.Errorf("memswap_limit %q, quero igual ao mem_limit (%q): memória e swap somam o mesmo teto, e a swap fica em 0", swap, mem)
+	}
+	ul := mapaYAML(t, raiz, "services", svcAPI, "ulimits")
+	if len(ul) != 1 || ul["core"] != "0" {
+		t.Errorf("ulimits da API %v, quero só core: 0", ul)
+	}
+	// O GOMEMLIMIT segura o heap abaixo do teto do contêiner.
+	if !strings.HasPrefix(ambiente(t, raiz, svcAPI)["GOMEMLIMIT"], "200") {
+		t.Error("o GOMEMLIMIT abaixo do limite do contêiner")
+	}
+	// A imagem não grava core por conta própria: o GOTRACEBACK=crash (que
+	// pediria o core) não está no compose.
+	exigirNaoContem(t, composeYml, codigo(ler(t, composeYml)), "GOTRACEBACK")
+}
+
+// O desligamento da API (ADR-021, escolha menor 22): o serve espera o Shutdown
+// (15 s) e, depois, os ditados em andamento (70 s). O stop_grace_period do
+// compose tem de cobrir os dois, senão o Docker mata o processo no meio de um
+// ditado que o provedor já cobrou. Os dois números vêm do cmd/server/serve.go.
+func TestCompose_DesligamentoDaAPI(t *testing.T) {
+	raiz := compose(t)
+	serve := ler(t, "cmd/server/serve.go")
+	segundos := func(nome string) time.Duration {
+		m := regexp.MustCompile(`(?m)\b` + nome + `\s*=\s*(\d+) \* time\.Second$`).FindStringSubmatch(serve)
+		if m == nil {
+			t.Fatalf("o cmd/server/serve.go não define %s em segundos", nome)
+		}
+		n, err := strconv.Atoi(m[1])
+		if err != nil {
+			t.Fatal(err)
+		}
+		return time.Duration(n) * time.Second
+	}
+	desligar, ditados := segundos("shutdownTimeout"), segundos("esperaDosDitados")
+	grace := duracao(t, textoYAML(t, raiz, "services", svcAPI, "stop_grace_period"))
+	if grace != 90*time.Second {
+		t.Errorf("stop_grace_period %v, quero 90 s (a escolha menor 22 da ADR-021)", grace)
+	}
+	if grace < desligar+ditados {
+		t.Errorf("stop_grace_period %v não cobre o Shutdown (%v) mais a espera dos ditados (%v)", grace, desligar, ditados)
 	}
 }
 

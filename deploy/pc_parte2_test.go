@@ -146,6 +146,16 @@ func TestPC2_DeployTesteConfereOQueAADRPede(t *testing.T) {
 		"--exit-on-error --single-transaction", "'pos-restauracao', '-confirmo'",
 		"($epochOriginal.Texto -ne $EpochAntes)", "($epochRestaurado.Texto -eq $EpochAntes)",
 	)
+	// ADR-021, C5c: o compose declara a chave de cifra, então o teste do PC a
+	// grava (sem o arquivo o "docker compose up" falha), confere que as rotas do
+	// ditado no celular existem atrás da borda (sem a chave elas dariam 404) e
+	// que o Permissions-Policy do servidor chega pela borda.
+	exigirContem(t, deployTeste, c,
+		"Gravar (Join-Path $PastaSegredos 'ai-keys-secret') ((Hex-Aleatorio 32) + \"`n\")",
+		"$PermissionsPolicyDoServidor = 'microphone=(self)'",
+		"($microfone.Count -ne 1) -or ($microfone[0] -ne $PermissionsPolicyDoServidor)",
+		"Pedir ('https://' + $Dominio + '/api/v1/dictation') $nosso", "($ditado.Codigo -ne 401)")
+	exigirContem(t, "internal/server/seguranca.go", ler(t, "internal/server/seguranca.go"), `const permissionsPolicy = "microphone=(self)"`)
 	// Os nomes que o teste lê no log são os que o servidor escreve.
 	exigirContem(t, "internal/server/nuvem.go", ler(t, "internal/server/nuvem.go"), `c.log.Info("arrumação", "logins_pendentes"`, `"lapides_criadas"`)
 	exigirContem(t, "cmd/server/serve.go", ler(t, "cmd/server/serve.go"), `logger.Info("servindo"`, `"proxy_confiavel", cfg.proxy.Ligado()`)

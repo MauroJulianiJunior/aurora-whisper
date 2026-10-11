@@ -60,6 +60,52 @@ func Run(t *testing.T, b Backend) {
 		{"Ditado_SemOArquivoAsRotasDao404", testDitadoSemOArquivo},
 		{"Ditado_OStoreGuardaLeELista", testDitadoStore},
 		{"Ditado_GravacoesAoMesmoTempoNaoDeixamDoisAceitesEmAberto", testDitadoConcorrencia},
+
+		// As correções da C3a e da C3b (C3-correções; corridas.go): a chave não
+		// sobrevive a um apagar nem a um revogar que terminam durante a chamada ao
+		// provedor, o GET dos modelos só atende a própria origem, e o limite é da conta.
+		{"Correcoes_ApagarDuranteOProvedorNaoGravaAChave", testApagarDuranteOProvedor},
+		{"Correcoes_ApagarEAceitarDeNovoDuranteOProvedorNaoGravaAChave", testApagarEAceitarDuranteOProvedor},
+		{"Correcoes_RevogarDuranteOProvedorNaoGravaAChave", testRevogarDuranteOProvedor},
+		{"Correcoes_AceiteTrocadoDuranteOProvedorNaoGravaAChave", testAceiteTrocadoDuranteOProvedor},
+		{"Correcoes_GravacaoConferidaNoStore", testGravacaoConferida},
+		{"Correcoes_GravarEApagarOuRevogarAoMesmoTempoNaoDeixamChave", testGravacaoEmCorrida},
+		{"Correcoes_ModelosSoDaMesmaOrigem", testModelosSoDaMesmaOrigem},
+		{"Correcoes_DuasSessoesDaMesmaContaDividemOLimite", testLimiteDuasSessoesDaMesmaConta},
+
+		// A rota de ditar (C5b; ditar.go, ditar_idempotencia.go, ditar_prazos.go).
+		{"Ditar_CriaODitadoPelaSessaoSemAparelho", testDitarCria},
+		{"Ditar_SoComASessaoETokenDeUmPCDa403", testDitarSoComSessao},
+		{"Ditar_SemOArquivoA404", testDitarSemOArquivo},
+		{"Ditar_SemAceiteDaTranscricaoOuDoPolish", testDitarSemAceite},
+		{"Ditar_SemChave", testDitarSemChave},
+		{"Ditar_GrandeDemais413SemLerOCorpo", testDitarGrandeDemais},
+		{"Ditar_Formato415", testDitarFormato},
+		{"Ditar_CabecalhosEId400", testDitarCabecalhos},
+		{"Ditar_SemFala422EORepetidoNaoChama", testDitarSemFala},
+		{"Ditar_FalhasDoProvedorViramCodigos", testDitarFalhasDoProvedor},
+		{"Ditar_AsRotasAntigasContinuam404", testDitarRotasAntigas404},
+		{"Ditar_DicaESmartDaConta", testDitarDicaESmart},
+		{"Ditar_PolishAceito", testDitarPolishAceito},
+		{"Ditar_PolishQueFalhaGravaOSmart", testDitarPolishQueFalha},
+		{"Ditar_PolishComModeloQueOProvedorNaoLista", testDitarPolishModeloDesconhecido},
+		{"Ditar_Idempotencia_DoisEnviosUmaChamadaEDuasContasDuas", testDitarMesmoIdUmaChamada},
+		{"Ditar_Idempotencia_ReenvioDuranteOAndamento", testDitarReenvioDuranteOAndamento},
+		{"Ditar_Idempotencia_ReenvioQueChegaNoFimDoPrimeiro", testDitarReenvioQueChegaNoFimDoPrimeiro},
+		{"Ditar_Idempotencia_CelularCaiDepoisDoProvedor", testDitarCelularCaiDepoisDoProvedor},
+		{"Ditar_Idempotencia_GravacaoQueFalhaUmaVez", testDitarGravacaoQueFalhaUmaVez},
+		{"Ditar_Idempotencia_LapideDa410", testDitarLapide},
+		{"Ditar_Limites_11NoMinuto", testDitarLimitePorMinuto},
+		{"Ditar_Limites_PorDia", testDitarLimitePorDia},
+		{"Ditar_Limites_UmPorVezEOcupado", testDitarUmPorVezEOcupado},
+		{"Ditar_Memoria_DezAoMesmoTempoNuncaLeemMaisQueTres", testDitarDezAoMesmoTempo},
+		{"Ditar_Corridas_RevogarDuranteOProvedor", testDitarRevogarDuranteOProvedor},
+		{"Ditar_Corridas_AceiteSemOPolishNoMeio", testDitarAceiteSemOPolishNoMeio},
+		{"Ditar_Corridas_ApagarMeusDadosDuranteOProvedor", testDitarApagarDuranteOProvedor},
+		{"Ditar_Corridas_ApagarOuDesligarNoMeioEsqueceOSmart", testDitarApagarOuDesligarNoMeioEsqueceOSmart},
+		{"Ditar_Prazos_CorpoLento", testDitarCorpoLento},
+		{"Ditar_Prazos_QuemEsperaPassaDoWriteTimeout", testDitarQuemEsperaPassaDoWriteTimeout},
+		{"Ditar_Canario", testDitarCanario},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) { c.fn(t, novoMundo(t, b)) })

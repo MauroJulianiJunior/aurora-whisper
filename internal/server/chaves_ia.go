@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/MauroJulianiJunior/aurora-whisper/internal/asr/nuvem"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/chavedeapi"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/ia"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/server/cloudstore"
@@ -46,6 +47,9 @@ const (
 	FraseDoCorpoDaChave = `corpo inválido: mande só {"chave": "..."}`
 	// FraseDoCorpoGrande é a do corpo acima de maxCorpoDaChave.
 	FraseDoCorpoGrande = "corpo grande demais para uma chave de API"
+	// FraseDaContaQueMudou é a do 409 CONFLICT do PUT cuja conta apagou os
+	// dados (ou teve o banco restaurado) enquanto o provedor respondia.
+	FraseDaContaQueMudou = "os dados da conta mudaram enquanto a chave era conferida: nada foi guardado"
 )
 
 // maxCorpoDaChave: a maior chave (chavedeapi.TamanhoMaximo, 2560 bytes) com
@@ -110,15 +114,18 @@ func (m ModelosPelaRede) ListarModelos(ctx context.Context, provedor, chave stri
 }
 
 // rotasDoDitado são as rotas que só existem com a chave de cifra (ADR-021,
-// decisão O): as das chaves da IA (C3a) e as das preferências e do aceite
-// (/dictation, C3b); a C5b acrescenta a de ditar aqui. Sem o cofre, nenhuma é
-// montada, e todas caem no 404 de rota não montada. Todas só da sessão do
-// navegador.
+// decisão O): as das chaves da IA (C3a), as das preferências e do aceite
+// (/dictation, C3b) e a de ditar (/dictations, C5b; ditar.go). Sem o cofre,
+// nenhuma é montada, e todas caem no 404 de rota não montada. Todas só da
+// sessão do navegador: a de ditar pelo AcessoDitar, que no passo 1 é a sessão e
+// nunca o token de um PC.
 func (c *Cloud) rotasDoDitado() []rota {
 	if c.cofre == nil {
 		return nil
 	}
 	return []rota{
+		{"POST /api/v1/dictations", AcessoDitar, c.handleDitar},
+
 		{"PUT /api/v1/ai-keys/{provedor}", AcessoSessao, c.handleGravarChaveDeIA},
 		{"DELETE /api/v1/ai-keys/{provedor}", AcessoSessao, c.handleApagarChaveDeIA},
 		{"GET /api/v1/ai-keys/{provedor}/models", AcessoSessao, c.handleModelosDaChaveDeIA},
@@ -144,14 +151,30 @@ type chaveDeIARequest struct {
 	Chave string `json:"chave"`
 }
 
-// handleGravarChaveDeIA é o PUT /ai-keys/{provedor}: o aceite (antes de ler
-// o corpo), a chave do corpo, as regras de chavedeapi.Validar, o limite por
-// conta, o teste no provedor (a lista de modelos), a cifra e a gravação por
-// cima da anterior. 200 com o provedor, configurada e o fim.
+// handleGravarChaveDeIA é o PUT /ai-keys/{provedor}: o epoch da conta (lido
+// primeiro), o aceite (antes de ler o corpo), a chave do corpo, as regras de
+// chavedeapi.Validar, o limite por conta, o teste no provedor (a lista de
+// modelos), a cifra e a gravação por cima da anterior. 200 com o provedor,
+// configurada e o fim.
+//
+// O provedor leva até 10 s para responder, e nesse tempo a pessoa pode apagar
+// os dados da conta, ou desligar o ditado, em outro aparelho. Por isso a
+// gravação não confia no que foi lido no começo: ela confere de novo o epoch
+// (lido aqui, antes de tudo) e o aceite DENTRO da transação que trava a conta
+// (GravarChaveDeIAConferindo). A chave nunca sobrevive a um apagar nem a um
+// revogar, nem os que terminam durante a chamada ao provedor.
 func (c *Cloud) handleGravarChaveDeIA(w http.ResponseWriter, r *http.Request) {
 	p, _ := principalFromContext(r.Context())
 	provedor, ok := provedorDaRota(w, r)
-	if !ok || !c.conferirAceite(w, r, p.UserID, provedor) {
+	if !ok {
+		return
+	}
+	epoch, err := c.cfg.ChavesDeIA.EpochDaConta(r.Context(), p.UserID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, codeInternal, "falha interna")
+		return
+	}
+	if !c.conferirAceite(w, r, p.UserID, provedor) {
 		return
 	}
 	colada, ok := lerCorpoDaChave(w, r)
@@ -166,20 +189,38 @@ func (c *Cloud) handleGravarChaveDeIA(w http.ResponseWriter, r *http.Request) {
 	if !c.permitirChaves(w, r, p.UserID) {
 		return
 	}
-	if _, err := c.cfg.Modelos.ListarModelos(r.Context(), provedor, chave); err != nil {
+	modelos, err := c.cfg.Modelos.ListarModelos(r.Context(), provedor, chave)
+	if err != nil {
 		writeFalhaDoProvedor(w, r, err)
 		return
 	}
+	// A lista que o provedor deu é a dos modelos que o ditado aceita sem
+	// perguntar de novo (modelos_conhecidos.go).
+	c.conhecidos.anotar(provedor, modelos)
 	selada, err := c.cofre.Selar(p.UserID, provedor, chave)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, codeInternal, "falha interna")
 		return
 	}
-	k, err := c.cfg.ChavesDeIA.GravarChaveDeIA(r.Context(), p.UserID, cloudstore.ChaveDeIA{
-		Provedor: provedor, IDDaCifra: selada.IDDaCifra, Nonce: selada.Nonce, Cifrado: selada.Cifrado,
-		Final: chavedeapi.Final(chave),
-	}, c.now())
-	if err != nil {
+	k, err := c.cfg.ChavesDeIA.GravarChaveDeIAConferindo(r.Context(), p.UserID,
+		cloudstore.CondicaoDaChave{Epoch: epoch, ExigeAceite: c.aceiteNaGravacao},
+		cloudstore.ChaveDeIA{
+			Provedor: provedor, IDDaCifra: selada.IDDaCifra, Nonce: selada.Nonce, Cifrado: selada.Cifrado,
+			Final: chavedeapi.Final(chave),
+		}, c.now())
+	switch {
+	case errors.Is(err, cloudstore.ErrEpochChanged):
+		// A conta apagou os dados enquanto o provedor respondia: nada foi
+		// guardado. A pessoa vê o estado de agora ao tentar de novo.
+		anotarMotivo(r.Context(), "conta_mudou")
+		writeError(w, http.StatusConflict, codeConflict, FraseDaContaQueMudou)
+		return
+	case errors.Is(err, cloudstore.ErrSemAceite):
+		// O aceite foi revogado (ou trocado por um que não cobre o provedor)
+		// enquanto o provedor respondia: a mesma recusa da conferência do começo.
+		c.negarSemAceite(w, r)
+		return
+	case err != nil:
 		writeError(w, http.StatusInternalServerError, codeInternal, "falha interna")
 		return
 	}
@@ -206,10 +247,19 @@ func (c *Cloud) handleApagarChaveDeIA(w http.ResponseWriter, r *http.Request) {
 // handleModelosDaChaveDeIA é o GET /ai-keys/{provedor}/models: a lista de
 // modelos que a chave guardada alcança, perguntada ao provedor. Pede o aceite
 // (a chave vai ao provedor) e conta no limite por conta.
+//
+// É um GET com efeito colateral: chama o provedor com a chave da conta e gasta
+// uma ficha do limite. O http.CrossOriginProtection só barra os métodos que
+// mudam estado, e o cookie da sessão é SameSite=Lax, que o navegador manda numa
+// navegação de topo vinda de outro site. Então esta rota recusa o pedido que o
+// navegador diz não ser da própria origem (Sec-Fetch-Site presente e diferente
+// de same-origin): 403, antes do aceite, da chave e do limite. O que não manda o
+// cabeçalho (um cliente que não é navegador) passa. A resposta nem seria lida
+// pelo outro site; o que se evita é o gasto da chave e das fichas.
 func (c *Cloud) handleModelosDaChaveDeIA(w http.ResponseWriter, r *http.Request) {
 	p, _ := principalFromContext(r.Context())
 	provedor, ok := provedorDaRota(w, r)
-	if !ok || !c.conferirAceite(w, r, p.UserID, provedor) {
+	if !ok || !c.somenteDaMesmaOrigem(w, r) || !c.conferirAceite(w, r, p.UserID, provedor) {
 		return
 	}
 	chave, err := c.chaveDeIA(r.Context(), p.UserID, provedor)
@@ -228,6 +278,7 @@ func (c *Cloud) handleModelosDaChaveDeIA(w http.ResponseWriter, r *http.Request)
 	if modelos == nil {
 		modelos = []string{}
 	}
+	c.conhecidos.anotar(provedor, modelos)
 	anotarContagens(r.Context(), "modelos", len(modelos))
 	writeJSON(w, http.StatusOK, map[string]any{"provedor": provedor, "modelos": modelos})
 }
@@ -288,11 +339,17 @@ func (c *Cloud) conferirAceite(w http.ResponseWriter, r *http.Request, userID, p
 		writeError(w, http.StatusInternalServerError, codeInternal, "falha interna")
 		return false
 	case !ok:
-		anotarMotivo(r.Context(), "sem_aceite")
-		writeError(w, http.StatusForbidden, codeSemAceite, "aceite o aviso do ditado no celular para este provedor antes")
+		c.negarSemAceite(w, r)
 		return false
 	}
 	return true
+}
+
+// negarSemAceite é a resposta 403 SEM_ACEITE, a mesma na conferência do começo
+// e na da gravação.
+func (c *Cloud) negarSemAceite(w http.ResponseWriter, r *http.Request) {
+	anotarMotivo(r.Context(), "sem_aceite")
+	writeError(w, http.StatusForbidden, codeSemAceite, "aceite o aviso do ditado no celular para este provedor antes")
 }
 
 // lerCorpoDaChave lê {"chave": "..."} e nada mais. QUALQUER erro de
@@ -365,18 +422,30 @@ func (c *Cloud) permitirChaves(w http.ResponseWriter, r *http.Request, userID st
 
 // FalhaDoProvedor é o que uma falha do provedor vira para o app: o status, o
 // código da lista fechada e uma frase fixa. Nunca a mensagem do erro, que não
-// sai daqui. A rota do ditado (C5b) usa a mesma tradução.
+// sai daqui. A rota de ditar (C5b; ditar.go) usa a mesma tradução: além do
+// *ia.Erro (a lista de modelos), ela recebe o *nuvem.Erro da transcrição, com
+// os mesmos motivos e dois a mais (sem_chave, que é SEM_CHAVE, e
+// arquivo_grande, que é PROVEDOR_FORA: o teto do corpo fica muito abaixo do
+// do provedor).
 func FalhaDoProvedor(err error) (status int, code, frase string) {
 	var e *ia.Erro
-	if errors.As(err, &e) {
-		switch e.Motivo {
-		case ia.MotivoChaveRecusada, ia.MotivoSemPermissao:
-			return http.StatusUnprocessableEntity, codeProvedorRecusouChave,
-				"o provedor recusou a chave: confira se ela foi copiada inteira, se está ativa e se pode listar os modelos"
-		case ia.MotivoLimite:
-			return http.StatusBadGateway, codeProvedorLimite,
-				"o provedor recusou por limite de uso ou falta de crédito: confira o saldo e tente de novo em alguns minutos"
-		}
+	var v *nuvem.Erro
+	motivo := ""
+	switch {
+	case errors.As(err, &e):
+		motivo = string(e.Motivo)
+	case errors.As(err, &v):
+		motivo = string(v.Motivo)
+	}
+	switch motivo {
+	case string(ia.MotivoChaveRecusada), string(ia.MotivoSemPermissao):
+		return http.StatusUnprocessableEntity, codeProvedorRecusouChave,
+			"o provedor recusou a chave: confira se ela foi copiada inteira, se está ativa e se pode listar os modelos"
+	case string(ia.MotivoLimite):
+		return http.StatusBadGateway, codeProvedorLimite,
+			"o provedor recusou por limite de uso ou falta de crédito: confira o saldo e tente de novo em alguns minutos"
+	case string(nuvem.MotivoSemChave):
+		return http.StatusConflict, codeSemChave, "a chave guardada não vale mais neste servidor: cole a chave de novo"
 	}
 	return http.StatusBadGateway, codeProvedorFora, "o provedor não respondeu como devia: tente de novo mais tarde"
 }

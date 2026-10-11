@@ -128,6 +128,18 @@ Unique `(user_id, install_id)`.
 >   mostra a lápide), junto com o epoch da conta.
 >
 > Não há coluna de áudio nem de contexto: o áudio só existe em memória, durante o pedido (ADR-021).
+>
+> **ADR-021, C5b (11-out-2026): o que a rota de ditar grava** (`POST /api/v1/dictations`, `06`, "Ditar
+> pelo celular"). Sem migration nem tabela nova. A linha é a do `Create` acima, com: `source_platform`
+> `web`; `raw_text` o texto do provedor de transcrição como chegou; `final_text` o do Smart da conta
+> ou, quando o Polish valeu, o do Polish; `mode` `polish` só nesse caso, senão `smart`; `language`
+> `pt-BR`; `asr_provider` e `asr_model` os das preferências da conta (`openai` ou `groq`);
+> `duration_ms` a duração que o app mediu (cabeçalho `Ditado-Duracao-Ms`, até 125 s); `processing_ms`
+> o tempo do servidor depois do corpo; `confidence` nulo. O `sync_epoch` esperado é o que o
+> `Situacao` leu antes de o corpo ser lido. **A idempotência do ditado (o andamento, o "sem fala" e o
+> desfecho pago e não gravado) mora na memória do processo, não no banco** (ADR-021, risco 11: duas
+> instâncias da API exigiriam levá-la ao banco); o desfecho pago guarda o texto por até 10 minutos e
+> nunca vai a log.
 
 ### DictionaryEntry
 - id uuid
@@ -409,6 +421,24 @@ e nenhuma guarda áudio (o `schema_test.go` confere).
   as linhas da conta (`pgstore.apagarDaConta`). As cópias cifradas de uma chave trocada ou removida
   ficam nos backups (cerca de 30 dias) e no banco da restauração (7 dias): a tela manda revogar a chave
   antiga no provedor (ADR-021, "As chaves").
+
+  **A gravação da chave é conferida sob a trava da conta (C3-correções, 11-out-2026).** O `PUT` do app
+  lê o `sync_epoch` da conta antes de chamar o provedor (até 10 s), e a gravação
+  (`GravarChaveDeIAConferindo`, nos dois Stores) acontece numa transação que trava, nesta ordem, **a
+  linha do usuário** (`FOR NO KEY UPDATE`, a mesma trava do aceite e do revogar) e **o contador de sync**
+  (`FOR NO KEY UPDATE`, a mesma do primeiro comando do "apagar meus dados"), e só então confere de novo o
+  epoch (`ErrEpochChanged`) e o aceite em aberto, da versão atual do aviso, que cobre o provedor
+  (`ErrSemAceite`; `Aceite.Cobre`). Sob o `READ COMMITTED`, quem espera uma trava vê, ao acordar, o que a
+  transação que a segurava confirmou. Assim a chave **nunca sobrevive** a um "apagar meus dados" nem a um
+  revogar, nem aos que terminam durante a chamada ao provedor: um deles que esteja no meio faz a gravação
+  esperar (e então a recusa), ou termina depois dela e apaga a chave que ela gravou. Gravar a chave não
+  passa pelo contador do histórico (não gasta `last_seq`, não gera evento). O `GravarChaveDeIA` sem
+  condição continua existindo só para montar os testes; o servidor usa o conferido.
+
+  **A ordem do "apagar meus dados"** apaga os aceites **antes** das chaves (`pgstore.apagarDaConta`): o
+  revogar trava o aceite e depois apaga as chaves, e se o apagar fizesse o contrário os dois se
+  esperariam (deadlock, `40P01`, que o Postgres desfaz abortando o apagar). Um teste do `pgstore`
+  (`TestPostgres_RevogarEApagarNaoSeTravam`) segura o revogar entre as duas coisas e lança o apagar.
 
 - **As preferências do ditado no celular** (`dictation_settings`, a 0018; **C3b, 11-out-2026**): uma
   linha por conta (PK `user_id`), gravada inteira a cada `PUT`. Moram só na nuvem e **nunca descem aos
@@ -1086,5 +1116,5 @@ dicionário escondia do painel todo o histórico anterior, porque toda listagem 
 | provider secrets | server-side |
 | chave de API do provedor de IA de quem usa | Credential Manager do Windows, nunca SQLite |
 | chave de API do provedor de IA colada no app do celular (ADR-021) | `ai_provider_keys`, só cifrada (AES-256-GCM, subchave por HKDF da chave de cifra de `AI_KEYS_SECRET_FILE`, que nunca entra no banco nem no backup); o app vê só o fim (até 4 caracteres). Quem tem a raiz da VPS decifra |
-| áudio | RAM |
+| áudio | RAM. **ADR-021:** o do celular também, na memória da API só durante o pedido (no máximo 3 corpos de até 1 MiB ao mesmo tempo), repassado ao provedor da pessoa e descartado ao fim; nunca em disco, log ou banco |
 | contexto UIA | RAM |

@@ -102,5 +102,8 @@ func (c *Cloud) handleApagarDados(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, codeInternal, "falha interna")
 		return
 	}
+	// O que a rota de ditar guarda da conta na memória sai junto (ADR-021,
+	// C5b): o Smart montado com o aprendido dela e o texto pago e não gravado.
+	c.esquecerDitadoDaConta(p.UserID)
 	w.WriteHeader(http.StatusNoContent)
 }

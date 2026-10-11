@@ -173,7 +173,7 @@ func novoSubir(t *testing.T) *subirDeTeste {
 	if err := os.MkdirAll(seg, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	for _, n := range strings.Fields("postgres-superusuario-senha postgres-aurora-senha postgres-backup-senha session-secret device-token-pepper") {
+	for _, n := range strings.Fields("postgres-superusuario-senha postgres-aurora-senha postgres-backup-senha session-secret device-token-pepper ai-keys-secret") {
 		s.segredos[n] = hexAleatorio(t, 32)
 	}
 	s.segredos["database-url"] = "postgres://aurora:" + s.segredos["postgres-aurora-senha"] + "@aurora-whisper-postgres:5432/aurora?sslmode=disable"
@@ -629,6 +629,13 @@ func TestSubir_RecusaAntesDeSubir(t *testing.T) {
 			_ = os.Chmod(p, 0o644)
 			_ = os.Remove(p)
 		}, "google-client.json"},
+		// ADR-021, C5c: o compose declara o segredo, e uma VPS que ja estava no ar
+		// nao o tem ate o criar-chave-de-cifra.sh (o passo da C3a).
+		{"sem a chave de cifra", func(s *subirDeTeste) {
+			p := filepath.Join(s.base, "segredos", "ai-keys-secret")
+			_ = os.Chmod(p, 0o644)
+			_ = os.Remove(p)
+		}, "rode antes o criar-chave-de-cifra.sh"},
 		{"sem o config.env", func(s *subirDeTeste) { _ = os.Remove(filepath.Join(s.base, "config.env")) }, "nao achei"},
 		{"o endereço em http", func(s *subirDeTeste) {
 			s.escreverConfig(s.a.t, strings.Replace(configDoGerar, "https://", "http://", 1))
@@ -677,6 +684,68 @@ func TestSubir_RecusaAntesDeSubir(t *testing.T) {
 			s.semSegredo(t, r)
 		})
 	}
+}
+
+// ADR-021, C5c: o segredo novo do compose é obrigatório. Numa VPS que já estava
+// no ar o gerar-segredos.sh não o criou (ele recusa rodar), então a recusa do
+// subir.sh aponta o passo a parte (criar-chave-de-cifra.sh) e não o
+// gerar-segredos.sh, que só confundiria; os outros segredos continuam apontando
+// o gerar-segredos.sh. Com o arquivo no lugar, o subir.sh segue.
+func TestSubir_SemAChaveDeCifraApontaOPassoDaC3a(t *testing.T) {
+	t.Parallel()
+	semAChave := func(s *subirDeTeste) {
+		p := filepath.Join(s.base, "segredos", "ai-keys-secret")
+		_ = os.Chmod(p, 0o644)
+		if err := os.Remove(p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Run("sem o arquivo novo", func(t *testing.T) {
+		t.Parallel()
+		s := novoSubir(t)
+		semAChave(s)
+		r := s.rodar("SIM\nSIM\n")
+		if r.codigo != 1 || !strings.Contains(r.erro, "FALHOU") {
+			t.Fatalf("deveria recusar: %d %q", r.codigo, r.tudo())
+		}
+		exigirContem(t, "a recusa", r.erro, "ai-keys-secret", "a chave de cifra das chaves da IA do celular",
+			"rode antes o criar-chave-de-cifra.sh", "(bash ", "/deploy/scripts/criar-chave-de-cifra.sh)", "Nada foi mudado")
+		exigirNaoContem(t, "a recusa", r.erro, "gerar-segredos.sh")
+		for _, c := range s.a.chamadas() {
+			// "docker compose version" é a conferência do passo 1; mais que ela,
+			// nada do compose roda antes da recusa.
+			if strings.Contains(c, "[up]") || strings.HasPrefix(c, "docker [run]") ||
+				(strings.HasPrefix(c, "docker [compose]") && !strings.Contains(c, "[version]")) {
+				t.Errorf("fez algo no compose antes de recusar: %s", c)
+			}
+		}
+		if s.config(t) != configDoGerar {
+			t.Errorf("o config.env mudou numa recusa:\n%s", s.config(t))
+		}
+		s.semSegredo(t, r)
+	})
+	t.Run("com o arquivo, segue", func(t *testing.T) {
+		t.Parallel()
+		s := novoSubir(t)
+		r := s.rodar("SIM\n")
+		if r.codigo != 0 {
+			t.Fatalf("falhou com a chave de cifra no lugar (%d): %s", r.codigo, r.tudo())
+		}
+		exigirNaoContem(t, "a saída", r.tudo(), "criar-chave-de-cifra.sh")
+	})
+	t.Run("outro arquivo que falta continua apontando o gerar-segredos.sh", func(t *testing.T) {
+		t.Parallel()
+		s := novoSubir(t)
+		p := filepath.Join(s.base, "segredos", "session-secret")
+		_ = os.Chmod(p, 0o644)
+		if err := os.Remove(p); err != nil {
+			t.Fatal(err)
+		}
+		r := s.rodar("SIM\nSIM\n")
+		if r.codigo != 1 || !strings.Contains(r.erro, "falta "+posix(p)) || !strings.Contains(r.erro, "rode o gerar-segredos.sh pelo roteiro") {
+			t.Fatalf("deveria apontar o gerar-segredos.sh: %d %q", r.codigo, r.tudo())
+		}
+	})
 }
 
 // Fora da pasta base (uma cópia do deploy/ em outro lugar, ou o repositório):

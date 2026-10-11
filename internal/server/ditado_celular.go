@@ -56,7 +56,7 @@ func (a aceitePeloStore) AceiteVigente(ctx context.Context, userID, provedor str
 	if err != nil {
 		return false, err
 	}
-	return ac.Vigente() && ac.Inclui(provedor), nil
+	return ac.Cobre(provedor), nil
 }
 
 // O que o app recebe.
@@ -315,6 +315,8 @@ func (c *Cloud) handleRevogarAceiteDoDitado(w http.ResponseWriter, r *http.Reque
 		writeError(w, http.StatusInternalServerError, codeInternal, "falha interna")
 		return
 	}
+	// O que a rota de ditar guarda da conta na memória sai junto (C5b).
+	c.esquecerDitadoDaConta(p.UserID)
 	anotarContagens(r.Context(), "chaves_apagadas", rev.ChavesApagadas)
 	w.WriteHeader(http.StatusNoContent)
 }
