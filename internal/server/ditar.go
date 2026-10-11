@@ -27,10 +27,11 @@ import (
 // Antes de ler o corpo, a rota confere, nesta ordem: a credencial (o
 // AcessoDitar, no portão), o aceite dos provedores que as preferências usam, as
 // chaves deles, o id e o que a nuvem e a memória já têm com ele, os cabeçalhos,
-// o tipo e o tamanho, os limites da conta e a vaga. Só então lê o corpo, sob o
-// prazo dele, confere pelos primeiros bytes que é webm, e solta o trabalho do
-// provedor, do Smart, do Polish e da gravação da conexão (ditar_trabalho.go):
-// o celular cair não perde o que já foi pago.
+// o tipo e o tamanho, os limites da conta e a vaga, e, já como dono do id, a
+// situação dele de novo (o primeiro com o mesmo id pode ter gravado nesse meio).
+// Só então lê o corpo, sob o prazo dele, confere pelos primeiros bytes que é
+// webm, e solta o trabalho do provedor, do Smart, do Polish e da gravação da
+// conexão (ditar_trabalho.go): o celular cair não perde o que já foi pago.
 //
 // O áudio fica numa variável do pedido e do trabalho, e sai de escopo no fim:
 // nunca vai a disco, a log, a erro, a resposta nem a uma estrutura de vida longa
@@ -221,7 +222,28 @@ func (c *Cloud) handleDitar(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// 7. O corpo, sob o prazo dele, e o formato pelos primeiros bytes.
+		// 7. A situação de novo, agora como dono do id: enquanto este pedido o
+		// for, ninguém mais grava o id, mas o primeiro com o mesmo id pode ter
+		// gravado (e saído da memória) entre a leitura do passo 3 e a vaga. Sem
+		// isto, o reenvio que chega no fim do primeiro pagaria o provedor de novo
+		// pelo mesmo ditado. O epoch lido aqui é o que a gravação confere.
+		sit, err = c.cfg.Store.Situacao(ctx, p.UserID, id)
+		if err != nil || sit.Estado != cloudstore.IdNada {
+			c.ditados.desistir(k, dono)
+			switch {
+			case err != nil:
+				writeError(w, http.StatusInternalServerError, codeInternal, "falha interna")
+			case sit.Estado == cloudstore.IdDitado:
+				anotarMotivo(ctx, "reenvio")
+				responderDitado(w, http.StatusOK, *sit.Ditado, avisoDoPrimeiro)
+			default:
+				anotarMotivo(ctx, "apagado")
+				writeError(w, http.StatusGone, codeApagado, fraseApagado)
+			}
+			return
+		}
+
+		// 8. O corpo, sob o prazo dele, e o formato pelos primeiros bytes.
 		_ = rc.SetReadDeadline(time.Now().Add(c.prazos.Corpo))
 		audio, err := lerOAudio(w, r)
 		if err != nil {
@@ -244,7 +266,7 @@ func (c *Cloud) handleDitar(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// 8. O trabalho solto.
+		// 9. O trabalho solto.
 		c.ditar(w, r, rc, trabalhoDoDitado{
 			k: k, a: dono, epoch: sit.Epoch, prefs: prefs, audio: audio,
 			duracaoMs: duracao.Milliseconds(), falaMs: fala.Milliseconds(), fimDoCorpo: time.Now(),

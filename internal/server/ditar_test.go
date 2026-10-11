@@ -243,6 +243,81 @@ func TestRegistro_SemFalaEPagoNaoGravado(t *testing.T) {
 	}
 }
 
+// O id que ganhou um desfecho na memória (o "sem fala", ou o pago e não
+// gravado) entre a olhada do pedido e a vaga dele: o primeiro com o mesmo id
+// terminou nesse meio. A vaga não é dada (o provedor seria chamado de novo para
+// o mesmo ditado), nenhuma ficha é gasta, e o pedido olha a memória de novo.
+func TestRegistro_EntrarDepoisDeUmDesfechoOlhaDeNovo(t *testing.T) {
+	novo := cloudstore.NewDictation{SourcePlatform: "web", RawText: "texto", FinalText: "texto", Mode: "smart", ASRProvider: "openai"}
+	for nome, c := range map[string]struct {
+		semFala bool
+		pago    *pagoNaoGravado
+	}{
+		"o sem fala": {semFala: true},
+		"o pago":     {pago: &pagoNaoGravado{epoch: "e", novo: novo}},
+	} {
+		g, _ := novoRegistroDeTeste(limitesDoDitado{porConta: 1, porMinuto: 10, porDia: 200, total: 3})
+		k := chaveDoDitado{"a", "1"}
+		if o := g.olhar(k, "e"); o.esperar != nil || o.semFala || o.regravar != nil {
+			t.Fatalf("%s: a memória não estava vazia", nome)
+		}
+		// O primeiro com o mesmo id pega a vaga, chama o provedor e termina
+		// enquanto o segundo ia da olhada à vaga.
+		d, _, _ := g.entrar(k)
+		g.concluir(k, d, desfecho{status: 422, code: codeSemFala}, c.semFala, c.pago)
+		fichas := g.porMinuto["a"].fichas
+		dono, esperar, recusa := g.entrar(k)
+		if dono != nil || recusa != nil || esperar == nil {
+			t.Fatalf("%s: o segundo pegou a vaga (dono %v, recusa %+v)", nome, dono != nil, recusa)
+		}
+		<-esperar.pronto
+		if !esperar.desfecho.reprocessar || esperar.desfecho.code != "" {
+			t.Fatalf("%s: o segundo não olha de novo: %+v", nome, esperar.desfecho)
+		}
+		if g.porMinuto["a"].fichas != fichas || g.vagas != 0 || len(g.andamentos) != 0 {
+			t.Fatalf("%s: a recusa gastou ficha (%v, era %v) ou pegou vaga (%d)", nome, g.porMinuto["a"].fichas, fichas, g.vagas)
+		}
+		// E a olhada de novo acha o desfecho.
+		o := g.olhar(k, "e")
+		if c.semFala && !o.semFala || c.pago != nil && o.regravar == nil {
+			t.Fatalf("%s: a olhada de novo não acha o desfecho: %+v", nome, o)
+		}
+	}
+}
+
+// O dono que desiste (a releitura da situação achou o id gravado): a vaga e as
+// fichas voltam (a resposta idempotente não conta no limite), quem espera olha
+// de novo, e o id sai do andamento.
+func TestRegistro_DesistirDevolveAVagaEAsFichas(t *testing.T) {
+	g, _ := novoRegistroDeTeste(limitesDoDitado{porConta: 1, porMinuto: 10, porDia: 200, total: 3})
+	k := chaveDoDitado{"a", "1"}
+	dono, _, _ := g.entrar(k)
+	_, esperar, _ := g.entrar(k)
+	if dono == nil || esperar != dono || g.porMinuto["a"].fichas != 9 || g.porDia["a"].fichas != 199 {
+		t.Fatal("o dono não pegou a vaga")
+	}
+	g.desistir(k, dono)
+	<-esperar.pronto
+	if !esperar.desfecho.reprocessar || esperar.desfecho.code != "" {
+		t.Fatalf("quem espera não olha de novo: %+v", esperar.desfecho)
+	}
+	if g.vagas != 0 || g.vagasPorConta["a"] != 0 || len(g.andamentos) != 0 {
+		t.Fatalf("a vaga não voltou: %d, %d, %d andamentos", g.vagas, g.vagasPorConta["a"], len(g.andamentos))
+	}
+	if g.porMinuto["a"].fichas != 10 || g.porDia["a"].fichas != 200 {
+		t.Fatalf("as fichas não voltaram: %v por minuto, %v por dia", g.porMinuto["a"].fichas, g.porDia["a"].fichas)
+	}
+	// O reenvio que só regrava (sem vaga) não ganha ficha a mais ao desistir.
+	novo := cloudstore.NewDictation{SourcePlatform: "web", RawText: "texto", FinalText: "texto", Mode: "smart", ASRProvider: "openai"}
+	d, _, _ := g.entrar(k)
+	g.concluir(k, d, desfecho{status: 500, code: codeInternal}, false, &pagoNaoGravado{epoch: "e", novo: novo})
+	o := g.olhar(k, "e")
+	g.desistir(k, o.dono)
+	if g.porMinuto["a"].fichas != 9 || g.porDia["a"].fichas != 199 {
+		t.Fatalf("o regravar que desiste devolveu ficha: %v, %v", g.porMinuto["a"].fichas, g.porDia["a"].fichas)
+	}
+}
+
 // O desligamento: espera os trabalhos soltos, e nenhum ditado novo pega vaga
 // nem começa um reenvio do pago.
 func TestRegistro_Desligamento(t *testing.T) {

@@ -192,10 +192,22 @@ type recusaDaVaga struct {
 	motivo      string
 }
 
+// olharDeNovo é o andamento que entrar devolve para esperar quando o id ganhou
+// um desfecho na memória (o "sem fala", ou o pago e não gravado) depois da
+// olhada do pedido: o primeiro com o mesmo id terminou entre a olhada e a vaga.
+// Já está pronto, com o reprocessar: quem o espera volta na hora e olha de novo.
+// Nunca entra no mapa dos andamentos, e ninguém o conclui.
+var olharDeNovo = func() *andamento {
+	a := &andamento{pronto: make(chan struct{}), desfecho: desfecho{reprocessar: true}}
+	close(a.pronto)
+	return a
+}()
+
 // entrar tenta pegar a vaga do ditado k: o mesmo id em andamento é esperado; o
-// desligamento, a conta com outro ditado em andamento, os limites da conta e as
-// vagas do total recusam. Só o pedido que pega a vaga gasta as fichas da conta
-// (a resposta idempotente não conta).
+// id que ganhou um desfecho na memória depois da olhada volta à olhada
+// (olharDeNovo); o desligamento, a conta com outro ditado em andamento, os
+// limites da conta e as vagas do total recusam. Só o pedido que pega a vaga
+// gasta as fichas da conta (a resposta idempotente não conta).
 func (g *registroDoDitado) entrar(k chaveDoDitado) (dono, esperar *andamento, recusa *recusaDaVaga) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -206,6 +218,10 @@ func (g *registroDoDitado) entrar(k chaveDoDitado) (dono, esperar *andamento, re
 	switch {
 	case g.desligando:
 		return nil, nil, &recusaDaVaga{status: 503, code: codeOcupado, frase: fraseOcupado, espera: esperaDaVaga, motivo: "desligando"}
+	case g.temDesfecho(k, now):
+		// Sem isto, o reenvio que olhou a memória antes de o primeiro terminar
+		// pegaria a vaga e pagaria o provedor de novo pelo mesmo ditado.
+		return nil, olharDeNovo, nil
 	case g.vagasPorConta[k.usuario] >= g.lim.porConta:
 		return nil, nil, &recusaDaVaga{status: 429, code: codeUmPorVez, frase: fraseUmPorVez, espera: esperaDaVaga, motivo: "um_por_vez"}
 	}
@@ -248,12 +264,46 @@ func (g *registroDoDitado) balde(m map[string]*baldeDoDitado, usuario string, ca
 	return b
 }
 
+// temDesfecho diz se a memória tem, ainda dentro dos 10 minutos, o "sem fala"
+// ou o desfecho pago e não gravado do id. Chamador segura mu.
+func (g *registroDoDitado) temDesfecho(k chaveDoDitado, now time.Time) bool {
+	if exp, ok := g.semFala[k]; ok && now.Before(exp) {
+		return true
+	}
+	p, ok := g.pagos[k]
+	return ok && now.Before(p.expira)
+}
+
 // concluir encerra o ditado k: o desfecho fica para quem espera, a vaga volta, e
 // a memória ganha o "sem fala" ou o desfecho pago e não gravado, na mesma trava
 // (quem chega depois vê um ou outro, nunca nenhum dos dois).
 func (g *registroDoDitado) concluir(k chaveDoDitado, a *andamento, d desfecho, semFala bool, pago *pagoNaoGravado) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	g.concluirTravado(k, a, d, semFala, pago)
+}
+
+// desistir encerra o andamento k de um pedido que pegou a vaga e não chegou a
+// processar o ditado (a releitura da situação, já como dono do id, achou o
+// ditado gravado ou a lápide, ou falhou): as fichas voltam à conta (só o envio
+// processado conta no limite, e a resposta idempotente não), a vaga volta, e
+// quem espera olha de novo.
+func (g *registroDoDitado) desistir(k chaveDoDitado, a *andamento) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if a.vaga {
+		if b := g.porMinuto[k.usuario]; b != nil {
+			b.fichas = math.Min(float64(g.lim.porMinuto), b.fichas+1)
+		}
+		if b := g.porDia[k.usuario]; b != nil {
+			b.fichas = math.Min(float64(g.lim.porDia), b.fichas+1)
+		}
+	}
+	g.concluirTravado(k, a, desfecho{reprocessar: true}, false, nil)
+}
+
+// concluirTravado é o concluir com mu já segura.
+func (g *registroDoDitado) concluirTravado(k chaveDoDitado, a *andamento, d desfecho, semFala bool, pago *pagoNaoGravado) {
 	now := g.now()
 	if semFala {
 		g.semFala[k] = now.Add(memoriaDoDitado)

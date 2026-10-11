@@ -91,6 +91,7 @@ func Run(t *testing.T, b Backend) {
 		{"Ditar_PolishComModeloQueOProvedorNaoLista", testDitarPolishModeloDesconhecido},
 		{"Ditar_Idempotencia_DoisEnviosUmaChamadaEDuasContasDuas", testDitarMesmoIdUmaChamada},
 		{"Ditar_Idempotencia_ReenvioDuranteOAndamento", testDitarReenvioDuranteOAndamento},
+		{"Ditar_Idempotencia_ReenvioQueChegaNoFimDoPrimeiro", testDitarReenvioQueChegaNoFimDoPrimeiro},
 		{"Ditar_Idempotencia_CelularCaiDepoisDoProvedor", testDitarCelularCaiDepoisDoProvedor},
 		{"Ditar_Idempotencia_GravacaoQueFalhaUmaVez", testDitarGravacaoQueFalhaUmaVez},
 		{"Ditar_Idempotencia_LapideDa410", testDitarLapide},

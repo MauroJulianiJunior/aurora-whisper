@@ -115,6 +115,91 @@ func testDitarReenvioDuranteOAndamento(t *testing.T, m *mundo) {
 	}
 }
 
+// storeQueSegura é o Store da nuvem com a resposta de uma leitura da situação
+// (Situacao) segurada quando o caso pede: a leitura já foi feita no banco, e a
+// resposta chega atrasada, como num banco ocupado.
+type storeQueSegura struct {
+	cloudstore.Store
+	mu sync.Mutex
+	// segurar, se não for nil, é o que a próxima Situacao espera abrir antes de
+	// voltar; leu é fechado quando ela já leu.
+	segurar, leu chan struct{}
+}
+
+func (s *storeQueSegura) Situacao(ctx context.Context, userID, id string) (cloudstore.SituacaoDoId, error) {
+	sit, err := s.Store.Situacao(ctx, userID, id)
+	s.mu.Lock()
+	segurar, leu := s.segurar, s.leu
+	s.segurar, s.leu = nil, nil
+	s.mu.Unlock()
+	if segurar != nil {
+		close(leu)
+		<-segurar
+	}
+	return sit, err
+}
+
+// O reenvio que chega no fim do primeiro: ele lê a situação do id ("nada")
+// enquanto o primeiro está no provedor, e a resposta do banco só chega depois
+// de o primeiro gravar e sair da memória. O reenvio não pode pagar o provedor
+// de novo nem ler o corpo: recebe o ditado gravado (200), com uma chamada só.
+func testDitarReenvioQueChegaNoFimDoPrimeiro(t *testing.T, m *mundo) {
+	m.prepararDitado(celA, "openai", "", false)
+	var st *storeQueSegura
+	m.embrulhar = func(s cloudstore.Store) cloudstore.Store {
+		st = &storeQueSegura{Store: s}
+		return st
+	}
+	m.montar(ChaveDeCifraA)
+	soltar, abrir := porta(t)
+	entrou := make(chan struct{}, 1)
+	m.voz.enquantoResponde(t, func() {
+		avisar(entrou)
+		<-soltar
+	})
+	id := cloudstore.NewUUIDv7()
+	primeiro := make(chan *httptest.ResponseRecorder, 1)
+	go func() {
+		r, _ := m.ditar(celA, id, webm())
+		primeiro <- r
+	}()
+	<-entrou
+
+	segurar, liberar := porta(t)
+	leu := make(chan struct{})
+	st.mu.Lock()
+	st.segurar, st.leu = segurar, leu
+	st.mu.Unlock()
+	type resposta struct {
+		rec   *httptest.ResponseRecorder
+		corpo *corpoVigiado
+	}
+	segundo := make(chan resposta, 1)
+	go func() {
+		r, c := m.ditar(celA, id, webm())
+		segundo <- resposta{r, c}
+	}()
+	<-leu
+	// O primeiro sai do provedor, grava e responde; só então o banco devolve ao
+	// reenvio a situação que leu antes ("nada").
+	abrir()
+	a := m.ditadoOk(<-primeiro, http.StatusCreated)
+	liberar()
+	s := <-segundo
+	b := m.ditadoOk(s.rec, http.StatusOK)
+	if a.ID != b.ID || a.FinalText != b.FinalText || a.Version != b.Version {
+		t.Fatalf("o reenvio do fim do primeiro: %+v / %+v", a, b)
+	}
+	if n := m.voz.quantas(); n != 1 || !s.corpo.naoLido() {
+		t.Fatalf("o reenvio do fim do primeiro pagou de novo: %d chamadas ao provedor, corpo lido=%v", n, !s.corpo.naoLido())
+	}
+	// A resposta idempotente não gastou ficha: com o limite de 10 por minuto,
+	// ainda cabem 9 ditados novos depois do primeiro.
+	for i := 0; i < 9; i++ {
+		m.ditadoOk(func() *httptest.ResponseRecorder { r, _ := m.ditar(celA, cloudstore.NewUUIDv7(), webm()); return r }(), http.StatusCreated)
+	}
+}
+
 // O celular cai depois da chamada ao provedor: o trabalho segue, desligado da
 // conexão, e grava o ditado; o reenvio sai 200, sem chamada.
 func testDitarCelularCaiDepoisDoProvedor(t *testing.T, m *mundo) {

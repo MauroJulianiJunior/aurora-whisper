@@ -1184,7 +1184,10 @@ depois de `/dictations/`, também são `404`.
    `LIMITE`; 3 ao mesmo tempo no total (os corpos na memória), `503` `OCUPADO`. Todos com `Retry-After`
    (5 s no `UM_POR_VEZ` e no `OCUPADO`; no `LIMITE`, o tempo até a próxima ficha). Em memória: reiniciar
    zera, como os limites do login. Os baldes são de fichas, como os outros limites (o "por dia" enche
-   200 fichas em 24 h).
+   200 fichas em 24 h). **Quem pega a vaga lê de novo o que a nuvem e a memória têm com o id** (os
+   passos 5 e 6): o primeiro com o mesmo id pode ter terminado entre aquelas leituras e a vaga, e o
+   reenvio não paga o provedor de novo. O ditado já gravado é `200`, a lápide é `410`, e a ficha volta
+   à conta; o `SEM_FALA` ou o pago de agora seguem o passo 6.
 9. **O corpo**, sob o prazo dele (abaixo), com `http.MaxBytesReader` (sem `Content-Length`, o que passa
    de 1 MiB é `413`); o corpo que não chega inteiro é `400`. **Os primeiros bytes:** não é webm (outro
    formato, ou o Matroska), `415` `FORMATO`. Nenhum dos dois chama o provedor.
@@ -1207,7 +1210,8 @@ depois de `/dictations/`, também são `404`.
       uma por processo), com o prazo `polish.Prazo` do texto (de 3,5 s a 8 s). O Polish que falha, ou que
       as guardas recusam, deixa o texto do Smart, com `mode` `smart` e o `aviso`.
     - **A gravação** (5 s): o aceite conferido de novo, e o `Store.Create` (o ponto único de gravação,
-      `Actor` sem aparelho) com o epoch lido no passo 5, conferido **dentro** da transação que trava o
+      `Actor` sem aparelho) com o epoch lido quando o pedido pegou a vaga (a releitura do passo 8),
+      conferido **dentro** da transação que trava o
       contador: a conta que apagou os dados no meio não grava (`403` `SEM_ACEITE`). A janela entre a
       conferência do aceite e o `Create` é de milissegundos (ADR-021, risco 16). A gravação que falha por
       outro motivo (o banco fora) é `500` `INTERNAL`, e **o desfecho pago fica 10 minutos na memória**:
