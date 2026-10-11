@@ -200,6 +200,80 @@ func testDitarReenvioQueChegaNoFimDoPrimeiro(t *testing.T, m *mundo) {
 	}
 }
 
+// storeQueEntraEmPanico é o Store da nuvem cuja leitura da situação (Situacao)
+// do id alvo entra em pânico uma vez, na vez pedida, depois de avisar (entrou)
+// e de esperar a porta (soltar): um defeito no trecho entre o pedido pegar a
+// vaga e soltar o trabalho.
+type storeQueEntraEmPanico struct {
+	cloudstore.Store
+	alvo     string
+	naVez    int32
+	leituras atomic.Int32
+	entrou   chan struct{}
+	soltar   chan struct{}
+}
+
+func (s *storeQueEntraEmPanico) Situacao(ctx context.Context, userID, id string) (cloudstore.SituacaoDoId, error) {
+	if id == s.alvo && s.leituras.Add(1) == s.naVez {
+		close(s.entrou)
+		<-s.soltar
+		panic("defeito de mentira entre a vaga e o trabalho")
+	}
+	return s.Store.Situacao(ctx, userID, id)
+}
+
+// Um pânico no pedido que pegou a vaga, antes de soltar o trabalho (aqui, na
+// releitura da situação, a segunda leitura do id): 500 INTERNAL, sem o valor
+// do pânico no log, e a vaga e o andamento voltam. Quem esperava o mesmo id não
+// fica preso: olha de novo e dita com o próprio corpo. E a conta dita outra vez
+// (sem 429 UM_POR_VEZ).
+func testDitarPanicoEntreAVagaEOTrabalho(t *testing.T, m *mundo) {
+	m.prepararDitado(celA, "openai", "", false)
+	id := cloudstore.NewUUIDv7()
+	soltar, abrir := porta(t)
+	st := &storeQueEntraEmPanico{alvo: id, naVez: 2, entrou: make(chan struct{}), soltar: soltar}
+	m.embrulhar = func(s cloudstore.Store) cloudstore.Store {
+		st.Store = s
+		return st
+	}
+	m.montar(ChaveDeCifraA)
+	primeiro := make(chan *httptest.ResponseRecorder, 1)
+	go func() {
+		r, _ := m.ditar(celA, id, webm())
+		primeiro <- r
+	}()
+	select {
+	case <-st.entrou: // o primeiro pegou a vaga e relê a situação
+	case <-time.After(10 * time.Second):
+		t.Fatal("o primeiro não pegou a vaga")
+	}
+	segundo := make(chan *httptest.ResponseRecorder, 1)
+	go func() {
+		r, _ := m.ditar(celA, id, webm())
+		segundo <- r
+	}()
+	// O segundo espera o primeiro: dá um tempo para ele chegar à espera.
+	time.Sleep(100 * time.Millisecond)
+	abrir()
+	exigirErro(t, <-primeiro, http.StatusInternalServerError, "INTERNAL")
+	select {
+	case r := <-segundo:
+		if d := m.ditadoOk(r, http.StatusCreated); d.ID != id {
+			t.Fatalf("quem esperava ditou outro id: %+v", d)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("quem esperava o mesmo id ficou preso no andamento do pedido que entrou em pânico")
+	}
+	// A vaga da conta voltou: outro ditado passa, sem 429 UM_POR_VEZ.
+	m.ditadoOk(func() *httptest.ResponseRecorder { r, _ := m.ditar(celA, cloudstore.NewUUIDv7(), webm()); return r }(), http.StatusCreated)
+	if n := m.voz.quantas(); n != 2 {
+		t.Fatalf("%d chamadas ao provedor, quero 2 (o pânico veio antes do provedor)", n)
+	}
+	if strings.Contains(m.logs.String(), "defeito de mentira") {
+		t.Fatal("o valor do pânico foi ao log")
+	}
+}
+
 // O celular cai depois da chamada ao provedor: o trabalho segue, desligado da
 // conexão, e grava o ditado; o reenvio sai 200, sem chamada.
 func testDitarCelularCaiDepoisDoProvedor(t *testing.T, m *mundo) {

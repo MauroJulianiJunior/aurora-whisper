@@ -103,6 +103,7 @@ func Run(t *testing.T, b Backend) {
 		{"Ditar_Corridas_AceiteSemOPolishNoMeio", testDitarAceiteSemOPolishNoMeio},
 		{"Ditar_Corridas_ApagarMeusDadosDuranteOProvedor", testDitarApagarDuranteOProvedor},
 		{"Ditar_Corridas_ApagarOuDesligarNoMeioEsqueceOSmart", testDitarApagarOuDesligarNoMeioEsqueceOSmart},
+		{"Ditar_Corridas_PanicoEntreAVagaEOTrabalhoDevolveAVaga", testDitarPanicoEntreAVagaEOTrabalho},
 		{"Ditar_Prazos_CorpoLento", testDitarCorpoLento},
 		{"Ditar_Prazos_QuemEsperaPassaDoWriteTimeout", testDitarQuemEsperaPassaDoWriteTimeout},
 		{"Ditar_Canario", testDitarCanario},

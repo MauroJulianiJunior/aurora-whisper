@@ -1258,10 +1258,20 @@ uma conta nunca espera nem recebe a resposta da outra):
   escrita** (o `writeTimeout` dele conta do fim dos cabeçalhos dele), sem ler o corpo nem chamar o
   provedor, e recebe o mesmo ditado (`200`) ou a mesma recusa. Se o primeiro parou antes do provedor (o
   corpo dele não chegou, ou não era webm), quem esperava tenta com o próprio corpo.
+- **Um pânico no dono do id**, antes de ele soltar o trabalho (entre pegar a vaga e o trabalho solto, ou
+  entre achar o pago e regravá-lo), é `500` `INTERNAL` (o valor do pânico não vai a log nem à
+  resposta) e encerra o andamento como o corpo que não chegou: a vaga volta (a ficha gasta, não), quem
+  esperava o mesmo id tenta com o próprio corpo, e o pago que ia ser regravado volta à memória **com o
+  prazo que já tinha** (os 10 minutos contam do primeiro). Sem isso, a vaga e o andamento ficariam
+  presos até o reinício. O pânico dentro do trabalho solto continua `500`, com o desfecho `panico` na
+  linha `ditado`.
 - **O que fica na memória:** o andamento e o "sem fala" guardam só o desfecho (o status, o código, o
   aviso); o desfecho pago e não gravado guarda o que seria gravado (os textos, o modo, o provedor, o
   modelo), porque é isso que o reenvio grava. Some em 10 minutos, no reinício, quando o epoch da conta
-  muda, no "Apagar meus dados" e no "Desligar o ditado". Nunca vai a log. Uma instância só da API
+  muda, no "Apagar meus dados" e no "Desligar o ditado". Os 10 minutos valem **sem pedido nenhum**: o
+  "sem fala" e o pago saem por um agendado (`time.AfterFunc`) na hora em que vencem, e não só quando
+  chega o próximo ditado; num servidor ocioso, o texto do pago não passa dos 10 minutos na memória. O
+  agendado guarda só a conta, o id e o prazo, nunca o texto. Nunca vai a log. Uma instância só da API
   (ADR-021, risco 11). O Smart da conta no cache (montado com o aprendido dela) também sai no "Apagar
   meus dados" e no "Desligar o ditado", e de novo no fim do ditado que um deles fez acabar em
   `SEM_ACEITE`: esse trabalho leu o aprendido antes e montou o Smart depois do esquecer.
@@ -1280,7 +1290,7 @@ uma conta nunca espera nem recebe a resposta da outra):
 | A gravação | 5 s (o aceite e o `Create`) |
 | A resposta | 45 s depois do fim do corpo (`SetWriteDeadline` no handler); o trabalho solto tem o teto de 44 s, e o que passar dele depois de o provedor cobrar vira o desfecho pago e não gravado |
 | Quem espera o mesmo id | o próprio prazo de escrita estendido em 80 s (o corpo, a resposta e 5 s de folga) |
-| O desligamento | o `Shutdown` de 15 s e, depois, **até 70 s pelos trabalhos soltos** em andamento (o `serve`; escolha menor 22). Nesse tempo nenhum ditado novo pega vaga (`OCUPADO`), e as respostas que esperavam saem. O `stop_grace_period` de 90 s da API é da C5c |
+| O desligamento | o `Shutdown` de 15 s e, depois, **até 70 s pelos trabalhos soltos** em andamento (o `serve`; escolha menor 22). Nesse tempo nenhum ditado novo pega vaga (`OCUPADO`), e as respostas que esperavam saem. Se o `Shutdown` passa dos 15 s com pedidos abertos (quem espera um ditado, ou o dono de um que ainda lê o corpo), o `serve` espera esses pedidos e, **depois deles, os trabalhos soltos de novo**, tudo dentro dos mesmos 70 s: o trabalho que um dono soltou depois da primeira espera (e cujo celular caiu) também termina antes de o pool fechar. O `stop_grace_period` de 90 s da API é da C5c, e cobre os 15 s mais os 70 s |
 
 **O log.** A linha de acesso de sempre (o padrão da rota, o status, os ms, os bytes), com um motivo da
 lista fechada quando o pedido parou: `sem_aceite`, `sem_chave`, `id`, `cabecalho`, `duracao`,

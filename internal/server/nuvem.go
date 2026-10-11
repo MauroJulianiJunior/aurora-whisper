@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/asr/nuvem"
+	"github.com/MauroJulianiJunior/aurora-whisper/internal/clock"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/ia"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/polish"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/server/cloudauth"
@@ -320,7 +321,10 @@ func NewCloud(cfg CloudConfig) (*Cloud, error) {
 		aceiteNaGravacao: aceiteNaGravacao,
 		limChaves:        cloudauth.NovoLimite(lim.ChavesPorConta, cfg.Now),
 
-		ditados: novoRegistroDoDitado(cfg.Now, limitesDoDitado{
+		// O vencimento sozinho do "sem fala" e do pago usa o time.AfterFunc de
+		// verdade mesmo com o cfg.Now dos testes: o agendado só tira a entrada
+		// que o agendou, e o vencer da olhada segue o cfg.Now.
+		ditados: novoRegistroDoDitado(cfg.Now, clock.System{}.AfterFunc, limitesDoDitado{
 			porConta: lim.DitarAoMesmoTempo, porMinuto: lim.DitarPorMinuto, porDia: lim.DitarPorDia, total: lim.DitarNoTotal,
 		}),
 		smart:      smartconta.NovoCache(0),

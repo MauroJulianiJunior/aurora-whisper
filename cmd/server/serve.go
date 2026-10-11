@@ -41,7 +41,6 @@ const (
 	writeTimeout      = 60 * time.Second
 	idleTimeout       = 120 * time.Second
 	maxHeaderBytes    = 64 << 10
-	shutdownTimeout   = 15 * time.Second
 	startupTimeout    = 30 * time.Second
 	readyTimeout      = 2 * time.Second
 )
@@ -218,21 +217,29 @@ func servir(ctx context.Context, cloud *server.Cloud, ln net.Listener, logger *s
 	}
 	errDit := cloud.EsperarDitados(ditCtx)
 	if errShut != nil {
-		// O Shutdown parou no prazo com pedidos abertos (os que esperavam um
-		// ditado): com os ditados terminados, eles respondem agora, no mesmo
-		// prazo da espera dos ditados.
+		// O Shutdown parou no prazo com pedidos abertos: os que esperavam um
+		// ditado, que respondem agora, e o dono de um ditado que ainda lia o
+		// corpo (até 30 s). Este solta o trabalho depois da espera acima e, se o
+		// celular cai, o pedido acaba sem esperá-lo: os ditados são esperados de
+		// novo, para o pool não fechar com um ditado já pago no meio. Tudo no
+		// mesmo prazo: 15 s mais 70 s, abaixo do stop_grace_period de 90 s.
 		errShut = srv.Shutdown(ditCtx)
+		errDit = cloud.EsperarDitados(ditCtx)
 	}
 	if errDit != nil {
 		return fail(1, "os ditados em andamento não terminaram em %s depois do desligamento", esperaDosDitados)
 	}
 	if errShut != nil {
-		return fail(1, "o desligamento não terminou em %s: %v", shutdownTimeout, errShut)
+		return fail(1, "o desligamento não terminou em %s: %v", shutdownTimeout+esperaDosDitados, errShut)
 	}
 	esperarArrumacao()
 	logger.Info("desligado")
 	return 0
 }
+
+// shutdownTimeout é o prazo do Shutdown do http.Server no desligamento. É
+// variável para os testes.
+var shutdownTimeout = 15 * time.Second
 
 // esperaDosDitados é quanto o desligamento espera os ditados em andamento depois
 // do Shutdown (ADR-021, escolha menor 22: 70 s, com o stop_grace_period da API
