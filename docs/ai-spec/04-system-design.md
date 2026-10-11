@@ -13,7 +13,12 @@ Arquitetura local-first e cloud-connected. Windows executa captura, hotkey, cont
 > continua fora. O celular ganha uma rota própria, `POST /api/v1/dictations`, que só repassa a voz
 > (webm/opus, em memória, descartada ao fim) ao provedor que a pessoa escolheu (OpenAI ou Groq), com a
 > chave dela guardada cifrada no servidor, e passa o texto pelo Smart da conta e, se ela ligar, pelo
-> Polish. O ASR local do PC não muda. Ver `13-implementation-plan.md`, TASK-028.
+> Polish. O ASR local do PC não muda. Ver `13-implementation-plan.md`, TASK-028. **Estado em
+> 11-out-2026:** a rota existe no código (C5b, `internal/server/ditar*.go`) e o compose a declara (C5c);
+> o que falta é o deploy e o teste no aparelho (C7). O código do gateway antigo (`asr_gateway.go`, o
+> multipart de PCM sem idempotência) **saiu** na C5c, junto do servidor em memória da F1-D, e
+> `/asr/transcribe` segue `404`. O diagrama abaixo (`GW`, `EXT`, `INF`) continua sendo o gateway de
+> ASR **do desenho original**, que não existe; o ditado do celular não passa por ele.
 
 ## Diagrama
 ```mermaid
@@ -256,6 +261,15 @@ Backend recebe áudio efêmero, valida limites, não grava, encaminha ao provide
 Secrets do projeto ficam server-side. Exceção (ADR-016): a chave de API do provedor de IA de quem
 usa (BYOK) fica no Gerenciador de Credenciais do Windows e só serve ao Polish, que **não passa
 por este gateway**.
+
+**Emenda (ADR-021, 11-out-2026): o que existe no lugar do gateway.** Não há gateway de ASR, e o
+servidor continua sem transcrever. Existe uma rota só do ditado do celular, `POST /api/v1/dictations`,
+que recebe o áudio cru em webm/opus (até 1 MiB), o lê para a memória, o manda ao provedor da pessoa
+(`internal/asr/nuvem`, com a chave dela decifrada só durante a chamada), passa o texto pelo Smart da
+conta (`internal/smartconta`) e, se ela ligou, pelo Polish (`internal/polish`, o mesmo adaptador do PC),
+grava o ditado pelo ponto único de gravação e descarta o áudio. Só existe com a chave de cifra
+(`AI_KEYS_SECRET_FILE`); sem ela, `404`. O contrato é o de `06-api-contract.md`, "Ditar pelo
+celular"; a privacidade, a de `09-security-privacy.md`, "Ditar no celular".
 
 ## Deploy
 Containers:

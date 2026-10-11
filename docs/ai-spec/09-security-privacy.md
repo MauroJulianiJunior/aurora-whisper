@@ -18,7 +18,8 @@
 | Chave de API da pessoa para ditar no celular (ADR-021) | Secreto | Postgres, **cifrada** (AES-256-GCM, subchave por HKDF); a chave de cifra é um arquivo do servidor (`AI_KEYS_SECRET_FILE`), fora do banco e do backup | até a pessoa trocar, remover, desligar o ditado ou apagar os dados. A cópia antiga, cifrada, fica nos backups (cerca de 30 dias) e no banco anterior da restauração (7 dias) |
 | Aceite e preferências do ditado no celular (ADR-021) | Pessoal | Postgres (`dictation_consents` e `dictation_settings`); nunca descem aos PCs | a vida da conta; o "Apagar meus dados" os apaga |
 | Termos do aprendido enviados como dica (ADR-021) | Confidencial; sai da máquina | nenhuma (a dica é montada a cada ditado); só com o interruptor ligado | a chamada ao provedor; no provedor, como a voz |
-| Desfecho pago e não gravado (ADR-021) | Confidencial | memória da API, por `(user_id, id)`: o texto que seria gravado, o modo, o provedor e o modelo | 10 min, o reinício ou a mudança do epoch da conta; nunca em log |
+| Desfecho pago e não gravado (ADR-021) | Confidencial | memória da API, por `(user_id, id)`: o texto que seria gravado (o do provedor e o final), o modo, o provedor e o modelo; só quando o provedor já cobrou e a gravação falhou | 10 min (o vencimento roda quando chega um pedido novo: ADR-021, risco 21), o reinício, a mudança do epoch da conta, o "Apagar meus dados" e o "Desligar o ditado" (os dois o esquecem na hora); nunca em disco nem em log |
+| Aprendido da conta montado em Smart (ADR-021) | Confidencial | memória da API: o `smartconta.Cache`, por conta, montado a cada mudança dos pares (até 500); os termos podem ser nomes de clientes ou de terceiros | até o reinício ou a saída pelo LRU; o "Apagar meus dados" e o "Desligar o ditado" o esquecem, **e esquecem de novo no fim de um ditado em andamento que um deles cortou**; nunca em disco nem em log |
 
 ## Threat model
 | ID | Ameaça | Mitigação |
@@ -180,6 +181,10 @@ de `winruntime` sem mudar o comportamento do Agent. Três coisas valem aqui e l�
 - **A memória da política de esforço é por processo, e não por conta** (guarda um degrau por provedor e
   modelo que recusou o esforço): no servidor, o modelo vem da conta, então a C5b valida o modelo contra a
   lista antes de chegar ao `Recusou`, para o mapa não crescer sem limite e o log não levar texto livre.
+  **[C5b, 11-out-2026: feito, por um registro por processo dos modelos que os provedores listaram
+  (`internal/server/modelos_conhecidos.go`, teto de 2000 nomes por provedor). Modelo fora da lista: o
+  Polish nem é chamado, com o aviso `modelo_inexistente`, e a linha `ditado` do log escreve `outro` no
+  lugar do nome.]**
 
 - **O que sai:** o texto final do Smart (não o bruto do ASR), só com 4 palavras ou mais; o prompt
   fixo (`polish-ptbr@1.0.2`); o nome do modelo; e a chave, no cabeçalho.
@@ -383,15 +388,18 @@ ADR-019, "Decisões da F3"). O que vale, e onde cada coisa é provada (a suíte
 - **Revogar ou desconectar** não apaga nada no PC: o Agent continua funcionando localmente.
 
 ## Ditar no celular: o que sai do aparelho (ADR-021)
-Acrescentado em 10-out-2026 (D0 da ADR-021) e atualizado em 11-out-2026. **O estado:** a fase 1 está na
-`main` (as subfatias S, C1, C2, C3a, C3b, C4, C5a, C6a, C6b e C6c): o cofre das chaves, o aceite e as
-preferências, os provedores de transcrição, o Smart da conta, o adaptador comum do Polish e o app. **A
-rota que recebe a voz (C5b), o compose (C5c) e o deploy no aparelho (C7) ainda não existem**, então a voz
-ainda não chega a servidor nenhum: o que se diz abaixo da rota, dos limites, dos prazos e do
-"descartado ao fim" é o desenho aprovado, e cada afirmação só vale como atendida depois do teste que a
-ADR lista (os ACs são o AC-065 a AC-079). **Nenhum áudio real sai do aparelho antes do OK do Mauro na
-política e no dossiê reescritos** (`docs/politica-de-privacidade.md`, que é o modelo, e
-`docs/lgpd-dossie.md`). O contrato das rotas está em `06-api-contract.md`.
+Acrescentado em 10-out-2026 (D0 da ADR-021) e atualizado em 11-out-2026. **O estado:** as fases 1 e 2
+estão na `main`: o cofre das chaves, o aceite e as preferências, os provedores de transcrição, o Smart
+da conta, o adaptador comum do Polish, o app, **a rota que recebe a voz (C5b, `POST /api/v1/dictations`)
+e o compose com `memswap_limit`, `ulimits: core: 0` e o segredo da chave de cifra (C5c)**. **O deploy e o
+teste no aparelho (C7) ainda não aconteceram** (o Mauro autorizou o deploy em 11-out-2026, e ele vem a
+seguir): a voz ainda não chegou a servidor nenhum fora dos testes (que usam só `httptest` e provedores
+de mentira), e o que se diz abaixo é o que o código e os testes provam, **com três coisas só medidas no
+aparelho e na VPS**: o `Blob` do `MediaRecorder` no Chrome, a swap do kernel da VPS (o
+`memswap_limit` só vale se o kernel contar a swap no cgroup) e a configuração do proxy. Os ACs são o
+AC-065 a AC-079 (`03-acceptance-criteria.md`). **Nenhum áudio real sai do aparelho antes do OK do
+Mauro na política e no dossiê reescritos** (`docs/politica-de-privacidade.md`, que é o modelo, e
+`docs/lgpd-dossie.md`). O contrato das rotas está em `06-api-contract.md`, "Ditar pelo celular".
 
 É a **primeira vez que a voz sai da máquina de quem dita**. Para o **PC**, a regra "o áudio não sai do
 PC" continua verdadeira e é a de sempre. O celular é um caminho à parte, opcional, que só começa depois
@@ -429,19 +437,51 @@ tratamento pediria o art. 11.
   referências são soltas no fim. Nada em `IndexedDB`, Cache ou `localStorage`. **O que não se garante:** o
   `MediaRecorder` entrega um `Blob`, e o Chrome pode paginar `Blob`s em disco acima de um limite de
   memória. Isso não foi verificado para o tamanho de um ditado (cerca de 0,5 MB para 120 s).
-- **Na API:** não há multipart nem arquivo temporário (o corpo é cru). O corpo é lido com
-  `http.MaxBytesReader`, o tipo vem dos primeiros bytes (o cabeçalho EBML do webm), nunca do
-  `Content-Type`, e os bytes ficam numa variável do handler que sai de escopo no fim, com sucesso ou erro.
-  Eles nunca entram em estrutura de vida longa (cache, pool, erro, pânico).
-- **Sem disco, swap nem core dump:** o contêiner da API é `read_only`; ganha `memswap_limit` igual ao
-  `mem_limit` e `ulimits: core: 0` (casos no `deploy/compose_test.go`). **O `memswap_limit` só vale se
-  o kernel da VPS contar a swap no cgroup**, e a C7 confere isso **antes do primeiro áudio** (o
-  `docker info` sem "No swap limit support" e o `memory.swap.max` do contêiner em `0`, lido no host).
-  Se não der `0`, para e pergunta.
-- **O proxy da entrada não é nosso:** ele pode segurar pedaços do corpo na memória dele, fora do
-  `memswap_limit`, e um middleware de buffering levaria ao disco um corpo acima de 1 MiB. O nosso router
-  não tem middleware, e o corpo fica perto de 0,5 MB. A C7 lê a configuração real (o `readTimeout`, o
-  `writeTimeout` e os middlewares do entrypoint) antes do primeiro áudio; **o proxy nunca é editado**.
+- **Na API:** a rota não grava o áudio em disco, log, erro, resposta nem banco. Não há multipart nem
+  arquivo temporário (o corpo é cru). O corpo é lido com `http.MaxBytesReader`, num slice do tamanho do
+  `Content-Length`, e vai ao provedor sem segunda cópia. A rota exige o `Content-Type` `audio/webm`
+  (`415` antes de ler o corpo) **e** confere os primeiros bytes (o cabeçalho EBML e o DocType `webm`; o
+  Matroska é recusado): o tipo de verdade sai dos bytes, nunca só do cabeçalho. Os bytes ficam numa
+  variável do trabalho que sai de escopo no fim, com sucesso ou erro (o trabalho solta a referência
+  assim que o provedor responde), e nunca entram em estrutura de vida longa (cache, pool, erro,
+  pânico, a memória do registro dos ditados).
+- **O canário prova isso** (`Ditar_Canario`, em `internal/server/chavestest`, na memória e no Postgres):
+  um áudio sentinela e um texto sentinela passam por todos os desfechos (o ditado criado, com e sem o
+  Polish; a falha do provedor em três status; o sem fala; o formato errado; o corpo grande demais; a
+  gravação que falha), e o teste varre o log de acesso e o log padrão, todas as respostas, o despejo do
+  banco e o diretório temporário. O áudio não está em nenhum deles, o texto não está no log nem numa
+  resposta de erro, e o diretório temporário não ganha arquivo. A chave e o corpo de erro do provedor
+  também não aparecem.
+- **A chave da pessoa é decifrada só durante a chamada ao provedor.** A rota monta o provedor a cada
+  ditado com uma função que decifra a chave da conta na hora, sem cache; nenhum campo a guarda, e ela só
+  vai no cabeçalho do pedido ao provedor. Uma chave que não decifra mais (a chave de cifra trocou) é
+  `SEM_CHAVE`, sem chamar o provedor.
+- **O texto que o provedor devolveu e o servidor já pagou, mas não gravou** (a gravação falhou, ou o
+  trabalho passou do teto de 44 s) fica **só em memória**, por `(user_id, id)`, até **10 min**, para o
+  reenvio com o mesmo id só gravar, sem pagar de novo. **O "Apagar meus dados" e o "Desligar o ditado
+  no celular" o esquecem na hora** (e ao "sem fala" da conta), sem esperar os 10 min. Nunca vai a log.
+  O vencimento roda quando chega um pedido novo, então num servidor ocioso o texto pode passar dos 10 min
+  na RAM até o próximo ditado (ADR-021, risco 21).
+- **O Smart da conta** (o aprendido, montado e guardado no `smartconta.Cache` por conta) é esquecido no
+  "Apagar meus dados" e no "Desligar o ditado" **e também quando um deles acontece com um ditado em
+  andamento**: esse trabalho leu o aprendido antes e montaria o Smart de novo depois do esquecer, então,
+  ao terminar em `SEM_ACEITE`, ele o esquece outra vez (a correção `1eea4b9` da revisão da C5b). É só
+  RAM, nada em disco nem em log; sem a correção, o Smart ficaria no cache até a conta ditar outra vez
+  ou o LRU tirar.
+- **Sem disco, swap nem core dump:** o contêiner da API é `read_only`; e o compose (C5c) aplica nele
+  `memswap_limit: 256m`, igual ao `mem_limit`, e `ulimits: core: 0`, **como meios** da promessa: o
+  `memswap_limit` tira a swap do contêiner para o heap (com o áudio e a chave decifrada) não ir ao
+  disco, e o `core: 0` impede que um core dump leve o heap ao disco (o Go não grava core no padrão; é a
+  segunda trava). Ambos são prendidos pelo `deploy/compose_test.go`. **O `memswap_limit` só vale se o
+  kernel da VPS contar a swap no cgroup**, e a C7 confere isso **antes do primeiro áudio** pelos passos
+  10.3 e 10.4 do `docs/deploy-f11.md` (o `docker info` sem "No swap limit support"; `MemorySwap` igual a
+  `Memory`; o `memory.swap.max` do contêiner em `0`, lido no host). Se não der `0`, para e pergunta.
+- **A promessa vale para o contêiner da API.** O proxy da entrada não é nosso: ele pode segurar pedaços
+  do corpo na memória dele, fora do `memswap_limit`, e um middleware de buffering levaria ao disco um
+  corpo acima de 1 MiB (ADR-021, risco 14). O nosso router não tem middleware, e o corpo fica perto de
+  0,5 MB. A C7 lê a configuração real (o `readTimeout` em `0` ou acima de 30 s, o `writeTimeout` em `0`
+  ou de pelo menos 90 s, e os middlewares do entrypoint) antes do primeiro áudio; **o proxy nunca é
+  editado**.
 - **"Descartado ao fim", e não "apagado da memória":** o Go não zera a memória. A política diz
   "descartado".
 - **No log:** ver "Logging proibido", abaixo. Nunca vão ao log o áudio, o texto, a chave, o id nem o
@@ -482,12 +522,21 @@ Contrato: as rotas das chaves, no `06-api-contract.md`. Desenho: ADR-021, decis�
   cifrado copiado para outro usuário ou provedor não decifra (o AAD); trocar o arquivo leva a
   `SEM_CHAVE`; só o `final` volta; o `PUT` sem aceite vigente recusa sem chamar o provedor; o 11º pedido
   no minuto é recusado sem chamar o provedor. A revisão adversarial da C3a rodou sem correção.
-- **O que as travas não cobrem** (ADR-021, riscos 18 e 19): o `PUT` não fecha a corrida com o apagar e o
-  revogar (uma chave pode ser gravada de novo depois deles; não é usável sem aceite e some no próximo
-  revogar); o `GET` dos modelos gasta uma ficha do limite e o `http.CrossOriginProtection` não barra
-  `GET`; e, só com acesso ao banco, o tamanho do texto cifrado revela o tamanho da chave, o `key_suffix`
-  fica em claro e fora do AAD (quem escreve no banco pode trocar o "terminada em" ou recolocar um cifrado
-  antigo da mesma conta e do mesmo provedor), e a subida não confere a entropia da chave de cifra.
+- **A gravação da chave é conferida sob a trava da conta** (C3-correções, `6925ecc`; ADR-021, riscos 18
+  e 19, **fechados**). O `PUT` lê o `sync_epoch` primeiro e grava a chave numa transação que trava a
+  linha do usuário e o contador de sync e só então reconfere o epoch e o aceite em aberto que cobre o
+  provedor. Um "Apagar meus dados" ou um "Desligar o ditado" que termine durante a chamada ao provedor
+  (até 10 s) **não deixa mais a chave gravada de novo**: o `PUT` responde `409` (`conta_mudou`) ou `403`
+  `SEM_ACEITE`, e nada é gravado. O `GET` e o `HEAD` dos modelos, que gastam uma ficha do limite, só
+  atendem a própria origem: um `Sec-Fetch-Site` que venha e não seja `same-origin` é `403`
+  (`origem_cruzada`), porque o `http.CrossOriginProtection` não barra `GET`. O limite das chaves é por
+  conta (duas sessões da mesma conta dividem o balde). Cobre a memória e o Postgres, com 13 mutações
+  pegas.
+- **O que as travas não cobrem:** só com acesso ao banco, o tamanho do texto cifrado revela o tamanho da
+  chave, o `key_suffix` fica em claro e fora do AAD (quem escreve no banco pode trocar o "terminada em"
+  ou recolocar um cifrado antigo da mesma conta e do mesmo provedor), e a subida não confere a entropia
+  da chave de cifra. E, na rota de ditar, a janela de milissegundos do aceite revogado entre a
+  conferência e o `Store.Create` (ADR-021, risco 16), que segue aceita.
 
 ### O aceite
 - **Quando:** no primeiro toque no microfone, antes de pedir a chave. Uma folha só, em destaque,
@@ -513,8 +562,10 @@ Contrato: as rotas das chaves, no `06-api-contract.md`. Desenho: ADR-021, decis�
   novo. O aceite cobre o **conjunto** dos dois provedores aceitos (o da transcrição e o do Polish).
 - **Quem confere, na implementação:** o `PUT` da chave e o `GET` dos modelos (que mandam a chave ao
   provedor) exigem o aceite; o `PUT` das preferências recusa um provedor fora do aceite vigente; a rota
-  de ditar (C5b) o confere como descrito acima, e de novo antes do Polish e de gravar. O `DELETE` da
-  chave não pede.
+  de ditar (C5b) o confere antes de ler o corpo, e de novo antes do Polish e antes de gravar. O `DELETE`
+  da chave não pede. A conferência é uma só (`Aceite.Cobre`: o aceite vigente que inclui o provedor), e
+  a mesma serve à rota e à gravação da chave. O aceite novo **substitui** o anterior: ele tem dois
+  lugares (`transcricao` e `polish`), e trocar a voz da OpenAI para a Groq tira a OpenAI do aceite.
 
 ### O que o provedor diz (páginas lidas em 10-out-2026)
 Resumo; as fontes, o que cada página diz e o que **não** diz estão em `docs/lgpd-dossie.md`, Anexo B.
@@ -566,15 +617,26 @@ dela no provedor; o projeto não paga nada.
 7. A dica pode induzir termos, e o ganho na nuvem não foi medido.
 8. Uma sessão roubada gasta o dinheiro da pessoa, até os limites por conta.
 9. A revogação no meio do Polish deixa uma janela de milissegundos; o "Apagar meus dados" não (o epoch
-   é conferido dentro do `Create`).
+   é conferido dentro do `Create`). Seguiu aceita na C5b (ADR-021, risco 16).
 10. As chaves antigas ficam cifradas nos backups e no banco da restauração depois de "Trocar" ou
     "Remover".
-11. O proxy da entrada segura pedaços do corpo na memória dele, fora do nosso `memswap_limit`.
-12. Uma chave pode ser gravada de novo por um `PUT` que perdeu a corrida com o "Apagar meus dados" ou
-    com o "Desligar o ditado no celular" (achado da revisão da C3a): não é usável sem aceite e some no
-    próximo revogar ou apagar (ADR-021, risco 18).
-13. O app (C6b) e o servidor (C3b) ainda não falam o mesmo JSON do aceite e das preferências, nem a mesma
-    versão do aviso (ADR-021, risco 20): a folha do aceite não fecha contra o servidor real até alinhar.
+11. O proxy da entrada segura pedaços do corpo na memória dele, fora do nosso `memswap_limit`: a
+    promessa "nunca vai a swap" vale para o contêiner da API (ADR-021, risco 14).
+12. **Fechado em 11-out-2026** (C3-correções, `6925ecc`; ADR-021, risco 18). Uma chave podia ser gravada
+    de novo por um `PUT` que perdeu a corrida com o "Apagar meus dados" ou com o "Desligar o ditado no
+    celular" (achado da revisão da C3a). Agora a gravação confere o epoch e o aceite sob a trava da
+    conta.
+13. **Fechado em 11-out-2026** (C6-alinhar, `796d17d`; ADR-021, risco 20). O app (C6b) e o servidor (C3b)
+    não falavam o mesmo JSON do aceite e das preferências, nem a mesma versão do aviso. Agora o app fala
+    o contrato do `06`, e a versão do aviso é uma só, inteira.
+14. **Fechado em 11-out-2026** (C3-correções; ADR-021, risco 19). O `GET` dos modelos gasta uma ficha do
+    limite e o `http.CrossOriginProtection` não barra `GET`. Agora o `GET` só atende a própria origem.
+15. O texto que o provedor devolveu e o servidor já pagou fica até 10 min em memória, e o vencimento roda
+    quando chega um pedido novo: num servidor ocioso, o texto pode passar dos 10 min na RAM até o
+    próximo ditado. O "Apagar meus dados" e o "Desligar o ditado" o esquecem na hora (ADR-021,
+    risco 21).
+16. No desligamento do servidor, um trabalho de ditado que só solta depois do segundo `Shutdown` pode
+    perder o ditado já pago (ADR-021, risco 21; correção sugerida: esperar os ditados de novo).
 
 ### Texto da tela
 O texto de Privacidade do app da nuvem e a folha do aceite foram propostos em
@@ -584,8 +646,11 @@ O texto de Privacidade do app da nuvem e a folha do aceite foram propostos em
 não pede a chave dentro da folha: depois do "Aceito", abre as Configurações, onde a chave é colada, e ela
 nunca vai à URL nem volta inteira à tela. O "Política completa: {link}" ficou de fora, porque a política
 não está publicada. **O texto da folha tem de continuar batendo com a política**, e qualquer mudança dele
-sobe a versão do aviso (servidor e app). O app ainda guarda uma versão provisória, em texto
-(`ditar/aviso.ts`), que difere do inteiro do servidor: ADR-021, risco 20.
+sobe a versão do aviso (servidor e app). A versão é um inteiro só nos dois lados (`VERSAO_DO_AVISO` e
+`cloudstore.VersaoDoAviso`, presos por um teste; o `aviso.ts` provisório em texto saiu na C6-alinhar,
+ADR-021, risco 20), e o `avisoDoDitado.test.ts` guarda uma impressão do texto que a folha mostra: se o
+texto mudar sem a versão, o teste quebra. Ajustar o texto para bater com a política exige atualizar a
+impressão e, se alguém real já aceitou, subir a versão.
 
 ## Áudio
 - RAM only;
@@ -614,7 +679,9 @@ sobe a versão do aviso (servidor e app). O app ainda guarda uma versão provis�
   malformado que leve a chave); o corpo de erro do provedor (a OpenAI devolve um pedaço da chave no
   `401`). O que vale: o log de acesso, com o método, o padrão da rota, o status, os ms e os bytes, e uma
   linha `ditado:` só com contagens e códigos (duração, fala, bytes, provedor, modelo, desfecho, desfecho
-  do Polish, termos na dica, ms do provedor);
+  do Polish, termos na dica, ms do provedor). O modelo só leva o nome se o provedor o listou (senão
+  `outro`), e o valor de um pânico no trabalho nunca vai a log, porque poderia citar o que a pessoa
+  ditou;
 - o aprendizado pelo painel (ADR-017): o evento só registra **contagens** (por exemplo, sugestões
   devolvidas, aprendidas e desfeitas, e as ocorrências de desfazer uma troca do próprio sistema, que
   só são contadas); nunca o texto, nem o "de" e o "para" da variante, nem o termo dono de uma
@@ -736,7 +803,9 @@ protegido"; ADR-011, nota de 29-set-2026).
   dados" apaga as três tabelas (`ai_provider_keys`, `dictation_settings`, `dictation_consents`); o
   aceite que terminou (revogado ou substituído) fica gravado como prova enquanto a conta existir, e
   revogar não apaga as preferências, só as chaves. O
-  **desfecho pago e não gravado** fica 10 min em memória. No **provedor**, vale o que a documentação dele
+  **desfecho pago e não gravado** fica 10 min em memória (e o "Apagar meus dados" e o "Desligar o ditado"
+  o esquecem na hora), e o **Smart da conta**, montado com o aprendido dela, fica só em memória até o
+  reinício, a saída pelo LRU ou esses dois esquecimentos. No **provedor**, vale o que a documentação dele
   diz (a tabela de "Ditar no celular").
 - Exceção (ADR-017): a variante que o painel aprende é um trecho de até 4 palavras do que o ASR
   escreveu, gravado no `dicionario.json`. O dicionário persiste até exclusão, então a variante **não

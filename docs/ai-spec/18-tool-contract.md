@@ -139,6 +139,17 @@ func (c *Cliente) ListarModelos(ctx, provedor, chave string) ([]string, error) /
 - **Invariantes (testados):** a chave só vai no cabeçalho; áudio, chave e corpo de erro não aparecem
   em erro nem em log (o pacote nem importa `log`, `slog` nem `os`); nenhum arquivo é criado; a suíte
   inteira roda contra `httptest`, com uma trava que reprova qualquer pedido para fora da máquina.
+- **Quem o chama (C5b, 11-out-2026; `internal/server/ditar_trabalho.go`).** A rota
+  `POST /api/v1/dictations` (`06-api-contract.md`, "Ditar pelo celular") monta um `nuvem.Provider` **a
+  cada ditado**, com o provedor e o modelo das preferências da conta, o idioma `pt` e a `Chave` como uma
+  função que decifra a chave da conta só durante a chamada (`(*Cloud).chaveDeIA`, sem cache). O buffer
+  leva só `Comprimido{Bytes, Tipo: "audio/webm"}`, os mesmos bytes que o servidor leu do corpo, sem
+  segunda cópia; a dica, quando a conta a ligou, vai em `ASROptions.Vocabulary`. O prazo é o contexto de
+  20 s. A tradução da falha para a resposta é `server.FalhaDoProvedor`: `PROVEDOR_RECUSOU_CHAVE` (422),
+  `PROVEDOR_LIMITE` (502) e `PROVEDOR_FORA` (502); o motivo `sem_chave` do provider vira `SEM_CHAVE`
+  (409), e `arquivo_grande`, `PROVEDOR_FORA`. `ErrSemFala` vira `SEM_FALA` (422), e a rota guarda o
+  desfecho por 10 minutos para o reenvio não pagar de novo. Antes de chamar, a rota confere
+  `Capabilities().AceitaFormato("audio/webm")`. Nada mais do contrato do provider mudou.
 
 ## ContextProvider
 ```go
@@ -420,7 +431,8 @@ type ErroPolish struct{ Motivo MotivoFallback } // Error() é sempre "polish: <m
   `sem_cliente`. `UltimoPolish`: motivo vazio quando o último Polish agiu ou não houve nenhum; o
   curto não mexe; é o que a S5 lê para `polish_ultimo_motivo`.
 - **O adaptador (`internal/polish`; ADR-021, C5a, 10-out-2026).** Era `cmd/agent/polish.go` e agora
-  mora num pacote comum, que o Agent e o servidor (no ditado do celular, C5b) usam igual, sem build tag.
+  mora num pacote comum, que o Agent e o servidor (no ditado do celular, C5b, 11-out-2026;
+  `internal/server/ditar_trabalho.go`) usam igual, sem build tag.
   `polish.Montagem{Smart, Cliente, Esforco, Provedor, Modelo, Chave, Contar}.Abrir()` devolve o
   `resolver.PolishResolver` do ditado e o rótulo do esforço (só para o log):
   `resolver.PolishResolver{Smart: <o Smart de quem dita>, Client: <o clienteDoDitado, não exportado>}`,

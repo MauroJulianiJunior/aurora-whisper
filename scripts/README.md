@@ -27,8 +27,16 @@ Este diretório contém:
 - `nuvem-local-teste.ps1 [-Porta 8080] [-SemExemplos]`: a nuvem de **teste** no PC, sem Docker e sem
   Google (ADR-019, F4): compila o app em `%USERPROFILE%\.aurora-whisper-dev\painel-nuvem` e sobe o
   servidor de teste (`go run -tags logindeteste ./cmd/server teste`), na memória, com a conta de teste
-  e ditados de exemplo inventados, só em `127.0.0.1`. Com `-SemExemplos` (variável
-  `TESTE_SEM_EXEMPLOS=1`), sobe vazia, só com a conta: é o que se usa ao conectar o Agent do `bin\`,
+  e ditados de exemplo inventados, só em `127.0.0.1`. **O ditado pelo celular (ADR-021) também
+  funciona aqui, sem rede e sem chave de verdade:** as rotas `/api/v1/dictation` e `/api/v1/ai-keys` não
+  são `404`, a chave de cifra nasce a cada subida (um cofre por processo, que some com ele) e os
+  provedores são de mentira. O `POST /api/v1/dictations` joga o áudio fora e devolve a transcrição de
+  mentira "este é um ditado de mentira do servidor de teste pelo celular", e o Polish de mentira
+  devolve o texto com a primeira letra maiúscula e um ponto no fim. Uma chave colada que começa com
+  `recusada`, `sem-credito` ou `fora-do-ar` faz o provedor de mentira recusar a chave, ficar sem crédito
+  ou cair, para a tela mostrar cada erro (o banner do servidor os explica). Nada disso existe no build
+  normal do servidor. Com `-SemExemplos` (variável `TESTE_SEM_EXEMPLOS=1`), sobe vazia, só com a
+  conta: é o que se usa ao conectar o Agent do `bin\`,
   para os exemplos inventados não descerem ao histórico de uso (roteiro da F7). As chaves nascem no
   servidor e nunca aparecem. PowerShell 5.1, só ASCII. Roteiros: `docs/teste-manual-nuvem-f4.md`,
   `docs/teste-manual-nuvem-f7.md` e `docs/teste-manual-nuvem-f8.md`.
