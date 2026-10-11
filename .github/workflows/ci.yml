@@ -28,8 +28,12 @@ jobs:
       - name: go vet
         run: go vet ./...
 
+      # 30 min por pacote, e não os 10 do padrão: no runner Windows o fsync do
+      # SQLite chega a parar minutos (em 11-out-2026 um commit ficou 4 min no
+      # FlushFileBuffers), e o cmd/agent já levava 467 s numa rodada boa. Um
+      # teste travado de verdade continua caindo, só que mais tarde.
       - name: go test
-        run: go test ./...
+        run: go test -timeout 30m ./...
 
       # O servidor de teste (login de teste, conta de id fixo) só existe com a
       # build tag logindeteste; sem este passo, os testes dele nunca rodam no CI.
