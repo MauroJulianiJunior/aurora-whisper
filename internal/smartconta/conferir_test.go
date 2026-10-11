@@ -1,4 +1,4 @@
-package aprendiz
+package smartconta
 
 import (
 	"errors"
@@ -165,5 +165,26 @@ func TestPalavraComum(t *testing.T) {
 	}
 	if PalavraComum("não", true) == "" {
 		t.Error("a polaridade passou como grafia")
+	}
+}
+
+// TestConferencias_SaoAsDoPC: Conferencias entrega a palavra comum e o "agiria"
+// do par recebido, as duas do Agent, e nenhuma é nula.
+func TestConferencias_SaoAsDoPC(t *testing.T) {
+	c := Conferencias()
+	if c.PalavraComum == nil || c.Agiria == nil {
+		t.Fatalf("Conferencias() = %+v, quero as duas", c)
+	}
+	if c.PalavraComum("não", true) == "" || c.PalavraComum("dirfi", true) != "" {
+		t.Error("PalavraComum não é a do PC")
+	}
+	s := sementeDoPC2()
+	par := dictionary.ParDoPainel{Variante: "dirfi", Termo: "DIRF", Restrito: true, Dominio: "contabil", EmAliasRestrito: true}
+	novo, _, err := s.AplicarPares([]dictionary.ParDaNuvem{par.ParaNuvem()}, c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Agiria(novo, par); err != nil {
+		t.Errorf("Agiria = %v, quero nil: é o ValidarPar, que confere o alias restrito no domínio dele", err)
 	}
 }

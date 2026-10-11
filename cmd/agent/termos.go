@@ -6,11 +6,11 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/MauroJulianiJunior/aurora-whisper/internal/agent/aprendiz"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/asr"
 	uiacontext "github.com/MauroJulianiJunior/aurora-whisper/internal/context"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/dictionary"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/resolver"
+	"github.com/MauroJulianiJunior/aurora-whisper/internal/smartconta"
 )
 
 // O "Adicionar termo" das Configurações do lado do binário do Agent
@@ -26,12 +26,12 @@ var _ dictionary.Termos = (*aprendizadoDoAgent)(nil)
 // onde o termo vive), e nenhuma variante que agia antes deixa de agir
 // (conferirMudanca). Não loga nada: variante e termo são texto da pessoa.
 func conferirTermos(antes, depois dictionary.Semente, novas []dictionary.Aprendida) error {
-	smartDepois, err := aprendiz.SmartDaSemente(depois)
+	smartDepois, err := smartconta.SmartDaSemente(depois)
 	if err != nil {
 		return err
 	}
 	for _, n := range novas {
-		age, err := aprendiz.AgeEm(smartDepois, depois, n, false)
+		age, err := smartconta.AgeEm(smartDepois, depois, n, false)
 		if err != nil {
 			return err
 		}
@@ -44,7 +44,7 @@ func conferirTermos(antes, depois dictionary.Semente, novas []dictionary.Aprendi
 
 // conferirMudanca exige que toda variante que agia no dicionário de antes, e
 // que segue no de depois no mesmo termo, continue agindo, em cada domínio da
-// conferência (aprendiz.DominiosDaConferencia). É o que pega a regressão nova do
+// conferência (smartconta.DominiosDaConferencia). É o que pega a regressão nova do
 // "Adicionar termo": o termo com dica tem prioridade 100 e casamento fonético,
 // e a busca põe a prioridade antes do casamento, então ele pode passar na
 // frente do alias confirmado de outro termo ("Viti" deixaria de virar "Vitti"
@@ -77,7 +77,7 @@ func conferirTermos(antes, depois dictionary.Semente, novas []dictionary.Aprendi
 // sobre ela devolve o mesmo antes e depois (as entradas que casam com ela são
 // as mesmas, iguais), e o resultado não muda.
 func conferirMudanca(antes, depois dictionary.Semente, smartDepois *resolver.SmartResolver) error {
-	smartAntes, err := aprendiz.SmartDaSemente(antes)
+	smartAntes, err := smartconta.SmartDaSemente(antes)
 	if err != nil {
 		return err
 	}
@@ -92,15 +92,15 @@ func conferirMudanca(antes, depois dictionary.Semente, smartDepois *resolver.Sma
 					continue
 				}
 				par := dictionary.Aprendida{Termo: e.Canonica, Variante: v}
-				for _, dominio := range aprendiz.DominiosDaConferencia(antes, e.Canonica, false) {
-					agia, err := aprendiz.AgeNoDominio(smartAntes, antes.Usuario, par, dominio)
+				for _, dominio := range smartconta.DominiosDaConferencia(antes, e.Canonica, false) {
+					agia, err := smartconta.AgeNoDominio(smartAntes, antes.Usuario, par, dominio)
 					if err != nil {
 						return err
 					}
 					if !agia {
 						continue
 					}
-					age, err := aprendiz.AgeNoDominio(smartDepois, depois.Usuario, par, dominio)
+					age, err := smartconta.AgeNoDominio(smartDepois, depois.Usuario, par, dominio)
 					if err != nil {
 						return err
 					}
@@ -197,19 +197,19 @@ func conferirCanonicas(antes, depois dictionary.Semente, smartAntes, smartDepois
 		if d, ok := entradaDoTermo(depois, e.Canonica); !ok || d.Inativa {
 			continue
 		}
-		for _, dominio := range aprendiz.DominiosDaConferencia(antes, e.Canonica, false) {
+		for _, dominio := range smartconta.DominiosDaConferencia(antes, e.Canonica, false) {
 			era, err := resolverSozinha(smartAntes, antes.Usuario, e.Canonica, dominio, contexto)
 			if err != nil {
 				return err
 			}
-			if !aprendiz.IgualNoDicionario(era, e.Canonica) {
+			if !smartconta.IgualNoDicionario(era, e.Canonica) {
 				continue
 			}
 			fica, err := resolverSozinha(smartDepois, depois.Usuario, e.Canonica, dominio, contexto)
 			if err != nil {
 				return err
 			}
-			if !aprendiz.IgualNoDicionario(fica, e.Canonica) {
+			if !smartconta.IgualNoDicionario(fica, e.Canonica) {
 				return &dictionary.ErroQuebraria{Variante: e.Canonica, Termo: e.Canonica, Vira: fica}
 			}
 		}
@@ -245,7 +245,7 @@ func liberada(e dictionary.EntradaSemente) dictionary.EntradaSemente {
 // entradaDoTermo acha a entrada do termo em s.
 func entradaDoTermo(s dictionary.Semente, termo string) (dictionary.EntradaSemente, bool) {
 	for _, e := range s.Entradas {
-		if aprendiz.IgualNoDicionario(e.Canonica, termo) {
+		if smartconta.IgualNoDicionario(e.Canonica, termo) {
 			return e, true
 		}
 	}
@@ -281,7 +281,7 @@ func trechosDe(v string) []string {
 // temAVariante diz se s tem v, exatamente, como variante do termo, ligado.
 func temAVariante(s dictionary.Semente, termo, v string) bool {
 	for _, e := range s.Entradas {
-		if e.Inativa || !aprendiz.IgualNoDicionario(e.Canonica, termo) {
+		if e.Inativa || !smartconta.IgualNoDicionario(e.Canonica, termo) {
 			continue
 		}
 		for _, lista := range [][]string{e.Alias, e.AliasRestrito} {

@@ -7,6 +7,7 @@ import (
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/agent/winruntime"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/dictionary"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/resolver"
+	"github.com/MauroJulianiJunior/aurora-whisper/internal/smartconta"
 )
 
 // Este arquivo é o aprendizado pelo painel do lado do binário do Agent
@@ -38,7 +39,7 @@ type aprendizadoDoAgent struct {
 	*aprendiz.Aplicador
 	rt     trocadorDeDicionario
 	polish *polishDoAgent
-	// montar é aprendiz.SmartDaSemente. Um campo, e não a chamada direta, para
+	// montar é smartconta.SmartDaSemente. Um campo, e não a chamada direta, para
 	// o teste poder falhar a montagem de DEPOIS de gravar, que na prática não
 	// acontece (Validar roda a mesma montagem antes de gravar).
 	montar func(dictionary.Semente) (*resolver.SmartResolver, error)
@@ -65,7 +66,7 @@ func novoAprendizado(caminho, usuario string, rt trocadorDeDicionario, polish *p
 	if log == nil {
 		log = slog.Default()
 	}
-	a := &aprendizadoDoAgent{rt: rt, polish: polish, montar: aprendiz.SmartDaSemente}
+	a := &aprendizadoDoAgent{rt: rt, polish: polish, montar: smartconta.SmartDaSemente}
 	a.Aplicador = aprendiz.Novo(aprendiz.Config{
 		Caminho: caminho,
 		Usuario: usuario,

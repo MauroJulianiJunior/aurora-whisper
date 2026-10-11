@@ -1,4 +1,4 @@
-package aprendiz
+package smartconta
 
 import (
 	"context"
@@ -12,7 +12,8 @@ import (
 // SmartDaSemente monta o Smart sobre um repositório em memória novo,
 // populado com a semente. É o mesmo caminho da subida (abrirDicionarioEm, no
 // Agent) e o da troca na hora: o dicionário que vale depois de aprender é
-// montado exatamente como o que vale depois de reiniciar.
+// montado exatamente como o que vale depois de reiniciar. É também o caminho
+// do Smart da conta (Montar): o celular monta o dele pela mesma função.
 func SmartDaSemente(s dictionary.Semente) (*resolver.SmartResolver, error) {
 	repo := dictionary.NewInMemoryDictionaryRepository(nil)
 	if err := s.Popular(context.Background(), repo); err != nil {
@@ -148,7 +149,13 @@ func DominiosDaConferencia(s dictionary.Semente, termo string, restrito bool) []
 // IgualNoDicionario compara como o Search compara: sem caixa, acento nem
 // pontuação, e sem espaços.
 func IgualNoDicionario(a, b string) bool {
-	return dictionary.CollapseSpaces(dictionary.Normalize(a)) == dictionary.CollapseSpaces(dictionary.Normalize(b))
+	return chaveNoDicionario(a) == chaveNoDicionario(b)
+}
+
+// chaveNoDicionario é a forma em que IgualNoDicionario compara: sem caixa,
+// acento, pontuação nem espaços.
+func chaveNoDicionario(s string) string {
+	return dictionary.CollapseSpaces(dictionary.Normalize(s))
 }
 
 // PalavraComum é o Arquivo.PalavraComum do Agent: para o termo, a guarda do
@@ -161,4 +168,12 @@ func PalavraComum(texto string, grafia bool) string {
 		return string(learning.GrafiaArriscada(texto))
 	}
 	return string(learning.Arriscada(texto))
+}
+
+// Conferencias são as conferências do lote, as MESMAS do Agent: a palavra
+// comum (PalavraComum) e o "agiria" do par recebido (ValidarPar, com a
+// restrição efetiva dele). É o que Semente.AplicarPares recebe no PC que
+// aplica o aprendido da nuvem (aprendiz.Novo) e no Smart da conta (Montar).
+func Conferencias() dictionary.ConferenciasDoLote {
+	return dictionary.ConferenciasDoLote{PalavraComum: PalavraComum, Agiria: ValidarPar}
 }

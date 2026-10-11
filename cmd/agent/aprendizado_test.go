@@ -13,13 +13,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MauroJulianiJunior/aurora-whisper/internal/agent/aprendiz"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/agent/chaves"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/agent/winruntime"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/asr"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/dictionary"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/ia"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/resolver"
+	"github.com/MauroJulianiJunior/aurora-whisper/internal/smartconta"
 )
 
 // Tudo aqui roda em t.TempDir(), com um runtime FALSO: nenhum teste toca o
@@ -171,7 +171,7 @@ func achaTermo(t *testing.T, s *resolver.SmartResolver, termo string) bool {
 
 func TestAprendizado_AprenderGravaETrocaNaHora(t *testing.T) {
 	m := montarAprendizado(t, dicionarioDoAprendizado, "mauro")
-	antes, err := aprendiz.SmartDaSemente(mustSemente(t, dicionarioDoAprendizado))
+	antes, err := smartconta.SmartDaSemente(mustSemente(t, dicionarioDoAprendizado))
 	if err != nil {
 		t.Fatal(err)
 	}

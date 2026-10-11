@@ -8,12 +8,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MauroJulianiJunior/aurora-whisper/internal/agent/aprendiz"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/agent/winruntime"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/asr"
 	uiacontext "github.com/MauroJulianiJunior/aurora-whisper/internal/context"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/dictionary"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/resolver"
+	"github.com/MauroJulianiJunior/aurora-whisper/internal/smartconta"
 )
 
 // O "Adicionar termo" (ADR-020) do lado do Agent: grava, troca o dicionário e
@@ -24,7 +24,7 @@ import (
 // dicionarioDe monta o dicionário do runtime de um JSON, como a subida.
 func dicionarioDe(t *testing.T, conteudo string) winruntime.Dicionario {
 	t.Helper()
-	smart, err := aprendiz.SmartDaSemente(mustSemente(t, conteudo))
+	smart, err := smartconta.SmartDaSemente(mustSemente(t, conteudo))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -62,7 +62,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/MauroJulianiJunior/aurora-whisper/internal/agent/aprendiz"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/agent/audio"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/agent/autostart"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/agent/chaves"
@@ -82,6 +81,7 @@ import (
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/agent/win32"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/agent/winruntime"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/clock"
+	"github.com/MauroJulianiJunior/aurora-whisper/internal/smartconta"
 )
 
 // appName identifica o binário nas mensagens de diagnóstico.
@@ -1052,7 +1052,7 @@ func abrirDicionarioEm(log *slog.Logger, caminho string) (*resolver.SmartResolve
 	if err != nil {
 		return nil, "", "", nil, fmt.Errorf("lendo %s: %w", caminho, err)
 	}
-	smart, err := aprendiz.SmartDaSemente(semente)
+	smart, err := smartconta.SmartDaSemente(semente)
 	if err != nil {
 		return nil, "", "", nil, fmt.Errorf("carregando %s: %w", caminho, err)
 	}
