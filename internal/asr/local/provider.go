@@ -58,6 +58,7 @@ func (p *Provider) Capabilities() asr.ASRCapabilities {
 		// O whisper-server aceita o campo "prompt" (o "initial prompt" do
 		// whisper.cpp) e o usa para enviesar o decodificador — ver pedir().
 		Vocabulary: true,
+		// Formatos fica vazio de propósito: só PCM. Ver Transcribe.
 	}
 }
 
@@ -106,7 +107,16 @@ func (p *Provider) garantirDePe(ctx context.Context) error {
 //
 // NUNCA chama audio.Release: o dono do buffer é quem libera, e apenas uma
 // vez, depois de todos os providers (asr.AudioBuffer, TEST-010).
+//
+// Só entende PCM: o whisper.cpp local recebe um WAV, e este provider não
+// decodifica webm nem opus (ADR-021, decisão C). Áudio comprimido é recusado
+// com asr.ErrComprimidoNaoSuportado ANTES de qualquer outra coisa, inclusive
+// de subir o servidor: quem manda comprimido para o PC errou de provider, e
+// gastar a subida do modelo para dizer isso seria o pior jeito de descobrir.
 func (p *Provider) Transcribe(ctx context.Context, audio asr.AudioBuffer, opts asr.ASROptions) (asr.ASRResult, error) {
+	if audio.Comprimido.Presente() {
+		return asr.ASRResult{}, asr.ErrComprimidoNaoSuportado
+	}
 	wav, err := encodeWAV(audio.PCM, audio.SampleRateHz)
 	if err != nil {
 		return asr.ASRResult{}, err

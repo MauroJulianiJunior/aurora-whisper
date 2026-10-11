@@ -13,6 +13,7 @@ import (
 
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/dictionary"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/resolver"
+	"github.com/MauroJulianiJunior/aurora-whisper/internal/smartconta"
 )
 
 // Troca é o dicionário novo que o Aplicador pede ao runtime depois de cada
@@ -41,9 +42,10 @@ type Config struct {
 	// operações ao mesmo tempo gravam na ordem da trava e pedem a troca na
 	// mesma ordem. Não pode bloquear nem chamar o Aplicador. Nil: só grava.
 	Trocar func(Troca)
-	// Montar monta o Smart do dicionário gravado; nil é SmartDaSemente. Um
-	// campo, para o teste poder falhar a montagem de DEPOIS de gravar, que na
-	// prática não acontece (o Validar roda a mesma montagem antes de gravar).
+	// Montar monta o Smart do dicionário gravado; nil é
+	// smartconta.SmartDaSemente. Um campo, para o teste poder falhar a
+	// montagem de DEPOIS de gravar, que na prática não acontece (o
+	// smartconta.Validar roda a mesma montagem antes de gravar).
 	Montar func(dictionary.Semente) (*resolver.SmartResolver, error)
 	// ConferirMudanca é a conferência do "Adicionar termo" (ADR-020;
 	// dictionary.Arquivo.ConferirMudanca). Nil não confere.
@@ -102,7 +104,7 @@ var (
 func Novo(cfg Config) *Aplicador {
 	a := &Aplicador{trocar: cfg.Trocar, montar: cfg.Montar, log: cfg.Log}
 	if a.montar == nil {
-		a.montar = SmartDaSemente
+		a.montar = smartconta.SmartDaSemente
 	}
 	if a.log == nil {
 		a.log = slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -112,17 +114,17 @@ func Novo(cfg Config) *Aplicador {
 			Caminho: cfg.Caminho,
 			Usuario: cfg.Usuario,
 			// O que não carrega no repositório em memória não chega ao disco.
-			Validar: Validar,
+			Validar: smartconta.Validar,
 			// O que o painel responde "aprendido" tem de AGIR.
-			ValidarAprendida: Agiria,
+			ValidarAprendida: smartconta.Agiria,
 			// O "Adicionar termo": cada grafia nova age, e nada que agia
 			// deixa de agir.
 			ConferirMudanca: cfg.ConferirMudanca,
 			// E nada que só tenha palavra de ligação, polaridade ou número.
-			PalavraComum: PalavraComum,
+			PalavraComum: smartconta.PalavraComum,
 			// O par que chega da nuvem tem de agir aqui, com a restrição
 			// efetiva dele.
-			ValidarPar: ValidarPar,
+			ValidarPar: smartconta.ValidarPar,
 		}
 	}
 	return a

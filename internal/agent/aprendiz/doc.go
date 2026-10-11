@@ -9,12 +9,14 @@
 // aplicador de verdade. O que depende do runtime do Windows (o
 // winruntime.Dicionario, o Polish) fica no Agent, atrás de Config.Trocar.
 //
-// # As conferências
+// # As conferências moram em outro pacote
 //
-// As do Agent que o dicionário sozinho não sabe fazer (conferir.go): a
-// montagem do Smart (SmartDaSemente), o Validar, o "agiria" do Aprender
-// (Agiria) e o do par recebido (ValidarPar, com a restrição efetiva do par),
-// os domínios da conferência e a palavra comum.
+// As que o dicionário sozinho não sabe fazer (a montagem do Smart, o
+// Validar, o "agiria" do Aprender e o do par recebido, os domínios da
+// conferência e a palavra comum) saíram daqui para internal/smartconta (ADR-021,
+// C2), um pacote puro que o servidor também usa para montar o Smart da conta.
+// O Aplicador as importa de lá e não muda de comportamento: é o mesmo código,
+// no mesmo caminho.
 //
 // # Nada de texto em log
 //

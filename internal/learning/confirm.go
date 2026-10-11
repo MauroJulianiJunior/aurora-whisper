@@ -7,7 +7,7 @@ import (
 
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/clock"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/dictionary"
-	"github.com/MauroJulianiJunior/aurora-whisper/internal/storage"
+	"github.com/MauroJulianiJunior/aurora-whisper/internal/ids"
 )
 
 // ErrNotConfirmed é devolvido por Confirm quando confirmation não é uma
@@ -68,8 +68,9 @@ type Deps struct {
 	Clock clock.Clock
 
 	// NewID gera o ID de novas entidades (Correction, e, quando
-	// necessário, DictionaryEntry/DictionaryAlias). Nil usa
-	// storage.NewID.
+	// necessário, DictionaryEntry/DictionaryAlias). Nil usa ids.New, o
+	// mesmo gerador de storage.NewID (que delega a ele); o learning não
+	// importa o storage (ADR-021, C2).
 	NewID func() string
 }
 
@@ -84,7 +85,7 @@ func (d Deps) newID() func() string {
 	if d.NewID != nil {
 		return d.NewID
 	}
-	return storage.NewID
+	return ids.New
 }
 
 // ConfirmInput descreve o que está sendo confirmado: a Suggestion

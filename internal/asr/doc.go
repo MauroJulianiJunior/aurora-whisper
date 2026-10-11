@@ -7,14 +7,20 @@
 // síncronos (subpacote internal/asr/mock). Nenhum modelo real, nenhuma
 // chamada de rede.
 //
+// Os providers concretos são subpacotes: local (o whisper.cpp residente do
+// PC, só PCM) e nuvem (OpenAI e Groq, com a chave de quem dita, só áudio
+// comprimido; ADR-021).
+//
 // # Responsabilidade
 //
 // Este pacote declara:
 //
 //   - ASRProvider (provider.go) — o contrato único que todo provider
 //     implementa, conforme docs/ai-spec/18-tool-contract.md.
-//   - Os tipos de apoio (types.go): AudioBuffer, ASRCapabilities,
-//     ASROptions, ASRResult, Confidence, Span, Alternative.
+//   - Os tipos de apoio (types.go): AudioBuffer (PCM ou áudio
+//     comprimido, nunca os dois), ASRCapabilities (com Formatos, o áudio
+//     comprimido aceito), ASROptions, ASRResult, Confidence, Span,
+//     Alternative.
 //   - Engine (engine.go) — o motor de policy que decide quais provider(s)
 //     chamar para uma Policy (local_only, local_then_cloud, cloud_only),
 //     conforme docs/ai-spec/04-system-design.md (seção "ASR provider") e
