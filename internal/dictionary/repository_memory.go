@@ -55,6 +55,10 @@ type InMemoryDictionaryRepository struct {
 
 	byUserNormalized       map[string]string // entryKey -> entry ID
 	byEntryNormalizedAlias map[string]string // aliasKey -> alias ID
+
+	// O índice de busca (indice.go) é derivado de entries e aliases, mantido
+	// junto deles por cada gravação. Search só o lê.
+	indice indiceDeBusca
 }
 
 // NewInMemoryDictionaryRepository constrói um repositório vazio. encoder
@@ -71,6 +75,7 @@ func NewInMemoryDictionaryRepository(encoder PhoneticEncoder) *InMemoryDictionar
 		aliases:                make(map[string]DictionaryAlias),
 		byUserNormalized:       make(map[string]string),
 		byEntryNormalizedAlias: make(map[string]string),
+		indice:                 novoIndiceDeBusca(),
 	}
 }
 
@@ -83,7 +88,7 @@ var _ DictionaryRepository = (*InMemoryDictionaryRepository)(nil)
 func (r *InMemoryDictionaryRepository) Put(entry DictionaryEntry) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.entries[entry.ID] = entry
+	r.gravarEntrada(entry)
 	r.byUserNormalized[entryKey(entry.UserID, entry.NormalizedForm)] = entry.ID
 }
 
@@ -91,8 +96,24 @@ func (r *InMemoryDictionaryRepository) Put(entry DictionaryEntry) {
 func (r *InMemoryDictionaryRepository) PutAlias(alias DictionaryAlias) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.aliases[alias.ID] = alias
+	r.gravarAlias(alias)
 	r.byEntryNormalizedAlias[aliasKey(alias.EntryID, alias.NormalizedAlias)] = alias.ID
+}
+
+// gravarEntrada põe a entrada em entries, por ID, e no índice de busca. Todo
+// caminho que muda entries passa por aqui. Chamador segura r.mu.
+func (r *InMemoryDictionaryRepository) gravarEntrada(entry DictionaryEntry) {
+	r.entries[entry.ID] = entry
+	r.indice.poeEntrada(entry, r.encoder)
+}
+
+// gravarAlias põe o alias em aliases, por ID, e no índice de busca (tirando
+// dele o alias antigo de mesmo ID, que pode ser de outra entrada). Todo caminho
+// que muda aliases passa por aqui. Chamador segura r.mu.
+func (r *InMemoryDictionaryRepository) gravarAlias(alias DictionaryAlias) {
+	antigo, tinha := r.aliases[alias.ID]
+	r.aliases[alias.ID] = alias
+	r.indice.poeAlias(antigo, tinha, alias, r.encoder)
 }
 
 func (r *InMemoryDictionaryRepository) Upsert(_ context.Context, entry DictionaryEntry) error {
@@ -120,7 +141,7 @@ func (r *InMemoryDictionaryRepository) Upsert(_ context.Context, entry Dictionar
 		entry.CreatedAt = existing.CreatedAt
 		entry.Version = existing.Version + 1
 		entry.UpdatedAt = now
-		r.entries[existing.ID] = entry
+		r.gravarEntrada(entry)
 		return nil
 	}
 
@@ -136,7 +157,7 @@ func (r *InMemoryDictionaryRepository) Upsert(_ context.Context, entry Dictionar
 		entry.Version = 1
 	}
 	entry.UpdatedAt = now
-	r.entries[entry.ID] = entry
+	r.gravarEntrada(entry)
 	r.byUserNormalized[key] = entry.ID
 	return nil
 }
@@ -174,7 +195,7 @@ func (r *InMemoryDictionaryRepository) UpsertAlias(_ context.Context, alias Dict
 			alias.UsageCount = existing.UsageCount
 		}
 		alias.UpdatedAt = now
-		r.aliases[existing.ID] = alias
+		r.gravarAlias(alias)
 		return nil
 	}
 
@@ -185,7 +206,7 @@ func (r *InMemoryDictionaryRepository) UpsertAlias(_ context.Context, alias Dict
 		alias.CreatedAt = now
 	}
 	alias.UpdatedAt = now
-	r.aliases[alias.ID] = alias
+	r.gravarAlias(alias)
 	r.byEntryNormalizedAlias[key] = alias.ID
 	return nil
 }
@@ -207,7 +228,8 @@ func (r *InMemoryDictionaryRepository) Search(_ context.Context, query Dictionar
 	queryPhonetic := r.encoder.Encode(normQuery)
 
 	candidates := make([]DictionaryCandidate, 0)
-	for _, entry := range r.entries {
+	for _, ix := range r.indice.entradas {
+		entry := &ix.e
 		if !entry.Active || entry.UserID != query.UserID {
 			continue
 		}
@@ -226,7 +248,7 @@ func (r *InMemoryDictionaryRepository) Search(_ context.Context, query Dictionar
 		}
 
 		dominioBate := query.Domain != nil && entry.Domain != nil && *entry.Domain == *query.Domain
-		if c, ok := r.bestMatch(entry, normQuery, collapsedQuery, queryPhonetic, dominioBate); ok {
+		if c, ok := r.bestMatch(ix, normQuery, collapsedQuery, queryPhonetic, dominioBate); ok {
 			candidates = append(candidates, c)
 		}
 	}
@@ -262,7 +284,11 @@ func (r *InMemoryDictionaryRepository) Search(_ context.Context, query Dictionar
 // dominioBate diz se o domínio pedido é EXATAMENTE o da entrada, e é o
 // que libera alias restrito. Falso quando qualquer um dos dois é
 // desconhecido — ver DictionaryAlias.Restricted.
-func (r *InMemoryDictionaryRepository) bestMatch(entry DictionaryEntry, normQuery, collapsedQuery, queryPhonetic string, dominioBate bool) (DictionaryCandidate, bool) {
+func (r *InMemoryDictionaryRepository) bestMatch(ix *entradaIndexada, normQuery, collapsedQuery, queryPhonetic string, dominioBate bool) (DictionaryCandidate, bool) {
+	entry := &ix.e
+	// Os aliases desta entrada e as formas que dependem só deles já estão no
+	// índice (indice.go): nada é recalculado por consulta.
+	aliases := r.indice.aliases[entry.ID]
 	base := DictionaryCandidate{
 		EntryID:       entry.ID,
 		CanonicalForm: entry.CanonicalForm,
@@ -271,21 +297,19 @@ func (r *InMemoryDictionaryRepository) bestMatch(entry DictionaryEntry, normQuer
 	}
 
 	if normQuery == entry.NormalizedForm ||
-		(collapsedQuery != "" && collapsedQuery == CollapseSpaces(entry.NormalizedForm)) {
+		(collapsedQuery != "" && collapsedQuery == ix.colapsada) {
 		base.Reason = MatchReasonExact
 		base.Score = scoreExact
 		return base, true
 	}
 
-	for _, alias := range r.aliases {
-		if alias.EntryID != entry.ID {
+	for i := range aliases {
+		alias := &aliases[i]
+		if alias.a.Restricted && !dominioBate {
 			continue
 		}
-		if alias.Restricted && !dominioBate {
-			continue
-		}
-		if alias.NormalizedAlias == normQuery ||
-			(collapsedQuery != "" && collapsedQuery == CollapseSpaces(alias.NormalizedAlias)) {
+		if alias.a.NormalizedAlias == normQuery ||
+			(collapsedQuery != "" && collapsedQuery == alias.colapsado) {
 			base.Reason = MatchReasonAlias
 			base.Score = scoreAlias
 			return base, true
@@ -306,7 +330,7 @@ func (r *InMemoryDictionaryRepository) bestMatch(entry DictionaryEntry, normQuer
 	bestScore := 0.0
 	matched := false
 
-	if r.encoder.Encode(entry.NormalizedForm) == queryPhonetic {
+	if ix.fonetica == queryPhonetic {
 		if sim := textSimilarity(normQuery, entry.NormalizedForm); sim >= phoneticSimilarityThreshold {
 			if score := phoneticScore(sim); score > bestScore {
 				bestScore = score
@@ -315,27 +339,20 @@ func (r *InMemoryDictionaryRepository) bestMatch(entry DictionaryEntry, normQuer
 		}
 	}
 
-	for _, alias := range r.aliases {
-		if alias.EntryID != entry.ID {
-			continue
-		}
+	for i := range aliases {
+		alias := &aliases[i]
 		// A restrição vale aqui também. Match fonético não é
 		// auto-aplicado (é evidência fraca), mas um alias restrito nem
 		// como CANDIDATO deve aparecer fora do domínio dele: o candidato
 		// vira span incerto, e span incerto é o que o resolver cloud
 		// recebe permissão de mexer.
-		if alias.Restricted && !dominioBate {
+		if alias.a.Restricted && !dominioBate {
 			continue
 		}
-		aliasPhonetic := alias.PhoneticKey
-		if aliasPhonetic == nil {
-			encoded := r.encoder.Encode(alias.NormalizedAlias)
-			aliasPhonetic = &encoded
-		}
-		if *aliasPhonetic != queryPhonetic {
+		if alias.fonetico != queryPhonetic {
 			continue
 		}
-		if sim := textSimilarity(normQuery, alias.NormalizedAlias); sim >= phoneticSimilarityThreshold {
+		if sim := textSimilarity(normQuery, alias.a.NormalizedAlias); sim >= phoneticSimilarityThreshold {
 			if score := phoneticScore(sim); score > bestScore {
 				bestScore = score
 				matched = true
