@@ -652,14 +652,16 @@ func testTirarDaLista(t *testing.T, b Backend) {
 	n.entrarComo(sub()+"-nao-usado", m.emailB)
 }
 
-// rotaConcreta troca os {id} do padrão por um UUID e separa o método. Os
-// padrões de resto (sem método) devolvem o método vazio.
+// rotaConcreta troca os {id} do padrão por um UUID (e o {provedor} das chaves
+// da IA por um da lista) e separa o método. Os padrões de resto (sem método)
+// devolvem o método vazio.
 func rotaConcreta(padrao string) (method, path string) {
 	method, path, ok := strings.Cut(padrao, " ")
 	if !ok {
 		return "", ""
 	}
-	return method, strings.ReplaceAll(strings.TrimSuffix(path, "{$}"), "{id}", contracttest.NewID())
+	path = strings.ReplaceAll(strings.TrimSuffix(path, "{$}"), "{id}", contracttest.NewID())
+	return method, strings.ReplaceAll(path, "{provedor}", "openai")
 }
 
 func testEscopo(t *testing.T, b Backend) {
@@ -718,6 +720,25 @@ func testEscopo(t *testing.T, b Backend) {
 	// O aprendido do celular (F8d): só a sessão, e sem parâmetro de caminho (o
 	// texto nunca vai na URL; o id do desfazer vai no corpo).
 	for _, padrao := range []string{"GET /api/v1/learned", "POST /api/v1/learned/undo"} {
+		if acesso, ok := porPadrao[padrao]; !ok || acesso != server.AcessoSessao {
+			t.Errorf("%s na tabela: %v (montada: %v), quero só a sessão", padrao, acesso, ok)
+		}
+		if strings.ContainsAny(padrao, "{}?") {
+			t.Errorf("%s tem parâmetro na URL", padrao)
+		}
+	}
+	// As chaves da IA do celular (ADR-021, C3a): só a sessão, e percorridas
+	// acima com o token, sem credencial e com o Bearer inválido.
+	for _, padrao := range []string{"PUT /api/v1/ai-keys/{provedor}", "DELETE /api/v1/ai-keys/{provedor}", "GET /api/v1/ai-keys/{provedor}/models"} {
+		if acesso, ok := porPadrao[padrao]; !ok || acesso != server.AcessoSessao {
+			t.Errorf("%s na tabela: %v (montada: %v), quero só a sessão", padrao, acesso, ok)
+		}
+	}
+	// O aceite e as preferências do ditado no celular (ADR-021, C3b): só a
+	// sessão, sem parâmetro de caminho, percorridas acima do mesmo jeito.
+	for _, padrao := range []string{
+		"GET /api/v1/dictation", "PUT /api/v1/dictation/settings", "POST /api/v1/dictation/consent", "DELETE /api/v1/dictation/consent",
+	} {
 		if acesso, ok := porPadrao[padrao]; !ok || acesso != server.AcessoSessao {
 			t.Errorf("%s na tabela: %v (montada: %v), quero só a sessão", padrao, acesso, ok)
 		}
@@ -805,6 +826,16 @@ func testCSRF(t *testing.T, b Backend) {
 	// o resto da tabela.
 	if !visto["POST /api/v1/learned/undo"] {
 		t.Error("o POST /learned/undo não foi conferido contra o pedido de outra origem")
+	}
+	// O PUT e o DELETE das chaves da IA (ADR-021, C3a) também.
+	if !visto["PUT /api/v1/ai-keys/{provedor}"] || !visto["DELETE /api/v1/ai-keys/{provedor}"] {
+		t.Error("as rotas das chaves da IA não foram conferidas contra o pedido de outra origem")
+	}
+	// O PUT, o POST e o DELETE do aceite e das preferências (C3b) também.
+	for _, padrao := range []string{"PUT /api/v1/dictation/settings", "POST /api/v1/dictation/consent", "DELETE /api/v1/dictation/consent"} {
+		if !visto[padrao] {
+			t.Errorf("%s não foi conferida contra o pedido de outra origem", padrao)
+		}
 	}
 	if status, _ := n.me(); status != http.StatusOK {
 		t.Fatal("um pedido de outra origem derrubou a sessão")
@@ -937,7 +968,10 @@ func testHost(t *testing.T, b Backend) {
 	if rotas < 20 {
 		t.Errorf("só %d rotas conferidas", rotas)
 	}
-	for _, padrao := range []string{"GET /api/v1/learned", "POST /api/v1/learned/undo"} {
+	for _, padrao := range []string{
+		"GET /api/v1/learned", "POST /api/v1/learned/undo",
+		"GET /api/v1/dictation", "PUT /api/v1/dictation/settings", "POST /api/v1/dictation/consent", "DELETE /api/v1/dictation/consent",
+	} {
 		if !conferidas[padrao] {
 			t.Errorf("%s não foi conferida com o Host estranho", padrao)
 		}

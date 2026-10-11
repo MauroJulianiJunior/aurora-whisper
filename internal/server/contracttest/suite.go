@@ -93,6 +93,17 @@ func Run(t *testing.T, b Backend) {
 		{"Arrumacao_ARespostaGuardadaViveAVidaDoToken", testRetencaoArrumacaoDasMutacoes},
 		// Depois de restaurar um backup (F11d; restauracao.go).
 		{"Restauracao_OBackupMaisVelhoTrocaOEpochERevogaTudo", testRestauracaoBackupMaisVelho},
+		// O ditado que nasce na nuvem (ADR-021, C1; criar.go).
+		{"Criar_GravaPeloPontoUnicoSemAparelho", testCriarGravaPeloPontoUnico},
+		{"Criar_OMesmoIdNaoCriaDois", testCriarOMesmoIdNaoCriaDois},
+		{"Criar_OMesmoIdEmDuasContas", testCriarOMesmoIdEmDuasContas},
+		{"Criar_ComEpochVelhoRecusaENaoGrava", testCriarComEpochVelhoRecusaENaoGrava},
+		{"Criar_RecusaOActorComAparelho", testCriarRecusaOActorComAparelho},
+		{"Criar_InvalidoNaoGastaSeq", testCriarInvalidoNaoGastaSeq},
+		{"Criar_ComLapideNaoRecria", testCriarComLapide},
+		{"Criar_OPCMudaOQueNasceuNoApp", testCriarOPCMudaOQueONascimentoDoApp},
+		{"Criar_Concorrente", testCriarConcorrente},
+		{"Situacao_DitadoLapideOuNada", testSituacao},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) { c.fn(t, newWorld(t, b)) })

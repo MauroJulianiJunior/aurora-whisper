@@ -129,9 +129,11 @@ func TestServe_Postgres_SobeEDesligaLimpo(t *testing.T) {
 	if ret, serv := strings.Index(stderr.String(), `"msg":"retenção"`), strings.Index(stderr.String(), `"msg":"servindo"`); ret < 0 || serv < 0 || ret > serv {
 		t.Fatalf("a linha \"retenção\" (%d) tem de vir antes da \"servindo\" (%d):\n%s", ret, serv, stderr.String())
 	}
-	// A linha "servindo" diz se há proxy confiável (aqui não), e não o valor.
-	if !strings.Contains(stderr.String(), `"https":false,"proxy_confiavel":false}`) {
-		t.Errorf("a linha \"servindo\" não diz o proxy confiável:\n%s", stderr.String())
+	// A linha "servindo" diz se há proxy confiável (aqui não), e não o valor;
+	// e se as chaves da IA do celular estão ligadas (ADR-021, C3a: aqui não,
+	// sem AI_KEYS_SECRET_FILE).
+	if !strings.Contains(stderr.String(), `"https":false,"proxy_confiavel":false,"chaves_da_ia":false}`) {
+		t.Errorf("a linha \"servindo\" não diz o proxy confiável e as chaves da IA:\n%s", stderr.String())
 	}
 	cancel()
 	select {
@@ -161,5 +163,81 @@ func TestServe_Postgres_SobeEDesligaLimpo(t *testing.T) {
 	}
 	if _, err := net.DialTimeout("tcp", addr.String(), time.Second); err == nil {
 		t.Error("a porta continua aberta depois do desligamento")
+	}
+}
+
+// Com a chave de cifra (AI_KEYS_SECRET), o serve sobe com as rotas do ditado no
+// celular (ADR-021, C3a e C3b): as das chaves da IA e as do aceite e das
+// preferências (/dictation) existem, e só com a sessão (sem credencial é 401, e
+// não o 404 de rota não montada); a linha "servindo" diz chaves_da_ia=true.
+// Prova também a ligação do serve: o NewCloud recusa a chave de cifra sem o
+// Ditado (onde o aceite mora), e o serve passa o próprio store.
+func TestServe_Postgres_ComAChaveDeCifraSobeComAsRotasDoDitado(t *testing.T) {
+	dbURL := pgtest.NewDB(t)
+	env := with(with(envBom(t), envDatabaseURL, dbURL), envAIKeysSecret, strings.Repeat("c0", 32))
+	if _, errOut, code := runCmd(t, env, "migrate"); code != 0 {
+		t.Fatalf("migrate: %d %q", code, errOut)
+	}
+
+	addrCh := make(chan net.Addr, 1)
+	onListen = func(a net.Addr) { addrCh <- a }
+	t.Cleanup(func() { onListen = nil })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var stdout, stderr safeBuffer
+	done := make(chan int, 1)
+	go func() {
+		done <- run(ctx, []string{"serve"}, func(k string) string { return env[k] }, &stdout, &stderr)
+	}()
+	var addr net.Addr
+	select {
+	case addr = <-addrCh:
+	case code := <-done:
+		t.Fatalf("o serve saiu com %d antes de escutar: %s", code, stderr.String())
+	case <-time.After(30 * time.Second):
+		t.Fatal("o serve não escutou em 30 s")
+	}
+
+	status := func(method, path string) int {
+		req, err := http.NewRequest(method, "http://"+addr.String()+path, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Host = "localhost:8080"
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("%s %s: %v", method, path, err)
+		}
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+		return resp.StatusCode
+	}
+	for _, r := range []struct{ method, path string }{
+		{http.MethodGet, "/api/v1/dictation"},
+		{http.MethodPut, "/api/v1/dictation/settings"},
+		{http.MethodPost, "/api/v1/dictation/consent"},
+		{http.MethodDelete, "/api/v1/dictation/consent"},
+		{http.MethodPut, "/api/v1/ai-keys/openai"},
+		{http.MethodGet, "/api/v1/ai-keys/openai/models"},
+	} {
+		if code := status(r.method, r.path); code != http.StatusUnauthorized {
+			t.Errorf("%s %s sem sessão: %d, quero 401 (a rota existe e é da sessão)", r.method, r.path, code)
+		}
+	}
+	if !strings.Contains(stderr.String(), `"chaves_da_ia":true}`) {
+		t.Errorf("a linha \"servindo\" não diz que as chaves da IA estão ligadas:\n%s", stderr.String())
+	}
+	cancel()
+	select {
+	case code := <-done:
+		if code != 0 {
+			t.Fatalf("o desligamento saiu com %d: %s", code, stderr.String())
+		}
+	case <-time.After(20 * time.Second):
+		t.Fatal("o serve não desligou em 20 s")
+	}
+	if logs := stderr.String() + stdout.String(); strings.Contains(logs, strings.Repeat("c0", 32)) {
+		t.Error("o log traz a chave de cifra")
 	}
 }

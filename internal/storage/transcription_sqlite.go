@@ -151,7 +151,8 @@ func inserirLinha(ctx context.Context, tx *sql.Tx, verbo string, t Transcription
 //     decisão 2);
 //   - num ditado que a nuvem NÃO tem (server_version nulo), só o Put do
 //     ditado novo (campos 0), com a nuvem conectada (o aparelho na tabela
-//     instalacao), e só o nascido aqui (device_id nulo). A edição, a lixeira
+//     instalacao), e só o nascido aqui (nasceuAquiSQL: device_id nulo, e não
+//     um ditado que o celular criou na nuvem, ADR-021). A edição, a lixeira
 //     e o restaurar dele não põem marcador: o histórico sobe pelo envio
 //     inicial, com o clique e a cópia antes (D1), e depois do aceite pela
 //     completação de cada rodada (CompletarEnvio), as duas sem a lixeira e
@@ -162,6 +163,8 @@ func inserirLinha(ctx context.Context, tx *sql.Tx, verbo string, t Transcription
 // Daí também que o ditado que veio de outro PC e que a nuvem desta conexão
 // não tem (device_id não nulo e server_version nulo: depois do "Esquecer esta
 // nuvem", ele é da conta antiga; ADR-019, "Decisões da F7c", D2) nunca entra.
+// O que o celular criou na nuvem (source_platform web ou android, sem
+// aparelho) é igual: veio da nuvem, e não nasceu aqui.
 // O que veio de outro PC pela nuvem de agora tem server_version, e a mudança
 // nele sobe.
 //
@@ -172,7 +175,7 @@ func emitir(ctx context.Context, tx *sql.Tx, id string, campos int, agora time.T
 		SELECT ?, ?, ?, ?
 		WHERE EXISTS (SELECT 1 FROM local_transcriptions WHERE id = ? AND sync_state <> ?
 		  AND (server_version IS NOT NULL
-		    OR (? = 0 AND device_id IS NULL AND EXISTS (SELECT 1 FROM instalacao WHERE nome = ? AND valor <> ''))))
+		    OR (? = 0 AND `+nasceuAquiSQL+` AND EXISTS (SELECT 1 FROM instalacao WHERE nome = ? AND valor <> ''))))
 		ON CONFLICT (entity_type, entity_id) DO UPDATE SET campos = campos | excluded.campos`,
 		EntidadeDitado, id, campos, emTexto(agora), id, SituacaoForaDaJanela, campos, ChaveNuvemAparelho)
 	if err != nil {

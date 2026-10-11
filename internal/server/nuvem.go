@@ -14,6 +14,7 @@ import (
 
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/server/cloudauth"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/server/cloudstore"
+	"github.com/MauroJulianiJunior/aurora-whisper/internal/server/cofre"
 )
 
 // O servidor da nuvem da etapa 5 (ADR-019, fatia F3): o histórico e o sync
@@ -59,15 +60,19 @@ type Limites struct {
 	// PareamentoTotal: o POST /device-auth/start de todos os IPs juntos (ele
 	// grava no banco sem sessão nenhuma).
 	PareamentoTotal int
+	// ChavesPorConta: as rotas das chaves da IA que chamam o provedor (o PUT
+	// e o GET dos modelos, juntos), por conta (ADR-021, C3a).
+	ChavesPorConta int
 }
 
 // LimitesPadrao: 10 tentativas de login por minuto por IP e 100 inícios no
 // total; no push, 60 pedidos e 5.000 mutações por minuto por aparelho (o
 // envio inicial de 10 mil ditados leva uns 2 minutos); no pareamento (F6),
-// 10 por minuto por IP e 100 inícios no total.
+// 10 por minuto por IP e 100 inícios no total; nas chaves da IA (ADR-021,
+// escolha menor 24), 10 por minuto por conta.
 var LimitesPadrao = Limites{
 	LoginPorIP: 10, InicioTotal: 100, PushPedidos: 60, PushMutacoes: 5000,
-	PareamentoPorIP: 10, PareamentoTotal: 100,
+	PareamentoPorIP: 10, PareamentoTotal: 100, ChavesPorConta: 10,
 }
 
 // CloudConfig é tudo o que o servidor da nuvem precisa. Quem lê o ambiente e
@@ -112,6 +117,30 @@ type CloudConfig struct {
 	// a arrumação e a retenção depois da rodada da subida; zero é a constante
 	// IntervaloDaArrumacao (1 h). Só os testes o mudam, para provar o tique.
 	IntervaloDaArrumacao time.Duration
+
+	// O ditado no celular (ADR-021). Cofre é a chave de cifra das chaves da
+	// IA (AI_KEYS_SECRET_FILE): sem ele, as rotas das chaves (e as do ditado
+	// que vêm depois) não são montadas e caem no 404 (decisão O; chaves_ia.go).
+	Cofre *cofre.Cofre
+	// ChavesDeIA é onde as chaves cifradas moram (o próprio Store, nos dois).
+	// Obrigatório com o Cofre.
+	ChavesDeIA cloudstore.ChavesDeIA
+	// Modelos pergunta ao provedor que modelos a chave alcança: o teste da
+	// chave e a lista. Obrigatório com o Cofre: o serve passa
+	// ModelosPelaRede; os testes, um dublê (nenhum teste chama um provedor de
+	// verdade).
+	Modelos ModelosDoProvedor
+	// Ditado guarda as preferências e o aceite do ditado no celular (C3b; o
+	// próprio Store, nos dois). Obrigatório com o Cofre: as rotas /dictation
+	// sobem com as das chaves.
+	Ditado cloudstore.DitadoNoCelular
+	// Aceite diz se a conta tem o aceite vigente do ditado no celular para um
+	// provedor (decisão H). Nil é o normal: o aceite vem do Ditado (a
+	// dictation_consents, o aceite em aberto da versão atual do aviso que
+	// inclui o provedor). Sem o Ditado também, ninguém tem aceite, e o PUT da
+	// chave recusa com SEM_ACEITE (falha fechada). Só os testes o trocam, por
+	// um dublê que dá e tira o aceite.
+	Aceite AceiteDoDitado
 }
 
 // Cloud é o servidor da nuvem montado.
@@ -134,6 +163,12 @@ type Cloud struct {
 	limPareamentoTotal *cloudauth.Limite
 	callbackPath       string
 	intervalo          time.Duration
+
+	// As chaves da IA (ADR-021, C3a; chaves_ia.go). cofre nil: as rotas não
+	// são montadas.
+	cofre     *cofre.Cofre
+	aceite    AceiteDoDitado
+	limChaves *cloudauth.Limite
 
 	// saude é a última rodada do Reter, para a rota da saúde do job (F11c;
 	// saude.go).
@@ -176,6 +211,15 @@ func NewCloud(cfg CloudConfig) (*Cloud, error) {
 	case cfg.Google.RedirectURL != RedirectURL(base):
 		return nil, errors.New("server: o redirect do Google não é PUBLIC_BASE_URL + /auth/google/callback")
 	}
+	if cfg.Cofre != nil && (cfg.ChavesDeIA == nil || cfg.Modelos == nil || cfg.Ditado == nil) {
+		return nil, errors.New("server: com a chave de cifra, a nuvem precisa do ChavesDeIA, do Modelos e do Ditado")
+	}
+	if cfg.Aceite == nil {
+		cfg.Aceite = semAceite{}
+		if cfg.Ditado != nil {
+			cfg.Aceite = aceitePeloStore{cfg.Ditado}
+		}
+	}
 	app, err := carregarPainel(cfg.Painel)
 	if err != nil {
 		return nil, err
@@ -198,6 +242,7 @@ func NewCloud(cfg CloudConfig) (*Cloud, error) {
 		{&lim.LoginPorIP, def.LoginPorIP}, {&lim.InicioTotal, def.InicioTotal},
 		{&lim.PushPedidos, def.PushPedidos}, {&lim.PushMutacoes, def.PushMutacoes},
 		{&lim.PareamentoPorIP, def.PareamentoPorIP}, {&lim.PareamentoTotal, def.PareamentoTotal},
+		{&lim.ChavesPorConta, def.ChavesPorConta},
 	} {
 		if *p.v <= 0 {
 			*p.v = p.d
@@ -220,6 +265,10 @@ func NewCloud(cfg CloudConfig) (*Cloud, error) {
 
 		limPareamento:      cloudauth.NovoLimite(lim.PareamentoPorIP, cfg.Now),
 		limPareamentoTotal: cloudauth.NovoLimite(lim.PareamentoTotal, cfg.Now),
+
+		cofre:     cfg.Cofre,
+		aceite:    cfg.Aceite,
+		limChaves: cloudauth.NovoLimite(lim.ChavesPorConta, cfg.Now),
 	}
 	c.csrf = http.NewCrossOriginProtection()
 	c.csrf.SetDenyHandler(http.HandlerFunc(c.negarOrigemCruzada))

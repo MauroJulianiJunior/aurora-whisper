@@ -48,6 +48,15 @@ type memUser struct {
 	learned   map[string]Learned
 	events    []Event
 	applied   map[string]memApplied
+	// chavesDeIA são as linhas de ai_provider_keys, pelo provedor (ADR-021,
+	// C3a; chaves_ia.go). Nil até a primeira gravação.
+	chavesDeIA map[string]ChaveDeIA
+	// preferenciasDoDitado é a linha de dictation_settings (nil: a conta nunca
+	// gravou, e vale PreferenciasPadrao) e aceitesDoDitado, as de
+	// dictation_consents, do mais velho ao mais novo; só o último pode estar
+	// em aberto (ADR-021, C3b; ditado_celular.go).
+	preferenciasDoDitado *PreferenciasDoDitado
+	aceitesDoDitado      []Aceite
 
 	// A conta (vazios num usuário de AddUser).
 	sub      string
@@ -330,6 +339,60 @@ func (s *MemoryStore) Get(_ context.Context, userID, id string) (Transcription, 
 		return Transcription{}, ErrNotFound
 	}
 	return t, nil
+}
+
+func (s *MemoryStore) Situacao(_ context.Context, userID, id string) (SituacaoDoId, error) {
+	canon, ok := CanonicalUUID(id)
+	if !ok {
+		return SituacaoDoId{}, ErrInvalidID
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	u, ok := s.users[userID]
+	if !ok {
+		return SituacaoDoId{}, ErrUnknownUser
+	}
+	sit := SituacaoDoId{Estado: IdNada, Epoch: u.epoch}
+	if t, ok := u.items[canon]; ok {
+		sit.Estado, sit.Ditado = IdDitado, &t
+	} else if _, ok := u.tombs[canon]; ok {
+		sit.Estado = IdLapide
+	}
+	return sit, nil
+}
+
+// Create é o ponto único de gravação do ditado que nasce na nuvem (ADR-021,
+// C1): a mesma regra do Postgres, com o mutex no lugar da trava do contador, e
+// o epoch conferido sob ele.
+func (s *MemoryStore) Create(_ context.Context, a Actor, epoch, id string, n NewDictation, now time.Time) (Transcription, bool, error) {
+	now = Normalize(now)
+	t, err := NewTranscription(a, id, n, now)
+	if err != nil {
+		return Transcription{}, false, err
+	}
+	var out Transcription
+	created := false
+	err = s.write(a.UserID, func(u *memUser, seq int64) (bool, error) {
+		if epoch == "" || epoch != u.epoch {
+			return false, ErrEpochChanged
+		}
+		if cur, ok := u.items[t.ID]; ok {
+			// O segundo de uma corrida (ou o reenvio) recebe o que o primeiro
+			// gravou, sem gravar nem gastar seq.
+			out = cur
+			return false, nil
+		}
+		if _, ok := u.tombs[t.ID]; ok {
+			return false, ErrTombstoned
+		}
+		u.put(t, seq, a, now)
+		out, created = u.items[t.ID], true
+		return true, nil
+	})
+	if err != nil {
+		return Transcription{}, false, err
+	}
+	return out, created, nil
 }
 
 func (s *MemoryStore) Edit(_ context.Context, a Actor, id string, baseVersion int64, finalText string, now time.Time) (Transcription, error) {

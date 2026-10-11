@@ -122,6 +122,9 @@ func (c *Cloud) tabela() []rota {
 		// O estilo das duas páginas fixas do login que não deu (pagina/).
 		{"GET /pagina.css", AcessoPublico, servirPagina("pagina.css")},
 	}
+	// As chaves da IA do ditado no celular (ADR-021, C3a; chaves_ia.go): só
+	// com o arquivo da chave de cifra. Sem ele, caem no 404 do /api/v1/.
+	t = append(t, c.rotasDoDitado()...)
 	// O login do Google. Sem o client (só o servidor de teste do PC, com a
 	// build tag logindeteste), as duas rotas caem no 404 do /auth/.
 	if c.cfg.Google != nil {

@@ -39,12 +39,19 @@
 // Este arquivo não tem build tag: a interface, as regras (Validar, Final,
 // o nome do alvo) e o dublê rodam e são testados no Linux do CI. A
 // chamada ao Windows fica em chaves_windows.go.
+//
+// Validar e Final moram em internal/chavedeapi (ADR-021, C3a), um pacote
+// neutro que o servidor da nuvem também usa para a chave do celular. Daqui
+// eles são chamados sem mudança: os mesmos erros (as variáveis abaixo são as
+// de lá), as mesmas mensagens e os mesmos testes.
 package chaves
 
 import (
 	"errors"
 	"strings"
 	"sync"
+
+	"github.com/MauroJulianiJunior/aurora-whisper/internal/chavedeapi"
 )
 
 // Cofre guarda uma chave por provedor.
@@ -59,21 +66,23 @@ type Cofre interface {
 	Apagar(provedor string) error
 }
 
-// Erros de Validar, AlvoDe e Ler. Nenhum carrega a chave.
+// Erros de Validar, AlvoDe e Ler. Nenhum carrega a chave. Os três de Validar
+// são os de internal/chavedeapi (a mesma variável: errors.Is vale dos dois
+// lados).
 var (
 	ErrAusente       = errors.New("chaves: nenhuma chave guardada para este provedor")
 	ErrProvedor      = errors.New("chaves: nome de provedor inválido")
-	ErrChaveVazia    = errors.New("chaves: chave vazia")
-	ErrChaveLonga    = errors.New("chaves: chave longa demais")
-	ErrChaveInvalida = errors.New("chaves: a chave tem espaço, quebra de linha ou caractere fora do ASCII")
+	ErrChaveVazia    = chavedeapi.ErrChaveVazia
+	ErrChaveLonga    = chavedeapi.ErrChaveLonga
+	ErrChaveInvalida = chavedeapi.ErrChaveInvalida
 	// ErrNaoSuportado é devolvido fora do Windows.
 	ErrNaoSuportado = errors.New("chaves: o Gerenciador de Credenciais só existe no Windows")
 )
 
 // TamanhoMaximo é o maior blob que o Gerenciador de Credenciais aceita
 // (CRED_MAX_CREDENTIAL_BLOB_SIZE = 5 * 512 bytes). Chave de API real tem
-// uma ou duas centenas de caracteres.
-const TamanhoMaximo = 5 * 512
+// uma ou duas centenas de caracteres. É o chavedeapi.TamanhoMaximo.
+const TamanhoMaximo = chavedeapi.TamanhoMaximo
 
 // PrefixoDoAlvo é o começo do nome da credencial no Gerenciador.
 const PrefixoDoAlvo = "AuroraWhisper/"
@@ -115,30 +124,9 @@ func ComentarioDe(provedor string) string {
 // Não confere o FORMATO de cada provedor (prefixo, tamanho): isso é
 // suposição sobre o provedor, e o "Testar" da tela pergunta a ele de
 // verdade.
-func Validar(chave string) (string, error) {
-	inicio, fim := 0, len(chave)
-	for inicio < fim && ehBranco(chave[inicio]) {
-		inicio++
-	}
-	for fim > inicio && ehBranco(chave[fim-1]) {
-		fim--
-	}
-	chave = chave[inicio:fim]
-	switch {
-	case chave == "":
-		return "", ErrChaveVazia
-	case len(chave) > TamanhoMaximo:
-		return "", ErrChaveLonga
-	}
-	for i := 0; i < len(chave); i++ {
-		if chave[i] < 0x21 || chave[i] > 0x7e {
-			return "", ErrChaveInvalida
-		}
-	}
-	return chave, nil
-}
-
-func ehBranco(b byte) bool { return b == ' ' || b == '\t' || b == '\r' || b == '\n' }
+//
+// A regra é a de internal/chavedeapi, a mesma do servidor da nuvem.
+func Validar(chave string) (string, error) { return chavedeapi.Validar(chave) }
 
 // Final devolve os últimos caracteres da chave, para a tela mostrar QUAL
 // chave está guardada sem mostrá-la: no máximo 4, e nunca mais que um
@@ -146,11 +134,8 @@ func ehBranco(b byte) bool { return b == ' ' || b == '\t' || b == '\r' || b == '
 // uma curta demais sai com menos, até nada.
 //
 // A chave já passou por Validar ao ser gravada, então é ASCII: byte e
-// caractere são a mesma coisa.
-func Final(chave string) string {
-	n := min(4, len(chave)/4)
-	return chave[len(chave)-n:]
-}
+// caractere são a mesma coisa. A regra é a de internal/chavedeapi.
+func Final(chave string) string { return chavedeapi.Final(chave) }
 
 // Memoria é o Cofre dos testes: um mapa, com as mesmas regras de
 // validação do Gerenciador de Credenciais. Seguro para uso concorrente.

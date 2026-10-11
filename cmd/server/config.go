@@ -13,6 +13,7 @@ import (
 
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/server"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/server/cloudauth"
+	"github.com/MauroJulianiJunior/aurora-whisper/internal/server/cofre"
 )
 
 // A configuração do "serve" (10-env-and-secrets.md; ADR-019, F3). Toda falta
@@ -31,6 +32,9 @@ const (
 	envProxyConfiavel   = "PROXY_CONFIAVEL"
 	envLogLevel         = "LOG_LEVEL"
 	envPainelDir        = "PAINEL_DIR"
+	// envAIKeysSecret é a chave de cifra das chaves da IA do celular
+	// (ADR-021, C3a), opcional: de AI_KEYS_SECRET_FILE, no contêiner.
+	envAIKeysSecret = "AI_KEYS_SECRET"
 )
 
 // defaultHTTPAddr: só a própria máquina. Na VPS, quem fica na frente é o
@@ -107,6 +111,9 @@ type serveConfig struct {
 	proxy         cloudauth.ProxyConfiavel
 	logLevel      slog.Level
 	painel        fs.FS
+	// cofre é a chave de cifra das chaves da IA (ADR-021, C3a). Nil sem
+	// AI_KEYS_SECRET(_FILE): as rotas do ditado no celular não sobem.
+	cofre *cofre.Cofre
 }
 
 // configError é um erro de configuração: a variável e o que está errado, sem
@@ -180,6 +187,9 @@ func loadConfig(getenv func(string) string) (serveConfig, error) {
 	if string(c.sessionSecret) == string(c.pepper) {
 		return c, errConfig(envSessionSecret, "tem de ser diferente de "+envDeviceTokenPep)
 	}
+	if c.cofre, err = lerChaveDeCifra(getenv, c.sessionSecret, c.pepper); err != nil {
+		return c, err
+	}
 
 	contas, err := cloudauth.ParseContas(getenv(envContasPermitidas))
 	if errors.Is(err, cloudauth.ErrContasVazia) {
@@ -215,6 +225,33 @@ func loadConfig(getenv func(string) string) (serveConfig, error) {
 		c.logLevel = slog.LevelError
 	default:
 		return c, errConfig(envLogLevel, "tem de ser debug, info, warn ou error")
+	}
+	return c, nil
+}
+
+// lerChaveDeCifra lê a chave de cifra das chaves da IA (ADR-021, C3a): de
+// AI_KEYS_SECRET ou do arquivo de AI_KEYS_SECRET_FILE (lerSegredo), opcional.
+// Sem nenhuma das duas, devolve nil sem erro: o servidor sobe sem as rotas do
+// ditado no celular (404). Com ela, tem de ser 64 caracteres hexadecimais
+// (32 bytes, como os outros segredos do deploy) e diferente dos dois segredos
+// do HMAC; senão, a subida falha, e a mensagem diz o nome da variável, nunca
+// o conteúdo.
+func lerChaveDeCifra(getenv func(string) string, sessionSecret, pepper []byte) (*cofre.Cofre, error) {
+	v, err := lerSegredo(getenv, envAIKeysSecret)
+	if err != nil || v == "" {
+		return nil, err
+	}
+	variavel := envAIKeysSecret
+	if getenv(envAIKeysSecret+sufixoArquivo) != "" {
+		variavel += sufixoArquivo
+	}
+	c, err := cofre.Novo(v)
+	if err != nil {
+		return nil, errConfig(variavel, "tem de ser 64 caracteres hexadecimais (32 bytes) numa linha só; "+
+			"numa VPS no ar, crie o arquivo com o deploy/scripts/criar-chave-de-cifra.sh")
+	}
+	if strings.EqualFold(v, string(sessionSecret)) || strings.EqualFold(v, string(pepper)) {
+		return nil, errConfig(variavel, "tem de ser diferente de "+envSessionSecret+" e de "+envDeviceTokenPep)
 	}
 	return c, nil
 }

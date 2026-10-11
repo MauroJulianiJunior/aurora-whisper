@@ -111,6 +111,23 @@ Unique `(user_id, install_id)`.
 > ele, mesmo com a versão acima da base (a mudança mesclada do próprio PC). `raw_text` e `final_text`
 > têm teto de 64 KiB na aplicação (não no banco). **Confirmado pelo Mauro em 05-out-2026** (ADR-019, "Decisões da
 > F2", "Revisão da F2").
+>
+> **ADR-021, C1 (10-out-2026): o ditado que nasce na nuvem (o do celular).** Sem migration: a 0003 já
+> aceita `device_id` nulo e `source_platform` em texto livre. O `Store.Create` grava a linha pelo ponto
+> único de gravação, com a regra de criar do push:
+> - `device_id`, `text_device_id` e `trash_device_id` **nulos** (nenhum PC o criou), `source_platform`
+>   `web` (o app do celular) ou `android` (o app nativo, passo 2) — a lista fechada das origens da
+>   nuvem; `status` `done`; `version`, `text_version` e `trash_version` 1; sem lixeira nem selo;
+> - `created_at` e `updated_at` são o **relógio do servidor** (nos ditados do PC, `created_at` é a data
+>   do PC); a retenção conta por ele do mesmo jeito;
+> - o evento de sync é `upsert`, versão 1, `device_id` nulo, com o `seq` do contador;
+> - o `Create` confere o `sync_epoch` esperado **dentro** da transação que trava o contador (sem janela
+>   para o "apagar meus dados" ou um backup restaurado) e confere só o id, o usuário e o epoch, nunca o
+>   texto: o mesmo id na conta devolve a linha gravada, e o id com lápide não é recriado;
+> - o `Store.Situacao(user_id, id)` lê, sem travar, se o id é um ditado, uma lápide ou nada (o `Get` não
+>   mostra a lápide), junto com o epoch da conta.
+>
+> Não há coluna de áudio nem de contexto: o áudio só existe em memória, durante o pedido (ADR-021).
 
 ### DictionaryEntry
 - id uuid
@@ -360,6 +377,90 @@ ADR-017) e `UserSettings` (preferências não sincronizam na v1).
 `User`: só é criado no primeiro login de um e-mail da lista permitida (`CONTAS_PERMITIDAS`), e o
 `google_sub` fica fixado; o mesmo e-mail com outro `sub` é recusado.
 
+### O ditado no celular: o que entra no Postgres (ADR-021)
+As tabelas do ditado no celular são **só aditivas** (as 0001 a 0016 já estão em produção): uma por
+arquivo, a partir da 0017 (a 0017 é da C3a, a 0018 e a 0019 são da C3b). Nenhuma sincroniza com os PCs, nenhuma passa pelo contador nem gera evento,
+e nenhuma guarda áudio (o `schema_test.go` confere).
+
+- **As chaves da IA** (`ai_provider_keys`, a 0017; **C3a, 10-out-2026**): a chave de API do provedor
+  que a pessoa cola no app do celular (BYOK; a chave **do PC** continua só no PC), guardada **só
+  cifrada**. PK **`(user_id, provider)`**: uma chave por pessoa e por provedor, e trocar é gravar por
+  cima. Colunas:
+  - `provider`: a lista fechada `openai`, `groq` e `anthropic` (a transcrição no celular é OpenAI ou
+    Groq; o Polish no celular, OpenAI ou Anthropic). A mesma lista mora em
+    `cloudstore.ProvedoresDeIA`, e um teste do `pgstore` confere as duas;
+  - `cipher_key_id` (8 bytes): o id da chave de cifra que cifrou a linha, os 8 primeiros bytes de um
+    HMAC-SHA256 da chave de cifra com o rótulo `aurora-whisper/ai-keys/id/v1`, e **não** um número de
+    versão. Trocar o arquivo da chave de cifra (`AI_KEYS_SECRET_FILE`, `10`) leva a linha a `SEM_CHAVE`
+    sem tentar decifrar;
+  - `nonce` (12 bytes, aleatórios a cada gravação) e `ciphertext` (de 17 a 2576 bytes: a chave, até
+    2560 bytes, mais os 16 da etiqueta do GCM). A cifra é AES-256-GCM com uma subchave derivada por
+    HKDF-SHA256 (rótulo `aurora-whisper/ai-keys/v1`); o AAD leva o `user_id`, o `provider` e o
+    `cipher_key_id`, então o cifrado copiado para outra conta ou outro provedor não decifra
+    (`internal/server/cofre`);
+  - `key_suffix`: o fim da chave que a tela mostra ("Chave terminada em WXYZ"), até 4 caracteres ASCII
+    imprimíveis e nunca mais que um quarto da chave (`chavedeapi.Final`), para a tela não precisar
+    decifrar;
+  - `created_at` (a primeira chave do provedor) e `updated_at` (a última troca), do relógio de quem
+    grava, sem `DEFAULT`, com `CHECK (updated_at >= created_at)`.
+
+  A chave de cifra **nunca** entra no banco nem no backup: o backup leva só o cifrado, e restaurado num
+  servidor sem o mesmo arquivo, cada chave vira `SEM_CHAVE` (sem erro 500). O "apagar meus dados" apaga
+  as linhas da conta (`pgstore.apagarDaConta`). As cópias cifradas de uma chave trocada ou removida
+  ficam nos backups (cerca de 30 dias) e no banco da restauração (7 dias): a tela manda revogar a chave
+  antiga no provedor (ADR-021, "As chaves").
+
+- **As preferências do ditado no celular** (`dictation_settings`, a 0018; **C3b, 11-out-2026**): uma
+  linha por conta (PK `user_id`), gravada inteira a cada `PUT`. Moram só na nuvem e **nunca descem aos
+  PCs** (as preferências do PC continuam no PC; não é a `UserSettings`). Sem a linha, a conta tem os
+  padrões (`cloudstore.PreferenciasPadrao`): transcrição pela OpenAI com o `gpt-4o-mini-transcribe`, sem
+  dica, sem Polish. Colunas:
+  - `asr_provider`: quem transcreve, `openai` ou `groq` (a Anthropic não transcreve); `asr_model`: o
+    modelo, de 1 a 100 caracteres entre letras, dígitos e `. _ : / @ -` (o nome vem do provedor, e a
+    nuvem não o valida contra uma lista fixa, só contra a forma; a mesma expressão mora em
+    `cloudstore.ModeloValido`, e um teste confere as duas);
+  - `use_hint`: manda os termos aprendidos da conta como dica (decisão E); começa desligada até a C8
+    medir. `polish_enabled`: o Polish no celular (decisão N); começa desligado. As duas sem `DEFAULT`;
+  - `polish_provider`: quem faz o Polish, `openai` ou `anthropic`, guardado mesmo com o Polish desligado
+    (é só a escolha, e o aceite do provedor vale quando ele liga); `polish_model`: o modelo (de 0 a 100
+    caracteres da mesma forma), vazio só enquanto o Polish está desligado
+    (`CHECK (NOT polish_enabled OR polish_model <> '')`);
+  - `created_at` (a primeira gravação) e `updated_at` (a última), do relógio de quem grava, sem
+    `DEFAULT`, com `CHECK (updated_at >= created_at)`.
+
+- **O aceite do ditado no celular** (`dictation_consents`, a 0019; **C3b, 11-out-2026**; ADR-021, decisão
+  H): **cada aceite é uma linha**, e nenhuma some quando termina, porque provar o consentimento é do
+  controlador (LGPD, art. 8º, §2º). PK `id` (UUID v7 gerado pela aplicação). Colunas:
+  - `notice_version`: a versão do texto do aviso que a pessoa viu (inteiro a partir de 1). O aceite só
+    **vale** com a versão atual, `cloudstore.VersaoDoAviso`; mudar o texto do aviso é subir o número, e o
+    servidor passa a pedir o aceite de novo (o aceite velho continua gravado, e não vale). **A mesma
+    versão mora no app**, em `web/src/nuvem/avisoDoDitado.ts` (`VERSAO_DO_AVISO`), e o app manda a
+    versão do texto que mostrou; um teste do Go (`TestVersaoDoAviso_AppEServidorConferem`) lê esse arquivo
+    e prende os dois números;
+  - `asr_provider` (`openai` ou `groq`) e `polish_provider` (`openai` ou `anthropic`, **nulo** quando o
+    aviso que a pessoa viu não incluía o Polish): os provedores que ela aceitou. O aceite cobre quem
+    está em qualquer um dos dois (`Aceite.Inclui`);
+  - `accepted_at`: quando aceitou, do relógio do servidor;
+  - `ended_at` e `end_reason`, sempre juntos (`CHECK ((ended_at IS NULL) = (end_reason IS NULL))`, e o
+    fim nunca antes do começo): `revogado` (a pessoa desligou o ditado no celular, e as chaves dela
+    saíram na mesma transação) ou `substituido` (ela aceitou de novo: outro provedor, o Polish com um
+    provedor novo, ou outra versão do aviso);
+  - **um índice único parcial** (`idx_dictation_consents_open`, `(user_id) WHERE ended_at IS NULL`)
+    garante no máximo **um aceite em aberto por conta**, o candidato a vigente. Gravar e revogar travam a
+    linha do usuário, então duas gravações ao mesmo tempo se enfileiram.
+
+  **O aceite vigente** é o aceite em aberto da versão atual do aviso: é ele que o `PUT /ai-keys`, o
+  `GET /ai-keys/{provedor}/models` e o `PUT /dictation/settings` conferem (a rota de ditar, da C5b,
+  confere de novo na hora de chamar). **Quando pede de novo:** trocar de provedor, ligar o Polish com um
+  provedor que o aceite não cobre, ou mudar o texto do aviso; **mudar só o modelo não pede**. Aceitar de
+  novo exatamente o mesmo (a mesma versão e os mesmos provedores) não grava outra linha: a data fica a
+  da primeira vez.
+
+  O "apagar meus dados" apaga as **três** tabelas do ditado no celular da conta, `ai_provider_keys`,
+  `dictation_settings` e `dictation_consents` (os aceites que terminaram também), e só as dela
+  (`pgstore.apagarDaConta`; um teste lê as migrations e falha se uma tabela com `user_id` ficar fora do
+  apagar). Nenhuma das duas guarda áudio, texto ditado nem chave (`schema_test.go` confere).
+
 ## SQLite
 
 ### local_transcriptions
@@ -407,6 +508,18 @@ Espelho útil de Transcription +:
 >   que não mudou aqui, a igual e a que só difere porque a **nuvem** a pôs na lixeira recebem o estado
 >   da nuvem (revisão da F7c: subir o ditado fora da lixeira não mudava nada lá, e o PC reconciliava
 >   a cada rodada).
+>
+> **ADR-021, C1 (10-out-2026), sem migration: a origem "pelo app".** O ditado que o celular criou na
+> nuvem chega com `device_id` nulo e `source_platform` `web` (ou `android`, no app nativo): o pull o
+> aplica como `recebido`, e o histórico o mostra como "pelo app". Como o `device_id` nulo era o que
+> dizia "nasceu neste PC", **a origem entra na conta**: "nasceu aqui" é `device_id` nulo **e**
+> `source_platform` fora de `web` e `android` (um só filtro, `nasceuAquiSQL`, em `internal/storage/
+> origem.go`). Ele vale no envio inicial (a prévia, o envio e a completação), no "Esquecer esta nuvem"
+> (que anota `nuvem_ditados_em_outra` só se a nuvem esquecida confirmou um ditado nascido aqui) e na
+> fila do sync (o `Put` de um ditado novo sem a versão da nuvem). Sem isso, o ditado do app, sem
+> aparelho e sem `server_version` depois do esquecer, seria enviado como histórico deste PC para uma
+> conta nova. O que o celular criou e o PC recebeu, e editou aqui, sobe como qualquer ditado que a
+> nuvem tem (a base é a `server_version`).
 
 ### local_dictionary_entries / aliases / corrections
 Espelhos sincronizáveis.
@@ -972,5 +1085,6 @@ dicionário escondia do painel todo o histórico anterior, porque toda listagem 
 | sessão web | cookie `__Host-` `HttpOnly`; no servidor, só o HMAC com `SESSION_SECRET` (ADR-019) |
 | provider secrets | server-side |
 | chave de API do provedor de IA de quem usa | Credential Manager do Windows, nunca SQLite |
+| chave de API do provedor de IA colada no app do celular (ADR-021) | `ai_provider_keys`, só cifrada (AES-256-GCM, subchave por HKDF da chave de cifra de `AI_KEYS_SECRET_FILE`, que nunca entra no banco nem no backup); o app vê só o fim (até 4 caracteres). Quem tem a raiz da VPS decifra |
 | áudio | RAM |
 | contexto UIA | RAM |

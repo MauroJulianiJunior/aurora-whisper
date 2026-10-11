@@ -24,6 +24,7 @@ import (
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/server"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/server/cloudauth"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/server/cloudstore"
+	"github.com/MauroJulianiJunior/aurora-whisper/internal/server/cofre"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/server/contracttest"
 )
 
@@ -148,17 +149,37 @@ func (m *mundo) montar(contas string) {
 	if err != nil {
 		m.t.Fatal(err)
 	}
+	// As rotas das chaves da IA (ADR-021, C3a) e as do aceite e das
+	// preferências (C3b) montadas, para o escopo, o CSRF e o Host as
+	// percorrerem com as outras. Com o aceite de verdade e nenhuma conta
+	// aceitando, nenhum pedido chega ao provedor.
+	chaves, _ := m.b.Store.(cloudstore.ChavesDeIA)
+	ditado, _ := m.b.Store.(cloudstore.DitadoNoCelular)
+	cofreDaSuite, err := cofre.Novo(strings.Repeat("5a", 32))
+	if err != nil || chaves == nil || ditado == nil {
+		m.t.Fatalf("o cofre, as chaves ou o ditado da suíte: %v", err)
+	}
 	m.cloud, err = server.NewCloud(server.CloudConfig{
 		Store: m.b.Store, Accounts: m.b.Accounts, BaseURL: m.opcoes.base,
 		SessionSecret: segredoDeSessao, DeviceTokenPepper: pepperDeToken, Contas: lista,
 		Google: m.g.Client(), Proxy: proxy, Now: m.clk.Now, Painel: contracttest.PainelDeTeste(),
 		Logger:  slog.New(slog.NewTextHandler(m.logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
 		Limites: m.opcoes.limites,
+		Cofre:   cofreDaSuite, ChavesDeIA: chaves, Ditado: ditado, Modelos: provedorQueNaoPodeSerChamado{m.t},
 	})
 	if err != nil {
 		m.t.Fatalf("NewCloud: %v", err)
 	}
 	m.h = m.cloud.Handler()
+}
+
+// provedorQueNaoPodeSerChamado é o provedor da IA da suíte: nenhum caso
+// daqui chega a ele (sem o aceite, as rotas das chaves recusam antes).
+type provedorQueNaoPodeSerChamado struct{ t *testing.T }
+
+func (p provedorQueNaoPodeSerChamado) ListarModelos(context.Context, string, string) ([]string, error) {
+	p.t.Error("um pedido da suíte de login chegou ao provedor da IA")
+	return nil, context.Canceled
 }
 
 // navegador guarda os cookies de uma origem, como um navegador, e manda os

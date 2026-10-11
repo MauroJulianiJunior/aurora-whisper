@@ -48,7 +48,9 @@ Base: `https://exemplo.com/api/v1` (o domínio real vem de `PUBLIC_BASE_URL`)
     10 por minuto por IP (o `/auth/start` e o callback juntos; o IPv6 conta por `/64`) e 100 por minuto
     no `/auth/start` de todos; no push, 60 pedidos e 5.000 mutações por minuto por aparelho. Em memória:
     reiniciar zera. O pull, o CRUD, o `/me` e as sessões não têm limite de taxa (ADR-019, "Decisões da
-    F3", riscos).
+    F3", riscos). **ADR-021, C3a:** as rotas das chaves da IA que chamam o provedor (o `PUT` e o `GET`
+    dos modelos, juntos) têm 10 por minuto **por conta**, com o código `LIMITE` (a lista fechada do
+    ditado no celular; "As chaves da IA", abaixo).
 
 Erro:
 ```json
@@ -212,8 +214,9 @@ mostrar "desconectado" (o token deles recebe `401`). `204`.
 o token do PC, `403`. Numa transação só: troca o `sync_epoch`, sobe a marca d'água das lápides ao
 `last_seq` (o `seq` continua; não volta a 0; a marca não tem leitor desde a F9, D2, mas o `CHECK
 (tombstone_watermark <= last_seq)` vale), apaga os ditados, as lápides, os eventos, as mutações, o
-aprendido, as correções, o dicionário, as preferências, os pedidos de pareamento aprovados pela conta e
-as outras sessões. **Os aparelhos são apagados, com os tokens**, e não ficam como revogados
+aprendido, as correções, o dicionário, as preferências, **as três tabelas do ditado no celular**
+(ADR-021: as chaves da IA, as preferências do ditado e todos os aceites, os que terminaram também), os
+pedidos de pareamento aprovados pela conta e as outras sessões. **Os aparelhos são apagados, com os tokens**, e não ficam como revogados
 (`revoked_at`): o efeito para o PC é o mesmo `401`, mas eles saem da lista de aparelhos da conta (a
 da F6), em vez de ficarem nela como revogados. Ficam o usuário, o contador e a sessão de quem pediu. **[Decisão 3
 da F3; confirmada pelo Mauro em 05-out-2026.]** A alternativa é manter os aparelhos com `revoked_at` (a palavra da
@@ -294,7 +297,10 @@ Todas só com sessão (o token do PC não alcança o CRUD).
   from/to, device_id, mode, trash.
 - **`POST /transcriptions/search`**: a busca, com o texto no corpo, para ele nunca parar num log de
   acesso. Corpo: `q` e os mesmos filtros do `GET`. Mesma resposta do `GET`.
-- **`POST /transcriptions`: não é montada.** O ditado só nasce no PC e sobe pelo sync.
+- **`POST /transcriptions`: não é montada.** O ditado nasce no PC e sobe pelo sync. **ADR-021 (C1,
+  10-out-2026):** ele também pode nascer na nuvem, o que o celular dita (`Store.Create`, abaixo em "O
+  ditado que nasce na nuvem"); a rota que o chama, `POST /api/v1/dictations`, é da C5b e **ainda não
+  está montada**. `POST /transcriptions` continua `404`: o texto nunca vem do cliente.
 - **`PATCH /transcriptions/{id}`**: como acima. `409` com a versão velha. Não devolve `sugestoes`:
   aprender continua só no PC (ADR-017).
 - **O selo de conflito:** um item pode trazer `versao_em_conflito` (o texto que perdeu, o aparelho e
@@ -330,6 +336,10 @@ Todas só com sessão (o token do PC não alcança o CRUD).
   `deleted_at` e `versao_em_conflito` vêm sempre (`null` quando não há). O selo:
   `{ "final_text": "...", "device_id": "uuid ou null", "conflict_at": "..." }`. O "excluir
   definitivamente" já existe no `Store` (`Purge`, com a lápide); a rota foi montada na F3 (abaixo).
+  **ADR-021 (C1):** `source_platform` é `"windows"` (nasceu num PC), `"web"` (o que o app do celular
+  ditou) ou `"android"` (o app nativo, passo 2); as duas últimas são a lista fechada das origens da
+  nuvem, e nelas `device_id` é sempre `null`. O texto do PC e o do app são o mesmo item, com as mesmas
+  rotas (editar, lixeira, restaurar, excluir de vez).
 - **F3 (05-out-2026):** o token do PC recebe `403` em todas estas rotas. `GET /transcriptions` com `q`
   na URL (qualquer valor, até vazio) é `400`. `POST /transcriptions/search`, corpo de até 16 KiB:
   `{ "q": "...", "cursor": "...", "limit": 50, "from": "RFC3339", "to": "RFC3339", "device_id": "uuid",
@@ -342,6 +352,31 @@ Todas só com sessão (o token do PC não alcança o CRUD).
   página da listagem para no item em que o texto acumulado (bruto, final e selo) chega a 2 MiB, com
   `next_cursor` para o resto, mesmo abaixo do `limit`. Os dois números são [ASSUMPTION] (ADR-019,
   "Decisões da F2").
+
+### O ditado que nasce na nuvem (ADR-021, C1)
+O ditado do celular não vem de um PC: o servidor o transcreve e o grava. Esta seção é o contrato do
+`Store` que a rota `POST /api/v1/dictations` (C5b) vai chamar; **a rota ainda não existe**, e nada
+aqui muda o que a API responde hoje. A suíte `internal/server/contracttest` (`criar.go`) é o contrato
+executável, contra o Store em memória e o Postgres.
+- **`Store.Create`** grava pelo ponto único de gravação, com a regra de criar do push (`decideCreate`)
+  sobre o payload validado pelas mesmas regras do push (a lista fechada, o teto de 64 KiB, `mode`,
+  `status`, `confidence`): uma linha da versão 1, o `seq` do contador e o evento `upsert` **sem
+  aparelho**. `device_id`, `text_device_id` e `trash_device_id` ficam nulos. O `Actor` é o da sessão,
+  sem aparelho; com aparelho, é erro (o ditado não é atribuído a um PC em silêncio).
+- **O que o servidor decide:** `created_at` e `updated_at` são o relógio do servidor, o `status` é
+  `done`, e a origem é `web` ou `android`. Não há `target_app`, áudio nem contexto.
+- **O epoch esperado:** `Create` recebe o `sync_epoch` que quem chama leu antes (`Situacao`), e o
+  confere **dentro da transação que trava o contador**: se a conta apagou os dados (ou um backup foi
+  restaurado) depois da leitura, recusa (`ErrEpochChanged`) e não grava nem gasta `seq`. Um epoch vazio
+  nunca confere.
+- **O id:** só o id, o usuário e o epoch são conferidos, nunca o texto. Se o id já existe na conta
+  (também na lixeira), `Create` devolve o que está gravado (`created = false`), sem gravar nem gastar
+  `seq`: o segundo de uma corrida recebe o que o primeiro gravou. O mesmo id em duas contas são dois
+  ditados. Um id com **lápide** não é recriado (`ErrTombstoned`).
+- **`Store.Situacao(user_id, id)`** só lê: `ditado` (com a linha, também o da lixeira), `lapide` ou
+  `nada`, e o epoch da conta, tudo no mesmo instante. Existe porque o `Get` não mostra a lápide. O id
+  de outra conta é `nada`.
+- **Sem migration:** a 0003 já aceita `device_id` nulo e `source_platform` livre. Nenhuma coluna nova.
 
 ## Learned (ADR-019)
 O aprendido no painel dos PCs, para ver e desfazer no celular. Só com sessão. O texto nunca vai na
@@ -397,6 +432,196 @@ PC recebe `403`.
     (`internal/server/pgstore/learned.go`) e os casos do celular em `TestContrato_Postgres` e em
     `learned_celular_pg_test.go` estão escritos e nunca rodaram (o Postgres de teste estava desligado
     na F8d e na revisão). Ver "Como a F8c fechou isso no Postgres", abaixo, para o que falta rodar.
+
+## As chaves da IA (ADR-021, C3a)
+Para ditar pelo celular, a pessoa cola no app a chave de API do provedor de IA **dela** (BYOK; a chave
+do PC continua só no PC). O servidor testa a chave no provedor, a guarda **só cifrada** (a
+`ai_provider_keys`, `05`) e nunca a devolve: o app recebe só se há chave e o fim dela. Código:
+`internal/server/chaves_ia.go` (as rotas), `internal/server/cofre` (a cifra), `internal/chavedeapi` (as
+regras `Validar` e `Final`, as mesmas do painel do PC). A suíte `internal/server/chavestest` é o
+contrato executável, contra o Store em memória e o Postgres.
+
+- **Só existem com a chave de cifra** (`AI_KEYS_SECRET_FILE`, `10`; decisão O): sem ela, as três rotas
+  não são montadas e caem no `404` de rota não montada (`NOT_FOUND`, "rota não encontrada"), como as
+  do aceite e das preferências (`/dictation`, abaixo) e as do ditado que vêm depois.
+- **Só com a sessão do navegador:** o token de um PC recebe `403` (`FORBIDDEN`); sem credencial, `401`.
+  O `PUT` e o `DELETE` passam pela proteção contra CSRF, como o resto.
+- **`{provedor}`** é exatamente `openai`, `groq` ou `anthropic`, em minúsculas. Outro valor é `404`
+  (`NOT_FOUND`, "provedor desconhecido"), sem eco do valor, antes de qualquer outra conferência.
+- **A chave nunca vai a log, a erro, a resposta nem a URL.** O log de acesso tem só o padrão da rota, o
+  status, os milissegundos, os bytes e, num erro, um motivo da lista fechada (`sem_aceite`, `sem_chave`,
+  `limite`, `provedor`, e `aviso` no `AVISO_DESATUALIZADO`); o `GET` dos modelos acrescenta a contagem
+  `modelos`, e o `DELETE /dictation/consent`, `chaves_apagadas`.
+
+### PUT `/ai-keys/{provedor}`
+Corpo `{ "chave": "..." }`, e nada mais. Nesta ordem:
+1. **O aceite**, antes de ler o corpo: sem um aceite vigente do ditado no celular que inclua aquele
+   provedor (decisão H), `403` `SEM_ACEITE`, sem chamar o provedor. **O aceite é o de verdade, o da
+   `dictation_consents`** (C3b, `POST /dictation/consent`, abaixo): o aceite em aberto da versão atual
+   do aviso, que cobre o provedor da transcrição ou o do Polish. Sem nenhum, ou revogado, ou de uma
+   versão velha do aviso, ou de outro provedor, o `PUT` recusa assim.
+2. **O corpo:** até 16 KiB (acima, `413` `PAYLOAD_TOO_LARGE`, "corpo grande demais para uma chave de
+   API"). **Qualquer** erro de decodificação (JSON quebrado, campo desconhecido, tipo errado, um segundo
+   valor depois do objeto) responde `400` `BAD_REQUEST` com a frase **fixa** `corpo inválido: mande só
+   {"chave": "..."}`: a mensagem do decodificador pode trazer um pedaço do que foi colado, e nunca vai à
+   resposta.
+3. **As regras do painel do PC** (`chavedeapi.Validar`): sem os espaços e quebras de linha das pontas;
+   vazia, acima de 2560 bytes, ou com espaço, controle ou caractere fora do ASCII no meio é `400`
+   `VALIDATION`, com as frases do painel do PC.
+4. **O limite por conta** (10 por minuto, o `PUT` e o `GET` dos modelos juntos; escolha menor 24): sem
+   ficha, `429` `LIMITE` com `Retry-After`, sem chamar o provedor. Só o pedido que vai chamar o provedor
+   gasta ficha.
+5. **O teste no provedor:** a lista de modelos que a chave alcança (o `internal/ia`, só HTTP/1.1, sem
+   seguir redirecionamento, sem repassar o corpo de erro; a Groq pela API compatível com a da OpenAI,
+   `https://api.groq.com/openai/v1/models`). A falha vira um código da lista abaixo, e nada é gravado (a
+   chave de antes, se havia, continua).
+6. **A cifra e a gravação** por cima da anterior.
+
+`200` com `{ "provedor": "openai", "configurada": true, "final": "WXYZ" }`. `final` tem no máximo 4
+caracteres e nunca mais que um quarto da chave (uma chave de 8 caracteres sai com 2).
+
+### DELETE `/ai-keys/{provedor}`
+Apaga a chave cifrada da conta. Não haver chave não é erro. **Não pede o aceite** (tirar a chave sempre
+pode). `204`. As cópias cifradas nos backups ficam: a tela manda revogar a chave antiga no provedor.
+
+### GET `/ai-keys/{provedor}/models`
+A lista de modelos que a chave **guardada** alcança, perguntada ao provedor: `200` com
+`{ "provedor": "openai", "modelos": ["...", "..."] }` (a ordem do provedor, do mais novo para o mais
+antigo; `modelos` nunca é `null`). Pede o aceite do provedor (a chave vai a ele: `403` `SEM_ACEITE`) e
+conta no limite por conta. Sem chave guardada, `409` `SEM_CHAVE` ("nenhuma chave guardada para este
+provedor"); com a chave cifrada por outra chave de cifra (o arquivo trocou, ou o backup voltou sem ele),
+ou que não decifra com esta conta e este provedor, `409` `SEM_CHAVE` ("a chave guardada não vale mais
+neste servidor: cole a chave de novo"). Nos dois, o provedor não é chamado.
+
+### Os códigos (a lista fechada do ditado no celular, ADR-021)
+O app decide pelo `error.code`, nunca pela frase. Os desta subfatia, com o status fixado aqui; a C5b
+fixa os da rota de ditar e usa a mesma tradução da falha do provedor (`server.FalhaDoProvedor`):
+
+| Código | Status | Quando |
+|---|---|---|
+| `SEM_ACEITE` | 403 | sem aceite vigente daquele provedor (as chaves, a lista de modelos e as preferências) |
+| `SEM_CHAVE` | 409 | sem chave guardada, ou a guardada não decifra mais |
+| `LIMITE` | 429, com `Retry-After` | o limite por conta |
+| `PROVEDOR_RECUSOU_CHAVE` | 422 | o provedor recusou a chave (`401`) ou negou a lista de modelos (`403`) |
+| `PROVEDOR_LIMITE` | 502 | o provedor recusou por limite de uso ou falta de crédito (`429`) |
+| `PROVEDOR_FORA` | 502 | qualquer outra falha do provedor: `5xx`, prazo, rede, redirecionamento, resposta inesperada |
+| `AVISO_DESATUALIZADO` | 409 | **C3b:** o aceite veio com uma versão do aviso que não é a atual (o app tem o texto velho) |
+
+A lista inteira do ditado no celular (a da ADR-021, "A rota") ainda ganha, na C5b, `UM_POR_VEZ`,
+`OCUPADO`, `FORMATO`, `SEM_FALA` e `APAGADO`, e o status dos que a ADR deixa para ela.
+
+## O aceite e as preferências do ditado no celular (ADR-021, C3b)
+Quem dita pelo celular **aceita um aviso específico antes de colar a chave** (decisão H): a voz de cada
+ditado vai ao provedor da transcrição que escolheu, e, com o Polish, o texto vai ao do Polish. O servidor
+guarda o aceite **por conta** (a `dictation_consents`, `05`), com a data, a versão do aviso e os
+provedores, e as preferências do ditado (a `dictation_settings`). Assim o aceite vale em qualquer
+aparelho da conta e no app nativo do passo 2. Nada disso sincroniza com os PCs. Código:
+`internal/server/ditado_celular.go` (as rotas), `internal/server/cloudstore/ditado_celular.go` (as
+regras e o `DitadoNoCelular`). A suíte `internal/server/chavestest` (os casos `Ditado_*`) é o contrato
+executável, contra o Store em memória e o Postgres.
+
+- **A versão do aviso** é um inteiro, `cloudstore.VersaoDoAviso`; o app tem a mesma em
+  `web/src/nuvem/avisoDoDitado.ts` (`VERSAO_DO_AVISO`), e um teste do Go lê esse arquivo e prende os
+  dois. Mudar o texto da folha do aceite é subir os dois números juntos: o servidor passa a tratar todo
+  aceite antigo como não vigente, e pede o aceite de novo.
+- **Só existem com a chave de cifra** (`AI_KEYS_SECRET_FILE`), como as das chaves: sem ela, as quatro
+  rotas caem no `404` de rota não montada.
+- **Só com a sessão do navegador:** o token de um PC recebe `403` (`FORBIDDEN`); sem credencial, `401`.
+  O `PUT`, o `POST` e o `DELETE` passam pela proteção contra CSRF. Nenhuma tem parâmetro na URL, e nenhum
+  corpo tem `user_id`: a conta vem da sessão.
+- **Corpos estritos:** campo desconhecido, tipo errado, corpo vazio e um segundo valor depois do objeto
+  são `400` `BAD_REQUEST` com uma frase **fixa** (a mensagem do decodificador nunca vai à resposta); o
+  corpo acima de 4 KiB é `413` `PAYLOAD_TOO_LARGE`. Os erros de valor são `400` `VALIDATION`, com frases
+  fixas que não repetem o que veio.
+
+### GET `/dictation`
+O estado de uma vez, para a tela de Configurações: `200` com
+
+```json
+{
+  "aviso": { "versao": 1 },
+  "aceite": { "versao": 1, "transcricao": "openai", "polish": "anthropic",
+              "aceito_em": "2026-10-11T12:00:00Z", "vigente": true },
+  "preferencias": {
+    "transcricao": { "provedor": "openai", "modelo": "gpt-4o-mini-transcribe" },
+    "dica": false,
+    "polish": { "ligado": false, "provedor": "openai", "modelo": "" }
+  },
+  "chaves": [
+    { "provedor": "openai",    "configurada": true,  "final": "WXYZ", "colar_de_novo": false },
+    { "provedor": "groq",      "configurada": false, "final": "",     "colar_de_novo": false },
+    { "provedor": "anthropic", "configurada": false, "final": "",     "colar_de_novo": true }
+  ]
+}
+```
+
+- `aviso.versao` é a versão do texto que o servidor aceita agora.
+- `aceite` é o aceite **em aberto** da conta (o que não terminou), ou `null`. `polish` é `null` quando o
+  aviso que a pessoa viu não incluía o Polish. `vigente` é `false` quando a versão dele não é a do aviso
+  atual: o aceite continua gravado, mas não vale, e o app abre a folha de novo.
+- `preferencias` são as da conta, ou os padrões se ela nunca gravou: OpenAI com o
+  `gpt-4o-mini-transcribe` (o mais barato; a ADR pede o `gpt-transcribe` se a chamada de teste em pt-BR da
+  C7 for boa, e a constante é uma linha só), **sem dica** e **sem Polish** (`polish.modelo` vazio).
+- `chaves` tem **uma entrada por provedor**, na ordem `openai`, `groq`, `anthropic`. **Nunca a chave**:
+  só o `final` (até 4 caracteres). `configurada` diz que há uma chave guardada que **vale** neste
+  servidor; `colar_de_novo`, que havia uma e ela não vale mais (a chave de cifra trocou, ou o backup voltou
+  sem ela): `configurada` é `false`, e a pessoa cola de novo. Isso sai do id da chave de cifra de cada
+  linha, **sem decifrar**.
+
+### PUT `/dictation/settings`
+Grava as preferências **inteiras** por cima das que houver. Corpo (os três campos são obrigatórios):
+
+```json
+{ "transcricao": { "provedor": "groq", "modelo": "" },
+  "dica": false,
+  "polish": { "ligado": true, "provedor": "anthropic", "modelo": "claude-..." } }
+```
+
+Nesta ordem:
+1. **O corpo** (`400` `BAD_REQUEST` com a frase fixa `corpo inválido: mande transcricao, dica e polish`
+   para qualquer erro de decodificação; faltando um dos três campos, `400` `VALIDATION`).
+2. **A forma** (`400` `VALIDATION`): a transcrição é `openai` ou `groq`; o Polish, `openai` ou `anthropic`
+   (outro, em maiúsculas ou vazio é erro, **também com o Polish desligado**); o modelo tem de 1 a 100
+   caracteres entre letras, dígitos e `. _ : / @ -` (a nuvem não o valida contra uma lista, só contra a
+   forma); o **modelo da transcrição vazio é o padrão do provedor** (`gpt-4o-mini-transcribe` na OpenAI,
+   `whisper-large-v3-turbo` na Groq); o modelo do Polish pode ficar vazio **só com o Polish desligado**.
+3. **O aceite** (`403` `SEM_ACEITE`, nada é gravado): o provedor da transcrição tem de estar no aceite
+   vigente, **e o do Polish também quando ele está ligado**. O app abre a folha do aceite. Com o Polish
+   desligado, o provedor dele é só uma escolha guardada, e o aceite vale quando ele liga. **Mudar só o
+   modelo de um provedor aceito não pede aceite novo.**
+4. **A gravação**, que não chama nenhum provedor e não confere se há chave (quem dita confere, `SEM_CHAVE`).
+
+`200` com o mesmo estado do `GET`.
+
+### POST `/dictation/consent`
+Grava o aceite. Corpo `{ "versao": 1, "transcricao": "openai", "polish": "anthropic" }`: `versao` e
+`transcricao` obrigatórios, `polish` opcional (`null` ou ausente: o aviso não incluía o Polish). Os
+provedores são **os que a folha do aceite mostrou**. Nesta ordem:
+1. O corpo (a frase fixa `corpo inválido: mande versao, transcricao e, se houver, polish`, `400`
+   `BAD_REQUEST`; faltando `versao` ou `transcricao`, `400` `VALIDATION`).
+2. **A versão:** só a do aviso atual. Outra, para mais ou para menos, é **`409` `AVISO_DESATUALIZADO`**
+   (o app tem o texto velho: recarrega e mostra o novo). Nada é gravado.
+3. **Os provedores** (`400` `VALIDATION`): a transcrição `openai` ou `groq`; o Polish, se vier, `openai`
+   ou `anthropic` (`""` não é "sem Polish").
+4. **A gravação**, numa transação que trava a conta: o aceite em aberto que houver **termina** (`fim:
+   substituido`) e o novo entra em aberto, a conta nunca tem dois. Se o aceite em aberto já é exatamente
+   este (a mesma versão e os mesmos provedores), nada muda: **não grava outra linha**, e a data do
+   aceite é a da primeira vez. As chaves guardadas **ficam** (só revogar as apaga).
+
+`200` com o mesmo estado do `GET` (o `aceite` novo, com `vigente: true`).
+
+**Quando a tela pede o aceite de novo:** trocar de provedor, ligar o Polish com um provedor que o aceite
+não cobre, ou o texto do aviso mudar. O aceite cobre o **conjunto** dos dois provedores aceitos: ligar o
+Polish com um provedor que já está lá (a OpenAI aceita para a transcrição, por exemplo) não pede aceite
+novo.
+
+### DELETE `/dictation/consent`
+"Desligar o ditado no celular". Numa transação só: termina o aceite em aberto (`fim: revogado`, com a
+data) **e apaga todas as chaves da IA da conta**, também as de um provedor que o aceite já não cobria. Não
+haver aceite em aberto não é erro (as chaves, se houver, saem do mesmo jeito). `204`. As preferências
+**ficam** (são só escolhas, sem segredo), e o aceite que terminou fica gravado, como prova. As cópias
+cifradas das chaves nos backups ficam: a tela manda revogar a chave no provedor. Depois, o `PUT`
+das chaves e o das preferências dão `403` `SEM_ACEITE` até a pessoa aceitar de novo.
 
 ## Dictionary
 **Depois (ADR-019):** não montada na etapa 5. O dicionário continua no `dicionario.json` de cada PC;
@@ -612,7 +837,9 @@ depois de `N` (cada uma com `seq` igual ao `last_seq` dela) e as **lápides**
   do `limit`.
 - **Pull:** o `payload` de um `upsert` é o item (o mesmo JSON do CRUD, abaixo); o `device_id` da
   mudança falta quando ela veio do celular. O `410` da marca d'água, que este contrato previa para a
-  F9, não existe (F9, D2).
+  F9, não existe (F9, D2). **ADR-021 (C1):** o ditado que nasceu na nuvem vem como `upsert` da versão
+  1, sem `device_id` na mudança, e com `source_platform` `"web"` (ou `"android"`) e `device_id` nulo no
+  item; o PC o aplica como `recebido`, como o de outro PC.
 - **A retenção na nuvem (F9; ADR-019, "Decisões da F9").** Não há rota nem configuração: é um job no
   processo do servidor, na subida e de hora em hora, por usuário. O que o cliente vê:
   - o **ativo** com 6 meses, pela data do ditado que o PC mandou, some do `GET /transcriptions` e do
@@ -680,6 +907,12 @@ depois de `N` (cada uma com `seq` igual ao `last_seq` dela) e as **lápides**
   (ou é pulada, com marcador: o push recebe o `gone`). O que não vale no PC (tipo desconhecido, id que
   não é UUID, payload de outro id, texto acima de 64 KiB, sem data) é "não aplicado" e o cursor anda;
   só um erro de E/S o segura. `has_more` com o cursor parado é falha.
+  **ADR-021 (C1), a origem "pelo app":** o ditado que nasceu na nuvem (`source_platform` `web` ou
+  `android`, sem `device_id`) é aplicado como qualquer outro (`recebido`, sem marcador, a
+  `server_version` guardada), com a origem como veio, e o histórico do PC o mostra como "pelo app". O
+  PC não o conta como "nascido aqui": o envio inicial e o "Esquecer esta nuvem", que olhavam só o
+  `device_id` nulo, olham também a origem (`source_platform` fora de `web` e `android`). Sem isso, ele
+  subiria como histórico deste PC para uma conta nova.
   **F7c, a reconciliação (D3):** um ditado que existe aqui sem `server_version`, sem marcador, que
   mudou aqui (depois do "Esquecer esta nuvem", ou sem esquecer) e em que o lado do PC pode vencer
   (outro texto, ou na lixeira só aqui) não é sobrescrito: ganha um marcador de criar e sobe inteiro,

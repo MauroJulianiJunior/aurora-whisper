@@ -102,6 +102,12 @@ func runServe(ctx context.Context, args []string, getenv func(string) string, st
 		Store: store, Accounts: store, BaseURL: cfg.base.String(),
 		SessionSecret: cfg.sessionSecret, DeviceTokenPepper: cfg.pepper,
 		Contas: cfg.contas, Google: cfg.google, Proxy: cfg.proxy, Logger: logger, Painel: cfg.painel,
+		// O ditado no celular (ADR-021, C3a e C3b): sem a chave de cifra
+		// (cfg.cofre nil), as rotas das chaves da IA e as do aceite e das
+		// preferências (/dictation) não sobem. O aceite vem do próprio store
+		// (a dictation_consents): o PUT da chave só passa com o aceite
+		// vigente do provedor.
+		Cofre: cfg.cofre, ChavesDeIA: store, Ditado: store, Modelos: server.ModelosPelaRede{},
 		ReadyCheckers: []server.ReadyChecker{func() error {
 			c, cancel := context.WithTimeout(context.Background(), readyTimeout)
 			defer cancel()
@@ -113,7 +119,7 @@ func runServe(ctx context.Context, args []string, getenv func(string) string, st
 	}
 	return abrir(ctx, cfg.addr, cloud, logger, fail,
 		"contas_permitidas", cfg.contas.Len(), "https", cfg.base.Scheme == "https",
-		"proxy_confiavel", cfg.proxy.Ligado())
+		"proxy_confiavel", cfg.proxy.Ligado(), "chaves_da_ia", cfg.cofre != nil)
 }
 
 // abrir é o fim da subida do serve (F11c; ADR-019, "Decisões da F11"): a

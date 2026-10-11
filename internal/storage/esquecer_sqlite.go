@@ -45,7 +45,7 @@ func (f *Fila) EsquecerNuvem(ctx context.Context, agora time.Time) error {
 		var recebeu int
 		if err := tx.QueryRowContext(ctx,
 			`SELECT EXISTS (SELECT 1 FROM local_transcriptions
-			   WHERE user_id = ? AND server_version IS NOT NULL AND device_id IS NULL)`,
+			   WHERE user_id = ? AND server_version IS NOT NULL AND `+nasceuAquiSQL+`)`,
 			f.dono).Scan(&recebeu); err != nil {
 			return fmt.Errorf("storage: lendo o que a nuvem recebeu: %w", err)
 		}
