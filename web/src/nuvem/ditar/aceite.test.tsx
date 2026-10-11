@@ -72,7 +72,7 @@ describe('sem o aceite, o microfone nem abre', () => {
     await abrirOHistorico()
     await tocarNoMicrofone()
     const f = await folha()
-    expect(f.textContent).toContain('Ditar pelo celular manda a sua voz a um provedor')
+    expect(f.textContent).toContain('Ao ditar pelo celular, a sua voz vai a um provedor')
     expect(p.estado.abriu).toBe(0)
     // Só a leitura do estado da conta: nenhuma chave, nenhum aceite, nenhum ditado.
     expect(daConta(srv)).toEqual(['GET /api/v1/dictation'])

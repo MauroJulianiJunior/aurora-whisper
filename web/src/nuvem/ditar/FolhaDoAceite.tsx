@@ -73,13 +73,14 @@ function Conteudo({ folha, aberta }: { folha: Folha; aberta: FolhaAberta }) {
       <div ref={folhaRef} className="folha" role="dialog" aria-modal="true" aria-labelledby="folha-titulo" onKeyDown={teclado}>
         <div className="folha-corpo">
           <h2 id="folha-titulo" className="folha-titulo" ref={titulo} tabIndex={-1}>
-            Ditar pelo celular manda a sua voz a um provedor que não diz processar no Brasil.
+            Ao ditar pelo celular, a sua voz vai a um provedor que não diz processar no Brasil.
           </h2>
+          {/* O "Por isso," retoma o título: vem sempre logo depois dele (no modo de só ler, depois do que já foi aceito). */}
           {pedido.somenteLer ? (
-            <p>Você já aceitou este aviso; ele está aqui para você reler. Por isso tratamos o envio como uma transferência internacional.</p>
+            <p>Você já aceitou este aviso; ele está aqui para você reler. Por isso, tratamos o envio como uma transferência internacional.</p>
           ) : (
             <p>
-              Leia antes de aceitar. Por isso tratamos o envio como uma transferência internacional. Se você tocar em &quot;Agora não&quot;, o
+              Por isso, tratamos o envio como uma transferência internacional. Leia antes de aceitar. Se você tocar em &quot;Agora não&quot;, o
               microfone não abre, nada é enviado e o resto do app continua igual.
             </p>
           )}

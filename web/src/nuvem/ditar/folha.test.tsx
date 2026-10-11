@@ -64,7 +64,7 @@ describe('o que a folha diz', () => {
     const f = screen.getByRole('dialog')
     expect(f.getAttribute('aria-modal')).toBe('true')
     const titulo = within(f).getByRole('heading', { level: 2 })
-    expect(titulo.textContent).toBe('Ditar pelo celular manda a sua voz a um provedor que não diz processar no Brasil.')
+    expect(titulo.textContent).toBe('Ao ditar pelo celular, a sua voz vai a um provedor que não diz processar no Brasil.')
     expect(f.getAttribute('aria-labelledby')).toBe(titulo.id)
     expect(document.activeElement).toBe(titulo)
     // Fora do Painel: a folha é filha do body.
@@ -105,8 +105,19 @@ describe('o que a folha diz', () => {
     const { folha } = montar()
     await abrir(folha)
     const t = screen.getByRole('dialog').textContent!
-    expect(t).toContain('Por isso tratamos o envio como uma transferência internacional.')
+    expect(t).toContain('Por isso, tratamos o envio como uma transferência internacional.')
     expect(t).toContain('A sua voz não é usada para identificar você.')
+  })
+
+  // O "Por isso," retoma o título: o parágrafo que vem logo depois dele começa por ele,
+  // e não por "Leia antes de aceitar." (que o deixava solto, sem o que ele explica).
+  it('o parágrafo depois do título começa pelo "Por isso," que retoma o título', async () => {
+    const { folha } = montar()
+    await abrir(folha)
+    const titulo = within(screen.getByRole('dialog')).getByRole('heading', { level: 2 })
+    expect(titulo.nextElementSibling?.textContent).toBe(
+      'Por isso, tratamos o envio como uma transferência internacional. Leia antes de aceitar. Se você tocar em "Agora não", o microfone não abre, nada é enviado e o resto do app continua igual.',
+    )
   })
 
   it('não funciona com a tela apagada nem com o app em segundo plano', async () => {
@@ -305,6 +316,11 @@ describe('só ler o aviso', () => {
     expect(within(screen.getByRole('dialog')).getAllByRole('button').map((b) => b.textContent)).toEqual(['Fechar'])
     expect(screen.getByRole('dialog').textContent).toContain('Você já aceitou este aviso')
     expect(screen.getByRole('dialog').textContent).not.toContain('Se você tocar em "Agora não"')
+    // Sem o "Leia antes de aceitar." (já aceitou), o "Por isso," continua retomando o título.
+    const titulo = within(screen.getByRole('dialog')).getByRole('heading', { level: 2 })
+    expect(titulo.nextElementSibling?.textContent).toBe(
+      'Você já aceitou este aviso; ele está aqui para você reler. Por isso, tratamos o envio como uma transferência internacional.',
+    )
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Fechar' }))
     })

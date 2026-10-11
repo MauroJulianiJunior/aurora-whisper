@@ -32,8 +32,16 @@ describe('VERSAO_DO_AVISO', () => {
 //
 // A impressão é um FNV-1a de 64 bits do texto: não é segurança, é só um jeito
 // de comparar sem guardar o texto aqui.
+//
+// A impressão da versão 1 foi TROCADA (11-out-2026), e a versão continua 1: o
+// título e o primeiro parágrafo foram reordenados (o "Por isso," ficava solto, sem
+// o que ele retoma), sem mudar o sentido, e NINGUÉM aceitou a versão 1 ainda (o
+// ditado no celular não foi ao ar: nenhum aceite foi gravado em servidor algum,
+// ADR-021, C7). Depois que a primeira pessoa real aceitar, isto não vale mais: a
+// regra de cima, subir a versão e acrescentar a impressão nova sem apagar a antiga,
+// passa a valer para qualquer mudança de texto.
 const impressoes: Record<number, string> = {
-  1: '09f045d645e8e779',
+  1: '5fbf39d58a4bcffa',
 }
 
 function impressao(texto: string): string {
