@@ -80,6 +80,18 @@ describe('um ditado, do toque ao texto', () => {
     expect(m.chegadas).toEqual([{ ditado }])
   })
 
+  it('mede a fala mesmo sem quadros de desenho (a janela coberta, com a página visível)', async () => {
+    // O navegador para de dar requestAnimationFrame a uma janela que não está
+    // sendo desenhada. Se a fala dependesse dos quadros, o ditado de verdade
+    // viraria "Não ouvi nada" e seria jogado fora.
+    const m = montar({ semQuadros: true })
+    await gravar(m, 1500)
+    await m.g.parar()
+    expect(m.fases).toEqual(['pedindo', 'gravando', 'enviando', 'pronto'])
+    expect(m.enviar).toHaveBeenCalledTimes(1)
+    expect(m.enviar.mock.calls[0]![0].falaMs).toBeGreaterThanOrEqual(1200)
+  })
+
   it('o microfone abre uma vez, começa, e desliga na hora ao parar (ADR-015)', async () => {
     const m = montar()
     await gravar(m, 800)

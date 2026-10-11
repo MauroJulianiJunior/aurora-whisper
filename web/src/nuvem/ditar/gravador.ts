@@ -19,7 +19,7 @@
 import type { Ditado } from '../../api'
 import type { DitadoGravado, PedidoDeDitado } from '../cliente'
 import { type ErroDoDitado, erroDoEnvio, erroDoMicrofone, erroSemFala, fraseDoAviso } from './erros'
-import { type Amostra, MedidorDeFala, barrasDoNivel, falaMinimaMs, janelaDaOndaMs, prazoDoEnvioMs, tetoMs } from './medidas'
+import { type Amostra, MedidorDeFala, barrasDoNivel, falaMinimaMs, intervaloDeLeituraMs, janelaDaOndaMs, prazoDoEnvioMs, tetoMs } from './medidas'
 
 // Microfone é o microfone aberto, com a gravação pronta para começar.
 export interface Microfone {
@@ -42,9 +42,10 @@ export interface Plataforma {
   suporta(): boolean
   // agora é o relógio em ms, monotônico.
   agora(): number
-  // quadro agenda a próxima leitura do nível (requestAnimationFrame).
+  // quadro agenda um desenho (requestAnimationFrame). O gravador não o usa para
+  // ler o nível (medidas.ts, intervaloDeLeituraMs); a página de calibração usa.
   quadro(cb: () => void): () => void
-  // depois agenda cb daqui a ms (setTimeout).
+  // depois agenda cb daqui a ms (setTimeout). O gravador lê o nível por ele.
   depois(ms: number, cb: () => void): () => void
   novoId(): string
   // abrirMicrofone pede a permissão e abre o microfone. Falha com o erro do
@@ -225,7 +226,8 @@ export class Gravador {
     this.inicio = p.agora()
     this.definir({ fase: 'gravando', inicio: this.inicio, telaPodeApagar: false })
 
-    // A leitura do nível, a cada quadro: a onda e a fala saem do mesmo lugar.
+    // A leitura do nível, a cada intervaloDeLeituraMs, por temporizador e não
+    // por quadro (medidas.ts diz por quê): a onda e a fala saem do mesmo lugar.
     const ler = () => {
       const t = p.agora()
       const rms = mic.nivel()
@@ -236,9 +238,9 @@ export class Gravador {
         const q = { decorrido: t - this.inicio, barras: barrasDoNivel(this.amostras, t) }
         for (const cb of [...this.quadros]) cb(q)
       }
-      this.cancelaQuadro = p.quadro(ler)
+      this.cancelaQuadro = p.depois(intervaloDeLeituraMs, ler)
     }
-    this.cancelaQuadro = p.quadro(ler)
+    this.cancelaQuadro = p.depois(intervaloDeLeituraMs, ler)
 
     // O teto, a página que sai da frente e a faixa que fica muda ou acaba: o
     // app para, e envia o que já gravou, se houver fala.

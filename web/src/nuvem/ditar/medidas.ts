@@ -34,6 +34,14 @@ export const limiarDeFala = 0.03
 // limiar com o mesmo teto.
 export const maiorQuadroMs = 100
 
+// O gravador lê o nível a cada 16 ms (o ritmo de um quadro a 60 Hz) por um temporizador,
+// e não por requestAnimationFrame: o navegador para de dar quadros a uma janela
+// que não está sendo desenhada (coberta por outra, ou a aba de um painel
+// recolhido) mesmo com a página "visível", e aí a fala de verdade daria
+// "Não ouvi nada" e o ditado seria jogado fora. A onda é desenhada na mesma
+// leitura. Com a página fora da frente o gravador para de qualquer jeito.
+export const intervaloDeLeituraMs = 16
+
 // A onda é a do overlay do PC (ADR-014): barras espelhadas, o nível em dBFS
 // espalhado sobre o curso da barra. Os limites foram medidos no microfone do
 // PC (-48 a -14); no celular são recalibrados na C6c e renderizados antes de

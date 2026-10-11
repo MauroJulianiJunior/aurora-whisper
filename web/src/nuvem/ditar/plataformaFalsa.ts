@@ -17,6 +17,9 @@ export interface OpcoesDaPlataforma {
   telaNegada?: boolean
   // bytes: o áudio que o microfone entrega ao parar.
   bytes?: number
+  // semQuadros: o navegador não dá quadros (a janela coberta, que não está
+  // sendo desenhada, com a página ainda "visível"); os temporizadores andam.
+  semQuadros?: boolean
 }
 
 export interface MicrofoneFalso extends Microfone {
@@ -135,6 +138,7 @@ export function plataformaFalsa(opcoes: OpcoesDaPlataforma = {}) {
         if (i < 0) break
         timers.splice(i, 1)[0]!.cb()
       }
+      if (opcoes.semQuadros) return
       for (const cb of [...quadros]) {
         quadros.delete(cb)
         cb()
