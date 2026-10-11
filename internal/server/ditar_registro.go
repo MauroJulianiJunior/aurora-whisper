@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/MauroJulianiJunior/aurora-whisper/internal/clock"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/server/cloudstore"
 )
 
@@ -24,7 +25,9 @@ import (
 // guarda o que seria gravado (o texto do ASR e o final, o modo, o provedor e o
 // modelo), porque é isso que o reenvio grava: nunca vai a log, e some em 10
 // minutos, no reinício, quando o epoch da conta muda, no "Apagar meus dados" e
-// no "Desligar o ditado".
+// no "Desligar o ditado". Os 10 minutos valem sem pedido nenhum: um agendado
+// (vencerSozinho) tira o "sem fala" e o pago na hora, e o vencer da olhada é só
+// a segunda guarda.
 
 // chaveDoDitado identifica um ditado na memória: a conta e o id.
 type chaveDoDitado struct {
@@ -101,7 +104,11 @@ func (b *baldeDoDitado) espera(capacidade int, periodo time.Duration) time.Durat
 type registroDoDitado struct {
 	mu  sync.Mutex
 	now func() time.Time
-	lim limitesDoDitado
+	// agendar roda f quando d passar, no relógio de now (o time.AfterFunc em
+	// produção; o clock.Fake nos testes). Nunca chama f na hora: o registro
+	// agenda com mu segura.
+	agendar func(d time.Duration, f func()) clock.Timer
+	lim     limitesDoDitado
 
 	andamentos map[chaveDoDitado]*andamento
 	// vagasPorConta e vagas são os ditados com vaga, por conta e no total.
@@ -131,11 +138,11 @@ const esperaDaVaga = 5 * time.Second
 // maxBaldes: acima disso, os baldes cheios (iguais a um novo) saem.
 const maxBaldes = 10000
 
-func novoRegistroDoDitado(now func() time.Time, lim limitesDoDitado) *registroDoDitado {
+func novoRegistroDoDitado(now func() time.Time, agendar func(time.Duration, func()) clock.Timer, lim limitesDoDitado) *registroDoDitado {
 	ocioso := make(chan struct{})
 	close(ocioso)
 	return &registroDoDitado{
-		now: now, lim: lim,
+		now: now, agendar: agendar, lim: lim,
 		andamentos:    map[chaveDoDitado]*andamento{},
 		vagasPorConta: map[string]int{},
 		semFala:       map[chaveDoDitado]time.Time{},
@@ -306,12 +313,15 @@ func (g *registroDoDitado) desistir(k chaveDoDitado, a *andamento) {
 func (g *registroDoDitado) concluirTravado(k chaveDoDitado, a *andamento, d desfecho, semFala bool, pago *pagoNaoGravado) {
 	now := g.now()
 	if semFala {
-		g.semFala[k] = now.Add(memoriaDoDitado)
+		exp := now.Add(memoriaDoDitado)
+		g.semFala[k] = exp
+		g.vencerSozinho(k, now, exp)
 	}
 	if pago != nil {
 		p := *pago
 		p.expira = now.Add(memoriaDoDitado)
 		g.pagos[k] = p
+		g.vencerSozinho(k, now, p.expira)
 	}
 	if a.vaga {
 		a.vaga = false
@@ -327,7 +337,26 @@ func (g *registroDoDitado) concluirTravado(k chaveDoDitado, a *andamento, d desf
 	close(a.pronto)
 }
 
-// vencer tira o "sem fala" e o pago que passaram dos 10 minutos. Chamador
+// vencerSozinho agenda a saída do "sem fala" e do pago de k para quando o
+// prazo exp chegar, sem esperar um pedido novo: num servidor ocioso, o texto do
+// pago não passa dos 10 minutos na memória. O agendado só tira a entrada com
+// esse mesmo prazo (um desfecho novo do mesmo id tem o agendado dele), e não
+// segura o texto: só a chave do ditado e o prazo. Chamador segura mu.
+func (g *registroDoDitado) vencerSozinho(k chaveDoDitado, now, exp time.Time) {
+	g.agendar(exp.Sub(now), func() {
+		g.mu.Lock()
+		defer g.mu.Unlock()
+		if e, ok := g.semFala[k]; ok && e.Equal(exp) {
+			delete(g.semFala, k)
+		}
+		if p, ok := g.pagos[k]; ok && p.expira.Equal(exp) {
+			delete(g.pagos, k)
+		}
+	})
+}
+
+// vencer tira o "sem fala" e o pago que passaram dos 10 minutos (a segunda
+// guarda, na olhada: o agendado de vencerSozinho é o que vale). Chamador
 // segura mu.
 func (g *registroDoDitado) vencer(now time.Time) {
 	for k, exp := range g.semFala {

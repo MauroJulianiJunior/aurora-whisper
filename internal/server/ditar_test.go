@@ -114,7 +114,7 @@ func TestMedidasDoDitado(t *testing.T) {
 
 func novoRegistroDeTeste(lim limitesDoDitado) (*registroDoDitado, *clock.Fake) {
 	clk := clock.NewFake(time.Date(2026, 10, 11, 12, 0, 0, 0, time.UTC))
-	return novoRegistroDoDitado(clk.Now, lim), clk
+	return novoRegistroDoDitado(clk.Now, clk.AfterFunc, lim), clk
 }
 
 // As vagas: o mesmo id em andamento é esperado; a conta com outro ditado é
@@ -240,6 +240,56 @@ func TestRegistro_SemFalaEPagoNaoGravado(t *testing.T) {
 	clk.Advance(10*time.Minute + time.Second)
 	if o := g.olhar(k3, "e1"); o.regravar != nil {
 		t.Fatal("o pago passou dos 10 minutos")
+	}
+}
+
+// O "sem fala" e o pago e não gravado (que guarda o texto) vencem sozinhos aos
+// 10 minutos, sem esperar um pedido novo: num servidor ocioso, o texto não passa
+// dos 10 minutos na memória (C5b-revisao). Nenhuma olhada é feita aqui (o
+// vencer de dentro dela não conta). Um desfecho novo do mesmo id depois do
+// vencido tem o prazo dele: o agendado do antigo não o tira.
+func TestRegistro_OSemFalaEOPagoVencemSozinhos(t *testing.T) {
+	g, clk := novoRegistroDeTeste(limitesDoDitado{porConta: 1, porMinuto: 10, porDia: 200, total: 3})
+	novo := cloudstore.NewDictation{SourcePlatform: "web", RawText: "texto", FinalText: "texto", Mode: "smart", ASRProvider: "openai"}
+	semFala, pago := chaveDoDitado{"a", "1"}, chaveDoDitado{"b", "1"}
+	d, _, _ := g.entrar(semFala)
+	g.concluir(semFala, d, desfecho{status: 422, code: codeSemFala}, true, nil)
+	clk.Advance(time.Minute)
+	d, _, _ = g.entrar(pago)
+	g.concluir(pago, d, desfecho{status: 500, code: codeInternal}, false, &pagoNaoGravado{epoch: "e", novo: novo})
+	tamanhos := func() (int, int) {
+		g.mu.Lock()
+		defer g.mu.Unlock()
+		return len(g.semFala), len(g.pagos)
+	}
+	clk.Advance(9*time.Minute - time.Second)
+	if s, p := tamanhos(); s != 1 || p != 1 {
+		t.Fatalf("antes dos 10 minutos: %d sem fala e %d pagos, quero 1 e 1", s, p)
+	}
+	clk.Advance(time.Second)
+	if s, p := tamanhos(); s != 0 || p != 1 {
+		t.Fatalf("aos 10 minutos do sem fala: %d sem fala e %d pagos, quero 0 e 1", s, p)
+	}
+	clk.Advance(time.Minute)
+	if s, p := tamanhos(); s != 0 || p != 0 {
+		t.Fatalf("aos 10 minutos do pago: %d sem fala e %d pagos, quero nenhum (o texto não fica num servidor ocioso)", s, p)
+	}
+
+	// O vencido sai pela olhada antes do agendado (o relógio do agendado está
+	// atrasado), e o mesmo id ganha outro desfecho: o agendado do antigo, que
+	// dispara depois, não tira o novo.
+	g2, clk2 := novoRegistroDeTeste(limitesDoDitado{porConta: 1, porMinuto: 10, porDia: 200, total: 3})
+	d, _, _ = g2.entrar(pago)
+	g2.concluir(pago, d, desfecho{status: 500, code: codeInternal}, false, &pagoNaoGravado{epoch: "e", novo: novo})
+	g2.mu.Lock()
+	g2.pagos[pago] = pagoNaoGravado{epoch: "e", novo: novo, expira: clk2.Now().Add(memoriaDoDitado + time.Minute)}
+	g2.mu.Unlock()
+	clk2.Advance(memoriaDoDitado)
+	g2.mu.Lock()
+	_, ficou := g2.pagos[pago]
+	g2.mu.Unlock()
+	if !ficou {
+		t.Fatal("o agendado de um desfecho tirou outro do mesmo id, com outro prazo")
 	}
 }
 

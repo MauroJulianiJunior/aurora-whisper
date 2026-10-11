@@ -1261,7 +1261,10 @@ uma conta nunca espera nem recebe a resposta da outra):
 - **O que fica na memória:** o andamento e o "sem fala" guardam só o desfecho (o status, o código, o
   aviso); o desfecho pago e não gravado guarda o que seria gravado (os textos, o modo, o provedor, o
   modelo), porque é isso que o reenvio grava. Some em 10 minutos, no reinício, quando o epoch da conta
-  muda, no "Apagar meus dados" e no "Desligar o ditado". Nunca vai a log. Uma instância só da API
+  muda, no "Apagar meus dados" e no "Desligar o ditado". Os 10 minutos valem **sem pedido nenhum**: o
+  "sem fala" e o pago saem por um agendado (`time.AfterFunc`) na hora em que vencem, e não só quando
+  chega o próximo ditado; num servidor ocioso, o texto do pago não passa dos 10 minutos na memória. O
+  agendado guarda só a conta, o id e o prazo, nunca o texto. Nunca vai a log. Uma instância só da API
   (ADR-021, risco 11). O Smart da conta no cache (montado com o aprendido dela) também sai no "Apagar
   meus dados" e no "Desligar o ditado", e de novo no fim do ditado que um deles fez acabar em
   `SEM_ACEITE`: esse trabalho leu o aprendido antes e montou o Smart depois do esquecer.
