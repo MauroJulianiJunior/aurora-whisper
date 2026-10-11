@@ -48,6 +48,9 @@ Este diretório contém:
 - `deploy-teste.ps1`, `enviar-para-servidor.ps1 -Dominio <endereço> [-ArquivoGoogle <JSON>]` e
   `conferir-nuvem.ps1 -Dominio <endereço> [-IPEsperado <IP>]`: o deploy da nuvem (ADR-019, F11, Parte
   2). Veja a seção "O deploy da nuvem", abaixo, e o roteiro `docs/deploy-f11.md`.
+- `remontar-agent.ps1`: remonta o Agent do `bin\` e o painel num comando só. Fecha o Agent aberto
+  como o "Sair" da bandeja, compila, monta o painel em `bin\painel`, abre o Agent novo e confere pelo
+  `StartTime` que é ele. Não mexe nos dados. PowerShell 5.1, só ASCII.
 
 ## Diagnóstico do servidor (`diagnostico-servidor.sh`)
 
