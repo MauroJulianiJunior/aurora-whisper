@@ -10,6 +10,10 @@ import type { DitadoGravado, PedidoDeDitado } from '../cliente'
 import { type Chegada, Gravador } from './gravador'
 import { tetoMs } from './medidas'
 
+// O teste do teto corre 120 s de relógio de mentira, quadro a quadro; com a
+// máquina ocupada, os 5 s padrão apertam.
+vi.setConfig({ testTimeout: 20_000 })
+
 const ditado = {
   id: 'd1',
   raw_text: 'texto ditado',

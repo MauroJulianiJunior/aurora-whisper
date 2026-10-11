@@ -35,13 +35,17 @@ const aviso = () => document.querySelector<HTMLElement>('.aviso-regiao')!
 const linhas = () => Array.from(document.querySelectorAll<HTMLElement>('[data-item]'))
 const posts = (srv: ReturnType<typeof servidorFalsoNuvem>) => srv.pedidos.filter((x) => x.metodo === 'POST' && x.caminho === '/api/v1/dictations')
 
+// A primeira renderização de um arquivo, com a máquina ocupada (os outros
+// testes do repositório rodam junto), passa do 1 s padrão do findBy.
+const espera = { timeout: 5000 }
+
 async function abrirOHistorico() {
-  await screen.findByRole('button', { name: /Manda o relatório amanhã/ })
+  await screen.findByRole('button', { name: /Manda o relatório amanhã/ }, espera)
 }
 
 async function comecar() {
   await act(async () => {
-    fireEvent.click(await screen.findByRole('button', { name: 'Ditar' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Ditar' }, espera))
   })
 }
 
@@ -56,6 +60,10 @@ async function ditar(p: ReturnType<typeof plataformaFalsa>, ms = 2000) {
   await comecar()
   await pararEEnviar(p, ms)
 }
+
+// Com a máquina ocupada (os outros testes do repositório rodam junto), o app
+// inteiro numa renderização passa dos 5 s padrão.
+vi.setConfig({ testTimeout: 20_000 })
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] })
