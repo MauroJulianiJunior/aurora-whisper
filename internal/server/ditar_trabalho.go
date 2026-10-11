@@ -164,6 +164,13 @@ func (c *Cloud) rodarDitado(t trabalhoDoDitado, saida chan<- resultadoDoDitado) 
 			rel.desfecho = "panico"
 		}
 		res.motivo = rel.desfecho
+		if res.desfecho.code == codeSemAceite {
+			// O aceite deixou de valer, ou a conta apagou os dados, durante o
+			// ditado. O "Desligar" e o "Apagar meus dados" já esqueceram o Smart
+			// da conta, mas este trabalho leu o aprendido antes e pode tê-lo
+			// montado (e guardado) de novo depois: ele sai outra vez.
+			c.smart.Esquecer(t.k.usuario)
+		}
 		c.ditados.concluir(t.k, t.a, res.desfecho, semFala, pago)
 		c.logDoDitado(t, rel, time.Since(inicio))
 		saida <- res

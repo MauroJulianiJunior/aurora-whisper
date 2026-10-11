@@ -542,3 +542,35 @@ func testDitarApagarDuranteOProvedor(t *testing.T, m *mundo) {
 		m.voz.enquantoResponde(t, nil)
 	}
 }
+
+// "Apagar meus dados" ou "Desligar o ditado" durante a chamada ao provedor: os
+// dois esquecem o Smart da conta (montado com o aprendido dela), mas o trabalho
+// do ditado leu o aprendido antes e monta o Smart depois do provedor. Ele não
+// pode deixá-lo de volta na memória: o ditado acaba em SEM_ACEITE, e nenhuma
+// conta fica com o Smart guardado.
+func testDitarApagarOuDesligarNoMeioEsqueceOSmart(t *testing.T, m *mundo) {
+	m.prepararDitado(celA, "openai", "", false)
+	m.aprenderPeloPC("dirfi", "DIRF", nil)
+	// Um ditado normal deixa o Smart da conta guardado: é o cache.
+	m.ditadoOk(func() *httptest.ResponseRecorder { r, _ := m.ditar(celA, cloudstore.NewUUIDv7(), webm()); return r }(), http.StatusCreated)
+	if n := m.cloud.ContasComOSmartNaMemoria(); n != 1 {
+		t.Fatalf("depois de um ditado, %d contas com o Smart na memória, quero 1", n)
+	}
+	m.voz.enquantoResponde(t, func() { m.exigirStatus(m.apagarMeusDados(celA), http.StatusNoContent, "apagar no meio") })
+	rec, _ := m.ditar(celA, cloudstore.NewUUIDv7(), webm())
+	exigirErro(t, rec, http.StatusForbidden, "SEM_ACEITE")
+	if n := m.cloud.ContasComOSmartNaMemoria(); n != 0 {
+		t.Fatalf("\"Apagar meus dados\" no meio do ditado: %d contas com o Smart na memória, quero 0", n)
+	}
+
+	m.voz.enquantoResponde(t, nil)
+	m.prepararDitado(celB, "openai", "", false)
+	m.voz.enquantoResponde(t, func() {
+		m.exigirStatus(m.pedir(celB, http.MethodDelete, rotaAceite, ""), http.StatusNoContent, "desligar no meio")
+	})
+	rec, _ = m.ditar(celB, cloudstore.NewUUIDv7(), webm())
+	exigirErro(t, rec, http.StatusForbidden, "SEM_ACEITE")
+	if n := m.cloud.ContasComOSmartNaMemoria(); n != 0 {
+		t.Fatalf("\"Desligar o ditado\" no meio do ditado: %d contas com o Smart na memória, quero 0", n)
+	}
+}

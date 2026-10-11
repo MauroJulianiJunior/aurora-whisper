@@ -1255,7 +1255,9 @@ uma conta nunca espera nem recebe a resposta da outra):
   aviso); o desfecho pago e não gravado guarda o que seria gravado (os textos, o modo, o provedor, o
   modelo), porque é isso que o reenvio grava. Some em 10 minutos, no reinício, quando o epoch da conta
   muda, no "Apagar meus dados" e no "Desligar o ditado". Nunca vai a log. Uma instância só da API
-  (ADR-021, risco 11).
+  (ADR-021, risco 11). O Smart da conta no cache (montado com o aprendido dela) também sai no "Apagar
+  meus dados" e no "Desligar o ditado", e de novo no fim do ditado que um deles fez acabar em
+  `SEM_ACEITE`: esse trabalho leu o aprendido antes e montou o Smart depois do esquecer.
 - **O que ainda paga de novo** (ADR-021, risco 4): o prazo de 20 s que corta uma transcrição já
   cobrada; o reinício além da espera do desligamento; o pago que passou dos 10 minutos.
 

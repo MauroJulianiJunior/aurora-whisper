@@ -338,6 +338,11 @@ func (c *Cloud) EsperarDitados(ctx context.Context) error {
 // DitadosEmAndamento diz quantos trabalhos soltos de ditado estão rodando.
 func (c *Cloud) DitadosEmAndamento() int { return c.ditados.emAndamento() }
 
+// ContasComOSmartNaMemoria diz quantas contas têm o Smart (montado com o
+// aprendido delas) guardado na memória da rota de ditar: só a contagem, para os
+// testes do esquecer.
+func (c *Cloud) ContasComOSmartNaMemoria() int { return c.smart.Len() }
+
 // esquecerDitadoDaConta tira da memória o que é da conta: o Smart montado (com o
 // aprendido dela), o "sem fala" e o desfecho pago e não gravado (com o texto).
 // É o "Apagar meus dados" e o "Desligar o ditado no celular".
