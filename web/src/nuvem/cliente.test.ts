@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from 'vitest'
 import { Conflito, ErroDaApi, ForaDoAr, SemSessao } from '../api'
-import { aprendido, itemNuvem, servidorFalsoNuvem } from '../testes/servidorFalsoNuvem'
+import { aprendido, ditadoComOPolish, itemNuvem, servidorFalsoNuvem } from '../testes/servidorFalsoNuvem'
 import { criarClienteNuvem, criarPortao } from './cliente'
 
 const em = (dia: number, hora: number) => new Date(2026, 9, dia, hora).toISOString()
@@ -230,7 +230,7 @@ describe('ditar', () => {
       'Ditado-Duracao-Ms': '4200',
       'Ditado-Fala-Ms': '3101',
     })
-    expect(srv.ditados).toEqual([{ id, bytes: 5, tipo: 'audio/webm', duracaoMs: 4200, falaMs: 3101, chamouOProvedor: true }])
+    expect(srv.ditados).toEqual([{ id, bytes: 5, tipo: 'audio/webm', duracaoMs: 4200, falaMs: 3101, chamouOProvedor: true, status: 201 }])
     expect(g.ditado.final_text).toBe('Manda o relatório amanhã.')
     expect(g.aviso).toBeUndefined()
   })
@@ -245,11 +245,16 @@ describe('ditar', () => {
   })
 
   it('quando o Polish caiu para o Smart, o motivo vem como aviso (e fica fora do ditado)', async () => {
-    const { srv, cliente } = montar()
+    const { srv, cliente } = montar({ ditado: ditadoComOPolish })
     srv.aoDitar({ texto: 'Texto.', aviso: 'chave_recusada' })
     const g = await cliente.ditar(pedido)
     expect(g.aviso).toBe('chave_recusada')
     expect('aviso' in g.ditado).toBe(false)
+  })
+
+  it('o aviso só existe com o Polish ligado na conta: pedir um sem ele é montar um servidor que não existe', () => {
+    const { srv } = montar()
+    expect(() => srv.aoDitar({ texto: 'Texto.', aviso: 'prazo' })).toThrow(/Polish ligado/)
   })
 
   it('o mesmo id de novo: o servidor devolve o que está gravado, sem chamar o provedor', async () => {
@@ -309,13 +314,13 @@ describe('ditar', () => {
 
   it.each([
     [403, 'SEM_ACEITE'],
-    [403, 'SEM_CHAVE'],
+    [409, 'SEM_CHAVE'],
     [429, 'UM_POR_VEZ'],
     [503, 'OCUPADO'],
     [413, 'PAYLOAD_TOO_LARGE'],
     [415, 'FORMATO'],
     [422, 'SEM_FALA'],
-    [502, 'PROVEDOR_RECUSOU_CHAVE'],
+    [422, 'PROVEDOR_RECUSOU_CHAVE'],
     [502, 'PROVEDOR_LIMITE'],
     [502, 'PROVEDOR_FORA'],
     [410, 'APAGADO'],

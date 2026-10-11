@@ -145,22 +145,45 @@ export function fraseDaChave(e: unknown): string {
   return 'Não deu para guardar a chave.'
 }
 
-// fraseDoAviso: o motivo (um ia.Motivo ou um motivo do Polish, nunca texto)
-// de o Polish ter caído para o texto do Smart. O motivo que o app não conhece
-// não vira frase solta: fica só "O Polish não agiu."
+// fraseDoAviso: o motivo de o Polish ter caído para o texto do Smart. O servidor
+// manda um resolver.MotivoFallback (06, "POST /dictations": o campo `aviso`),
+// da lista fechada do Polish, e nunca texto. O motivo que o app não conhece não
+// vira frase solta: fica só "O Polish não agiu." Um teste
+// (contratoDoDitado.test.ts) lê a lista do 06 e exige uma frase para cada motivo
+// dela: um motivo novo no servidor quebra a suíte aqui, e não a tela de alguém.
 const motivosDoPolish: Record<string, string> = {
-  chave_recusada: 'o provedor recusou a chave',
+  // Da conta ou do provedor: a pessoa pode agir.
   sem_chave: 'falta a chave',
-  sem_permissao: 'a chave não tem permissão',
+  chave_recusada: 'o provedor recusou a chave',
   sem_credito: 'falta crédito no provedor',
   limite: 'o provedor atingiu o limite',
-  prazo: 'o provedor demorou',
-  tempo_esgotado: 'o provedor demorou',
-  transporte: 'não consegui falar com o provedor',
-  sem_rede: 'não consegui falar com o provedor',
-  sobrecarga: 'o provedor está sobrecarregado',
-  indisponivel: 'o provedor está fora do ar',
   modelo_inexistente: 'o modelo escolhido não existe mais',
+  modelo_incompativel: 'o modelo escolhido não aceita este pedido',
+  // Do provedor ou da rede: costuma passar sozinho.
+  prazo: 'o provedor demorou',
+  transporte: 'não consegui falar com o provedor',
+  sobrecarga: 'o provedor está sobrecarregado',
+  pedido_recusado: 'o provedor rejeitou o pedido',
+  recusa: 'o modelo recusou responder',
+  truncada: 'a resposta veio cortada',
+  resposta_invalida: 'o provedor respondeu de um jeito inesperado',
+  // As guardas: a IA respondeu, mas o texto que voltou não era o que a pessoa
+  // disse, só com sinais e quebras. O provedor não tem culpa, e o nome dele só
+  // confundiria.
+  json: 'a resposta veio fora do formato',
+  formato: 'a resposta trouxe algo além do texto',
+  numeros: 'a resposta mudou os números',
+  siglas_termos: 'a resposta mudou siglas, termos ou nomes',
+  palavras: 'a resposta mudou o texto',
+  trecho_novo: 'a resposta acrescentou palavras',
+  caixa: 'a resposta pôs palavras em maiúsculas',
+  dicionario: 'não consegui conferir os termos aprendidos',
+  // Motivos do ia e do asr/nuvem (ia.Motivo). O servidor não os manda no aviso,
+  // mas o texto antigo da ADR-021 os citava: ficam por tolerância.
+  sem_permissao: 'a chave não tem permissão',
+  tempo_esgotado: 'o provedor demorou',
+  sem_rede: 'não consegui falar com o provedor',
+  indisponivel: 'o provedor está fora do ar',
 }
 
 export function fraseDoAviso(motivo: string): string {

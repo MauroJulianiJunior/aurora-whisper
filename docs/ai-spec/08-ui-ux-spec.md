@@ -520,8 +520,10 @@ pergunta conta as trocas aprendidas (o `previa_trocas` do `06`, o M).
   `ditar-polish`). A calibração do microfone, `/calibracao-dev.html` ("A calibração do microfone no
   Android", abaixo). São só do `pnpm dev`: nenhum build as inclui. A nuvem de mentira dessas telas e
   dos testes do app (`web/src/testes/servidorFalsoNuvem.ts`) fala o contrato do `06` para o ditado no
-  celular (`/dictation`, `/dictation/settings`, `/dictation/consent` e `/ai-keys`), e o
-  `contratoDoDitado.test.ts` prende os campos e os status dela ao `06`.
+  celular (`/dictation`, `/dictation/settings`, `/dictation/consent` e `/ai-keys`) e para a rota de
+  ditar (`POST /dictations`, na ordem das conferências do `06`: o aceite e a chave, o id v7, o reenvio
+  e o que espera, as medidas e os tetos, a gravação que falha e só regrava), e o
+  `contratoDoDitado.test.ts` prende os campos, os motivos do `aviso` e os status dela ao `06`.
 - **O teste manual** (F8i, 08-out-2026): `docs/teste-manual-nuvem-f8.md` confere, no `bin\` e no app, com
   a nuvem de teste, a pergunta do envio com a troca e o **Desfazer** do **Aprendido** do app e do
   **Aprendido no painel**, nos dois sentidos. É um PC só: as etiquetas de estado e o "não aplicado neste
@@ -822,7 +824,9 @@ seções seguintes; a calibração do limiar e da onda no Android (C6c), no fim 
   etiqueta "novo", que dura 10 s ou até a pessoa abrir uma linha ou trocar de vista), com o **Copiar**
   que toda linha tem (sempre à vista no toque), e o aviso diz "Ditado no topo do histórico.". Se o
   Polish caiu para o texto do Smart, o aviso acrescenta "O Polish não agiu: {motivo}." (o motivo é um
-  código do servidor, nunca texto dele; o que o app não conhece fica só "O Polish não agiu."). Numa
+  `resolver.MotivoFallback`, da lista fechada do `06`, e nunca texto do servidor; o app tem uma frase
+  curta para cada motivo da lista, como "o provedor demorou", "falta crédito no provedor" ou "a
+  resposta mudou os números", e o que não conhece fica só "O Polish não agiu."). Numa
   busca, na Lixeira ou nas Configurações o ditado não entra na lista que está na tela, e o aviso diz
   "Ditado salvo no histórico.". **Copiar sozinho ao chegar não existe**: escrever na área de
   transferência pede um gesto recente, e a resposta chega segundos depois do toque (escolha menor 14,
@@ -902,9 +906,11 @@ versão** e pede o aceite de novo.
   botões ficam sempre à vista**, no rodapé. É um diálogo modal (`role="dialog"`, `aria-modal`): o foco
   nasce no título, o Tab não sai da folha, o **Esc é "Agora não"**, e o foco volta ao que o tinha (o
   microfone, o seletor de provedor).
-- **O título:** "Ditar pelo celular manda a sua voz a um provedor que não diz processar no Brasil."
-  Depois: "Leia antes de aceitar. Por isso tratamos o envio como uma transferência internacional. Se você
-  tocar em "Agora não", o microfone não abre, nada é enviado e o resto do app continua igual."
+- **O título:** "Ao ditar pelo celular, a sua voz vai a um provedor que não diz processar no Brasil."
+  Depois: "Por isso, tratamos o envio como uma transferência internacional. Leia antes de aceitar. Se você
+  tocar em "Agora não", o microfone não abre, nada é enviado e o resto do app continua igual." (O "Por
+  isso," retoma o título, e por isso vem primeiro. Reordenado em 11-out-2026, sem mudar o sentido; a
+  versão do aviso continua 1, porque ninguém aceitou ainda.)
 - **O provedor da voz** (só no primeiro uso, a pedido do app): "OpenAI" e "Groq", duas opções de rádio, a
   OpenAI marcada. O bloco do provedor, mais abaixo, muda com a escolha.
 - **O que vai:**
@@ -937,7 +943,8 @@ versão** e pede o aceite de novo.
   Tente de novo." (a frase é nossa, nunca a do servidor); a sessão que acabou fecha a folha e acende a
   faixa da sessão. **Agora não** não grava nada.
 - **Só ler:** "Ler o aviso", nas Configurações, reabre a folha de quem já aceitou, só para reler: "Você
-  já aceitou este aviso; ele está aqui para você reler.", e um botão só, **Fechar**.
+  já aceitou este aviso; ele está aqui para você reler. Por isso, tratamos o envio como uma transferência
+  internacional.", e um botão só, **Fechar**.
 
 ### Ditar pelo celular nas Configurações (ADR-021, C6b)
 A seção **"Ditar pelo celular"** fica **logo depois da Conta** (é o que o app faz). Tudo age na hora, sem

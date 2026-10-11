@@ -149,6 +149,8 @@ describe('o bundle local (bin\\painel)', () => {
     '/api/v1/dictation',
     '/api/v1/ai-keys',
     'Ditar pelo celular',
+    // O título da folha do aceite (o 'Ditar pelo celular' acima é o da seção das Configurações).
+    'Ao ditar pelo celular, a sua voz vai a um provedor',
     'transferência internacional',
     'Chave terminada em',
     'Revogue também esta chave',
@@ -210,7 +212,7 @@ describe('o bundle da nuvem (dist-nuvem)', () => {
       '/api/v1/dictation/settings',
       '/api/v1/dictation/consent',
       '/api/v1/ai-keys',
-      'Ditar pelo celular manda a sua voz a um provedor que não diz processar no Brasil.',
+      'Ao ditar pelo celular, a sua voz vai a um provedor que não diz processar no Brasil.',
       'Não é gravada no seu aparelho nem no servidor.',
       'quem administra o servidor consegue decifrá-la',
       'A voz e os termos podem ter dados de outras pessoas',

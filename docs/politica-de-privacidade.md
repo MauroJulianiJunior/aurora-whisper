@@ -352,9 +352,9 @@ folha só, em destaque, separada das outras finalidades. Os botões são **Aceit
 identificação da versão do aviso é da C3b: **qualquer mudança neste texto muda a versão e pede o aceite
 de novo.** Onde há `{...}`, o app mostra o bloco do provedor que a pessoa escolheu.
 
-> **Ditar pelo celular manda a sua voz a um provedor que não diz processar no Brasil.**
+> **Ao ditar pelo celular, a sua voz vai a um provedor que não diz processar no Brasil.**
 >
-> Leia antes de aceitar. Por isso tratamos o envio como uma transferência internacional. Se você tocar
+> Por isso, tratamos o envio como uma transferência internacional. Leia antes de aceitar. Se você tocar
 > em "Agora não", o microfone não abre, nada é enviado e o resto do app continua igual.
 >
 > **O que vai**

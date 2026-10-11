@@ -9,6 +9,13 @@
 //
 // O item sai como a nuvem o manda: deleted_at e versao_em_conflito sempre
 // presentes (null quando não há), e next_cursor "" na última página.
+//
+// A rota de ditar (POST /api/v1/dictations) segue a do servidor de verdade (06,
+// "Ditar pelo celular", C5b), na mesma ordem: o aceite e a chave, o Ditado-Id v7, o
+// que a nuvem e a memória têm com o id (o reenvio, a lápide, o que esperou, o pago
+// e não gravado), as medidas, o tipo e o tamanho, a vaga, e o trabalho. O que dá
+// errado em cada ponto se pede com falharNoProximoDitado; o provedor que demora,
+// com segurarOProximoDitado. contratoDoDitado.test.ts prende tudo isso ao 06.
 
 import type { Buscador, Ditado, VersaoEmConflito } from '../api'
 
@@ -23,25 +30,154 @@ export interface PedidoNuvem {
   credentials?: RequestCredentials
 }
 
-// DitadoDoCelular é um ditado que o servidor de mentira recebeu (ADR-021): o
-// que o app mandou, e se o provedor foi chamado por ele.
+// DitadoDoCelular é um pedido de ditado que o servidor de mentira recebeu
+// (ADR-021): o que o app mandou, o que o servidor respondeu, e se o provedor foi
+// chamado por ele. Só entram os pedidos que passaram do aceite, da chave e do
+// Ditado-Id (os que a rota de verdade também responde antes de olhar o ditado
+// ficam só em `pedidos`).
 export interface DitadoDoCelular {
   id: string
   bytes: number
   tipo: string
   duracaoMs: number
   falaMs: number
-  // chamouOProvedor: false no reenvio do mesmo id (a idempotência).
+  // chamouOProvedor: false no reenvio do mesmo id (a idempotência), em quem
+  // esperou o primeiro, e em qualquer recusa que vem antes do provedor.
   chamouOProvedor: boolean
+  // status: o que o servidor respondeu a este pedido (201 o ditado novo, 200 o
+  // reenvio, ou a recusa).
+  status: number
 }
 
-// ComoDitar é o que o provedor de mentira devolve no próximo ditado.
+// Os motivos do `aviso` do ditado (resolver.MotivoFallback): a lista fechada do
+// Polish que o 06 dá em "POST /dictations". contratoDoDitado.test.ts prende esta
+// lista à do 06, e a fraseDoAviso do app tem de ter uma frase para cada um.
+export const motivosDoPolishFalsos = [
+  'prazo',
+  'sem_chave',
+  'chave_recusada',
+  'sem_credito',
+  'limite',
+  'modelo_inexistente',
+  'modelo_incompativel',
+  'sobrecarga',
+  'transporte',
+  'pedido_recusado',
+  'recusa',
+  'truncada',
+  'resposta_invalida',
+  'json',
+  'formato',
+  'numeros',
+  'siglas_termos',
+  'palavras',
+  'caixa',
+  'trecho_novo',
+  'dicionario',
+] as const
+export type MotivoDoPolish = (typeof motivosDoPolishFalsos)[number]
+
+// ComoDitar é o que o provedor de mentira devolve nos próximos ditados.
 export interface ComoDitar {
   // texto: o que o ASR (e o Smart) escreveram.
   texto: string
-  // aviso: o motivo de o Polish ter caído para o Smart (um ia.Motivo).
-  aviso?: string
+  // aviso: o motivo de o Polish ter caído para o Smart (um resolver.MotivoFallback,
+  // nunca texto). Só existe com o Polish ligado na conta: o servidor de verdade
+  // só o manda quando o Polish estava ligado e não valeu.
+  aviso?: MotivoDoPolish
 }
+
+// FalhaDoDitado é o que dá errado no PRÓXIMO ditado (uma vez só), no ponto em que
+// daria no servidor de verdade (06, "POST /dictations", a ordem):
+//  - 'UM_POR_VEZ', 'LIMITE', 'OCUPADO': a vaga e os limites, antes de ler o corpo
+//    (429, 429 e 503, com Retry-After). O provedor não é chamado;
+//  - 'corpo_incompleto': o corpo não chegou inteiro (400 BAD_REQUEST). O provedor
+//    não é chamado, e o reenvio com o mesmo id processa normalmente;
+//  - 'PROVEDOR_RECUSOU_CHAVE', 'PROVEDOR_LIMITE', 'PROVEDOR_FORA': o provedor
+//    falhou (422, 502 e 502). Foi chamado, e nenhum ditado é criado;
+//  - 'provedor_sem_texto': o provedor não devolveu texto (422 SEM_FALA). Foi
+//    chamado, e o mesmo id dá 422 sem chamá-lo de novo;
+//  - 'gravacao': o provedor devolveu o texto e a gravação falhou (500 INTERNAL). O
+//    desfecho pago fica na memória, e o reenvio com o mesmo id só grava (201).
+export type FalhaDoDitado =
+  | 'UM_POR_VEZ'
+  | 'LIMITE'
+  | 'OCUPADO'
+  | 'corpo_incompleto'
+  | 'PROVEDOR_RECUSOU_CHAVE'
+  | 'PROVEDOR_LIMITE'
+  | 'PROVEDOR_FORA'
+  | 'provedor_sem_texto'
+  | 'gravacao'
+
+// Os status dos códigos da rota de ditar (a tabela "Os códigos" do 06). O servidor
+// de mentira responde com ESTES status, e contratoDoDitado.test.ts compara cada
+// um ao da tabela do 06.
+export const statusDosCodigosDaRota = {
+  SEM_ACEITE: 403,
+  SEM_CHAVE: 409,
+  LIMITE: 429,
+  UM_POR_VEZ: 429,
+  OCUPADO: 503,
+  PAYLOAD_TOO_LARGE: 413,
+  FORMATO: 415,
+  SEM_FALA: 422,
+  APAGADO: 410,
+  PROVEDOR_RECUSOU_CHAVE: 422,
+  PROVEDOR_LIMITE: 502,
+  PROVEDOR_FORA: 502,
+} as const
+type CodigoDaRota = keyof typeof statusDosCodigosDaRota
+
+// Os tetos e o mínimo da rota (internal/server/ditar.go): 1 MiB de corpo, 125 s de
+// duração (os 120 s do PC e 5 s de folga) e 300 ms de fala medida.
+export const tetoDoCorpoNoServidorFalso = 1 << 20
+export const tetoDaDuracaoNoServidorFalso = 125_000
+export const falaMinimaNoServidorFalso = 300
+
+// DesfechoFalso é o que a rota de ditar responde: o status e o corpo. É o que
+// "o registro do servidor" guarda de um ditado em andamento, e quem espera o mesmo
+// id recebe (200 com o ditado, se deu certo, ou a mesma recusa).
+interface DesfechoFalso {
+  status: number
+  corpo: unknown
+  // espera: o Retry-After, em segundos.
+  espera?: number
+  // aviso: o do Polish do ditado que este desfecho gravou.
+  aviso?: string
+  // reprocessar: o primeiro parou antes do provedor (o corpo dele não chegou), e
+  // quem esperava tenta com o próprio corpo.
+  reprocessar?: boolean
+}
+
+function desfechoDeErro(status: number, code: string, message: string, extra: Partial<DesfechoFalso> = {}): DesfechoFalso {
+  return { status, corpo: { error: { code, message, request_id: 'r1' } }, ...extra }
+}
+
+// recusaDaRota é a recusa de um código da lista fechada, com o status do 06.
+function recusaDaRota(codigo: CodigoDaRota, frase: string, espera?: number): DesfechoFalso {
+  return desfechoDeErro(statusDosCodigosDaRota[codigo], codigo, frase, espera === undefined ? {} : { espera })
+}
+
+function comoResposta(d: DesfechoFalso): Response {
+  const cabecalhos: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (d.espera !== undefined) cabecalhos['Retry-After'] = String(d.espera)
+  return new Response(JSON.stringify(d.corpo), { status: d.status, headers: cabecalhos })
+}
+
+// A vaga e os limites: a frase e o Retry-After de cada um (5 s no UM_POR_VEZ e no
+// OCUPADO; no LIMITE, o tempo até a próxima ficha).
+const recusasDaVaga = {
+  UM_POR_VEZ: { frase: 'um ditado de cada vez: espere o anterior terminar', espera: 5 },
+  LIMITE: { frase: 'ditados demais em pouco tempo: espere um pouco', espera: 12 },
+  OCUPADO: { frase: 'o servidor está ocupado com outros ditados: tente de novo em alguns segundos', espera: 5 },
+} as const
+
+const recusasDoProvedor = {
+  PROVEDOR_RECUSOU_CHAVE: 'o provedor recusou a chave',
+  PROVEDOR_LIMITE: 'o provedor recusou por limite de uso ou falta de crédito',
+  PROVEDOR_FORA: 'o provedor não respondeu',
+} as const
 
 // O item na nuvem, com os campos que só ela manda.
 export type ItemNuvem = Omit<Ditado, 'deleted_at' | 'versao_em_conflito'> & {
@@ -223,11 +359,25 @@ export interface OpcoesDaNuvem {
   versaoDoAviso?: number
 }
 
+// ditadoComOPolish é a opção `ditado` de uma conta com o Polish ligado (a
+// Anthropic, com um modelo), o aceite dos dois provedores e as duas chaves: a
+// única de onde o `aviso` do ditado pode sair.
+export const ditadoComOPolish: NonNullable<OpcoesDaNuvem['ditado']> = {
+  preferencias: { polish: true, polish_provedor: 'anthropic', polish_modelo: 'claude-haiku-4-5' },
+  aceite: { versao: versaoDoAvisoNoServidorFalso, transcricao: 'openai', polish: 'anthropic', aceito_em: '2026-10-10T12:00:00.000Z' },
+  chaves: { openai: 'sk-teste-de-mentira-OPEN', anthropic: 'sk-ant-teste-de-mentira-ANTH' },
+}
+
 const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
 const erro = (status: number, code: string, message: string) => json({ error: { code, message, request_id: 'r1' } }, status)
 const vazio = (status = 204) => new Response(null, { status })
-// O id do ditado é um UUID v7 (o 05 pede v7): versão 7 e variante 10.
+// O id do ditado é um UUID v7 (o 05 pede v7): versão 7 e variante 10. Maiúsculas
+// valem, e o servidor as guarda em minúsculas.
 const pareceUUID = (s: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s)
+// As medidas do ditado: milissegundos inteiros, sem sinal, de 1 a 9 dígitos.
+const milissegundos = (v: string | undefined) => (v !== undefined && /^\d{1,9}$/.test(v) ? Number(v) : null)
+// O tipo do Content-Type sem os parâmetros (";codecs=opus"), como o servidor o compara.
+const tipoDeMidia = (v: string) => v.split(';')[0]!.trim().toLowerCase()
 
 function ordenar(itens: ItemNuvem[], campo: 'created_at' | 'deleted_at'): ItemNuvem[] {
   const t = (d: ItemNuvem) => Date.parse(d[campo] ?? d.created_at)
@@ -269,6 +419,22 @@ export function servidorFalsoNuvem(
   const ditados: DitadoDoCelular[] = []
   const lapides = new Set<string>()
   let comoDitar: ComoDitar = { texto: 'Texto ditado pelo celular.' }
+  // O que o servidor guarda na memória dos ditados (06, "A idempotência"), por id:
+  // o que está em andamento (quem chega com o mesmo id espera o desfecho), o que o
+  // provedor não entendeu como fala (o mesmo id dá 422 sem chamá-lo) e o que foi
+  // pago e não gravado (o reenvio só grava). Some no "Apagar meus dados" e no
+  // "Desligar o ditado". Uma conta só: o servidor de mentira tem uma conta.
+  const emAndamento = new Map<string, Promise<DesfechoFalso>>()
+  const semFala = new Set<string>()
+  const pagosNaoGravados = new Map<string, { item: ItemNuvem; aviso?: string }>()
+  const esquecerOsDitados = () => {
+    semFala.clear()
+    pagosNaoGravados.clear()
+  }
+  // O que dá errado no próximo ditado (uma vez só), e o ditado segurado no
+  // provedor até a pessoa do teste liberar.
+  let falhaDoProximo: FalhaDoDitado | null = null
+  let segurado: Promise<void> | null = null
 
   // O ditado pelo celular da conta: aceite, preferências e chaves. Sem a opção
   // `ditado`, a conta nasce pronta (aceite da OpenAI para a voz e da Anthropic
@@ -356,6 +522,7 @@ export function servidorFalsoNuvem(
       daConta.aceite = null
       daConta.chaves = {}
       daConta.colarDeNovo = []
+      esquecerOsDitados()
       return vazio()
     }
     const rotaDaChave = p.caminho.match(/^\/api\/v1\/ai-keys\/([^/]+)(\/models)?$/)
@@ -460,31 +627,146 @@ export function servidorFalsoNuvem(
 
   const cabecalho = (p: PedidoNuvem, nome: string) => Object.entries(p.cabecalhos).find(([k]) => k.toLowerCase() === nome.toLowerCase())?.[1]
 
-  // ditar responde POST /api/v1/dictations como o servidor: o id procurado
-  // antes de tudo (o que já existe volta sem chamar o provedor), a fala medida
-  // abaixo do mínimo recusada antes do corpo, o formato e os cabeçalhos
-  // conferidos, e o ditado criado pela sessão, sem aparelho, como "web".
-  function ditar(p: PedidoNuvem): Response {
-    // O aceite dos provedores que as preferências usam, e a chave deles, antes
-    // de qualquer outra coisa (ADR-021, "O caminho de um ditado", 6).
+  // doDitado é o ditado como a rota o responde: o item do histórico e, quando o
+  // Polish caiu para o Smart, o `aviso`.
+  const doDitado = (status: number, item: ItemNuvem, aviso?: string): DesfechoFalso => ({
+    status,
+    corpo: { ...item, ...(aviso ? { aviso } : {}) },
+    ...(aviso ? { aviso } : {}),
+  })
+
+  // ditar responde POST /api/v1/dictations como o servidor, na ORDEM do 06
+  // ("POST /dictations", internal/server/ditar.go), com tudo o que vem antes do
+  // corpo sem lê-lo:
+  //  1. o aceite vigente dos provedores que as preferências usam (403 SEM_ACEITE) e as
+  //     chaves deles (409 SEM_CHAVE);
+  //  2. o Ditado-Id (UUID v7; 400 BAD_REQUEST);
+  //  3. o que a nuvem tem com o id: o ditado, também na lixeira, é 200 com ele, sem
+  //     chamar nada; a lápide é 410 APAGADO;
+  //  4. o que a memória tem: o mesmo id em andamento é esperado (200 com o ditado e o
+  //     `aviso` do primeiro, ou a mesma recusa); o que o provedor não ouviu como fala
+  //     é 422; o pago e não gravado só é gravado (201, sem chamar o provedor);
+  //  5. as medidas, o tipo e o tamanho: 400 fora da forma (milissegundos inteiros, a
+  //     fala até a duração), 413 com a duração acima de 125.000 ms, 422 SEM_FALA com a
+  //     fala abaixo de 300 ms, 415 FORMATO sem Content-Type audio/webm (os parâmetros
+  //     valem) ou com o corpo vazio, 413 com o corpo acima de 1 MiB;
+  //  6. a vaga e os limites (a FalhaDoDitado 'UM_POR_VEZ', 'LIMITE' e 'OCUPADO');
+  //  7. o corpo e o trabalho solto: o provedor, o Smart e o Polish e a gravação, com o
+  //     ditado criado pela sessão, sem aparelho, como "web".
+  // Os primeiros bytes do corpo (EBML e DocType webm) o servidor de mentira não
+  // olha: o áudio dos testes não é webm de verdade. Isso é do Go (internal/server).
+  async function ditar(p: PedidoNuvem): Promise<Response> {
+    // 1. O aceite e as chaves (ADR-021, "O caminho de um ditado", 6).
     const prefs = daConta.preferencias
-    if (!conferido(exigidos(prefs))) return erro(403, 'SEM_ACEITE', 'falta o aceite do aviso')
-    if (!exigidos(prefs).every((prov) => daConta.chaves[prov])) return erro(409, 'SEM_CHAVE', 'falta a chave do provedor')
-    const id = cabecalho(p, 'Ditado-Id') ?? ''
-    if (!pareceUUID(id)) return erro(400, 'BAD_REQUEST', 'Ditado-Id inválido')
-    const existente = itens.find((i) => i.id === id)
-    if (existente) {
-      ditados.push({ id, bytes: p.audio?.size ?? 0, tipo: cabecalho(p, 'Content-Type') ?? '', duracaoMs: 0, falaMs: 0, chamouOProvedor: false })
-      return json({ ...existente })
+    if (!conferido(exigidos(prefs))) return comoResposta(recusaDaRota('SEM_ACEITE', 'falta o aceite do aviso'))
+    if (!exigidos(prefs).every((prov) => daConta.chaves[prov])) return comoResposta(recusaDaRota('SEM_CHAVE', 'falta a chave do provedor'))
+    // 2. O Ditado-Id.
+    const idRecebido = cabecalho(p, 'Ditado-Id')
+    if (idRecebido === undefined || !pareceUUID(idRecebido)) {
+      return comoResposta(desfechoDeErro(400, 'BAD_REQUEST', 'Ditado-Id ausente ou inválido: mande o UUID v7 do ditado'))
     }
-    if (lapides.has(id)) return erro(410, 'APAGADO', 'o ditado foi apagado')
-    const falaMs = Number(cabecalho(p, 'Ditado-Fala-Ms'))
-    const duracaoMs = Number(cabecalho(p, 'Ditado-Duracao-Ms'))
-    if (!Number.isInteger(falaMs) || !Number.isInteger(duracaoMs) || falaMs < 0 || duracaoMs < 0) return erro(400, 'BAD_REQUEST', 'cabeçalho inválido')
-    if (falaMs < 300) return erro(422, 'SEM_FALA', 'fala demais curta')
-    if (cabecalho(p, 'Content-Type') !== 'audio/webm') return erro(415, 'FORMATO', 'só webm')
+    const id = idRecebido.toLowerCase()
+
+    const duracaoMs = milissegundos(cabecalho(p, 'Ditado-Duracao-Ms'))
+    const falaMs = milissegundos(cabecalho(p, 'Ditado-Fala-Ms'))
     const bytes = p.audio?.size ?? 0
-    ditados.push({ id, bytes, tipo: cabecalho(p, 'Content-Type') ?? '', duracaoMs, falaMs, chamouOProvedor: true })
+    const tipo = cabecalho(p, 'Content-Type') ?? ''
+    // responder registra o pedido (o que chegou e o que o servidor respondeu) e
+    // monta a resposta.
+    const responder = (d: DesfechoFalso, chamouOProvedor = false) => {
+      ditados.push({ id, bytes, tipo, duracaoMs: duracaoMs ?? 0, falaMs: falaMs ?? 0, chamouOProvedor, status: d.status })
+      return comoResposta(d)
+    }
+
+    // Quem esperou o primeiro e o viu dar certo volta ao passo 3 e lê o ditado
+    // gravado; quem o viu parar antes do provedor tenta com o próprio corpo. Até
+    // três voltas (maxVoltas), e depois é OCUPADO.
+    let avisoDoPrimeiro: string | undefined
+    for (let volta = 0; volta < 3; volta++) {
+      // 3. O que a nuvem tem com o id.
+      const gravado = itens.find((i) => i.id === id)
+      if (gravado) return responder(doDitado(200, gravado, avisoDoPrimeiro))
+      if (lapides.has(id)) return responder(recusaDaRota('APAGADO', 'esse ditado foi apagado'))
+
+      // 4. O que a memória tem com o id.
+      const primeiro = emAndamento.get(id)
+      if (primeiro) {
+        const d = await primeiro
+        if (d.status < 300 || d.reprocessar) {
+          avisoDoPrimeiro = d.aviso
+          continue
+        }
+        return responder(d)
+      }
+      if (semFala.has(id)) return responder(recusaDaRota('SEM_FALA', 'o provedor não ouviu fala no áudio'))
+      const pago = pagosNaoGravados.get(id)
+      if (pago) {
+        pagosNaoGravados.delete(id)
+        itens.push(pago.item)
+        return responder(doDitado(201, pago.item, pago.aviso))
+      }
+
+      // 5. As medidas, o tipo e o tamanho, ainda sem ler o corpo.
+      if (duracaoMs === null || falaMs === null || falaMs > duracaoMs) {
+        return responder(desfechoDeErro(400, 'BAD_REQUEST', 'Ditado-Duracao-Ms e Ditado-Fala-Ms têm de ser milissegundos inteiros, com a fala até a duração'))
+      }
+      if (duracaoMs > tetoDaDuracaoNoServidorFalso) return responder(recusaDaRota('PAYLOAD_TOO_LARGE', 'o ditado passa do teto de duração'))
+      if (falaMs < falaMinimaNoServidorFalso) return responder(recusaDaRota('SEM_FALA', 'o app não mediu fala bastante: nada foi enviado ao provedor'))
+      if (tipoDeMidia(tipo) !== 'audio/webm' || bytes === 0) return responder(recusaDaRota('FORMATO', 'o áudio tem de ser webm (audio/webm)'))
+      if (bytes > tetoDoCorpoNoServidorFalso) return responder(recusaDaRota('PAYLOAD_TOO_LARGE', 'o áudio passa de 1 MiB'))
+
+      // 6. A vaga e os limites.
+      const falha = falhaDoProximo
+      if (falha === 'UM_POR_VEZ' || falha === 'LIMITE' || falha === 'OCUPADO') {
+        falhaDoProximo = null
+        return responder(recusaDaRota(falha, recusasDaVaga[falha].frase, recusasDaVaga[falha].espera))
+      }
+
+      // 7. Este pedido é o dono do id: o corpo e o trabalho. Quem chegar com o
+      // mesmo id enquanto isso espera o desfecho.
+      falhaDoProximo = null
+      let concluir: (d: DesfechoFalso) => void = () => {}
+      emAndamento.set(
+        id,
+        new Promise<DesfechoFalso>((resolver) => {
+          concluir = resolver
+        }),
+      )
+      let feito: { d: DesfechoFalso; chamou: boolean } | undefined
+      try {
+        feito = await trabalhar(id, duracaoMs, falha)
+      } finally {
+        emAndamento.delete(id)
+        concluir(feito?.d ?? desfechoDeErro(500, 'INTERNAL', 'falha interna', { reprocessar: true }))
+      }
+      return responder(feito.d, feito.chamou)
+    }
+    return responder(recusaDaRota('OCUPADO', recusasDaVaga.OCUPADO.frase, recusasDaVaga.OCUPADO.espera))
+  }
+
+  // trabalhar é o que o dono do id faz depois das conferências: lê o corpo, chama
+  // o provedor (o texto vem de `comoDitar`), passa pelo Smart e pelo Polish, e
+  // grava. `falha` é o que o teste pediu para dar errado, no ponto certo.
+  async function trabalhar(id: string, duracaoMs: number, falha: FalhaDoDitado | null): Promise<{ d: DesfechoFalso; chamou: boolean }> {
+    // O corpo que não chegou inteiro: o provedor não foi chamado, e nada fica na memória.
+    if (falha === 'corpo_incompleto') {
+      return { d: desfechoDeErro(400, 'BAD_REQUEST', 'o áudio não chegou inteiro', { reprocessar: true }), chamou: false }
+    }
+    // O provedor demora: o ditado fica em andamento até a pessoa do teste liberar.
+    if (segurado) {
+      const espera = segurado
+      segurado = null
+      await espera
+    }
+    if (falha === 'PROVEDOR_RECUSOU_CHAVE' || falha === 'PROVEDOR_LIMITE' || falha === 'PROVEDOR_FORA') {
+      return { d: recusaDaRota(falha, recusasDoProvedor[falha]), chamou: true }
+    }
+    if (falha === 'provedor_sem_texto') {
+      semFala.add(id)
+      return { d: recusaDaRota('SEM_FALA', 'o provedor não ouviu fala no áudio'), chamou: true }
+    }
+    const prefs = daConta.preferencias
+    const aviso = comoDitar.aviso
     const agora = new Date().toISOString()
     const novo = itemNuvem({
       id,
@@ -498,8 +780,13 @@ export function servidorFalsoNuvem(
       device_id: null,
       source_platform: 'web',
     })
+    // A gravação que falha: o texto foi pago, e o reenvio com o mesmo id só grava.
+    if (falha === 'gravacao') {
+      pagosNaoGravados.set(id, { item: novo, ...(aviso ? { aviso } : {}) })
+      return { d: desfechoDeErro(500, 'INTERNAL', 'o texto saiu, mas não foi guardado: tente de novo com o mesmo ditado (sem pagar de novo)'), chamou: true }
+    }
     itens.push(novo)
-    return json({ ...novo, ...(comoDitar.aviso ? { aviso: comoDitar.aviso } : {}) }, 201)
+    return { d: doDitado(201, novo, aviso), chamou: true }
   }
 
   function rotaDoItem(p: PedidoNuvem, id: string, acao?: string): Response {
@@ -603,11 +890,13 @@ export function servidorFalsoNuvem(
     if (p.caminho === '/api/v1/me/data' && p.metodo === 'DELETE') {
       if (p.corpo?.confirmar !== 'apagar') return erro(400, 'VALIDATION', 'confirmação obrigatória')
       itens.splice(0, itens.length)
-      // O aceite, as preferências e as chaves também (ADR-021, C3b).
+      // O aceite, as preferências e as chaves também (ADR-021, C3b), e o que a
+      // rota de ditar guardava na memória (o pago e não gravado, o sem fala).
       daConta.aceite = null
       daConta.chaves = {}
       daConta.colarDeNovo = []
       daConta.preferencias = preferenciasIniciais()
+      esquecerOsDitados()
       for (let i = listaDeSessoes.length - 1; i >= 0; i--) if (!listaDeSessoes[i]!.atual) listaDeSessoes.splice(i, 1)
       // Os aparelhos também (decisão 3 da F3): os PCs ficam desconectados.
       listaDeAparelhos.splice(0, listaDeAparelhos.length)
@@ -699,9 +988,30 @@ export function servidorFalsoNuvem(
     get chamadasAoProvedor() {
       return ditados.filter((d) => d.chamouOProvedor).length
     },
-    // aoDitar muda o que o provedor de mentira devolve nos próximos ditados.
+    // aoDitar muda o que o provedor de mentira devolve nos próximos ditados. O
+    // aviso só existe com o Polish ligado na conta (o servidor de verdade só o
+    // manda então): pedir um sem ele é montar um servidor que não existe.
     aoDitar(como: ComoDitar) {
+      if (como.aviso && !daConta.preferencias.polish) {
+        throw new Error('servidorFalsoNuvem: o aviso do Polish só existe com o Polish ligado na conta (ditado.preferencias.polish)')
+      }
       comoDitar = como
+    },
+    // falharNoProximoDitado faz o PRÓXIMO ditado que passar das conferências do
+    // cabeçalho dar errado, uma vez só, no ponto em que daria no servidor de
+    // verdade (FalhaDoDitado).
+    falharNoProximoDitado(falha: FalhaDoDitado) {
+      falhaDoProximo = falha
+    },
+    // segurarOProximoDitado faz o próximo ditado ficar no provedor (em andamento)
+    // até `liberar`: quem chega com o mesmo id nesse tempo espera o primeiro e
+    // recebe o mesmo ditado (200, com o aviso do primeiro).
+    segurarOProximoDitado() {
+      let liberar: () => void = () => {}
+      segurado = new Promise<void>((resolver) => {
+        liberar = resolver
+      })
+      return { liberar: () => liberar() }
     },
     // O ditado pelo celular da conta (aceite, preferências e as chaves
     // INTEIRAS, que o app nunca recebe): para o teste conferir o que ficou
