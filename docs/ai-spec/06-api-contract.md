@@ -1283,7 +1283,7 @@ uma conta nunca espera nem recebe a resposta da outra):
 | A gravação | 5 s (o aceite e o `Create`) |
 | A resposta | 45 s depois do fim do corpo (`SetWriteDeadline` no handler); o trabalho solto tem o teto de 44 s, e o que passar dele depois de o provedor cobrar vira o desfecho pago e não gravado |
 | Quem espera o mesmo id | o próprio prazo de escrita estendido em 80 s (o corpo, a resposta e 5 s de folga) |
-| O desligamento | o `Shutdown` de 15 s e, depois, **até 70 s pelos trabalhos soltos** em andamento (o `serve`; escolha menor 22). Nesse tempo nenhum ditado novo pega vaga (`OCUPADO`), e as respostas que esperavam saem. O `stop_grace_period` de 90 s da API é da C5c |
+| O desligamento | o `Shutdown` de 15 s e, depois, **até 70 s pelos trabalhos soltos** em andamento (o `serve`; escolha menor 22). Nesse tempo nenhum ditado novo pega vaga (`OCUPADO`), e as respostas que esperavam saem. Se o `Shutdown` passa dos 15 s com pedidos abertos (quem espera um ditado, ou o dono de um que ainda lê o corpo), o `serve` espera esses pedidos e, **depois deles, os trabalhos soltos de novo**, tudo dentro dos mesmos 70 s: o trabalho que um dono soltou depois da primeira espera (e cujo celular caiu) também termina antes de o pool fechar. O `stop_grace_period` de 90 s da API é da C5c, e cobre os 15 s mais os 70 s |
 
 **O log.** A linha de acesso de sempre (o padrão da rota, o status, os ms, os bytes), com um motivo da
 lista fechada quando o pedido parou: `sem_aceite`, `sem_chave`, `id`, `cabecalho`, `duracao`,
