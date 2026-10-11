@@ -182,6 +182,12 @@ export interface Cliente extends ClienteDoHistorico {
   // resolverConflito é a escolha do selo (F7c), o mesmo PATCH da nuvem: o
   // 409 vem como Conflito, e o painel relê o ditado.
   resolverConflito(id: string, versao: number, escolha: EscolhaDoSelo): Promise<Ditado>
+  // mudancas é o contador de mudanças do sync (ADR-021, S; GET
+  // /api/nuvem/mudancas): quantas rodadas gravaram no histórico algo que veio
+  // da nuvem, desde que o Agent subiu. Só um número. A leitura é também o
+  // aviso ao Agent de que o painel está aberto (ele busca a nuvem a cada 10
+  // s); um Agent de antes da S responde 404.
+  mudancas(sinal?: AbortSignal): Promise<number>
 }
 
 // Um slice nil do Go vira null no JSON: a lista vazia do contrato pode
@@ -351,6 +357,14 @@ export function criarCliente(token: string, buscar: Buscador = buscadorPadrao): 
     async resolverConflito(id, versao, escolha) {
       const r = await pedir(buscar, doItem(id), comJson('PATCH', { base_version: versao, resolver_conflito: escolha }))
       return (await r.json()) as Ditado
+    },
+    async mudancas(sinal) {
+      const r = await pedir(buscar, '/api/nuvem/mudancas', autorizado({ signal: sinal }), false)
+      const { contador } = (await r.json()) as { contador?: unknown }
+      // Um corpo que não é o contador não é uma mudança: a leitura falha, e a
+      // seguinte tenta de novo.
+      if (typeof contador !== 'number' || !Number.isFinite(contador)) throw new Error('o Agent não mandou o contador de mudanças')
+      return contador
     },
   }
 }

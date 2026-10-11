@@ -22,6 +22,8 @@ export function ambienteLocal(cliente: Cliente): Ambiente {
       semResposta: 'o Agent não respondeu',
     },
     resolverConflito: (id, versao, escolha) => cliente.resolverConflito(id, versao, escolha),
+    // O ditado do celular e as edições feitas lá chegam sozinhos (ADR-021, S).
+    mudancasDoSync: (sinal) => cliente.mudancas(sinal),
     aprendiz: {
       pergunta: perguntaDeSugestao,
       efeito: efeitoDeAprender,

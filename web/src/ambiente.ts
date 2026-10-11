@@ -86,4 +86,11 @@ export interface Ambiente {
   // resolverConflito é a escolha do selo ("2 versões"). Os dois ambientes o
   // têm (o PC desde a F7c); sem ele, o selo apareceria sem os botões.
   resolverConflito?(id: string, versao: number, escolha: EscolhaDoSelo): Promise<Ditado>
+  // mudancasDoSync é o contador de mudanças do sync do PC (ADR-021, S): o
+  // Painel o lê a cada poucos segundos enquanto está à vista e, quando o número
+  // muda, relê a lista (mudancas.ts). Ler o contador é também o aviso ao Agent
+  // de que o painel está aberto, e ele busca a nuvem mais vezes. Só o PC o tem;
+  // na nuvem, a lista é relida só ao voltar à aba. A leitura que falha é
+  // ignorada; o 404 de um Agent de antes da S faz o Painel parar de perguntar.
+  mudancasDoSync?(sinal: AbortSignal): Promise<number>
 }

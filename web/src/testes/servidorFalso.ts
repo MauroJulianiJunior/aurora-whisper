@@ -40,6 +40,12 @@
 // por POST, com o texto no corpo.
 
 //
+// O contador de mudanças do sync (ADR-021, S; GET /api/nuvem/mudancas): um
+// número que o teste faz subir por fora, como um pull que trouxe algo
+// (chegouDaNuvem, mudancasPorFora); o Agent de antes da S responde 404
+// (agentSemContador).
+
+//
 // Os 6 meses no PC e as cópias do banco (ADR-019, F10d e F10e;
 // internal/agent/localapi/retencao.go): GET /api/retencao é só números e
 // booleanos; o OK (POST /api/retencao/ligar) leva a contagem que a tela
@@ -171,8 +177,17 @@ export function servidorFalso(
   // também o Cancelar; o Conferir só devolve o estado (o teste muda o estado
   // por fora, como a aprovação no navegador ou a revogação no app).
   let nuvem: EstadoNuvem = { ...nuvemInicial }
+  // O contador de mudanças do sync (ADR-021, S; GET /api/nuvem/mudancas): só um
+  // número, que sobe quando o Agent grava no histórico algo que veio da nuvem.
+  // O teste o faz subir por fora (chegouDaNuvem, mudancasPorFora), como um pull.
+  // agentSemContador: o Agent de antes da S, que responde 404.
+  let contador = 0
+  let agentSemContador = false
   function rotaNuvem(p: Pedido): Response {
     if (p.caminho === '/api/nuvem' && p.metodo === 'GET') return json(nuvem)
+    if (p.caminho === '/api/nuvem/mudancas' && p.metodo === 'GET') {
+      return agentSemContador ? new Response('404 page not found', { status: 404 }) : json({ contador })
+    }
     if (p.metodo !== 'POST') return erro(404, 'NOT_FOUND', 'rota')
     switch (p.caminho) {
       case '/api/nuvem/conferir':
@@ -626,6 +641,29 @@ export function servidorFalso(
     // nuvemAgora é o estado da nuvem como o Agent o tem.
     nuvemAgora(): EstadoNuvem {
       return nuvem
+    },
+    // chegouDaNuvem simula um pull que trouxe estes ditados (o do celular, por
+    // exemplo): eles entram no histórico e o contador do sync sobe, uma vez.
+    chegouDaNuvem(...novos: Ditado[]) {
+      itens.push(...novos.map((i) => ({ ...i })))
+      contador += 1
+    },
+    // mudancasPorFora sobe o contador sem trazer ditado novo: o pull que
+    // trouxe uma edição feita no celular (use com alterarPorFora) ou a lápide.
+    mudancasPorFora() {
+      contador += 1
+    },
+    // contadorAgora é o contador de mudanças como o Agent o tem.
+    contadorAgora(): number {
+      return contador
+    },
+    // reiniciarContador simula o Agent que reiniciou: o contador volta a 0.
+    reiniciarContador() {
+      contador = 0
+    },
+    // agentSemContador: o Agent de antes da S (a rota dá 404).
+    agentSemContador(sim = true) {
+      agentSemContador = sim
     },
     // seloPorFora põe um selo num ditado, como um pull que trouxe o
     // conflito (a versão sobe).

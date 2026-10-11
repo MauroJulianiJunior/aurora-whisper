@@ -144,6 +144,25 @@ Filtros:
 - provider;
 - trash.
 
+**A lista se atualiza sozinha no PC (ADR-021, S; `web/src/mudancas.ts` e `Painel.tsx`).** O ditado feito
+no celular e as edições feitas lá chegam ao painel do PC aberto em segundos, sem a pessoa tocar em nada.
+- **Como.** Com a aba à vista, o painel lê a cada 3 s o contador de mudanças do Agent
+  (`GET /api/nuvem/mudancas`, `06`). Quando o número muda, relê a lista pelo mesmo caminho do "voltar à
+  aba". A leitura é também o aviso ao Agent de que o painel está aberto: ele busca a nuvem a cada 10 s
+  (e a cada 60 s com o painel fechado ou escondido há mais de 15 s). Uma edição feita no celular
+  aparece no painel aberto em até ~13 s (os 10 s do Agent mais os 3 s da leitura).
+- **O que não muda na tela.** Nada se anuncia: sem aviso, sem "Atualizado", sem recarregar a página.
+  A busca, a vista (Histórico ou Lixeira) e as páginas de "Mostrar mais antigos" já carregadas ficam
+  como estão. **A edição em andamento não se perde:** o editor aberto continua aberto, o texto
+  digitado e não salvo continua na caixa, o foco não sai do lugar, e as linhas com rascunho ficam na
+  lista mesmo que a nuvem as tenha mudado ou mandado para a lixeira. Quem salva depois de o ditado ter
+  mudado lá cai no conflito de sempre ("alterado em outra aba"), com o texto dele intacto. A região
+  viva (`role="status"`) só fala se a contagem de ditados mudou, como em qualquer carga.
+- **Quando para.** Escondida, a aba não lê (e o Agent volta aos 60 s); ao voltar, lê já. Se a leitura
+  falha (o Agent reiniciando), o painel não mostra nada por isso: a faixa do topo é da lista, como
+  sempre. Um Agent de antes da S (`404`) não é perguntado de novo. O celular e a nuvem não têm o
+  contador: o app continua relendo a lista ao voltar à aba.
+
 ### Detalhe
 - raw_text;
 - final_text;
