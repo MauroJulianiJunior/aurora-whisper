@@ -860,6 +860,11 @@ func testCabecalhos(t *testing.T, b Backend) {
 				h.Get("Referrer-Policy") != "no-referrer" || h.Get("Cross-Origin-Opener-Policy") != "same-origin" {
 				t.Errorf("%s %s (%s): cabeçalhos %v", c.method, c.path, base, h)
 			}
+			// ADR-021 (escolha menor 18): o app grava o ditado do celular, e o
+			// microfone é só da própria origem, em toda resposta.
+			if got := h.Get("Permissions-Policy"); got != "microphone=(self)" {
+				t.Errorf("%s %s (%s): Permissions-Policy %q, quero microphone=(self)", c.method, c.path, base, got)
+			}
 			if got := h.Get("Strict-Transport-Security"); (got == "max-age=31536000") != strings.HasPrefix(base, "https") {
 				t.Errorf("%s %s (%s): HSTS %q (só com https)", c.method, c.path, base, got)
 			}
@@ -870,7 +875,7 @@ func testCabecalhos(t *testing.T, b Backend) {
 		// Até a resposta barrada antes da rota traz os cabeçalhos.
 		req := m.req(http.MethodGet, "/api/v1/me", nil)
 		req.Host = "evil.example"
-		if h := m.serve(req).Header(); h.Get("Content-Security-Policy") != cspWant || h.Get("Cache-Control") != "no-store" {
+		if h := m.serve(req).Header(); h.Get("Content-Security-Policy") != cspWant || h.Get("Cache-Control") != "no-store" || h.Get("Permissions-Policy") != "microphone=(self)" {
 			t.Errorf("Host recusado sem os cabeçalhos: %v", h)
 		}
 	}
