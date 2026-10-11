@@ -520,8 +520,10 @@ pergunta conta as trocas aprendidas (o `previa_trocas` do `06`, o M).
   `ditar-polish`). A calibração do microfone, `/calibracao-dev.html` ("A calibração do microfone no
   Android", abaixo). São só do `pnpm dev`: nenhum build as inclui. A nuvem de mentira dessas telas e
   dos testes do app (`web/src/testes/servidorFalsoNuvem.ts`) fala o contrato do `06` para o ditado no
-  celular (`/dictation`, `/dictation/settings`, `/dictation/consent` e `/ai-keys`), e o
-  `contratoDoDitado.test.ts` prende os campos e os status dela ao `06`.
+  celular (`/dictation`, `/dictation/settings`, `/dictation/consent` e `/ai-keys`) e para a rota de
+  ditar (`POST /dictations`, na ordem das conferências do `06`: o aceite e a chave, o id v7, o reenvio
+  e o que espera, as medidas e os tetos, a gravação que falha e só regrava), e o
+  `contratoDoDitado.test.ts` prende os campos, os motivos do `aviso` e os status dela ao `06`.
 - **O teste manual** (F8i, 08-out-2026): `docs/teste-manual-nuvem-f8.md` confere, no `bin\` e no app, com
   a nuvem de teste, a pergunta do envio com a troca e o **Desfazer** do **Aprendido** do app e do
   **Aprendido no painel**, nos dois sentidos. É um PC só: as etiquetas de estado e o "não aplicado neste
@@ -822,7 +824,9 @@ seções seguintes; a calibração do limiar e da onda no Android (C6c), no fim 
   etiqueta "novo", que dura 10 s ou até a pessoa abrir uma linha ou trocar de vista), com o **Copiar**
   que toda linha tem (sempre à vista no toque), e o aviso diz "Ditado no topo do histórico.". Se o
   Polish caiu para o texto do Smart, o aviso acrescenta "O Polish não agiu: {motivo}." (o motivo é um
-  código do servidor, nunca texto dele; o que o app não conhece fica só "O Polish não agiu."). Numa
+  `resolver.MotivoFallback`, da lista fechada do `06`, e nunca texto do servidor; o app tem uma frase
+  curta para cada motivo da lista, como "o provedor demorou", "falta crédito no provedor" ou "a
+  resposta mudou os números", e o que não conhece fica só "O Polish não agiu."). Numa
   busca, na Lixeira ou nas Configurações o ditado não entra na lista que está na tela, e o aviso diz
   "Ditado salvo no histórico.". **Copiar sozinho ao chegar não existe**: escrever na área de
   transferência pede um gesto recente, e a resposta chega segundos depois do toque (escolha menor 14,

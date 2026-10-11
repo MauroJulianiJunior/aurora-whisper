@@ -9,7 +9,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { type Buscador } from '../api'
 import { type OpcoesDaPlataforma, plataformaFalsa } from './ditar/plataformaFalsa'
-import { type OpcoesDaNuvem, itemNuvem, servidorFalsoNuvem } from '../testes/servidorFalsoNuvem'
+import { type OpcoesDaNuvem, ditadoComOPolish, itemNuvem, servidorFalsoNuvem } from '../testes/servidorFalsoNuvem'
 import AppNuvem from './AppNuvem'
 
 const em = (dia: number, hora: number, minuto = 0) => new Date(2026, 9, dia, hora, minuto).toISOString()
@@ -155,7 +155,7 @@ describe('o ditado que chega', () => {
   })
 
   it('quando o Polish caiu para o Smart, o aviso diz o motivo', async () => {
-    const { srv, p } = montar()
+    const { srv, p } = montar({ ditado: ditadoComOPolish })
     await abrirOHistorico()
     srv.aoDitar({ texto: 'Ligar para o cliente.', aviso: 'chave_recusada' })
     await ditar(p)
@@ -301,6 +301,50 @@ describe('as falhas', () => {
     expect(linhas().filter((l) => l.textContent?.includes('Texto ditado pelo celular.'))).toHaveLength(1)
   })
 
+  // 500 INTERNAL (06): o provedor cobrou e a gravação falhou. O servidor guarda o texto pago
+  // por 10 minutos, e o reenvio com o mesmo id só grava (201): o app não escolhe nada, só
+  // oferece o "Tentar de novo" com o áudio que ficou na memória.
+  it('a gravação que falhou no servidor depois de o provedor cobrar (500): o áudio fica, e o "Tentar de novo" só grava, com o MESMO id', async () => {
+    const { srv, p } = montar()
+    await abrirOHistorico()
+    srv.falharNoProximoDitado('gravacao')
+    await ditar(p)
+    const nota = await screen.findByRole('alert')
+    expect(nota.textContent).toContain('Não deu para enviar o ditado.')
+    expect(srv.chamadasAoProvedor).toBe(1)
+    expect(srv.itens.filter((i) => i.source_platform === 'web')).toHaveLength(0)
+    await act(async () => {
+      fireEvent.click(within(nota).getByRole('button', { name: 'Tentar de novo' }))
+    })
+    await screen.findByText('Texto ditado pelo celular.')
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(posts(srv)).toHaveLength(2)
+    expect(new Set(posts(srv).map((x) => x.cabecalhos['Ditado-Id'])).size).toBe(1)
+    // O provedor não foi chamado de novo, e o ditado entrou uma vez só.
+    expect(srv.ditados.map((d) => [d.status, d.chamouOProvedor])).toEqual([
+      [500, true],
+      [201, false],
+    ])
+    expect(srv.chamadasAoProvedor).toBe(1)
+    expect(linhas().filter((l) => l.textContent?.includes('Texto ditado pelo celular.'))).toHaveLength(1)
+  })
+
+  it('o corpo que não chegou inteiro (400): o áudio fica, e o "Tentar de novo" com o mesmo id dá certo', async () => {
+    const { srv, p } = montar()
+    await abrirOHistorico()
+    srv.falharNoProximoDitado('corpo_incompleto')
+    await ditar(p)
+    const nota = await screen.findByRole('alert')
+    expect(nota.textContent).toContain('Não deu para enviar o ditado.')
+    expect(srv.chamadasAoProvedor).toBe(0)
+    await act(async () => {
+      fireEvent.click(within(nota).getByRole('button', { name: 'Tentar de novo' }))
+    })
+    await screen.findByText('Texto ditado pelo celular.')
+    expect(new Set(posts(srv).map((x) => x.cabecalhos['Ditado-Id'])).size).toBe(1)
+    expect(srv.chamadasAoProvedor).toBe(1)
+  })
+
   it('Descartar solta o áudio e a nota sai', async () => {
     const { srv, p } = montar()
     await abrirOHistorico()
@@ -317,7 +361,7 @@ describe('as falhas', () => {
     const { srv, p } = montar()
     await abrirOHistorico()
     srv.interceptar((x) =>
-      x.caminho === '/api/v1/dictations' ? new Response(JSON.stringify({ error: { code: 'SEM_CHAVE', message: 'sem chave' } }), { status: 403 }) : undefined,
+      x.caminho === '/api/v1/dictations' ? new Response(JSON.stringify({ error: { code: 'SEM_CHAVE', message: 'sem chave' } }), { status: 409 }) : undefined,
     )
     await ditar(p)
     const nota = await screen.findByRole('alert')

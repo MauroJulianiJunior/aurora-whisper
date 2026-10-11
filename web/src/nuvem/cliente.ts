@@ -123,7 +123,10 @@ export interface PedidoDeDitado {
 }
 
 // DitadoGravado é a resposta de POST /api/v1/dictations: o ditado como ficou
-// e, quando o Polish caiu para o Smart, o motivo (um ia.Motivo, nunca texto).
+// e, quando o Polish caiu para o Smart, o motivo (um resolver.MotivoFallback,
+// da lista fechada do 06, nunca texto). O app trata igual o 201 (o ditado novo,
+// ou o que só foi gravado de novo) e o 200 (o reenvio de um ditado já gravado,
+// sem aviso, ou o que esperou o primeiro, com o aviso dele).
 export interface DitadoGravado {
   ditado: Ditado
   aviso?: string
