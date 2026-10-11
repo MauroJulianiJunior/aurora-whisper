@@ -160,7 +160,10 @@ Regras que o diagrama não mostra:
     aplicada numa transação. **Um push sem resposta encerra a rodada, sem pull.** Depois, o pull até
     `has_more` falso, cada página numa transação com o cursor. Nenhuma rede dentro de transação.
   - **Quando roda:** na subida do Agent, 2 s depois de uma gravação (para juntar as seguintes), a
-    cada 60 s e ao conectar. Desconectado, nenhum pedido sai.
+    cada 60 s e ao conectar. Desconectado, nenhum pedido sai. **ADR-021, subfatia S (10-out-2026):** com
+    o painel do PC aberto (alguém leu o contador de mudanças nos últimos 15 s), a busca periódica é a
+    cada **10 s**; com ele fechado, volta aos 60 s. O painel visível lê o contador a cada 3 s e relê a
+    lista quando ele muda (`06`, "A chegada mais rápida no PC").
   - **Quando falha:** a rede, o prazo ou um `5xx` esperam de 2 s a 5 min, com jitter, e as gravações
     não furam a espera; o `429` espera o `Retry-After` (até 10 min); uma resposta fora do contrato
     espera o teto; o `401` desconecta (o token sai do Gerenciador, o aparelho da instalação, o painel
@@ -413,6 +416,7 @@ flowchart TD
 - resolve com timeout proporcional ao texto: 5 s até 250 caracteres, mais 6 ms por caractere
   acima disso, até 9,5 s (`dictation.PrazoDeResolucao`; ADR-007, segunda nota de 2026-10-01);
 - Polish com prazo 1,5 s menor que o do resolve, pelo mesmo texto: 3,5 s até 250 caracteres, até
-  8 s aos 1000; passou do prazo, entra o texto do Smart (`winruntime`, `prazoPolish`; ADR-016,
-  "Emenda de 01-out-2026"; `docs/defeito-ditado-longo.md`, decisão 5);
+  8 s aos 1000; passou do prazo, entra o texto do Smart (`winruntime`, que usa `polish.Prazo`, do
+  pacote `internal/polish`; era o `prazoPolish` do `winruntime` até a C5a da ADR-021; ADR-016, "Emenda
+  de 01-out-2026"; `docs/defeito-ditado-longo.md`, decisão 5);
 - sync com exponential backoff + jitter.

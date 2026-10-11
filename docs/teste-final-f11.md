@@ -164,7 +164,10 @@ docker stats --no-stream --format "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}"
 1. No app, abra a frase do passo 10, mude uma palavra (não a sentinela) e **Salvar**.
 2. No PC, clique em **Histórico** (ou volte à aba).
 
-**Deve aparecer:** a mudança no PC em até 1 minuto (o PC busca a cada 60 s).
+**Deve aparecer:** a mudança no PC. Com o painel do PC aberto, em até cerca de 13 s: o Agent busca a
+nuvem a cada 10 s enquanto o painel está aberto, e o painel lê o contador de mudanças a cada 3 s e
+relê a lista sozinho (ADR-021, subfatia S). Com o painel fechado, em até 1 minuto (o Agent busca a
+cada 60 s).
 
 ## 12. Aprender no PC e desfazer pelo celular
 
@@ -180,7 +183,9 @@ some do PC.
    **Aprendido** com `contrato → acordo` e **Desfazer**.
 4. No celular, **Desfazer** > **Desfazer**. **Deve aparecer:** "Desfeito em todos os aparelhos." e a
    seção "Nada aprendido ainda."
-5. No PC, espere até 1 minuto e clique em **Histórico** e em **Configurações**. **Deve aparecer:** a
+5. No PC, espere até 1 minuto (cerca de 13 s, com o painel aberto) e clique em **Histórico** e em
+   **Configurações** (o aviso de mudanças do painel não conta o que é só do aprendido, e a seção só
+   relê quando a tela aparece). **Deve aparecer:** a
    seção **Aprendido no painel** sem a troca.
 6. Dite de novo **"o contrato está assinado"**. **Deve aparecer:** "contrato", e não mais "acordo".
 
@@ -234,7 +239,8 @@ liga pelo seu clique.
 
 1. Se o app instalou de verdade (sem o selo do Chrome) e se o "Sem conexão." apareceu (passos 1 e 2).
 2. O N e o k do envio (passos 8 e 9), e o `docker stats` (CPU dos outros serviços do servidor).
-3. Os tempos de ida e volta (passos 10, 11 e 12): dentro de 1 minuto?
+3. Os tempos de ida e volta (passos 10, 11 e 12): dentro de 1 minuto? (No passo 11, com o painel do
+   PC aberto, o esperado é cerca de 13 s.)
 4. Se a revogação desligou o PC e se a volta mandou a frase (passo 13), e a volta da internet (passo
    14).
 5. Os três `0` da sentinela (passo 15).

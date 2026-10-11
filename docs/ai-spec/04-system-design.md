@@ -9,6 +9,12 @@ Arquitetura local-first e cloud-connected. Windows executa captura, hotkey, cont
 > depois: as rotas não são montadas (diagrama abaixo: `GW`, `EXT` e `INF` são "depois"). A nuvem é
 > opcional: sem quem usa conectar o PC, o Agent não abre conexão nenhuma.
 
+> **Emendado pela ADR-021 (10-out-2026), ditar no celular.** O gateway de ASR (`/asr/transcribe`)
+> continua fora. O celular ganha uma rota própria, `POST /api/v1/dictations`, que só repassa a voz
+> (webm/opus, em memória, descartada ao fim) ao provedor que a pessoa escolheu (OpenAI ou Groq), com a
+> chave dela guardada cifrada no servidor, e passa o texto pelo Smart da conta e, se ela ligar, pelo
+> Polish. O ASR local do PC não muda. Ver `13-implementation-plan.md`, TASK-028.
+
 ## Diagrama
 ```mermaid
 flowchart LR
@@ -97,7 +103,12 @@ type ASRProvider interface {
 Providers iniciais:
 - `mock`;
 - `local`;
-- `cloud_gateway`.
+- `cloud_gateway` (**depois**, ADR-019: não montado na etapa 5);
+- `nuvem` (ADR-021, C4): `internal/asr/nuvem`, **no servidor**, para o ditado do celular. OpenAI ou
+  Groq, escolhidos pela pessoa, com a chave dela, que chega por uma função a cada chamada. Só áudio
+  comprimido (webm/opus): os bytes vão ao provedor como chegaram, sem decodificar, e o PCM é recusado
+  (`asr.ErrPCMNaoSuportado`). Usa o mesmo contrato do `ASRProvider` (`AudioBuffer.Comprimido` e
+  `ASRCapabilities.Formatos`; `18-tool-contract.md`). Não é uma `ASRPolicy` do PC.
 
 Policies:
 - `local_only`;
@@ -272,6 +283,7 @@ Containers:
 | DEC-008 | React compartilhado local/cloud. **Emenda (ADR-019):** o mesmo código, em dois builds (local, sem service worker nem login; nuvem, com os dois) |
 | DEC-009 | Polish preserva e organiza, e o Agent chama o provedor direto, com a chave de quem usa (ADR-016) |
 | DEC-010 | Nuvem e celular (ADR-019): PWA, Android primeiro; gravação única com o evento de sync na mesma transação; sync por usuário; login Google só para as contas permitidas; pareamento por retorno a `127.0.0.1` com PKCE |
+| DEC-011 | Ditar no celular (ADR-021): o servidor só repassa a voz ao provedor da pessoa (OpenAI ou Groq, BYOK) e não transcreve; a chave dela fica cifrada no servidor (AES-256-GCM, HKDF); a voz só em memória, com aceite específico por conta; o Smart roda no servidor com o aprendido da conta; o Polish é o mesmo motor do PC (`internal/polish`). Emenda a DEC-006 e à regra "a chave nunca sai do PC" (ADR-016): elas valem para a chave **do PC**; a que a pessoa cola no app do celular é outra |
 
 ## Alternativas rejeitadas
 - fixar Whisper antes de benchmark;

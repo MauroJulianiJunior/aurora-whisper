@@ -80,7 +80,8 @@ Polish não agiu nos ditados longos.** A tentativa 8 (802 caracteres) caiu no Sm
 (latência de 3469 ms contra um prazo de 3468 ms), e a tentativa 4 (907 caracteres, a do laço)
 caiu por `palavras`: provavelmente o LLM tirou o laço, e a checagem de palavras recusou o texto
 mais curto. A tentativa 3 (359 caracteres) passou com 3143 ms, perto do teto. O prazo do Polish é
-fixo em 3,5 s (`winruntime/polish.go`, `prazoPolish`), dentro do `DefaultResolveTimeout` de 5 s
+fixo em 3,5 s (`winruntime/polish.go`, `prazoPolish`; desde a C5a da ADR-021, de 11-out-2026, a conta
+mora em `polish.Prazo`, em `internal/polish`), dentro do `DefaultResolveTimeout` de 5 s
 do núcleo, e não cresce com o texto: no modo com IA, o ditado longo sai como Smart. Isto não
 mudou na branch do ditado longo; **mudou depois, com a decisão 5** (ver "Decisões que são do
 Mauro"): o prazo do Polish e o do núcleo crescem com o texto. O `palavras` da tentativa 4 deve

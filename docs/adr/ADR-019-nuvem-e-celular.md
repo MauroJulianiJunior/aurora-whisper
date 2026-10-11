@@ -20,6 +20,13 @@ o `CLAUDE.md`, linha 7 (conflito 16). **Implementa a ADR-009** (toda mutação e
 SyncEvent), que até aqui era só decisão. **Não muda o núcleo** (ADR-007): o Agent continua ditando
 sem nuvem (AC-033).
 
+**Nota de 11-out-2026 (ADR-021, ditar no celular).** O Mauro pediu o ditado no celular depois da F11,
+e a ADR-021 **emenda** esta ADR em cinco pontos, cada um com uma nota datada no lugar dele: a decisão 9
+e a derivada D1 (o ditado só nasce no PC); "O que nunca vai" (a chave do Polish e o áudio); a decisão 8
+(a chave nunca sai do PC, e as preferências); "Fora do escopo, e depois do MVP" (o ditado no celular e a
+transcrição na nuvem); e a decisão 1 da F7a/b (a busca de 60 s, que passa a ser de 10 s com o painel do
+PC aberto). O resto desta ADR continua valendo como está.
+
 ## O problema
 
 O Mauro quer o histórico no celular e entre os PCs. A spec desenha nuvem, sync, login Google e
@@ -164,7 +171,7 @@ aprovar a ADR; se mudar uma, as linhas da terceira coluna são as que mudam com 
 
 | # | O que a ADR escreveu | O que o plano dizia | Onde está escrito |
 |---|---|---|---|
-| D1 | `POST /transcriptions` **não é montada**: o ditado só nasce no PC e sobe pelo sync. | O plano deixa de fora só a transcrição, a resolução com contexto e a atualização; não cita essa rota. | Decisão 9; `06` (rotas não montadas e "Como fica na etapa 5") |
+| D1 | `POST /transcriptions` **não é montada**: o ditado só nasce no PC e sobe pelo sync. **[Nota de 11-out-2026, ADR-021: a rota continua não montada, mas "o ditado só nasce no PC" deixou de valer: o do celular nasce numa rota nova. Ver a decisão 9.]** | O plano deixa de fora só a transcrição, a resolução com contexto e a atualização; não cita essa rota. | Decisão 9; `06` (rotas não montadas e "Como fica na etapa 5") |
 | D2 | **"Apagar meus dados da nuvem" revoga todos os aparelhos** e as outras sessões. Os PCs ficam com a cópia deles e mostram "desconectado". | O plano diz que, depois do "apagar meus dados", o PC "baixa tudo de novo" (seção 3, "Recomeço seguro"), e que ele fica com a cópia dele (seção 4). A ADR muda o primeiro: sem a revogação, o recomeço de um PC mandaria tudo de novo e desfaria o pedido. | "Segurança e privacidade", "Apagar"; `06`, `DELETE /me/data`; `07`, "Delete"; `09`, THR-024 |
 | D3 | **Trocar a conta de uma instalação é recusado na v1**, com aviso. | A crítica pedia "exigir recomeço para trocar"; o plano não fala de troca. | "Dono local e conta"; "Fora do escopo" |
 | D4 | **O que sobe é mais do que o plano lista:** do ditado, também o modo, o aparelho de origem e os metadados do ASR que o histórico já mostra; do aparelho, também a plataforma. | Ditado: texto bruto, texto final, data, status e lixeira. Aparelho: nome, versão e último acesso. | "Segurança e privacidade", "O que vai para a nuvem"; `09`, "O que sai" |
@@ -203,12 +210,22 @@ pareamento, os 180 dias do token) são propostas, não decisões, e a F3 e a F6 
 8. **As preferências não sincronizam na v1.** Cada PC guarda as suas: atalho, microfone, modo de
    texto, Polish, bipe, modelo de voz e a chave do provedor de IA. Por quê: "herdar ao conectar" já
    é meio sync, com versão própria. E a chave nunca sai do PC (ADR-016).
+   *(Nota de 11-out-2026, ADR-021, decisão G: a chave **do PC** continua só no PC. Para ditar no
+   celular, a pessoa cola uma chave no app, e o servidor a guarda **cifrada**; é outra chave, e o Agent
+   nunca a vê. As preferências do ditado no celular são novas: moram só na nuvem e nunca descem aos
+   PCs. As do PC continuam no PC.)*
 9. **Transcrição, resolução com contexto e atualização pela nuvem: depois.** As rotas
    `/asr/transcribe`, `/resolve`, `/updates/windows/latest`, `/settings`, `/dictionary` e
    `/corrections` **não são montadas**, e um teste pede cada uma e recebe `404`. Por quê: áudio e
    contexto não saem do PC nesta etapa, e cada rota a menos é superfície a menos. Pelo mesmo motivo,
    `POST /transcriptions` também não é montada: o ditado só nasce no PC e sobe pelo sync.
    **[derivada, D1]**
+   *(Nota de 11-out-2026, ADR-021, decisão A: `/asr/transcribe`, `/resolve` e `POST /transcriptions`
+   **continuam não montadas**, e os testes de `404` continuam valendo para elas. O ditado do celular
+   nasce numa rota nova, `POST /api/v1/dictations`, com acesso próprio (no passo 1, só a sessão do
+   navegador; o token de um PC recebe `403`), que só repassa a voz ao provedor que a pessoa escolheu e
+   grava o texto pelo ponto único. O texto nunca vem do cliente. "Áudio e contexto não saem do PC" vale
+   para o PC; o áudio do celular tem o caminho e o aceite da ADR-021.)*
 10. **O `target_app` sai da nuvem.** O servidor não tem a coluna e recusa o campo. Por quê: o nome do
     app em foco é contexto (REQ-025), e o Agent já não o grava.
 11. **Texto legível no servidor** (resposta 4). O que o protege está em "Segurança e privacidade".
@@ -586,6 +603,11 @@ chega ao painel local.
   - da conta: e-mail e `sub`.
 - **O que nunca vai:** áudio; contexto de janela (o nome do app em foco, título, texto de perto); a
   chave do Polish; os logs; o mapa de domínios para executáveis; as preferências.
+  *(Nota de 11-out-2026, ADR-021: isto vale para o áudio **do PC**, a chave do Polish **do PC** e as
+  preferências **do PC**. O celular manda ao servidor outras coisas, só depois do aceite específico de
+  quem dita: a voz de cada ditado, em memória e descartada ao fim; a chave que a pessoa cola no app, que
+  o servidor guarda cifrada; o aceite e as preferências do ditado. Elas estão em `09`, "Ditar no celular:
+  o que sai do aparelho", e na ADR-021.)*
 - **Texto legível no servidor** (resposta 4). Protegem: o Postgres fechado, sem porta publicada; o
   HTTPS terminando na VPS, sem terceiro na frente; e o backup cifrado. Quem administra a VPS lê o
   texto. A cifra ponta a ponta fica para depois.
@@ -632,13 +654,18 @@ Nada disso sai da spec: vira "depois", com o motivo.
 - **Aprender no celular.** O motor e o texto bruto estão no PC.
 - **Sync de preferências** (a parte de preferências do REQ-018). A rota `/settings` não é montada.
 - **Transcrição na nuvem** (REQ-028, REQ-043, AC-041, TASK-017) e as policies `local_then_cloud` e
-  `cloud_only` (REQ-029, AC-030, AC-032, TASK-018).
+  `cloud_only` (REQ-029, AC-030, AC-032, TASK-018). *(Nota de 11-out-2026, ADR-021: a rota
+  `/asr/transcribe` e as policies continuam fora. O que entrou é o ditado do celular, que repassa a voz
+  ao provedor da pessoa por uma rota própria; ver o item "Ditado no celular", abaixo.)*
 - **Resolução com contexto na nuvem** (`/resolve`, `cloud_context_resolve`).
 - **Atualização pela nuvem** (`/updates/windows/latest`, TASK-023). A ADR-018 já decidiu a
   atualização manual nas 0.x.
 - **O dicionário completo no banco**, e as telas de Dicionário e de Correções na nuvem.
 - **A Correction com a frase inteira.** O TEST-008 passa a valer como o par curto.
-- **Ditado no celular** e texto guardado no aparelho.
+- **Ditado no celular** e texto guardado no aparelho. *(Nota de 11-out-2026, ADR-021: o ditado no
+  celular **entrou**, no passo 1 (o PWA: toque para começar e toque para parar, com a voz transcrita
+  pelo provedor que a pessoa escolhe, OpenAI ou Groq, com a chave dela). O texto guardado no aparelho
+  continua fora. O app nativo Android, a bolha flutuante e o teclado são o passo 2, outra ADR.)*
 - **Trocar a conta** de uma instalação.
 - **Cifra ponta a ponta.**
 - **App nativo Android ou teclado (IME).**
@@ -2221,6 +2248,12 @@ não era a real, e perdia edição sem aviso.
   na subida do Agent, 2 s depois de cada gravação local (para juntar as seguintes) e ao conectar.
   **A alternativa:** 30 s (a edição do celular aparece antes, com o dobro de pedidos vazios) ou 5 min;
   é a constante `IntervaloPadrao` (`internal/sync/laco.go`).
+  **Nota de 11-out-2026 (ADR-021, decisão P, subfatia S, escolha menor 17; aprovada pelo Mauro em
+  10-out-2026):** com o painel do PC aberto e lendo o contador de mudanças (`GET /api/nuvem/mudancas`),
+  o laço busca a nuvem a cada **10 s** (`IntervaloComPainelPadrao`), por uma janela de 15 s depois de
+  cada leitura (`JanelaDoPainelPadrao`); com o painel fechado, continuam os **60 s** desta decisão
+  (`IntervaloPadrao`, que não mudou). O painel visível lê o contador a cada 3 s e relê a lista quando ele
+  muda. Uma edição feita no celular aparece no painel aberto em até cerca de 13 s.
 - **A volta do PC que ficou fora continua de onde parou, no mesmo epoch. [Decisão 2 da F7b, refeita
   na revisão de 06-out-2026; confirmada pelo Mauro em 06-out-2026.]** As `server_version` que o PC guardou continuam
   valendo enquanto o epoch é o mesmo, e a volta não reenvia nada com a base vazia:
@@ -3953,7 +3986,10 @@ migration; nada no `web/` (a tela é da F8h). O Agent liga tudo: o PC sobe e rec
   `ValidarPar` (o par que chega, com a restrição efetiva: o alias restrito confere só no domínio
   da entrada), `DominiosDaConferencia` com a restrição, e a palavra comum. No `cmd/agent` ficam a
   troca no runtime do Windows (`winruntime.Dicionario` com o Polish do Smart novo, atrás de
-  `Config.Trocar`) e a conferência do "Adicionar termo" (`conferirTermos`).
+  `Config.Trocar`) e a conferência do "Adicionar termo" (`conferirTermos`). *(Nota de 11-out-2026,
+  ADR-021, C2: as conferências do `conferir.go` foram para `internal/smartconta`, onde o servidor as usa
+  também; o Agent as chama de lá e o comportamento dele não mudou. A palavra comum, `Arriscada`, ficou em
+  `internal/learning`.)*
 - **A ligação** (`cmd/agent/sync.go`): o `montarSync` passa o aplicador ao laço, e o
   `Aplicador.LigarAoSync` liga o gancho do painel: o Aprender e o Desfazer que gravaram sobem a
   versão local do id no espelho (`Fila.SubirVersaoLocal`) no ato, sob a trava, e acordam o laço.
@@ -6624,7 +6660,7 @@ escolha de público ou privado). Pendências técnicas pequenas: fixar por diges
 a do Postgres (pede um ensaio a mais), e o `conferir-b2.sh` ainda não rodou na VPS (o teste à mão do
 mesmo dia provou subir, listar e não apagar).
 
-**O PC na nuvem de produção, em 10-out-2026.** O Mauro instalou o app no Android (Chrome, "Instalar app") e entrou com o Google. No PC: o Agent do `bin\` remontado com tudo até a F11 (o banco migrou para a 0008 sem mudar ditado); a nuvem de teste desconectada e esquecida (o contêiner do Postgres de teste removido com o volume); conectado a `https://aurora-whisper.mjj.net.br` como a conta dele (o navegador já tinha a sessão, e a aprovação passou sem novo login); o histórico enviado: **56 ditados** dos últimos 6 meses, fora da lixeira, todos com a versão da nuvem, a fila vazia, e a cópia `historico.db.antes-da-nuvem-20261010-185227.db` ao lado do banco (conferido só lendo). Uma edição no celular chegou ao PC na rodada seguinte (18:55:30, `recebidos=1 aplicados_do_pull=1`). **Achados para depois:** a lista do painel do PC não se atualiza sozinha quando chega uma mudança da nuvem (só ao voltar à tela), e a busca de 60 s parece lenta para ele. **Ponto que ficou claro só agora:** o app do celular não dita (decisão 1: ver e editar; "Ditar no celular continua fora", no `02`); o Mauro quer o ditado no celular, como a próxima etapa.
+**O PC na nuvem de produção, em 10-out-2026.** O Mauro instalou o app no Android (Chrome, "Instalar app") e entrou com o Google. No PC: o Agent do `bin\` remontado com tudo até a F11 (o banco migrou para a 0008 sem mudar ditado); a nuvem de teste desconectada e esquecida (o contêiner do Postgres de teste removido com o volume); conectado a `https://aurora-whisper.mjj.net.br` como a conta dele (o navegador já tinha a sessão, e a aprovação passou sem novo login); o histórico enviado: **56 ditados** dos últimos 6 meses, fora da lixeira, todos com a versão da nuvem, a fila vazia, e a cópia `historico.db.antes-da-nuvem-20261010-185227.db` ao lado do banco (conferido só lendo). Uma edição no celular chegou ao PC na rodada seguinte (18:55:30, `recebidos=1 aplicados_do_pull=1`). **Achados para depois:** a lista do painel do PC não se atualiza sozinha quando chega uma mudança da nuvem (só ao voltar à tela), e a busca de 60 s parece lenta para ele. **Ponto que ficou claro só agora:** o app do celular não dita (decisão 1: ver e editar; "Ditar no celular continua fora", no `02`); o Mauro quer o ditado no celular, como a próxima etapa. **[ADR-021, 10-out-2026: o ditado no celular e as duas queixas (a busca de 60 s e a lista que não se atualiza) estão decididos lá.]**
 
 **A publicação do código, decidida pelo Mauro em 10-out-2026.** Um repositório público novo, com um
 commit só e sem o histórico; o de antes, privado, continua guardado com o histórico inteiro. O commit
