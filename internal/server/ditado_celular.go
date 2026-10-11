@@ -315,6 +315,8 @@ func (c *Cloud) handleRevogarAceiteDoDitado(w http.ResponseWriter, r *http.Reque
 		writeError(w, http.StatusInternalServerError, codeInternal, "falha interna")
 		return
 	}
+	// O que a rota de ditar guarda da conta na memória sai junto (C5b).
+	c.esquecerDitadoDaConta(p.UserID)
 	anotarContagens(r.Context(), "chaves_apagadas", rev.ChavesApagadas)
 	w.WriteHeader(http.StatusNoContent)
 }

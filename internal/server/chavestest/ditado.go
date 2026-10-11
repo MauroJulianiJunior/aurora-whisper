@@ -819,7 +819,9 @@ func testDitadoSoComSessao(t *testing.T, m *mundo) {
 	}
 	achadas := 0
 	for _, rt := range m.cloud.Rotas() {
-		if strings.Contains(rt.Padrao, "/dictation") {
+		// A rota de ditar (/dictations, C5b) tem o acesso dela, o AcessoDitar:
+		// é conferida em ditar.go.
+		if strings.Contains(rt.Padrao, "/dictation") && !strings.Contains(rt.Padrao, "/dictations") {
 			achadas++
 			if rt.Acesso != server.AcessoSessao {
 				t.Errorf("%s com acesso %v, quero só a sessão", rt.Padrao, rt.Acesso)

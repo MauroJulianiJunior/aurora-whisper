@@ -12,9 +12,13 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/MauroJulianiJunior/aurora-whisper/internal/asr/nuvem"
+	"github.com/MauroJulianiJunior/aurora-whisper/internal/ia"
+	"github.com/MauroJulianiJunior/aurora-whisper/internal/polish"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/server/cloudauth"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/server/cloudstore"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/server/cofre"
+	"github.com/MauroJulianiJunior/aurora-whisper/internal/smartconta"
 )
 
 // O servidor da nuvem da etapa 5 (ADR-019, fatia F3): o histórico e o sync
@@ -63,16 +67,28 @@ type Limites struct {
 	// ChavesPorConta: as rotas das chaves da IA que chamam o provedor (o PUT
 	// e o GET dos modelos, juntos), por conta (ADR-021, C3a).
 	ChavesPorConta int
+	// O ditado pelo celular (ADR-021, "Limites", escolha menor 4; C5b), todos
+	// conferidos antes de ler o corpo: DitarAoMesmoTempo é quantos ditados uma
+	// conta tem em andamento (UM_POR_VEZ); DitarPorMinuto e DitarPorDia, os
+	// baldes da conta (LIMITE); DitarNoTotal, os ditados de todas as contas ao
+	// mesmo tempo, que são os corpos na memória (OCUPADO).
+	DitarAoMesmoTempo int
+	DitarPorMinuto    int
+	DitarPorDia       int
+	DitarNoTotal      int
 }
 
 // LimitesPadrao: 10 tentativas de login por minuto por IP e 100 inícios no
 // total; no push, 60 pedidos e 5.000 mutações por minuto por aparelho (o
 // envio inicial de 10 mil ditados leva uns 2 minutos); no pareamento (F6),
 // 10 por minuto por IP e 100 inícios no total; nas chaves da IA (ADR-021,
-// escolha menor 24), 10 por minuto por conta.
+// escolha menor 24), 10 por minuto por conta; no ditado pelo celular (ADR-021,
+// escolha menor 4), 1 de cada vez, 10 por minuto e 200 por dia por conta, e 3
+// ao mesmo tempo no total.
 var LimitesPadrao = Limites{
 	LoginPorIP: 10, InicioTotal: 100, PushPedidos: 60, PushMutacoes: 5000,
 	PareamentoPorIP: 10, PareamentoTotal: 100, ChavesPorConta: 10,
+	DitarAoMesmoTempo: 1, DitarPorMinuto: 10, DitarPorDia: 200, DitarNoTotal: 3,
 }
 
 // CloudConfig é tudo o que o servidor da nuvem precisa. Quem lê o ambiente e
@@ -143,6 +159,17 @@ type CloudConfig struct {
 	// confere o aceite de novo sob a trava da conta (ele não está no banco): só
 	// o epoch. Com o aceite de verdade, confere os dois (chaves_ia.go).
 	Aceite AceiteDoDitado
+	// Voz é o cliente dos provedores de transcrição do ditado (C4; ditar.go).
+	// Nil fala com as APIs oficiais; os testes apontam para um httptest.Server
+	// (nenhum teste chama um provedor de verdade), e o servidor de teste do PC,
+	// para um provedor de mentira.
+	Voz *nuvem.Cliente
+	// Polish é o cliente dos provedores do Polish do ditado (internal/ia). Nil
+	// fala com as APIs oficiais; os testes e o servidor de teste, como o Voz.
+	Polish *ia.Cliente
+	// PrazosDoDitado são os prazos da rota de ditar; zero em um campo é o
+	// padrão (PrazosDoDitadoPadrao). Só os testes os mudam.
+	PrazosDoDitado PrazosDoDitado
 }
 
 // Cloud é o servidor da nuvem montado.
@@ -175,6 +202,16 @@ type Cloud struct {
 	// só com o dublê do aceite dos testes (CloudConfig.Aceite).
 	aceiteNaGravacao bool
 	limChaves        *cloudauth.Limite
+
+	// O ditado pelo celular (ADR-021, C5b; ditar.go): a memória da rota (os
+	// ditados em andamento, o "sem fala", o pago e não gravado, as vagas e os
+	// limites), o Smart de cada conta já montado, UMA política de esforço do
+	// Polish por processo, os modelos que os provedores listaram e os prazos.
+	ditados    *registroDoDitado
+	smart      *smartconta.Cache
+	esforco    *polish.PoliticaEsforco
+	conhecidos *modelosConhecidos
+	prazos     PrazosDoDitado
 
 	// saude é a última rodada do Reter, para a rota da saúde do job (F11c;
 	// saude.go).
@@ -253,6 +290,8 @@ func NewCloud(cfg CloudConfig) (*Cloud, error) {
 		{&lim.PushPedidos, def.PushPedidos}, {&lim.PushMutacoes, def.PushMutacoes},
 		{&lim.PareamentoPorIP, def.PareamentoPorIP}, {&lim.PareamentoTotal, def.PareamentoTotal},
 		{&lim.ChavesPorConta, def.ChavesPorConta},
+		{&lim.DitarAoMesmoTempo, def.DitarAoMesmoTempo}, {&lim.DitarPorMinuto, def.DitarPorMinuto},
+		{&lim.DitarPorDia, def.DitarPorDia}, {&lim.DitarNoTotal, def.DitarNoTotal},
 	} {
 		if *p.v <= 0 {
 			*p.v = p.d
@@ -280,6 +319,14 @@ func NewCloud(cfg CloudConfig) (*Cloud, error) {
 		aceite:           cfg.Aceite,
 		aceiteNaGravacao: aceiteNaGravacao,
 		limChaves:        cloudauth.NovoLimite(lim.ChavesPorConta, cfg.Now),
+
+		ditados: novoRegistroDoDitado(cfg.Now, limitesDoDitado{
+			porConta: lim.DitarAoMesmoTempo, porMinuto: lim.DitarPorMinuto, porDia: lim.DitarPorDia, total: lim.DitarNoTotal,
+		}),
+		smart:      smartconta.NovoCache(0),
+		esforco:    polish.NovaPoliticaEsforco(cfg.Logger),
+		conhecidos: novosModelosConhecidos(),
+		prazos:     cfg.PrazosDoDitado.comPadroes(),
 	}
 	c.csrf = http.NewCrossOriginProtection()
 	c.csrf.SetDenyHandler(http.HandlerFunc(c.negarOrigemCruzada))

@@ -687,7 +687,9 @@ func testEscopo(t *testing.T, b Backend) {
 			body = nil
 		}
 		switch rt.Acesso {
-		case server.AcessoSessao:
+		case server.AcessoSessao, server.AcessoDitar:
+			// A rota de ditar (ADR-021, C5b): no passo 1, o token de um PC é
+			// 403, como nas rotas só da sessão.
 			if res := m.comToken(method, path, tok, body); res.Code != http.StatusForbidden {
 				t.Errorf("%s com o token do PC: %d, quero 403", rt.Padrao, res.Code)
 			}
@@ -745,6 +747,16 @@ func testEscopo(t *testing.T, b Backend) {
 		if strings.ContainsAny(padrao, "{}?") {
 			t.Errorf("%s tem parâmetro na URL", padrao)
 		}
+	}
+	// A rota de ditar (ADR-021, C5b): o AcessoDitar, que nunca é o
+	// AcessoQualquer (ele admitiria o token de um PC), sem parâmetro de caminho
+	// (o id vai num cabeçalho), percorrida acima com o token, sem credencial e
+	// com o Bearer inválido.
+	if acesso, ok := porPadrao["POST /api/v1/dictations"]; !ok || acesso != server.AcessoDitar || acesso == server.AcessoQualquer {
+		t.Errorf("POST /api/v1/dictations na tabela: %v (montada: %v), quero o AcessoDitar", acesso, ok)
+	}
+	if seen[server.AcessoDitar] != 1 {
+		t.Errorf("%d rotas com o AcessoDitar, quero só a de ditar", seen[server.AcessoDitar])
 	}
 	for padrao := range porPadrao {
 		if strings.Contains(padrao, "/learned") && padrao != "GET /api/v1/learned" && padrao != "POST /api/v1/learned/undo" {
@@ -831,8 +843,9 @@ func testCSRF(t *testing.T, b Backend) {
 	if !visto["PUT /api/v1/ai-keys/{provedor}"] || !visto["DELETE /api/v1/ai-keys/{provedor}"] {
 		t.Error("as rotas das chaves da IA não foram conferidas contra o pedido de outra origem")
 	}
-	// O PUT, o POST e o DELETE do aceite e das preferências (C3b) também.
-	for _, padrao := range []string{"PUT /api/v1/dictation/settings", "POST /api/v1/dictation/consent", "DELETE /api/v1/dictation/consent"} {
+	// O PUT, o POST e o DELETE do aceite e das preferências (C3b) também, e o
+	// POST de ditar (C5b).
+	for _, padrao := range []string{"PUT /api/v1/dictation/settings", "POST /api/v1/dictation/consent", "DELETE /api/v1/dictation/consent", "POST /api/v1/dictations"} {
 		if !visto[padrao] {
 			t.Errorf("%s não foi conferida contra o pedido de outra origem", padrao)
 		}
@@ -976,6 +989,7 @@ func testHost(t *testing.T, b Backend) {
 	for _, padrao := range []string{
 		"GET /api/v1/learned", "POST /api/v1/learned/undo",
 		"GET /api/v1/dictation", "PUT /api/v1/dictation/settings", "POST /api/v1/dictation/consent", "DELETE /api/v1/dictation/consent",
+		"POST /api/v1/dictations",
 	} {
 		if !conferidas[padrao] {
 			t.Errorf("%s não foi conferida com o Host estranho", padrao)
@@ -1048,6 +1062,9 @@ func testNaoMontadas(t *testing.T, b Backend) {
 		"GET /auth/start", "GET /auth/logout",
 		"PUT /api/v1/transcriptions/" + contracttest.NewID(), "DELETE /api/v1/me", "GET /api/v1/me/data",
 		"POST /api/v1/sync/pull", "GET /api/v1/sync/push", "GET /qualquer", "GET /assets/x.js",
+		// ADR-021, C5b: a rota de ditar só tem o POST, e sem nada no caminho.
+		"GET /api/v1/dictations", "PUT /api/v1/dictations", "DELETE /api/v1/dictations",
+		"POST /api/v1/dictations/" + contracttest.NewID(), "GET /api/v1/dictations/" + contracttest.NewID(),
 		// Um método que a página não tem: sem o padrão "/" de resto, o mux
 		// responderia 405 com Allow (e o 404 dele em texto puro no resto).
 		"POST /", "DELETE /", "POST /pagina.js", "PUT /pagina.css", "GET /qualquer-coisa", "GET /favicon.ico",

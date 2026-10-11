@@ -194,6 +194,19 @@ type mundo struct {
 	// aceite à vontade.
 	aceiteDeVerdade bool
 
+	// Os provedores falsos da rota de ditar (C5b; provedores.go): a
+	// transcrição (OpenAI e Groq) e o Polish (OpenAI e Anthropic), cada um num
+	// httptest.Server que conta as chamadas. Montados em todo mundo, para que
+	// nenhum caso, nem por engano, fale com um provedor de verdade.
+	voz *vozFalsa
+	pol *polishFalso
+	// limites e prazos vão à configuração da nuvem (zero: os padrões).
+	limites server.Limites
+	prazos  server.PrazosDoDitado
+	// embrulhar, se não for nil, troca o Store que a nuvem recebe (a gravação
+	// que falha uma vez).
+	embrulhar func(cloudstore.Store) cloudstore.Store
+
 	userA, userB string
 	creds        map[string]credencial
 }
@@ -218,6 +231,8 @@ func novoMundo(t *testing.T, b Backend) *mundo {
 		aceite: &aceiteFalso{vigente: map[string]bool{}},
 		prov:   &provedorFalso{modelos: []string{"modelo-novo", "modelo-velho"}},
 		creds:  map[string]credencial{},
+		voz:    novaVozFalsa(t),
+		pol:    novoPolishFalso(t),
 	}
 	var emails []string
 	novoUsuario := func(nome string) string {
@@ -276,13 +291,18 @@ func (m *mundo) montar(chaveDeCifra string) {
 	if m.aceiteDeVerdade {
 		aceite = nil
 	}
+	store := m.b.Store
+	if m.embrulhar != nil {
+		store = m.embrulhar(store)
+	}
 	cloud, err := server.NewCloud(server.CloudConfig{
-		Store: m.b.Store, Accounts: m.b.Accounts, BaseURL: contracttest.BaseURL,
+		Store: store, Accounts: m.b.Accounts, BaseURL: contracttest.BaseURL,
 		SessionSecret: segredoDeSessao, DeviceTokenPepper: pepperDeToken, Contas: m.contas,
 		Google: cloudauth.NovoGoogle("cliente-da-suite", "segredo-da-suite", contracttest.BaseURL+"/auth/google/callback"),
 		Painel: contracttest.PainelDeTeste(), Now: m.clk.Now,
 		Logger: slog.New(slog.NewTextHandler(m.logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
 		Cofre:  m.cofre, ChavesDeIA: m.b.Chaves, Ditado: m.b.Ditado, Modelos: m.prov, Aceite: aceite,
+		Voz: m.voz.cliente(), Polish: m.pol.cliente(), Limites: m.limites, PrazosDoDitado: m.prazos,
 	})
 	if err != nil {
 		m.t.Fatalf("NewCloud: %v", err)

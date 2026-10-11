@@ -128,6 +128,18 @@ Unique `(user_id, install_id)`.
 >   mostra a lápide), junto com o epoch da conta.
 >
 > Não há coluna de áudio nem de contexto: o áudio só existe em memória, durante o pedido (ADR-021).
+>
+> **ADR-021, C5b (11-out-2026): o que a rota de ditar grava** (`POST /api/v1/dictations`, `06`, "Ditar
+> pelo celular"). Sem migration nem tabela nova. A linha é a do `Create` acima, com: `source_platform`
+> `web`; `raw_text` o texto do provedor de transcrição como chegou; `final_text` o do Smart da conta
+> ou, quando o Polish valeu, o do Polish; `mode` `polish` só nesse caso, senão `smart`; `language`
+> `pt-BR`; `asr_provider` e `asr_model` os das preferências da conta (`openai` ou `groq`);
+> `duration_ms` a duração que o app mediu (cabeçalho `Ditado-Duracao-Ms`, até 125 s); `processing_ms`
+> o tempo do servidor depois do corpo; `confidence` nulo. O `sync_epoch` esperado é o que o
+> `Situacao` leu antes de o corpo ser lido. **A idempotência do ditado (o andamento, o "sem fala" e o
+> desfecho pago e não gravado) mora na memória do processo, não no banco** (ADR-021, risco 11: duas
+> instâncias da API exigiriam levá-la ao banco); o desfecho pago guarda o texto por até 10 minutos e
+> nunca vai a log.
 
 ### DictionaryEntry
 - id uuid
@@ -1104,5 +1116,5 @@ dicionário escondia do painel todo o histórico anterior, porque toda listagem 
 | provider secrets | server-side |
 | chave de API do provedor de IA de quem usa | Credential Manager do Windows, nunca SQLite |
 | chave de API do provedor de IA colada no app do celular (ADR-021) | `ai_provider_keys`, só cifrada (AES-256-GCM, subchave por HKDF da chave de cifra de `AI_KEYS_SECRET_FILE`, que nunca entra no banco nem no backup); o app vê só o fim (até 4 caracteres). Quem tem a raiz da VPS decifra |
-| áudio | RAM |
+| áudio | RAM. **ADR-021:** o do celular também, na memória da API só durante o pedido (no máximo 3 corpos de até 1 MiB ao mesmo tempo), repassado ao provedor da pessoa e descartado ao fim; nunca em disco, log ou banco |
 | contexto UIA | RAM |

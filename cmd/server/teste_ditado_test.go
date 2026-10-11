@@ -259,3 +259,85 @@ func TestTeste_OProvedorDeMentira(t *testing.T) {
 		}
 	}
 }
+
+// A rota de ditar (ADR-021, C5b) funciona no servidor de teste, com a
+// transcrição e o Polish de mentira: o ditado sai 201 com o texto de mentira,
+// passa pelo Polish de mentira (mode polish), e o reenvio do mesmo id sai 200.
+// Nada sai da máquina, e nem a chave, nem o áudio, nem o texto aparecem na
+// saída.
+func TestTeste_DitarComATranscricaoEOPolishDeMentira(t *testing.T) {
+	n := subirNuvemDeTeste(t)
+	sessao := n.entrar()
+	const chave = "sk-teste-de-mentira-0123456789abcdef"
+	versao := strconv.Itoa(cloudstore.VersaoDoAviso)
+	for _, p := range []struct{ method, path, body string }{
+		{http.MethodPost, "/api/v1/dictation/consent", `{"versao":` + versao + `,"transcricao":"openai","polish":"openai"}`},
+		{http.MethodPut, "/api/v1/ai-keys/openai", `{"chave":"` + chave + `"}`},
+		{http.MethodPut, "/api/v1/dictation/settings", `{"transcricao":{"provedor":"openai","modelo":""},"dica":false,"polish":{"ligado":true,"provedor":"openai","modelo":"gpt-4o-mini"}}`},
+	} {
+		if resp, body := n.pedir(p.method, p.path, p.body, sessao, "Sec-Fetch-Site", "same-origin"); resp.StatusCode != http.StatusOK {
+			t.Fatalf("%s %s: %d %s", p.method, p.path, resp.StatusCode, body)
+		}
+	}
+	audio := "\x1a\x45\xdf\xa3\x9f\x42\x86\x81\x01\x42\xf7\x81\x01\x42\xf2\x81\x04\x42\xf3\x81\x08\x42\x82\x84webm\x42\x87\x81\x04\x42\x85\x81\x02" +
+		strings.Repeat("AUDIO-DE-MENTIRA-", 100)
+	id := cloudstore.NewUUIDv7()
+	ditar := func() (*http.Response, string) {
+		return n.pedir(http.MethodPost, "/api/v1/dictations", audio, sessao, "Sec-Fetch-Site", "same-origin",
+			"Content-Type", "audio/webm", "Ditado-Id", id, "Ditado-Duracao-Ms", "3000", "Ditado-Fala-Ms", "2000")
+	}
+	resp, body := ditar()
+	var d struct {
+		ID, SourcePlatform, RawText, FinalText, Mode string
+		DeviceID                                     *string
+	}
+	if err := json.Unmarshal([]byte(body), &d); err != nil || resp.StatusCode != http.StatusCreated {
+		t.Fatalf("POST /dictations: %d %s (%v)", resp.StatusCode, body, err)
+	}
+	if !strings.Contains(body, `"source_platform":"web"`) || !strings.Contains(body, `"device_id":null`) ||
+		!strings.Contains(body, `"raw_text":"`+TextoDeMentira+`"`) || !strings.Contains(body, `"mode":"polish"`) ||
+		!strings.Contains(body, `"final_text":"Este é um ditado de mentira do servidor de teste pelo celular."`) {
+		t.Fatalf("o ditado de mentira: %s", body)
+	}
+	if resp, body = ditar(); resp.StatusCode != http.StatusOK || !strings.Contains(body, `"id":"`+id+`"`) {
+		t.Fatalf("o reenvio: %d %s", resp.StatusCode, body)
+	}
+	saida := n.saida()
+	if strings.Contains(saida, chave) || strings.Contains(saida, "AUDIO-DE-MENTIRA") || strings.Contains(saida, TextoDeMentira) {
+		t.Errorf("a saída tem a chave, o áudio ou o texto: %s", saida)
+	}
+	if !strings.Contains(saida, `"msg":"ditado"`) {
+		t.Errorf("a saída não tem a linha \"ditado\": %s", saida)
+	}
+}
+
+// A transcrição e o Polish de mentira não chamam rede: respondem pelo
+// transporte, e a chave que começa com "recusada", "sem-credito" ou
+// "fora-do-ar" vira a falha correspondente.
+func TestTeste_ATranscricaoEOPolishDeMentira(t *testing.T) {
+	for prefixo, status := range map[string]int{
+		chaveQueRecusa: http.StatusUnauthorized, chaveSemCredito: http.StatusTooManyRequests,
+		chaveQueCai: http.StatusServiceUnavailable, "sk-boa": http.StatusOK,
+	} {
+		req, _ := http.NewRequest(http.MethodPost, "https://api.openai.com/v1/audio/transcriptions", strings.NewReader("x"))
+		req.Header.Set("Authorization", "Bearer "+prefixo+"-0123456789")
+		resp, err := vozDeMentira{}.RoundTrip(req)
+		if err != nil || resp.StatusCode != status {
+			t.Errorf("voz %s: %v %v", prefixo, resp, err)
+		}
+		req, _ = http.NewRequest(http.MethodPost, "https://api.anthropic.com/v1/messages",
+			strings.NewReader(`{"messages":[{"role":"user","content":"{\"ditado\":\"oi tudo bem com você hoje\"}"}]}`))
+		req.Header.Set("x-api-key", prefixo+"-0123456789")
+		resp, err = polishDeMentira{}.RoundTrip(req)
+		if err != nil || resp.StatusCode != status {
+			t.Errorf("Polish %s: %v %v", prefixo, resp, err)
+			continue
+		}
+		if status == http.StatusOK {
+			raw, _ := io.ReadAll(resp.Body)
+			if !strings.Contains(string(raw), `Oi tudo bem com você hoje.`) || !strings.Contains(string(raw), `"end_turn"`) {
+				t.Errorf("o Polish de mentira da Anthropic: %s", raw)
+			}
+		}
+	}
+}

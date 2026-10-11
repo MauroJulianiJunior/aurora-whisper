@@ -40,6 +40,9 @@ func TestTeste_OCofreEOProvedorDeMentiraSoExistemComATag(t *testing.T) {
 	vigiados := map[string]bool{
 		"modelosDeTeste": true, "modelosDeMentira": true, "novoCofreDeTeste": true,
 		"chaveQueRecusa": true, "chaveSemCredito": true, "chaveQueCai": true,
+		// A transcrição e o Polish de mentira da rota de ditar (ADR-021, C5b).
+		"vozDeMentira": true, "polishDeMentira": true, "TextoDeMentira": true,
+		"respostaDeMentira": true, "falhaDaChaveDeMentira": true,
 	}
 	achados := map[string]string{}
 	fset := token.NewFileSet()

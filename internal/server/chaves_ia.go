@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/MauroJulianiJunior/aurora-whisper/internal/asr/nuvem"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/chavedeapi"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/ia"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/server/cloudstore"
@@ -113,15 +114,18 @@ func (m ModelosPelaRede) ListarModelos(ctx context.Context, provedor, chave stri
 }
 
 // rotasDoDitado são as rotas que só existem com a chave de cifra (ADR-021,
-// decisão O): as das chaves da IA (C3a) e as das preferências e do aceite
-// (/dictation, C3b); a C5b acrescenta a de ditar aqui. Sem o cofre, nenhuma é
-// montada, e todas caem no 404 de rota não montada. Todas só da sessão do
-// navegador.
+// decisão O): as das chaves da IA (C3a), as das preferências e do aceite
+// (/dictation, C3b) e a de ditar (/dictations, C5b; ditar.go). Sem o cofre,
+// nenhuma é montada, e todas caem no 404 de rota não montada. Todas só da
+// sessão do navegador: a de ditar pelo AcessoDitar, que no passo 1 é a sessão e
+// nunca o token de um PC.
 func (c *Cloud) rotasDoDitado() []rota {
 	if c.cofre == nil {
 		return nil
 	}
 	return []rota{
+		{"POST /api/v1/dictations", AcessoDitar, c.handleDitar},
+
 		{"PUT /api/v1/ai-keys/{provedor}", AcessoSessao, c.handleGravarChaveDeIA},
 		{"DELETE /api/v1/ai-keys/{provedor}", AcessoSessao, c.handleApagarChaveDeIA},
 		{"GET /api/v1/ai-keys/{provedor}/models", AcessoSessao, c.handleModelosDaChaveDeIA},
@@ -185,10 +189,14 @@ func (c *Cloud) handleGravarChaveDeIA(w http.ResponseWriter, r *http.Request) {
 	if !c.permitirChaves(w, r, p.UserID) {
 		return
 	}
-	if _, err := c.cfg.Modelos.ListarModelos(r.Context(), provedor, chave); err != nil {
+	modelos, err := c.cfg.Modelos.ListarModelos(r.Context(), provedor, chave)
+	if err != nil {
 		writeFalhaDoProvedor(w, r, err)
 		return
 	}
+	// A lista que o provedor deu é a dos modelos que o ditado aceita sem
+	// perguntar de novo (modelos_conhecidos.go).
+	c.conhecidos.anotar(provedor, modelos)
 	selada, err := c.cofre.Selar(p.UserID, provedor, chave)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, codeInternal, "falha interna")
@@ -270,6 +278,7 @@ func (c *Cloud) handleModelosDaChaveDeIA(w http.ResponseWriter, r *http.Request)
 	if modelos == nil {
 		modelos = []string{}
 	}
+	c.conhecidos.anotar(provedor, modelos)
 	anotarContagens(r.Context(), "modelos", len(modelos))
 	writeJSON(w, http.StatusOK, map[string]any{"provedor": provedor, "modelos": modelos})
 }
@@ -413,18 +422,30 @@ func (c *Cloud) permitirChaves(w http.ResponseWriter, r *http.Request, userID st
 
 // FalhaDoProvedor é o que uma falha do provedor vira para o app: o status, o
 // código da lista fechada e uma frase fixa. Nunca a mensagem do erro, que não
-// sai daqui. A rota do ditado (C5b) usa a mesma tradução.
+// sai daqui. A rota de ditar (C5b; ditar.go) usa a mesma tradução: além do
+// *ia.Erro (a lista de modelos), ela recebe o *nuvem.Erro da transcrição, com
+// os mesmos motivos e dois a mais (sem_chave, que é SEM_CHAVE, e
+// arquivo_grande, que é PROVEDOR_FORA: o teto do corpo fica muito abaixo do
+// do provedor).
 func FalhaDoProvedor(err error) (status int, code, frase string) {
 	var e *ia.Erro
-	if errors.As(err, &e) {
-		switch e.Motivo {
-		case ia.MotivoChaveRecusada, ia.MotivoSemPermissao:
-			return http.StatusUnprocessableEntity, codeProvedorRecusouChave,
-				"o provedor recusou a chave: confira se ela foi copiada inteira, se está ativa e se pode listar os modelos"
-		case ia.MotivoLimite:
-			return http.StatusBadGateway, codeProvedorLimite,
-				"o provedor recusou por limite de uso ou falta de crédito: confira o saldo e tente de novo em alguns minutos"
-		}
+	var v *nuvem.Erro
+	motivo := ""
+	switch {
+	case errors.As(err, &e):
+		motivo = string(e.Motivo)
+	case errors.As(err, &v):
+		motivo = string(v.Motivo)
+	}
+	switch motivo {
+	case string(ia.MotivoChaveRecusada), string(ia.MotivoSemPermissao):
+		return http.StatusUnprocessableEntity, codeProvedorRecusouChave,
+			"o provedor recusou a chave: confira se ela foi copiada inteira, se está ativa e se pode listar os modelos"
+	case string(ia.MotivoLimite):
+		return http.StatusBadGateway, codeProvedorLimite,
+			"o provedor recusou por limite de uso ou falta de crédito: confira o saldo e tente de novo em alguns minutos"
+	case string(nuvem.MotivoSemChave):
+		return http.StatusConflict, codeSemChave, "a chave guardada não vale mais neste servidor: cole a chave de novo"
 	}
 	return http.StatusBadGateway, codeProvedorFora, "o provedor não respondeu como devia: tente de novo mais tarde"
 }

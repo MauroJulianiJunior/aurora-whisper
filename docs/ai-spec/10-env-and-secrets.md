@@ -25,7 +25,7 @@
 | PAINEL_DIR | Sim | **F4 (ADR-019):** a pasta do build da nuvem do painel (o app), com o `index.html` (`pnpm build:nuvem`, que sai em `web/dist-nuvem`). O servidor a lê para a memória na subida. Vazia, não é pasta, ou sem o `index.html`: saída 2, sem o caminho na mensagem. No servidor de teste do PC (`teste`, build tag `logindeteste`) também é obrigatória |
 | AI_KEYS_SECRET | Não (ou o `_FILE`) | **ADR-021, C3a:** a chave de cifra das chaves da IA que as pessoas colam no app do celular: 64 caracteres hexadecimais (32 bytes). Sem ela, o servidor sobe **sem** as rotas do ditado no celular (`404`). Ver "A chave de cifra das chaves da IA", abaixo |
 | AI_KEYS_SECRET_FILE | Não | **ADR-021, C3a:** o caminho do arquivo com o `AI_KEYS_SECRET` (o segredo montado no contêiner, `segredos/ai-keys-secret`). É a forma de produção |
-| ASR_CLOUD_PROVIDER | Não | provider. **Não usada na etapa 5** (ADR-019: ASR na nuvem é "depois") |
+| ASR_CLOUD_PROVIDER | Não | provider. **Não usada na etapa 5** (ADR-019: ASR na nuvem é "depois"). **ADR-021:** o ditado pelo celular usa o provedor e a chave **de cada pessoa**, das preferências dela, e não estas variáveis |
 | ASR_CLOUD_MODEL | Não | model. **Não usada na etapa 5** |
 | ASR_CLOUD_API_KEY | Condicional | secret. **Não usada na etapa 5** |
 | CONTEXT_PROVIDER | Não | resolver. **Não usada na etapa 5** (contexto não vai para a nuvem) |
@@ -132,10 +132,28 @@
   mentira recusar a chave, ficar sem crédito ou cair (`PROVEDOR_RECUSOU_CHAVE`, `PROVEDOR_LIMITE`,
   `PROVEDOR_FORA`), para a tela mostrar cada erro sem rede. As chaves e o aceite moram na memória do
   processo e somem com ele. Assim as rotas do ditado no celular respondem no `pnpm dev` em vez de `404`.
-  **Nada disso existe no build normal:** o cofre aleatório e o provedor de mentira estão num arquivo que
-  só compila com a tag, o `serve` só sobe as rotas com `AI_KEYS_SECRET_FILE` e fala com os provedores de
-  verdade (`server.ModelosPelaRede`), e `cmd/server/teste_off_test.go` (que roda sem a tag) lê o código
-  e falha se um arquivo do build normal declarar um deles.
+  **C5b:** a rota de ditar (`POST /api/v1/dictations`) também responde lá, com a transcrição e o Polish
+  de mentira (`vozDeMentira` e `polishDeMentira`, os transportes dos clientes, sem rede): o áudio é lido
+  na memória e jogado fora, o texto é sempre o mesmo, inventado (`TextoDeMentira`), o Polish devolve o
+  texto com a primeira letra maiúscula e um ponto no fim, e as mesmas chaves de mentira fazem cada
+  provedor recusar, ficar sem crédito ou cair.
+  **Nada disso existe no build normal:** o cofre aleatório e os provedores de mentira estão num arquivo
+  que só compila com a tag, o `serve` só sobe as rotas com `AI_KEYS_SECRET_FILE` e fala com os
+  provedores de verdade (`server.ModelosPelaRede`, e os clientes da transcrição e do Polish no valor
+  zero), e `cmd/server/teste_off_test.go` (que roda sem a tag) lê o código e falha se um arquivo do
+  build normal declarar um deles.
+- **O ditado pelo celular (ADR-021, C5b, 11-out-2026).** Nenhuma variável nova: a rota de ditar existe
+  com a mesma chave de cifra das chaves da IA (sem ela, `404`). Ela fala, **com a chave de cada pessoa**
+  (decifrada só durante a chamada, nunca guardada em claro, em variável de ambiente nem em log), com
+  `api.openai.com` ou `api.groq.com` (a transcrição) e com `api.openai.com` ou `api.anthropic.com` (o
+  Polish), sempre por HTTPS e HTTP/1.1, sem seguir redirecionamento: o contêiner da API precisa de saída
+  para esses endereços. As antigas `ASR_CLOUD_*` continuam sem uso (o servidor não tem chave de
+  provedor própria). Os limites (1 ditado de cada vez, 10 por minuto e 200 por dia por conta, 3 ao mesmo
+  tempo no total) e os prazos (o corpo em 30 s, a transcrição em 20 s, a resposta em 45 s depois do
+  corpo) são constantes do código, não configuração. **O desligamento** do `serve` espera, depois do
+  `Shutdown` de 15 s, até **70 s** pelos ditados em andamento (o provedor, o Smart, o Polish e a
+  gravação, que seguem sem a conexão), e só então fecha o pool: o `stop_grace_period` da API passa a
+  90 s na C5c (escolha menor 22).
 - **O `healthcheck` (F11c).** `aurora-whisper-server healthcheck` faz `GET` no `/api/v1/health/live`
   em `127.0.0.1` (ou no loopback de `HTTP_ADDR`), na porta de `HTTP_ADDR`, com prazo de 3 s, sem proxy e
   sem seguir redirecionamento, e sai com 0 ou 1 (nunca 2, que o Docker reserva): a imagem não tem shell

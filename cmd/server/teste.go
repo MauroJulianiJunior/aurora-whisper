@@ -12,10 +12,12 @@ import (
 	"io"
 	"log/slog"
 	"net"
+	"net/http"
 	"slices"
 	"strings"
 	"time"
 
+	"github.com/MauroJulianiJunior/aurora-whisper/internal/asr/nuvem"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/ia"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/server"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/server/cloudauth"
@@ -38,8 +40,10 @@ import (
 // /api/v1/dictation e /api/v1/ai-keys não serem 404 no pnpm dev: a chave de
 // cifra das chaves da IA nasce aqui, a cada subida, como as outras duas (um
 // cofre por processo, que some com ele, junto com as chaves guardadas na
-// memória), e o provedor da IA é de mentira (modelosDeTeste): nenhuma chamada
-// sai da máquina. Nada disso existe no build normal.
+// memória), e os provedores da IA são de mentira: a lista de modelos
+// (modelosDeTeste), a transcrição do POST /api/v1/dictations (vozDeMentira,
+// que joga o áudio fora e devolve TextoDeMentira) e o Polish (polishDeMentira):
+// nenhuma chamada sai da máquina. Nada disso existe no build normal.
 //
 //	go -C C:\Desenvolvimento\aurora-whisper run -tags logindeteste ./cmd/server teste
 //
@@ -119,8 +123,11 @@ func runTeste(ctx context.Context, args []string, getenv func(string) string, st
 		SessionSecret: []byte(cloudauth.NovoSegredo()), DeviceTokenPepper: []byte(cloudauth.NovoSegredo()),
 		Contas: contas, Painel: painel, Logger: logger,
 		// O ditado no celular: o cofre por processo, as chaves e o aceite na
-		// memória (o próprio mem), e o provedor de mentira.
+		// memória (o próprio mem), e os provedores de mentira (a lista de
+		// modelos, a transcrição e o Polish), sem rede.
 		Cofre: cifra, ChavesDeIA: mem, Ditado: mem, Modelos: modelosDeTeste{},
+		Voz:    &nuvem.Cliente{HTTP: &http.Client{Transport: vozDeMentira{}}},
+		Polish: &ia.Cliente{HTTP: &http.Client{Transport: polishDeMentira{}}},
 	})
 	if err != nil {
 		_ = ln.Close()
@@ -183,6 +190,104 @@ func (modelosDeTeste) ListarModelos(_ context.Context, provedor, chave string) (
 		return nil, errors.New("provedor de mentira: provedor desconhecido")
 	}
 	return slices.Clone(lista), nil
+}
+
+// TextoDeMentira é o que a transcrição de mentira do servidor de teste devolve
+// a todo ditado: inventado, sem nada pessoal.
+const TextoDeMentira = "este é um ditado de mentira do servidor de teste pelo celular"
+
+// falhaDaChaveDeMentira é a falha que o começo da chave pede (as mesmas
+// chaves de mentira da lista de modelos), ou 0.
+func falhaDaChaveDeMentira(chave string) int {
+	switch {
+	case strings.HasPrefix(chave, chaveQueRecusa):
+		return http.StatusUnauthorized
+	case strings.HasPrefix(chave, chaveSemCredito):
+		return http.StatusTooManyRequests
+	case strings.HasPrefix(chave, chaveQueCai):
+		return http.StatusServiceUnavailable
+	}
+	return 0
+}
+
+// respostaDeMentira monta a resposta de um provedor de mentira, sem rede.
+func respostaDeMentira(r *http.Request, status int, corpo string) *http.Response {
+	return &http.Response{
+		StatusCode: status, Status: http.StatusText(status), Proto: "HTTP/1.1", ProtoMajor: 1, ProtoMinor: 1,
+		Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(corpo)),
+		ContentLength: int64(len(corpo)), Request: r,
+	}
+}
+
+// vozDeMentira é a transcrição do servidor de teste (o transporte do
+// nuvem.Cliente): lê e joga fora o áudio, na memória, e devolve
+// TextoDeMentira, ou a falha que o começo da chave pede. Nada sai da máquina.
+type vozDeMentira struct{}
+
+func (vozDeMentira) RoundTrip(r *http.Request) (*http.Response, error) {
+	if r.Body != nil {
+		_, _ = io.Copy(io.Discard, r.Body)
+		_ = r.Body.Close()
+	}
+	if s := falhaDaChaveDeMentira(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")); s != 0 {
+		return respostaDeMentira(r, s, `{}`), nil
+	}
+	corpo, _ := json.Marshal(map[string]string{"text": TextoDeMentira})
+	return respostaDeMentira(r, http.StatusOK, string(corpo)), nil
+}
+
+// polishDeMentira é o Polish do servidor de teste (o transporte do ia.Cliente):
+// devolve o texto que recebeu com a primeira letra maiúscula e um ponto no fim,
+// no envelope da OpenAI ou da Anthropic, ou a falha que o começo da chave pede.
+type polishDeMentira struct{}
+
+func (polishDeMentira) RoundTrip(r *http.Request) (*http.Response, error) {
+	var corpo struct {
+		Input []struct {
+			Content string `json:"content"`
+		} `json:"input"`
+		Messages []struct {
+			Content string `json:"content"`
+		} `json:"messages"`
+	}
+	if r.Body != nil {
+		_ = json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&corpo)
+		_ = r.Body.Close()
+	}
+	chave := r.Header.Get("x-api-key")
+	if chave == "" {
+		chave = strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+	}
+	if s := falhaDaChaveDeMentira(chave); s != 0 {
+		return respostaDeMentira(r, s, `{}`), nil
+	}
+	msg := ""
+	if len(corpo.Input) > 0 {
+		msg = corpo.Input[0].Content
+	} else if len(corpo.Messages) > 0 {
+		msg = corpo.Messages[0].Content
+	}
+	var ditado struct {
+		Ditado string `json:"ditado"`
+	}
+	_ = json.Unmarshal([]byte(msg), &ditado)
+	final := ditado.Ditado
+	if final != "" {
+		final = strings.ToUpper(final[:1]) + final[1:]
+		if !strings.HasSuffix(final, ".") {
+			final += "."
+		}
+	}
+	interno, _ := json.Marshal(map[string]string{"final_text": final})
+	var envelope any = map[string]any{
+		"status": "completed",
+		"output": []map[string]any{{"type": "message", "content": []map[string]string{{"type": "output_text", "text": string(interno)}}}},
+	}
+	if strings.HasSuffix(r.URL.Path, "/v1/messages") {
+		envelope = map[string]any{"stop_reason": "end_turn", "content": []map[string]string{{"type": "text", "text": string(interno)}}}
+	}
+	saida, _ := json.Marshal(envelope)
+	return respostaDeMentira(r, http.StatusOK, string(saida)), nil
 }
 
 // exemplo é um ditado inventado: há quanto tempo, de qual PC, o texto bruto e
