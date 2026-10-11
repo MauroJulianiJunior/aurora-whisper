@@ -14,7 +14,14 @@ o prazo efetivo, a política de esforço e a linha de log.
 **Quarta emenda em 01-out-2026**, decidida pelo Mauro depois do incidente do ditado longo
 (`docs/defeito-ditado-longo.md`, decisão 5): o prazo da decisão 4 cresce com o texto, de 3,5 s a
 8 s, e o watchdog do núcleo cresce junto; ver "Emenda de 01-out-2026: o prazo cresce com o texto".
-Data: 2026-09-29 (emendas: 2026-09-30 e 2026-10-01)
+**Nota de 10-out-2026 (ADR-021, ditar no celular):** a regra "a chave nunca sai do PC" (decisões 2 e 3
+e "Consequências") passa a valer para a chave **do PC**. Para ditar no celular, a pessoa cola uma chave
+no app, e o **servidor da nuvem** a guarda **cifrada**; o Polish do celular usa este mesmo motor
+(`internal/ia`, OpenAI ou Anthropic), chamado pelo servidor, com as mesmas regras (4 palavras ou mais,
+as guardas, o prazo da decisão 4 e a queda para o Smart). É opt-in e começa desligado. O Polish do PC
+não muda em nada: a chave dele continua só no Gerenciador de Credenciais. Ver a ADR-021, decisões G e
+N.
+Data: 2026-09-29 (emendas: 2026-09-30 e 2026-10-01; nota: 2026-10-10)
 Contexto: etapa 2 (Polish), depois da tela de Configurações e da chave de API (`internal/ia`,
 `internal/agent/chaves`)
 Emenda: `16-ai-behavior-spec.md` ("Polish", "Fallback", "Human-in-the-loop"); `17-prompt-spec.md`
@@ -70,6 +77,8 @@ o que faz o Polish valer para quem usa: o cliente HTTP, o prompt, as guardas e a
    leitura feita pelo binário do Agent, onde o portão `sysinput` abre. Assim "Remover chave" vale
    no ditado seguinte e nenhuma cópia da chave fica em memória. Provedor e modelo são os que
    valiam no keydown (ao lado do `text_mode`, em `Preferencias`, que continua comparável).
+   (Nota de 10-out-2026, ADR-021: isto descreve o **PC**. No celular quem chama o provedor é o
+   servidor, com a chave que a pessoa colou no app e que ele guarda cifrada; ver o cabeçalho.)
 3. **O que sai da máquina, e o que nunca sai.** Sai: o **texto final do Smart** (não o bruto do
    ASR), só com **4 palavras ou mais**, o prompt fixo, o nome do modelo e a chave, no cabeçalho.
    Nunca sai: áudio, contexto de janela (app, domínio, título, texto de perto), dicionário,
@@ -263,7 +272,7 @@ Polish o texto sai da máquina, custa dinheiro e exige chave, e os modelos barat
 - o texto dito volta com a cara de quem falou, e o que não pode mudar (números, siglas, termos) é
   conferido por código, não só pelo prompt;
 - nenhum segredo do projeto, nenhum servidor novo; a chave continua só no Gerenciador de
-  Credenciais;
+  Credenciais (**do PC**; a nota de 10-out-2026 no cabeçalho trata da chave do celular);
 - qualquer falha deixa o Smart, e o ditado nunca se perde por causa do Polish;
 - Literal e Smart não mudam de comportamento nem de latência;
 - o benchmark mede o que o Agent faria, porque usa as mesmas guardas.

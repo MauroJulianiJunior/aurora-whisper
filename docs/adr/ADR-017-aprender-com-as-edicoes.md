@@ -14,6 +14,12 @@ Emenda: `04-system-design.md`, `05-data-model.md` e a ADR-008 (onde o dicionári
 **Emendada pela ADR-020 (01-out-2026):** a decisão 7 ("a lista que o ASR recebe como dica não muda")
 e a alternativa descartada "promover o termo novo ao prompt do ASR" estão revogadas: o prompt agora é
 trocado em memória, e quem põe um termo nele é a pessoa, pela caixa "Dica" do "Adicionar termo".
+**Nota de 10-out-2026 (ADR-021, ditar no celular):** o que esta ADR diz do prompt do ASR vale para o
+**PC**: o termo aprendido pelo botão Aprender continua fora do prompt do ASR local. Só a nuvem diverge:
+no ditado do celular, os termos distintos do aprendido da conta podem ir como **dica** ao provedor de
+transcrição (OpenAI ou Groq), porque o celular não tem outra fonte de dica. O interruptor é da pessoa e
+**começa desligado**; ligado, os termos (que podem ser nomes de clientes ou de terceiros) saem do
+servidor junto com a voz de cada ditado. Nada muda no PC. Ver a ADR-021, decisão E.
 
 ## O problema
 

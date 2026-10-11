@@ -10,7 +10,8 @@ ditados e as configurações.
 dicionário, inserção, bandeja, overlay e painel. A nuvem é opcional e serve para ver e editar o
 histórico no celular e nos outros PCs; o projeto não tem servidor central, e cada pessoa sobe a sua,
 num servidor seu (o código está em `cmd/server`, o deploy em `deploy/` e o roteiro em
-`docs/deploy-f11.md`; o desenho, na ADR-019). Ainda não há Setup publicado: falta abrir o portão do
+`docs/deploy-f11.md`; o desenho, na ADR-019). **Ditar pelo celular** está decidido (ADR-021), mas ainda
+não existe no código. Ainda não há Setup publicado: falta abrir o portão do
 workflow de release e publicar o release do modelo (veja "Montar o Setup"). Quem quer usar hoje
 monta do código.
 
@@ -148,8 +149,9 @@ Segure `Ctrl+Win`, fale, solte. O roteiro de teste manual da bandeja e do painel
 
 ## Privacidade
 
-- **Áudio.** Só existe na memória, durante a transcrição. Nunca é gravado em disco nem enviado a
-  ninguém; o servidor de transcrição roda na sua máquina, em loopback.
+- **Áudio do PC.** Só existe na memória, durante a transcrição. Nunca é gravado em disco nem enviado
+  a ninguém; o servidor de transcrição roda na sua máquina, em loopback. Isso vale para o PC, conectado
+  ou não a uma nuvem. **O celular é outro caso, ainda em desenho** (veja "Ditar no celular", abaixo).
 - **Contexto de outras aplicações** (janela, campo em foco, texto próximo) é efêmero: vive na
   memória enquanto o texto é resolvido, não vai para o log nem é sincronizado. Campos de senha
   são bloqueados.
@@ -171,10 +173,30 @@ Segure `Ctrl+Win`, fale, solte. O roteiro de teste manual da bandeja e do painel
   você conecta o PC a uma nuvem, o texto dos ditados e as trocas que você aprendeu no painel (o
   botão **Aprender**) passam a ir para lá, **legíveis para quem administra o servidor**, para
   aparecer no celular e nos outros PCs. O que já estava no PC antes (o histórico e as trocas
-  aprendidas) só sobe quando você clica em **Enviar o histórico**. O áudio e o que está nas outras
+  aprendidas) só sobe quando você clica em **Enviar o histórico**. O áudio do PC e o que está nas outras
   janelas nunca vão. Sem conectar, o Agent não abre conexão nenhuma. Quem hospeda uma nuvem para
   outras pessoas tem um modelo de política de privacidade em `docs/politica-de-privacidade.md` e o
   dossiê de LGPD em `docs/lgpd-dossie.md`. O desenho está na ADR-019.
+- **Ditar no celular** (opcional, **decidido na ADR-021 e ainda não implementado**: o texto abaixo é o
+  que o desenho promete, e vale só depois que existir). No app do celular, a voz vai ao servidor da
+  nuvem **de quem hospeda** e dele ao provedor de transcrição que você escolher, **OpenAI ou Groq**,
+  **com a sua chave de API**. Isso muda a regra do PC, e por isso começa com um **aceite específico**
+  seu, antes do microfone abrir:
+  - **a voz** só fica na memória, durante o pedido, e é descartada ao fim; não é gravada em disco,
+    nem no aparelho, nem no servidor. O que o provedor guarda depende da documentação e da conta dele
+    (por exemplo, registros por até 30 dias para investigar falha ou abuso); o Aurora Whisper não
+    controla isso. Nenhum dos dois provedores diz processar no Brasil, então o envio é tratado como
+    transferência internacional;
+  - **a sua chave de API** fica no servidor, **cifrada**; o app só mostra o fim dela. Quem tem acesso de
+    administrador (a raiz) ao servidor lê o arquivo da chave de cifra e o banco, e decifra. Use uma
+    chave só para o celular, com limite de gasto no provedor. A chave do PC continua só no PC;
+  - **a dica** (termos que você ensinou, enviados junto com a voz) começa **desligada**;
+  - **o Polish no celular** começa desligado e, ligado, chama o provedor do Polish pelo servidor;
+  - **a voz e a dica podem levar dado de outras pessoas**, como dado de cliente. Isso é decisão sua:
+    veja se cabe nas suas obrigações com elas antes de ligar;
+  - no passo 1 não há ditado com a tela apagada nem em segundo plano.
+  O detalhe e os prazos de cada provedor estão em `docs/politica-de-privacidade.md` e
+  `docs/lgpd-dossie.md`; o desenho, na ADR-021.
 - A API local só escuta em `127.0.0.1`.
 
 Os detalhes estão em `docs/ai-spec/09-security-privacy.md`.
