@@ -33,6 +33,7 @@ o `docs/restauracao-f11.md`.
 | `postgres/init/10-papel-da-aplicacao.sh` | Roda uma vez, na criação do volume do Postgres: cria o papel `aurora` sem superusuário, dono do banco `aurora`, e o papel `aurora_backup`, só de leitura (`pg_read_all_data`, com a entrada no banco). A API e o `migrate` usam o `aurora`; o backup, o `aurora_backup`. A sessão do init não registra comando no log (a senha nunca vai para o log, nem num erro). |
 | `postgres/conferir-postgres.sh` | Na VPS, antes do primeiro dado real: confere os cinco ajustes de log (o log do Postgres sem texto ditado) e os dois papéis. Só lê. |
 | `scripts/gerar-segredos.sh` | Na VPS, uma vez: gera as senhas do Postgres, o `SESSION_SECRET` e o `DEVICE_TOKEN_PEPPER` de `/dev/urandom`, pergunta o domínio, o e-mail, o bucket e a chave do B2 e a chave pública do backup, confere o JSON do Google que o `enviar-para-servidor.ps1` mandou (o redirect de produção) e o move para `segredos/`, e grava tudo fora do repositório, sem mostrar nada. Recusa sobrescrever. |
+| `scripts/criar-chave-de-cifra.sh` | Na VPS que já está no ar, uma vez (ADR-021, C3a): cria **só** `segredos/ai-keys-secret`, a chave de cifra das chaves da IA que as pessoas colam no app do celular (32 bytes de `/dev/urandom` em hexadecimal, o `AI_KEYS_SECRET_FILE` da API), `0444` na pasta `0700`, sem mostrar o valor e sem tocar nos outros arquivos. Recusa sobrescrever, e recusa sem a pasta `segredos/` (numa VPS nova, o `gerar-segredos.sh` vem antes). Detalhes abaixo, em "A chave de cifra das chaves da IA". |
 | `scripts/backup.sh` | Dentro do contêiner do backup: `pg_dump` conferido, cifrado com o `age` para a chave pública e enviado ao Backblaze B2 por uma chave sem `deleteFiles`, num bucket com Object Lock (é ele que segura os backups: abaixo). |
 | `scripts/conferir-b2.sh` | Na VPS, antes do primeiro backup e a cada chave nova: num contêiner da imagem do backup, sobe um arquivo de conferência, confere que a chave lista e que **não** consegue apagá-lo de vez. Lembra o que só o painel do B2 mostra (o Object Lock, a regra, as capacidades). |
 | `scripts/restaurar.sh` | Na VPS, num desastre: `receber` (o dump decifrado no PC chega à memória só do usuário e é lido inteiro), `aplicar` (restaura num banco novo, roda nele o `migrate` e o `pos-restauracao`, e só por último troca os nomes) e `descartar`. Nunca apaga banco. |
@@ -63,6 +64,8 @@ mais a pasta `deploy\` e o JSON do Google) e `conferir-nuvem.ps1` (de fora, só 
     google-client.json           GOOGLE_CLIENT_SECRET_FILE (o client Web do Google)
     backup-chave-publica         a chave PÚBLICA do age
     rclone.conf                  a application key do B2 (só listBuckets, listFiles e writeFiles)
+    ai-keys-secret               AI_KEYS_SECRET_FILE: a chave de cifra das chaves da IA do celular
+                                 (o criar-chave-de-cifra.sh; ADR-021, C3a)
   config.env                   0600: PUBLIC_BASE_URL, DOMINIO, CONTAS_PERMITIDAS, B2_BUCKET e o
                                PROXY_CONFIAVEL (este, do subir.sh)
   antes-de-restaurar/          a cópia cifrada do banco antes de uma restauração
@@ -136,6 +139,32 @@ devagar nos picos deles.
 Os arquivos de segredo são `0444` porque a imagem da API roda como `nonroot` (uid 65532) e a do backup
 como `postgres` (uid 70), e o compose monta cada arquivo com o dono e o modo do host; quem fecha o
 acesso dos outros usuários é a pasta `0700`.
+
+### A chave de cifra das chaves da IA (ADR-021, C3a)
+
+Para ditar pelo celular, a pessoa cola no app a chave de API do provedor de IA dela, e o servidor a
+guarda **cifrada** no banco (a `ai_provider_keys`). A chave de cifra é um arquivo da VPS,
+`segredos/ai-keys-secret`, que nunca entra no banco nem no backup. Numa VPS que já está no ar, o
+`gerar-segredos.sh` não serve (ele recusa quando `segredos/` existe), e o passo é um script próprio:
+
+```bash
+bash ~/aurora-whisper/deploy/scripts/criar-chave-de-cifra.sh
+```
+
+- **O que ele faz:** confere a pasta base (fora do `deploy/` e de um repositório git) e que
+  `segredos/` existe; gera 32 bytes de `/dev/urandom` em hexadecimal (64 caracteres, como os outros
+  segredos); cria o arquivo sem nunca ir por cima (o `noclobber` do bash o cria com `O_EXCL`), escreve
+  o valor, e o deixa `0444` na pasta `0700`. Nenhum valor aparece na tela; uma falha no meio apaga o
+  arquivo que ele criou, e só ele.
+- **O que ele recusa:** o arquivo que já existe (trocar a chave de cifra leva toda chave guardada a
+  "cole de novo"; nada é mudado) e a VPS sem `segredos/` (numa VPS nova, o `gerar-segredos.sh` vem
+  antes).
+- **Sem cópia fora da VPS** (ADR-021, escolha menor 11): perder o arquivo, ou a VPS, faz cada pessoa
+  colar a chave da IA de novo no app; nenhum ditado se perde.
+- **Quando a API passa a usá-lo:** quando o compose declarar o segredo e o `AI_KEYS_SECRET_FILE` (a
+  C5c, que também o põe no `SEGREDOS_ESPERADOS` do `subir.sh`). Até lá, o arquivo fica na pasta sem
+  uso, e o servidor sobe sem as rotas do ditado no celular (`404`). Com o arquivo montado e malformado,
+  a API não sobe, e a mensagem diz o nome da variável, nunca o conteúdo.
 
 ## O backup (D2)
 

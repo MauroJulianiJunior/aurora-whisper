@@ -377,6 +377,39 @@ ADR-017) e `UserSettings` (preferências não sincronizam na v1).
 `User`: só é criado no primeiro login de um e-mail da lista permitida (`CONTAS_PERMITIDAS`), e o
 `google_sub` fica fixado; o mesmo e-mail com outro `sub` é recusado.
 
+### O ditado no celular: o que entra no Postgres (ADR-021)
+As tabelas do ditado no celular são **só aditivas** (as 0001 a 0016 já estão em produção): uma por
+arquivo, a partir da 0017. Nenhuma sincroniza com os PCs, nenhuma passa pelo contador nem gera evento,
+e nenhuma guarda áudio (o `schema_test.go` confere).
+
+- **As chaves da IA** (`ai_provider_keys`, a 0017; **C3a, 10-out-2026**): a chave de API do provedor
+  que a pessoa cola no app do celular (BYOK; a chave **do PC** continua só no PC), guardada **só
+  cifrada**. PK **`(user_id, provider)`**: uma chave por pessoa e por provedor, e trocar é gravar por
+  cima. Colunas:
+  - `provider`: a lista fechada `openai`, `groq` e `anthropic` (a transcrição no celular é OpenAI ou
+    Groq; o Polish no celular, OpenAI ou Anthropic). A mesma lista mora em
+    `cloudstore.ProvedoresDeIA`, e um teste do `pgstore` confere as duas;
+  - `cipher_key_id` (8 bytes): o id da chave de cifra que cifrou a linha, os 8 primeiros bytes de um
+    HMAC-SHA256 da chave de cifra com o rótulo `aurora-whisper/ai-keys/id/v1`, e **não** um número de
+    versão. Trocar o arquivo da chave de cifra (`AI_KEYS_SECRET_FILE`, `10`) leva a linha a `SEM_CHAVE`
+    sem tentar decifrar;
+  - `nonce` (12 bytes, aleatórios a cada gravação) e `ciphertext` (de 17 a 2576 bytes: a chave, até
+    2560 bytes, mais os 16 da etiqueta do GCM). A cifra é AES-256-GCM com uma subchave derivada por
+    HKDF-SHA256 (rótulo `aurora-whisper/ai-keys/v1`); o AAD leva o `user_id`, o `provider` e o
+    `cipher_key_id`, então o cifrado copiado para outra conta ou outro provedor não decifra
+    (`internal/server/cofre`);
+  - `key_suffix`: o fim da chave que a tela mostra ("Chave terminada em WXYZ"), até 4 caracteres ASCII
+    imprimíveis e nunca mais que um quarto da chave (`chavedeapi.Final`), para a tela não precisar
+    decifrar;
+  - `created_at` (a primeira chave do provedor) e `updated_at` (a última troca), do relógio de quem
+    grava, sem `DEFAULT`, com `CHECK (updated_at >= created_at)`.
+
+  A chave de cifra **nunca** entra no banco nem no backup: o backup leva só o cifrado, e restaurado num
+  servidor sem o mesmo arquivo, cada chave vira `SEM_CHAVE` (sem erro 500). O "apagar meus dados" apaga
+  as linhas da conta (`pgstore.apagarDaConta`). As cópias cifradas de uma chave trocada ou removida
+  ficam nos backups (cerca de 30 dias) e no banco da restauração (7 dias): a tela manda revogar a chave
+  antiga no provedor (ADR-021, "As chaves").
+
 ## SQLite
 
 ### local_transcriptions
@@ -1001,5 +1034,6 @@ dicionário escondia do painel todo o histórico anterior, porque toda listagem 
 | sessão web | cookie `__Host-` `HttpOnly`; no servidor, só o HMAC com `SESSION_SECRET` (ADR-019) |
 | provider secrets | server-side |
 | chave de API do provedor de IA de quem usa | Credential Manager do Windows, nunca SQLite |
+| chave de API do provedor de IA colada no app do celular (ADR-021) | `ai_provider_keys`, só cifrada (AES-256-GCM, subchave por HKDF da chave de cifra de `AI_KEYS_SECRET_FILE`, que nunca entra no banco nem no backup); o app vê só o fim (até 4 caracteres). Quem tem a raiz da VPS decifra |
 | áudio | RAM |
 | contexto UIA | RAM |

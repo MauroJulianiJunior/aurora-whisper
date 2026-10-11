@@ -129,9 +129,11 @@ func TestServe_Postgres_SobeEDesligaLimpo(t *testing.T) {
 	if ret, serv := strings.Index(stderr.String(), `"msg":"retenção"`), strings.Index(stderr.String(), `"msg":"servindo"`); ret < 0 || serv < 0 || ret > serv {
 		t.Fatalf("a linha \"retenção\" (%d) tem de vir antes da \"servindo\" (%d):\n%s", ret, serv, stderr.String())
 	}
-	// A linha "servindo" diz se há proxy confiável (aqui não), e não o valor.
-	if !strings.Contains(stderr.String(), `"https":false,"proxy_confiavel":false}`) {
-		t.Errorf("a linha \"servindo\" não diz o proxy confiável:\n%s", stderr.String())
+	// A linha "servindo" diz se há proxy confiável (aqui não), e não o valor;
+	// e se as chaves da IA do celular estão ligadas (ADR-021, C3a: aqui não,
+	// sem AI_KEYS_SECRET_FILE).
+	if !strings.Contains(stderr.String(), `"https":false,"proxy_confiavel":false,"chaves_da_ia":false}`) {
+		t.Errorf("a linha \"servindo\" não diz o proxy confiável e as chaves da IA:\n%s", stderr.String())
 	}
 	cancel()
 	select {

@@ -48,7 +48,9 @@ Base: `https://exemplo.com/api/v1` (o domínio real vem de `PUBLIC_BASE_URL`)
     10 por minuto por IP (o `/auth/start` e o callback juntos; o IPv6 conta por `/64`) e 100 por minuto
     no `/auth/start` de todos; no push, 60 pedidos e 5.000 mutações por minuto por aparelho. Em memória:
     reiniciar zera. O pull, o CRUD, o `/me` e as sessões não têm limite de taxa (ADR-019, "Decisões da
-    F3", riscos).
+    F3", riscos). **ADR-021, C3a:** as rotas das chaves da IA que chamam o provedor (o `PUT` e o `GET`
+    dos modelos, juntos) têm 10 por minuto **por conta**, com o código `LIMITE` (a lista fechada do
+    ditado no celular; "As chaves da IA", abaixo).
 
 Erro:
 ```json
@@ -212,8 +214,8 @@ mostrar "desconectado" (o token deles recebe `401`). `204`.
 o token do PC, `403`. Numa transação só: troca o `sync_epoch`, sobe a marca d'água das lápides ao
 `last_seq` (o `seq` continua; não volta a 0; a marca não tem leitor desde a F9, D2, mas o `CHECK
 (tombstone_watermark <= last_seq)` vale), apaga os ditados, as lápides, os eventos, as mutações, o
-aprendido, as correções, o dicionário, as preferências, os pedidos de pareamento aprovados pela conta e
-as outras sessões. **Os aparelhos são apagados, com os tokens**, e não ficam como revogados
+aprendido, as correções, o dicionário, as preferências, as chaves da IA do celular (ADR-021, C3a), os
+pedidos de pareamento aprovados pela conta e as outras sessões. **Os aparelhos são apagados, com os tokens**, e não ficam como revogados
 (`revoked_at`): o efeito para o PC é o mesmo `401`, mas eles saem da lista de aparelhos da conta (a
 da F6), em vez de ficarem nela como revogados. Ficam o usuário, o contador e a sessão de quem pediu. **[Decisão 3
 da F3; confirmada pelo Mauro em 05-out-2026.]** A alternativa é manter os aparelhos com `revoked_at` (a palavra da
@@ -429,6 +431,77 @@ PC recebe `403`.
     (`internal/server/pgstore/learned.go`) e os casos do celular em `TestContrato_Postgres` e em
     `learned_celular_pg_test.go` estão escritos e nunca rodaram (o Postgres de teste estava desligado
     na F8d e na revisão). Ver "Como a F8c fechou isso no Postgres", abaixo, para o que falta rodar.
+
+## As chaves da IA (ADR-021, C3a)
+Para ditar pelo celular, a pessoa cola no app a chave de API do provedor de IA **dela** (BYOK; a chave
+do PC continua só no PC). O servidor testa a chave no provedor, a guarda **só cifrada** (a
+`ai_provider_keys`, `05`) e nunca a devolve: o app recebe só se há chave e o fim dela. Código:
+`internal/server/chaves_ia.go` (as rotas), `internal/server/cofre` (a cifra), `internal/chavedeapi` (as
+regras `Validar` e `Final`, as mesmas do painel do PC). A suíte `internal/server/chavestest` é o
+contrato executável, contra o Store em memória e o Postgres.
+
+- **Só existem com a chave de cifra** (`AI_KEYS_SECRET_FILE`, `10`; decisão O): sem ela, as três rotas
+  não são montadas e caem no `404` de rota não montada (`NOT_FOUND`, "rota não encontrada"), como as do
+  ditado que vêm depois.
+- **Só com a sessão do navegador:** o token de um PC recebe `403` (`FORBIDDEN`); sem credencial, `401`.
+  O `PUT` e o `DELETE` passam pela proteção contra CSRF, como o resto.
+- **`{provedor}`** é exatamente `openai`, `groq` ou `anthropic`, em minúsculas. Outro valor é `404`
+  (`NOT_FOUND`, "provedor desconhecido"), sem eco do valor, antes de qualquer outra conferência.
+- **A chave nunca vai a log, a erro, a resposta nem a URL.** O log de acesso tem só o padrão da rota, o
+  status, os milissegundos, os bytes e, num erro, um motivo da lista fechada (`sem_aceite`, `sem_chave`,
+  `limite`, `provedor`); o `GET` dos modelos acrescenta a contagem `modelos`.
+
+### PUT `/ai-keys/{provedor}`
+Corpo `{ "chave": "..." }`, e nada mais. Nesta ordem:
+1. **O aceite**, antes de ler o corpo: sem um aceite vigente do ditado no celular que inclua aquele
+   provedor (decisão H), `403` `SEM_ACEITE`, sem chamar o provedor. O aceite é gravado pela C3b; **até
+   ela, nenhuma conta tem aceite** e todo `PUT` recusa assim (o servidor sobe com o aceite em falha
+   fechada).
+2. **O corpo:** até 16 KiB (acima, `413` `PAYLOAD_TOO_LARGE`, "corpo grande demais para uma chave de
+   API"). **Qualquer** erro de decodificação (JSON quebrado, campo desconhecido, tipo errado, um segundo
+   valor depois do objeto) responde `400` `BAD_REQUEST` com a frase **fixa** `corpo inválido: mande só
+   {"chave": "..."}`: a mensagem do decodificador pode trazer um pedaço do que foi colado, e nunca vai à
+   resposta.
+3. **As regras do painel do PC** (`chavedeapi.Validar`): sem os espaços e quebras de linha das pontas;
+   vazia, acima de 2560 bytes, ou com espaço, controle ou caractere fora do ASCII no meio é `400`
+   `VALIDATION`, com as frases do painel do PC.
+4. **O limite por conta** (10 por minuto, o `PUT` e o `GET` dos modelos juntos; escolha menor 24): sem
+   ficha, `429` `LIMITE` com `Retry-After`, sem chamar o provedor. Só o pedido que vai chamar o provedor
+   gasta ficha.
+5. **O teste no provedor:** a lista de modelos que a chave alcança (o `internal/ia`, só HTTP/1.1, sem
+   seguir redirecionamento, sem repassar o corpo de erro; a Groq pela API compatível com a da OpenAI,
+   `https://api.groq.com/openai/v1/models`). A falha vira um código da lista abaixo, e nada é gravado (a
+   chave de antes, se havia, continua).
+6. **A cifra e a gravação** por cima da anterior.
+
+`200` com `{ "provedor": "openai", "configurada": true, "final": "WXYZ" }`. `final` tem no máximo 4
+caracteres e nunca mais que um quarto da chave (uma chave de 8 caracteres sai com 2).
+
+### DELETE `/ai-keys/{provedor}`
+Apaga a chave cifrada da conta. Não haver chave não é erro. **Não pede o aceite** (tirar a chave sempre
+pode). `204`. As cópias cifradas nos backups ficam: a tela manda revogar a chave antiga no provedor.
+
+### GET `/ai-keys/{provedor}/models`
+A lista de modelos que a chave **guardada** alcança, perguntada ao provedor: `200` com
+`{ "provedor": "openai", "modelos": ["...", "..."] }` (a ordem do provedor, do mais novo para o mais
+antigo; `modelos` nunca é `null`). Pede o aceite do provedor (a chave vai a ele: `403` `SEM_ACEITE`) e
+conta no limite por conta. Sem chave guardada, `409` `SEM_CHAVE` ("nenhuma chave guardada para este
+provedor"); com a chave cifrada por outra chave de cifra (o arquivo trocou, ou o backup voltou sem ele),
+ou que não decifra com esta conta e este provedor, `409` `SEM_CHAVE` ("a chave guardada não vale mais
+neste servidor: cole a chave de novo"). Nos dois, o provedor não é chamado.
+
+### Os códigos (a lista fechada do ditado no celular, ADR-021)
+O app decide pelo `error.code`, nunca pela frase. Os desta subfatia, com o status fixado aqui; a C5b
+fixa os da rota de ditar e usa a mesma tradução da falha do provedor (`server.FalhaDoProvedor`):
+
+| Código | Status | Quando |
+|---|---|---|
+| `SEM_ACEITE` | 403 | sem aceite vigente daquele provedor |
+| `SEM_CHAVE` | 409 | sem chave guardada, ou a guardada não decifra mais |
+| `LIMITE` | 429, com `Retry-After` | o limite por conta |
+| `PROVEDOR_RECUSOU_CHAVE` | 422 | o provedor recusou a chave (`401`) ou negou a lista de modelos (`403`) |
+| `PROVEDOR_LIMITE` | 502 | o provedor recusou por limite de uso ou falta de crédito (`429`) |
+| `PROVEDOR_FORA` | 502 | qualquer outra falha do provedor: `5xx`, prazo, rede, redirecionamento, resposta inesperada |
 
 ## Dictionary
 **Depois (ADR-019):** não montada na etapa 5. O dicionário continua no `dicionario.json` de cada PC;

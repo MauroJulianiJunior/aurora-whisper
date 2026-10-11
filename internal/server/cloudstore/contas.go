@@ -98,8 +98,9 @@ type Accounts interface {
 	// ponto único de gravação), troca o sync_epoch (UUID v7), sobe a marca
 	// d'água das lápides ao last_seq (o seq continua, não volta a 0) e apaga
 	// os ditados, as lápides, os eventos, as mutações, o aprendido, as
-	// correções, o dicionário, as preferências, os pedidos de pareamento que
-	// o usuário aprovou, os aparelhos (com os tokens) e as outras sessões.
+	// correções, o dicionário, as preferências, as chaves da IA (ADR-021,
+	// C3a), os pedidos de pareamento que o usuário aprovou, os aparelhos (com
+	// os tokens) e as outras sessões.
 	// Ficam o usuário, o contador e a sessão keepSessionID. Devolve o epoch
 	// novo.
 	ApagarDadosDaConta(ctx context.Context, userID, keepSessionID string, now time.Time) (string, error)

@@ -197,6 +197,16 @@ var wantTables = []tableSpec{
 			"version", "last_seq",
 		},
 	},
+	// ADR-021 (o ditado no celular), C3a: a chave da IA de cada pessoa, só
+	// cifrada (docs/ai-spec/05-data-model.md, "As chaves da IA").
+	{
+		file:  "0017_ai_provider_keys_table.sql",
+		table: "ai_provider_keys",
+		columns: []string{
+			"user_id", "provider", "cipher_key_id", "nonce", "ciphertext",
+			"key_suffix", "created_at", "updated_at",
+		},
+	},
 }
 
 // TestSchema_EveryMigrationIsCoveredBySpec garante que a lista acima e os
@@ -284,6 +294,9 @@ func TestSchema_UniqueConstraints(t *testing.T) {
 		{"0016_learned_pairs_table.sql", "PRIMARY KEY (user_id, id)"},
 		{"0016_learned_pairs_table.sql", "UNIQUE (user_id, normalized_variant)"},
 		{"0016_learned_pairs_table.sql", "UNIQUE (user_id, last_seq)"},
+		// Uma chave por provedor e por pessoa (ADR-021, C3a): trocar é gravar
+		// por cima.
+		{"0017_ai_provider_keys_table.sql", "PRIMARY KEY (user_id, provider)"},
 	}
 	for _, c := range cases {
 		// Sem os comentários: eles explicam as constraints, e citam o texto delas.
@@ -503,6 +516,9 @@ func TestSchema_OptimisticConcurrencyVersionColumn(t *testing.T) {
 		"0014_device_tokens_table.sql":      false,
 		"0015_tombstones_table.sql":         false,
 		"0016_learned_pairs_table.sql":      true,
+		// ADR-021, C3a: a chave cifrada é trocada inteira (gravar por cima),
+		// sem concorrência otimista.
+		"0017_ai_provider_keys_table.sql": false,
 	}
 
 	re := regexp.MustCompile(`(?im)^\s*version\s+BIGINT`)
@@ -733,6 +749,22 @@ var sqlContracts = []struct {
 		"last_seq BIGINT NOT NULL CHECK (last_seq > 0)",
 		// A restrição e o domínio: restrito sem domínio nunca age.
 		"CHECK (NOT restricted OR domain IS NOT NULL)",
+	}},
+	// ADR-021, C3a: a chave da IA só cifrada. A lista fechada dos provedores,
+	// os tamanhos fixos do id da chave de cifra (8) e do nonce do GCM (12), o
+	// teto do cifrado (2560 da chave mais 16 da etiqueta) e o fim da chave
+	// que a tela mostra (até 4 caracteres ASCII imprimíveis).
+	{"0017_ai_provider_keys_table.sql", "ai_provider_keys", []string{
+		"user_id UUID NOT NULL REFERENCES users (id)",
+		"provider TEXT NOT NULL CHECK (provider IN ('openai', 'groq', 'anthropic'))",
+		"cipher_key_id BYTEA NOT NULL CHECK (octet_length(cipher_key_id) = 8)",
+		"nonce BYTEA NOT NULL CHECK (octet_length(nonce) = 12)",
+		"ciphertext BYTEA NOT NULL CHECK (octet_length(ciphertext) BETWEEN 17 AND 2576)",
+		"key_suffix TEXT NOT NULL CHECK (key_suffix ~ '^[!-~]{0,4}$')",
+		// As datas vêm de quem grava, sem DEFAULT.
+		"created_at TIMESTAMPTZ NOT NULL,",
+		"updated_at TIMESTAMPTZ NOT NULL,",
+		"CHECK (updated_at >= created_at)",
 	}},
 }
 

@@ -48,6 +48,9 @@ type memUser struct {
 	learned   map[string]Learned
 	events    []Event
 	applied   map[string]memApplied
+	// chavesDeIA são as linhas de ai_provider_keys, pelo provedor (ADR-021,
+	// C3a; chaves_ia.go). Nil até a primeira gravação.
+	chavesDeIA map[string]ChaveDeIA
 
 	// A conta (vazios num usuário de AddUser).
 	sub      string

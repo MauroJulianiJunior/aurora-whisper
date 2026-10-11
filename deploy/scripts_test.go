@@ -22,9 +22,12 @@ const (
 	agendarBackup = "deploy/scripts/agendar-backup.sh"
 	subirSh       = "deploy/scripts/subir.sh"
 	backupImagem  = "deploy/backup/Dockerfile"
+	// ADR-021, C3a: o passo que cria só o arquivo da chave de cifra das
+	// chaves da IA numa VPS que já está no ar.
+	criarChaveDeCifra = "deploy/scripts/criar-chave-de-cifra.sh"
 )
 
-var scriptsDaVPS = []string{gerarSegredos, backupSh, restaurarSh, conferirB2, agendarBackup, subirSh}
+var scriptsDaVPS = []string{gerarSegredos, backupSh, restaurarSh, conferirB2, agendarBackup, subirSh, criarChaveDeCifra}
 
 // curlDoSubir é o único curl que um script da VPS roda: o subir.sh confere o
 // https pelo Traefik (um GET no health, com o certificado conferido).
@@ -661,6 +664,243 @@ func TestVPS_GerarSegredosRecusaPastaNoRepositorio(t *testing.T) {
 			t.Error("criou a pasta mesmo recusando")
 		}
 	})
+}
+
+// --- criar-chave-de-cifra.sh (ADR-021, C3a) ----------------------------------
+
+func TestVPS_CriarChaveDeCifraNoTexto(t *testing.T) {
+	c := codigo(ler(t, criarChaveDeCifra))
+	exigirContem(t, criarChaveDeCifra, c,
+		"od -An -vtx1 -N32 /dev/urandom", // 32 bytes, em hexadecimal, como os outros
+		"NOME='ai-keys-secret'",          // o arquivo de AI_KEYS_SECRET_FILE
+		`SEGREDOS="$BASE/segredos"`,
+		// Recusa sobrescrever, e grava sem nunca ir por cima: o noclobber cria
+		// o arquivo com O_EXCL antes de escrever.
+		`if [ -e "$ARQUIVO" ] || [ -L "$ARQUIVO" ]; then`,
+		"set -o noclobber",
+		`if ! { : > "$ARQUIVO"; } 2> /dev/null; then`,
+		`printf '%s\n' "$chave" >| "$ARQUIVO"`,
+		`chmod 0444 -- "$ARQUIVO"`, `chmod 0700 -- "$SEGREDOS"`,
+		// Sem a pasta segredos/ (a VPS nova), manda para o gerar-segredos.sh.
+		`if [ -L "$SEGREDOS" ] || [ ! -d "$SEGREDOS" ]; then`,
+	)
+	// Só acrescenta: nada de mexer na pasta (mv, cp, rm de outra coisa que
+	// não o arquivo que ele mesmo criou) nem de mostrar o valor.
+	exigirNaoContem(t, criarChaveDeCifra, c, "mv ", "cp ", "rm -rf", `cat "$ARQUIVO"`, `cat -- "$ARQUIVO"`, "mktemp")
+	for _, l := range linhasDeCodigo(ler(t, criarChaveDeCifra)) {
+		if strings.Contains(l.texto, "rm ") && l.texto != `rm -f -- "$ARQUIVO"` {
+			t.Errorf("linha %d apaga outra coisa: %s", l.n, l.texto)
+		}
+		// O valor só vai para o arquivo, pelo printf do bash.
+		if strings.Contains(l.texto, "$chave") && !strings.HasPrefix(l.texto, `printf '%s\n' "$chave" >| "$ARQUIVO"`) {
+			t.Errorf("linha %d usa a chave fora da gravação: %s", l.n, l.texto)
+		}
+	}
+	// O apagar da falha no meio só roda se este script criou o arquivo.
+	limpar := strings.Index(c, "limpar() {")
+	criado := strings.Index(c, "criado=1")
+	if limpar < 0 || criado < 0 || !strings.Contains(c[limpar:criado], `if [ "$criado" -eq 1 ]; then`) {
+		t.Error("o limpar não depende de o script ter criado o arquivo")
+	}
+}
+
+// segredosDeMentira são os arquivos que o gerar-segredos.sh deixou na VPS de
+// mentira (o conteúdo é só para conferir que nada muda).
+var segredosDeMentira = map[string]string{
+	"session-secret": strings.Repeat("1a", 32) + "\n", "device-token-pepper": strings.Repeat("2b", 32) + "\n",
+	"database-url":       "postgres" + "://aurora:" + strings.Repeat("3c", 32) + "@aurora-whisper-postgres:5432/aurora?sslmode=disable\n",
+	"google-client.json": `{"web":{}}` + "\n",
+}
+
+// vpsNoAr monta a VPS de mentira com a pasta segredos/ do gerar-segredos.sh e
+// devolve a cópia do script (numa árvore projeto/deploy/scripts/ de mentira,
+// para uma recusa que falhasse nunca gravar no repositório) e a pasta base.
+func vpsNoAr(t *testing.T, a *ambienteBash) (script, base string) {
+	t.Helper()
+	dir := filepath.Join(a.dir, "projeto", "deploy", "scripts")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	script = filepath.Join(dir, "criar-chave-de-cifra.sh")
+	if err := os.WriteFile(script, []byte(ler(t, criarChaveDeCifra)), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	base = filepath.Join(a.dir, "vps", "aurora-whisper")
+	a.env["AW_BASE"] = posix(base)
+	if err := os.MkdirAll(filepath.Join(base, "segredos"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for n, v := range segredosDeMentira {
+		if err := os.WriteFile(filepath.Join(base, "segredos", n), []byte(v), 0o444); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return script, base
+}
+
+// O caminho feliz: cria SÓ o ai-keys-secret, com 64 hexadecimais e o fim de
+// linha, 0444 na pasta 0700, sem mostrar o valor e sem tocar nos outros. Uma
+// segunda vez recusa, e nada muda.
+func TestVPS_CriarChaveDeCifraCriaSoOArquivoSemMostrar(t *testing.T) {
+	a := novoAmbienteBash(t)
+	script, base := vpsNoAr(t, a)
+	r := a.rodar(script, nil)
+	if r.codigo != 0 {
+		t.Fatalf("falhou (%d): %s", r.codigo, r.tudo())
+	}
+	seg := lerTodos(t, filepath.Join(base, "segredos"))
+	if len(seg) != len(segredosDeMentira)+1 {
+		t.Fatalf("segredos/ tem %d arquivos, quero os %d de antes e o novo: %v", len(seg), len(segredosDeMentira), seg)
+	}
+	for n, v := range segredosDeMentira {
+		if seg[n] != v {
+			t.Errorf("o %s mudou", n)
+		}
+	}
+	nova := seg["ai-keys-secret"]
+	if !regexp.MustCompile(`^[0-9a-f]{64}\n$`).MatchString(nova) {
+		t.Fatalf("o ai-keys-secret não é uma linha de 64 hexadecimais")
+	}
+	valor := strings.TrimSpace(nova)
+	if strings.Contains(r.tudo()+strings.Join(a.chamadas(), "\n"), valor) || strings.Contains(r.tudo(), valor[:16]) {
+		t.Error("o valor aparece na saída")
+	}
+	for _, v := range segredosDeMentira {
+		if strings.Contains(v, valor) {
+			t.Error("a chave de cifra repete outro segredo")
+		}
+	}
+	exigirContem(t, "a saída", r.saida, "OK: chave de cifra em", "Nenhum valor foi mostrado")
+	if r.erro != "" {
+		t.Errorf("stderr no caminho feliz: %q", r.erro)
+	}
+	if sobras, _ := filepath.Glob(filepath.Join(base, "segredos", ".*")); len(sobras) > 0 {
+		t.Errorf("sobrou: %v", sobras)
+	}
+	// Os modos só valem no Linux (o NTFS do Windows não tem 0444 de verdade).
+	if runtime.GOOS != "windows" {
+		for p, quero := range map[string]os.FileMode{filepath.Join(base, "segredos"): 0o700, filepath.Join(base, "segredos", "ai-keys-secret"): 0o444} {
+			info, err := os.Stat(p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if m := info.Mode().Perm(); m != quero {
+				t.Errorf("%s tem modo %o, quero %o", filepath.Base(p), m, quero)
+			}
+		}
+	}
+
+	// De novo: recusa, e nada muda.
+	r2 := a.rodar(script, nil)
+	if r2.codigo == 0 || !strings.Contains(r2.erro, "FALHOU: ja existe") || strings.Contains(r2.tudo(), valor) {
+		t.Fatalf("a segunda vez deveria recusar sem mostrar nada: %d %q", r2.codigo, r2.tudo())
+	}
+	if depois := lerTodos(t, filepath.Join(base, "segredos")); depois["ai-keys-secret"] != nova || len(depois) != len(seg) {
+		t.Error("a segunda vez mudou a pasta")
+	}
+}
+
+// Sem a pasta segredos/ (a VPS nova, que ainda não rodou o gerar-segredos.sh),
+// com a pasta base dentro do deploy/ ou de um repositório git, e com o
+// arquivo já lá (mesmo vazio): recusa sem criar nada.
+func TestVPS_CriarChaveDeCifraRecusaSemCriarNada(t *testing.T) {
+	t.Run("sem a pasta segredos", func(t *testing.T) {
+		a := novoAmbienteBash(t)
+		script, base := vpsNoAr(t, a)
+		if err := os.RemoveAll(filepath.Join(base, "segredos")); err != nil {
+			t.Fatal(err)
+		}
+		r := a.rodar(script, nil)
+		if r.codigo == 0 || !strings.Contains(r.erro, "rode antes o gerar-segredos.sh") {
+			t.Fatalf("deveria recusar: %d %q", r.codigo, r.tudo())
+		}
+		if _, err := os.Stat(filepath.Join(base, "segredos")); err == nil {
+			t.Error("criou a pasta segredos/ (o gerar-segredos.sh recusaria depois)")
+		}
+	})
+	t.Run("o arquivo já existe, vazio", func(t *testing.T) {
+		a := novoAmbienteBash(t)
+		script, base := vpsNoAr(t, a)
+		arquivo := filepath.Join(base, "segredos", "ai-keys-secret")
+		if err := os.WriteFile(arquivo, nil, 0o444); err != nil {
+			t.Fatal(err)
+		}
+		r := a.rodar(script, nil)
+		if r.codigo == 0 || !strings.Contains(r.erro, "FALHOU: ja existe") {
+			t.Fatalf("deveria recusar: %d %q", r.codigo, r.tudo())
+		}
+		if data, err := os.ReadFile(arquivo); err != nil || len(data) != 0 {
+			t.Error("escreveu por cima do arquivo que já existia")
+		}
+	})
+	t.Run("dentro do deploy", func(t *testing.T) {
+		a := novoAmbienteBash(t)
+		script, _ := vpsNoAr(t, a)
+		base := filepath.Join(a.dir, "projeto", "deploy", "aqui")
+		if err := os.MkdirAll(filepath.Join(base, "segredos"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		a.env["AW_BASE"] = posix(base)
+		r := a.rodar(script, nil)
+		if r.codigo == 0 || !strings.Contains(r.erro, "nao pode ficar dentro de") {
+			t.Fatalf("deveria recusar: %d %q", r.codigo, r.tudo())
+		}
+		if _, err := os.Stat(filepath.Join(base, "segredos", "ai-keys-secret")); err == nil {
+			t.Error("criou o arquivo mesmo recusando")
+		}
+	})
+	t.Run("dentro de um repositório git", func(t *testing.T) {
+		a := novoAmbienteBash(t)
+		script, _ := vpsNoAr(t, a)
+		repo := filepath.Join(a.dir, "outro-repo")
+		base := filepath.Join(repo, "aurora")
+		if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(filepath.Join(base, "segredos"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		a.env["AW_BASE"] = posix(base)
+		r := a.rodar(script, nil)
+		if r.codigo == 0 || !strings.Contains(r.erro, "repositorio git") {
+			t.Fatalf("deveria recusar: %d %q", r.codigo, r.tudo())
+		}
+		if _, err := os.Stat(filepath.Join(base, "segredos", "ai-keys-secret")); err == nil {
+			t.Error("criou o arquivo mesmo recusando")
+		}
+	})
+}
+
+// Uma falha depois de criar (aqui, o chmod 0444) apaga o arquivo que o script
+// criou, e só ele: a pasta fica como estava.
+func TestVPS_CriarChaveDeCifraFalhaNoMeioNaoDeixaSobra(t *testing.T) {
+	a := novoAmbienteBash(t)
+	script, base := vpsNoAr(t, a)
+	a.falso("chmod", `if [ "$1" = 0444 ]; then exit 1; fi
+exec "$(dirname "$0")/../ferramentas-reais/chmod" "$@"`)
+	if err := os.MkdirAll(filepath.Join(a.dir, "ferramentas-reais"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(a.dir, "ferramentas-reais", "chmod"),
+		[]byte("#!/usr/bin/env bash\nPATH=\"${PATH#*:}\" exec chmod \"$@\"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	r := a.rodar(script, nil)
+	if r.codigo == 0 {
+		t.Fatalf("deveria falhar com o chmod quebrado: %q", r.tudo())
+	}
+	if !a.chamou("chmod [0444]") {
+		t.Fatal("o chmod de mentira não foi chamado: o teste não valeu")
+	}
+	seg := lerTodos(t, filepath.Join(base, "segredos"))
+	if _, ficou := seg["ai-keys-secret"]; ficou || len(seg) != len(segredosDeMentira) {
+		t.Errorf("depois da falha, segredos/ tem %v", seg)
+	}
+	for n, v := range segredosDeMentira {
+		if seg[n] != v {
+			t.Errorf("a falha mudou o %s", n)
+		}
+	}
 }
 
 // --- backup.sh com programas de mentira -------------------------------------

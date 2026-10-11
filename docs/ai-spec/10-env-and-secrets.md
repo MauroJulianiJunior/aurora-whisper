@@ -23,6 +23,8 @@
 | CONTAS_PERMITIDAS | Sim | **ADR-019:** e-mails que podem entrar na nuvem, separados por vírgula. **F3:** vazia, o servidor não sobe; uma entrada que não é e-mail também não. O `sub` de cada um fica fixado no primeiro login |
 | PROXY_CONFIAVEL | Não | **F3:** o IP (ou a rede CIDR) do proxy que termina o HTTPS na frente do servidor; só dele o `X-Forwarded-For` (o último salto) vale. Vazia, nenhum |
 | PAINEL_DIR | Sim | **F4 (ADR-019):** a pasta do build da nuvem do painel (o app), com o `index.html` (`pnpm build:nuvem`, que sai em `web/dist-nuvem`). O servidor a lê para a memória na subida. Vazia, não é pasta, ou sem o `index.html`: saída 2, sem o caminho na mensagem. No servidor de teste do PC (`teste`, build tag `logindeteste`) também é obrigatória |
+| AI_KEYS_SECRET | Não (ou o `_FILE`) | **ADR-021, C3a:** a chave de cifra das chaves da IA que as pessoas colam no app do celular: 64 caracteres hexadecimais (32 bytes). Sem ela, o servidor sobe **sem** as rotas do ditado no celular (`404`). Ver "A chave de cifra das chaves da IA", abaixo |
+| AI_KEYS_SECRET_FILE | Não | **ADR-021, C3a:** o caminho do arquivo com o `AI_KEYS_SECRET` (o segredo montado no contêiner, `segredos/ai-keys-secret`). É a forma de produção |
 | ASR_CLOUD_PROVIDER | Não | provider. **Não usada na etapa 5** (ADR-019: ASR na nuvem é "depois") |
 | ASR_CLOUD_MODEL | Não | model. **Não usada na etapa 5** |
 | ASR_CLOUD_API_KEY | Condicional | secret. **Não usada na etapa 5** |
@@ -102,6 +104,24 @@
   Tira também as do `config.env` (`PUBLIC_BASE_URL`, `DOMINIO`, `CONTAS_PERMITIDAS`, `B2_BUCKET`,
   `PROXY_CONFIAVEL`) e as `COMPOSE_*`, porque na interpolação o compose lê o ambiente antes do
   `--env-file`, e o `COMPOSE_PROJECT_NAME` vale mais que o `name:` do arquivo (revisão da Parte 2).
+- **A chave de cifra das chaves da IA (ADR-021, C3a, 10-out-2026).** Para ditar pelo celular, a
+  pessoa cola no app a chave de API do provedor de IA **dela** (BYOK), e o servidor a guarda cifrada na
+  `ai_provider_keys`. A chave de cifra é do servidor: `AI_KEYS_SECRET`, ou o arquivo de
+  `AI_KEYS_SECRET_FILE` (a forma de produção; as duas juntas são erro, saída 2, como os outros
+  segredos por arquivo). **É opcional:** sem ela, o `serve` sobe sem as rotas do ditado no celular, que
+  caem no `404` de rota não montada (decisão O), e a linha `servindo` diz `chaves_da_ia=false`. **Com
+  ela, tem de ser exatamente 64 caracteres hexadecimais** (32 bytes; maiúsculas ou minúsculas), numa
+  linha só, e diferente de `SESSION_SECRET` e de `DEVICE_TOKEN_PEPPER`; senão a subida falha com saída
+  2 e a linha `serve: AI_KEYS_SECRET_FILE: ...` (ou `AI_KEYS_SECRET`), que diz o que fazer e **nunca o
+  conteúdo nem o caminho**. A chave de cifra nunca é usada crua: a cifra (AES-256-GCM) usa uma subchave
+  derivada por HKDF-SHA256 com o rótulo `aurora-whisper/ai-keys/v1`, e cada linha guarda um id da chave
+  de cifra (os 8 primeiros bytes de um HMAC-SHA256 dela com o rótulo `aurora-whisper/ai-keys/id/v1`).
+  Trocar o arquivo leva toda chave guardada a `SEM_CHAVE` (a pessoa cola de novo); duas chaves de
+  cifra ao mesmo tempo ficam fora. Ela **nunca entra no banco nem no backup**, e não tem cópia fora da
+  VPS (escolha menor 11): perdê-la faz cada pessoa colar a chave de novo. Na VPS, quem a cria é o
+  `deploy/scripts/criar-chave-de-cifra.sh` (`deploy/README.md`), com a saída suprimida; o compose a
+  monta em `/run/secrets/ai-keys-secret` a partir da C5c. O servidor de teste do PC (`teste`) não a
+  tem: lá, as rotas do ditado no celular são `404`.
 - **O `healthcheck` (F11c).** `aurora-whisper-server healthcheck` faz `GET` no `/api/v1/health/live`
   em `127.0.0.1` (ou no loopback de `HTTP_ADDR`), na porta de `HTTP_ADDR`, com prazo de 3 s, sem proxy e
   sem seguir redirecionamento, e sai com 0 ou 1 (nunca 2, que o Docker reserva): a imagem não tem shell
@@ -148,6 +168,8 @@ DEVICE_TOKEN_PEPPER_FILE=
 GOOGLE_CLIENT_SECRET_FILE=
 CONTAS_PERMITIDAS=
 PAINEL_DIR=
+AI_KEYS_SECRET=
+AI_KEYS_SECRET_FILE=
 ASR_CLOUD_PROVIDER=
 ASR_CLOUD_MODEL=
 ASR_CLOUD_API_KEY=
@@ -175,3 +197,6 @@ LOG_LEVEL=info
 
 A chave de quem usa não é variável deste arquivo: `CONTEXT_API_KEY` e `ASR_CLOUD_API_KEY` acima são
 do operador da cloud, no servidor. A de quem usa entra pela tela de Configurações do painel.
+**ADR-021 (o ditado no celular):** a chave **do PC** continua só no PC. Para ditar pelo celular, a
+pessoa cola **outra** chave no app, e o servidor a guarda cifrada (`AI_KEYS_SECRET_FILE`, acima); ela
+nunca volta ao app (só o fim dela, até 4 caracteres) e nunca vai a log, erro, resposta ou URL.

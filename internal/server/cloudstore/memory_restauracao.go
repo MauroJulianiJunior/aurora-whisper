@@ -77,6 +77,7 @@ func (s *MemoryStore) copiar() *MemoryStore {
 		nu.tombs = maps.Clone(u.tombs)
 		nu.learned = maps.Clone(u.learned)
 		nu.applied = maps.Clone(u.applied)
+		nu.chavesDeIA = clonarChavesDeIA(u.chavesDeIA)
 		nu.events = append([]Event(nil), u.events...)
 		c.users[id] = &nu
 	}

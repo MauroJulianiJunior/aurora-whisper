@@ -385,6 +385,9 @@ func (s *MemoryStore) ApagarDadosDaConta(_ context.Context, userID, keepSessionI
 	u.learned = make(map[string]Learned)
 	u.events = nil
 	u.applied = make(map[string]memApplied)
+	// As chaves da IA (ADR-021, C3a): o DELETE FROM ai_provider_keys do
+	// Postgres.
+	u.chavesDeIA = nil
 	for deviceID := range u.devices {
 		delete(s.devices, deviceID)
 	}
@@ -534,6 +537,15 @@ func (s *MemoryStore) Despejo() string {
 	}
 	for id, d := range s.devices {
 		b.WriteString(id + "|" + d.userID + "|" + d.installID + "|" + d.name + "|" + d.appVersion + "\n")
+	}
+	// As chaves da IA (ADR-021, C3a): os bytes em hex, como o bytea do
+	// Postgres sai no texto, e também crus, para a varredura achar a chave em
+	// claro de qualquer jeito que ela estivesse guardada.
+	for id, u := range s.users {
+		for p, k := range u.chavesDeIA {
+			b.WriteString(id + "|" + p + "|" + key(k.IDDaCifra) + "|" + key(k.Nonce) + "|" + key(k.Cifrado) + "|" +
+				string(k.Cifrado) + "|" + k.Final + "\n")
+		}
 	}
 	return b.String()
 }

@@ -107,6 +107,21 @@ Os nomes de coluna e o formato são desta fatia; o que cada tabela guarda está 
 **`schema_test.go` foi atualizado na mesma fatia**, e ganhou as leituras que dão para fazer sem
 Postgres (abaixo).
 
+## O ditado no celular (ADR-021)
+
+Depois do deploy, as 0001 a 0016 estão em produção, e a regra é a do fim da "Convenção": **só migration
+nova, só aditiva**, uma tabela por arquivo.
+
+| Arquivo | Tabela | O quê |
+|---|---|---|
+| 0017 | `ai_provider_keys` | **C3a (10-out-2026):** a chave de API do provedor de IA colada no app do celular, **só cifrada** (o id da chave de cifra, o nonce, o cifrado com a etiqueta do GCM e o fim de até 4 caracteres que a tela mostra); uma por pessoa e por provedor (`openai`, `groq`, `anthropic`) |
+
+A chave de cifra nunca entra no banco (`AI_KEYS_SECRET_FILE`, `docs/ai-spec/10-env-and-secrets.md`).
+`schema_test.go` lê a 0017 (as colunas, os tamanhos fixos, a lista dos provedores, nenhuma coluna de
+áudio), o `internal/server/pgstore` confere a lista e os tamanhos contra o Go
+(`TestSQL_AsChavesDaIAConferemComA0017`) e cada `CHECK` no Postgres
+(`TestPostgres_AsChavesDaIANoBanco`).
+
 ## Como rodar o `migrate`
 
 É um **subcomando do binário do servidor** (escolha da F1; a ADR e o `05` dizem só "comando próprio do

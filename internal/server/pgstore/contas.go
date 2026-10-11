@@ -100,6 +100,8 @@ var apagarDaConta = []struct{ op, sql string }{
 	{"apagar o aprendido", `DELETE FROM learned_pairs WHERE user_id = $1`},
 	{"apagar o dicionário", `DELETE FROM dictionary_entries WHERE user_id = $1`},
 	{"apagar as preferências", `DELETE FROM user_settings WHERE user_id = $1`},
+	// As chaves da IA do celular (ADR-021, C3a; a 0017), só cifradas.
+	{"apagar as chaves da IA", `DELETE FROM ai_provider_keys WHERE user_id = $1`},
 	{"apagar os pedidos de pareamento", `DELETE FROM pairing_requests WHERE approved_by = $1`},
 	// Os tokens vão junto (device_tokens: ON DELETE CASCADE).
 	{"apagar os aparelhos", `DELETE FROM devices WHERE user_id = $1`},
