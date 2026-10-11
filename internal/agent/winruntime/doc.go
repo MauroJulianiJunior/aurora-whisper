@@ -35,7 +35,7 @@
 //     reescrita aceita.
 //   - polish.go liga o Polish (ADR-016, S4): o Smart continua no laço, e só
 //     a chamada ao provedor roda numa goroutine própria, com prazo de 3,5 s
-//     (até 8 s no texto longo, prazoPolish) contado do começo da resolução;
+//     (até 8 s no texto longo, polish.Prazo) contado do começo da resolução;
 //     o resultado volta por rt.polidos, com uma linha de log sem texto, e o
 //     último motivo de fallback fica em memória para a tela (UltimoPolish).
 //
