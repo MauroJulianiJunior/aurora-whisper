@@ -9,7 +9,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { type OpcoesDaNuvem, itemNuvem, servidorFalsoNuvem } from '../../testes/servidorFalsoNuvem'
 import AppNuvem from '../AppNuvem'
-import { versaoDoAviso } from './aviso'
+import { VERSAO_DO_AVISO } from '../avisoDoDitado'
 import { plataformaFalsa } from './plataformaFalsa'
 
 const espera = { timeout: 5000 }
@@ -26,14 +26,20 @@ afterEach(() => {
 })
 
 type Servidor = ReturnType<typeof servidorFalsoNuvem>
-type Provedores = ('openai' | 'groq' | 'anthropic')[]
 
-const aceiteDe = (provedores: Provedores, versao = versaoDoAviso) => ({ versao, provedores, aceito_em: '2026-10-09T12:00:00.000Z' })
+// O aceite de um servidor que já o tem: o provedor da transcrição, o do Polish
+// (ou nenhum) e a versão do aviso.
+const aceiteDe = (transcricao: 'openai' | 'groq', polish: 'openai' | 'anthropic' | null = null, versao = VERSAO_DO_AVISO) => ({
+  versao,
+  transcricao,
+  polish,
+  aceito_em: '2026-10-09T12:00:00.000Z',
+})
 const chaveDaOpenAI = 'sk-teste-de-mentira-WXYZ'
 
 // pronto: a conta com o aceite da OpenAI e a chave dela.
 const pronto = (extra: NonNullable<OpcoesDaNuvem['ditado']> = {}): OpcoesDaNuvem => ({
-  ditado: { aceite: aceiteDe(['openai']), chaves: { openai: chaveDaOpenAI }, ...extra },
+  ditado: { aceite: aceiteDe('openai'), chaves: { openai: chaveDaOpenAI }, ...extra },
 })
 
 async function abrir(opcoes: OpcoesDaNuvem = {}) {
@@ -62,7 +68,8 @@ const doCaminho = (srv: Servidor, metodo: string, caminho: string) => srv.pedido
 
 async function ligadaComChave(extra: NonNullable<OpcoesDaNuvem['ditado']> = {}, opcoes: OpcoesDaNuvem = {}) {
   const m = await abrir({ ...pronto(extra), ...opcoes })
-  await within(secao()).findByText('Chave terminada em', { exact: false }, espera)
+  // Uma chave (a da voz) ou duas (a do Polish de outro provedor também).
+  await within(secao()).findAllByText('Chave terminada em', { exact: false }, espera)
   return m
 }
 
@@ -88,8 +95,8 @@ describe('o estado', () => {
     expect(within(secao()).queryByRole('button', { name: 'Ligar' })).toBeNull()
   })
 
-  it('o aviso mudou (o aceite é de uma versão velha): "Desligado" e o Ligar, com o motivo', async () => {
-    await abrir({ ditado: { aceite: aceiteDe(['openai'], '2026-01-01'), chaves: { openai: chaveDaOpenAI } } })
+  it('o aviso mudou (o aceite é de uma versão velha, e o servidor diz vigente: false): "Desligado" e o Ligar, com o motivo', async () => {
+    await abrir({ ditado: { aceite: aceiteDe('openai', null, VERSAO_DO_AVISO - 1), chaves: { openai: chaveDaOpenAI } } })
     await within(secao()).findByText('Desligado. O aviso mudou: leia e aceite de novo para ligar.', undefined, espera)
     expect(within(secao()).getByRole('button', { name: 'Ligar' })).toBeTruthy()
     expect(within(secao()).queryByLabelText('Provedor da voz')).toBeNull()
@@ -136,14 +143,13 @@ describe('Ligar', () => {
     })
     await within(secao()).findByText('Ligado desde 10/10/2026.', undefined, espera)
     expect(escritas(srv)).toEqual(['POST /api/v1/dictation/consent', 'PUT /api/v1/dictation/settings'])
-    expect(doCaminho(srv, 'POST', '/api/v1/dictation/consent')[0]!.corpo).toEqual({ versao: versaoDoAviso, provedores: ['groq'] })
+    expect(doCaminho(srv, 'POST', '/api/v1/dictation/consent')[0]!.corpo).toEqual({ versao: VERSAO_DO_AVISO, transcricao: 'groq' })
+    // O corpo das preferências é o do servidor: {transcricao, dica, polish}, e o
+    // modelo vazio é o padrão do provedor novo.
     expect(doCaminho(srv, 'PUT', '/api/v1/dictation/settings')[0]!.corpo).toEqual({
-      provedor: 'groq',
-      modelo: '',
+      transcricao: { provedor: 'groq', modelo: '' },
       dica: false,
-      polish: false,
-      polish_provedor: 'openai',
-      polish_modelo: '',
+      polish: { ligado: false, provedor: 'openai', modelo: '' },
     })
     expect(aviso().textContent).toBe('Ditar pelo celular ligado.')
     // Agora a Groq é o provedor, e falta a chave dela.
@@ -200,7 +206,7 @@ describe('o provedor da voz', () => {
     expect(srv.daConta.preferencias.provedor).toBe('openai')
   })
 
-  it('com o Aceito, o aceite novo mantém a OpenAI, e a troca vale; o modelo volta ao padrão', async () => {
+  it('com o Aceito, o aceite novo é só o da Groq (o da OpenAI sai), e a troca vale; o modelo volta ao padrão da Groq', async () => {
     const { srv } = await ligadaComChave({ preferencias: { modelo: 'gpt-4o-transcribe' } })
     fireEvent.change(seletor('Provedor da voz'), { target: { value: 'groq' } })
     await folha()
@@ -209,13 +215,36 @@ describe('o provedor da voz', () => {
     })
     await waitFor(() => expect(seletor('Provedor da voz').value).toBe('groq'))
     expect(escritas(srv)).toEqual(['POST /api/v1/dictation/consent', 'PUT /api/v1/dictation/settings'])
-    expect(doCaminho(srv, 'POST', '/api/v1/dictation/consent')[0]!.corpo).toEqual({ versao: versaoDoAviso, provedores: ['openai', 'groq'] })
-    expect(srv.daConta.preferencias).toMatchObject({ provedor: 'groq', modelo: '' })
+    // O servidor guarda dois lugares (a transcrição e o Polish) e cada aceite
+    // substitui o anterior: o que vale é o que a folha mostrou.
+    expect(doCaminho(srv, 'POST', '/api/v1/dictation/consent')[0]!.corpo).toEqual({ versao: VERSAO_DO_AVISO, transcricao: 'groq' })
+    expect(srv.daConta.aceite).toMatchObject({ transcricao: 'groq', polish: null })
+    expect(doCaminho(srv, 'PUT', '/api/v1/dictation/settings')[0]!.corpo).toMatchObject({ transcricao: { provedor: 'groq', modelo: '' } })
+    expect(srv.daConta.preferencias).toMatchObject({ provedor: 'groq', modelo: 'whisper-large-v3-turbo' })
     await within(secao()).findByText('Chave da Groq', undefined, espera)
   })
 
-  it('um provedor que já está no aceite troca direto, sem folha', async () => {
-    const { srv } = await ligadaComChave({ aceite: aceiteDe(['openai', 'groq']) })
+  it('com o Polish ligado, o aceite novo da troca da voz leva também o provedor do Polish', async () => {
+    const { srv } = await ligadaComChave({
+      aceite: aceiteDe('openai', 'anthropic'),
+      preferencias: { polish: true, polish_provedor: 'anthropic', polish_modelo: 'claude-haiku-4-5' },
+      chaves: { openai: chaveDaOpenAI, anthropic: 'sk-ant-teste-de-mentira-ANTH' },
+    })
+    fireEvent.change(seletor('Provedor da voz'), { target: { value: 'groq' } })
+    const f = await folha()
+    expect(f.textContent).toContain('O Polish que você está ligando: o texto do ditado, para Anthropic')
+    await act(async () => {
+      fireEvent.click(aceito())
+    })
+    await waitFor(() => expect(seletor('Provedor da voz').value).toBe('groq'))
+    expect(doCaminho(srv, 'POST', '/api/v1/dictation/consent')[0]!.corpo).toEqual({ versao: VERSAO_DO_AVISO, transcricao: 'groq', polish: 'anthropic' })
+    expect(srv.daConta.preferencias).toMatchObject({ provedor: 'groq', polish: true, polish_provedor: 'anthropic', polish_modelo: 'claude-haiku-4-5' })
+  })
+
+  it('um provedor que já está no aceite troca direto, sem folha (o aceite cobre a transcrição e o Polish)', async () => {
+    // A Groq na voz e a OpenAI no Polish: a voz da conta é a OpenAI, que o
+    // aceite cobre pelo lugar do Polish, e a troca para a Groq também.
+    const { srv } = await ligadaComChave({ aceite: aceiteDe('groq', 'openai') })
     fireEvent.change(seletor('Provedor da voz'), { target: { value: 'groq' } })
     await waitFor(() => expect(seletor('Provedor da voz').value).toBe('groq'))
     expect(screen.queryByRole('dialog')).toBeNull()
@@ -223,7 +252,7 @@ describe('o provedor da voz', () => {
   })
 
   it('o servidor que recusa por falta de aceite (SEM_ACEITE no PUT) abre a folha; aceitando, o PUT é refeito', async () => {
-    const { srv } = await ligadaComChave({ aceite: aceiteDe(['openai', 'groq']) })
+    const { srv } = await ligadaComChave({ aceite: aceiteDe('groq', 'openai') })
     // O aviso mudou em outro aparelho: a tela ainda acha que vale.
     srv.envelhecerAceitePorFora()
     fireEvent.change(seletor('Provedor da voz'), { target: { value: 'groq' } })
@@ -234,13 +263,13 @@ describe('o provedor da voz', () => {
     })
     await waitFor(() => expect(seletor('Provedor da voz').value).toBe('groq'))
     expect(escritas(srv)).toEqual(['PUT /api/v1/dictation/settings', 'POST /api/v1/dictation/consent', 'PUT /api/v1/dictation/settings'])
-    expect(doCaminho(srv, 'PUT', '/api/v1/dictation/settings').map((x) => x.corpo?.provedor)).toEqual(['groq', 'groq'])
+    expect(doCaminho(srv, 'PUT', '/api/v1/dictation/settings').map((x) => (x.corpo?.transcricao as { provedor: string }).provedor)).toEqual(['groq', 'groq'])
     // O aceite que vale agora é o de hoje, só da Groq (o velho não conta).
-    expect(srv.daConta.aceite).toMatchObject({ versao: versaoDoAviso, provedores: ['groq'] })
+    expect(srv.daConta.aceite).toMatchObject({ versao: VERSAO_DO_AVISO, transcricao: 'groq', polish: null })
   })
 
   it('SEM_ACEITE no PUT e "Agora não": nada é gravado, e a tela passa a dizer o que o servidor diz (o aviso mudou)', async () => {
-    const { srv } = await ligadaComChave({ aceite: aceiteDe(['openai', 'groq']) })
+    const { srv } = await ligadaComChave({ aceite: aceiteDe('groq', 'openai') })
     srv.envelhecerAceitePorFora()
     fireEvent.change(seletor('Provedor da voz'), { target: { value: 'groq' } })
     await folha()
@@ -255,7 +284,7 @@ describe('o provedor da voz', () => {
   })
 
   it('o erro de salvar é uma frase nossa, nunca a do servidor', async () => {
-    const { srv } = await ligadaComChave({ aceite: aceiteDe(['openai', 'groq']) })
+    const { srv } = await ligadaComChave({ aceite: aceiteDe('groq', 'openai') })
     srv.interceptar((x) =>
       x.caminho === '/api/v1/dictation/settings' ? new Response(JSON.stringify({ error: { message: 'deadlock em dictation_settings' } }), { status: 500 }) : undefined,
     )
@@ -323,6 +352,22 @@ describe('a chave', () => {
     expect(doCaminho(srv, 'PUT', '/api/v1/ai-keys/openai')).toHaveLength(1)
   })
 
+  it('a chave que o servidor guardava e já não decifra (colar_de_novo): a seção pede a chave de novo, e colá-la volta ao normal', async () => {
+    const { srv } = await abrir(pronto({ chaves: {}, colarDeNovo: ['openai'] }))
+    await within(secao()).findByLabelText('Chave da OpenAI', undefined, espera)
+    // Não é "Nenhuma chave guardada": havia uma, e o servidor não a lê mais.
+    expect(within(secao()).getByText('A chave guardada não vale mais neste servidor. Cole a chave de novo.')).toBeTruthy()
+    expect(within(secao()).queryByText('Nenhuma chave guardada.')).toBeNull()
+    // Sem chave que valha, o campo está à mão (e sem Trocar nem Remover), e a lista de modelos nem é pedida.
+    expect(within(secao()).queryByRole('button', { name: 'Trocar a chave da OpenAI' })).toBeNull()
+    expect(leituras(srv, '/api/v1/ai-keys/openai/models')).toBe(0)
+    await guardar('sk-teste-do-celular-NOVA')
+    await within(secao()).findByText('Chave terminada em', { exact: false }, espera)
+    expect(within(secao()).queryByText('A chave guardada não vale mais neste servidor. Cole a chave de novo.')).toBeNull()
+    expect(srv.daConta.colarDeNovo).toEqual([])
+    expect(srv.daConta.chaves.openai).toBe('sk-teste-do-celular-NOVA')
+  })
+
   it('com a chave guardada: "Chave terminada em WXYZ", com Trocar e Remover, e nada da chave além do final', async () => {
     await ligadaComChave()
     expect(within(secao()).getByText('Chave terminada em', { exact: false }).textContent).toBe('Chave terminada em WXYZ.')
@@ -338,9 +383,18 @@ describe('a chave', () => {
       x.caminho === '/api/v1/dictation' && x.metodo === 'GET'
         ? new Response(
             JSON.stringify({
-              preferencias: { provedor: 'openai', modelo: '', dica: false, polish: false, polish_provedor: 'openai', polish_modelo: '' },
-              aceite: aceiteDe(['openai']),
-              chaves: { openai: { configurada: true, final: 'sk-teste-inteira-1234567890' } },
+              aviso: { versao: VERSAO_DO_AVISO },
+              preferencias: {
+                transcricao: { provedor: 'openai', modelo: 'gpt-4o-mini-transcribe' },
+                dica: false,
+                polish: { ligado: false, provedor: 'openai', modelo: '' },
+              },
+              aceite: { ...aceiteDe('openai'), vigente: true },
+              chaves: [
+                { provedor: 'openai', configurada: true, final: 'sk-teste-inteira-1234567890', colar_de_novo: false },
+                { provedor: 'groq', configurada: false, final: '', colar_de_novo: false },
+                { provedor: 'anthropic', configurada: false, final: '', colar_de_novo: false },
+              ],
             }),
           )
         : undefined,
@@ -510,13 +564,24 @@ describe('o modelo da voz', () => {
     expect(leituras(srv, '/api/v1/ai-keys/openai/models')).toBe(0)
   })
 
-  it('com a chave: o padrão do provedor e os modelos de voz da conta (os de texto ficam de fora)', async () => {
+  it('com a chave: o padrão do provedor e os modelos de voz da conta (os de texto ficam de fora); a conta mostra o modelo de verdade', async () => {
     const { srv } = await ligadaComChave()
     await waitFor(() =>
       expect(Array.from(seletor('Modelo da voz').options, (o) => o.textContent)).toEqual(['Padrão do provedor', 'gpt-4o-transcribe', 'gpt-4o-mini-transcribe', 'whisper-1']),
     )
-    expect(seletor('Modelo da voz').value).toBe('')
+    // O servidor guarda o modelo padrão do provedor pelo nome (nunca "vazio").
+    expect(seletor('Modelo da voz').value).toBe('gpt-4o-mini-transcribe')
     expect(leituras(srv, '/api/v1/ai-keys/openai/models')).toBe(1)
+  })
+
+  it('"Padrão do provedor" pede o padrão ao servidor (modelo vazio no PUT), e o que volta é o nome dele', async () => {
+    const { srv } = await ligadaComChave({ preferencias: { modelo: 'gpt-4o-transcribe' } })
+    await waitFor(() => expect(seletor('Modelo da voz').options.length).toBe(4))
+    expect(seletor('Modelo da voz').value).toBe('gpt-4o-transcribe')
+    fireEvent.change(seletor('Modelo da voz'), { target: { value: '' } })
+    await waitFor(() => expect(srv.daConta.preferencias.modelo).toBe('gpt-4o-mini-transcribe'))
+    expect(doCaminho(srv, 'PUT', '/api/v1/dictation/settings')[0]!.corpo).toMatchObject({ transcricao: { provedor: 'openai', modelo: '' } })
+    await waitFor(() => expect(seletor('Modelo da voz').value).toBe('gpt-4o-mini-transcribe'))
   })
 
   it('escolher o modelo salva na hora, sem pedir o aceite de novo', async () => {
@@ -536,7 +601,7 @@ describe('o modelo da voz', () => {
   })
 
   it('a Groq lista os whisper dela', async () => {
-    await ligadaComChave({ aceite: aceiteDe(['groq']), preferencias: { provedor: 'groq' }, chaves: { groq: 'gsk-teste-de-mentira-GROQ' } })
+    await ligadaComChave({ aceite: aceiteDe('groq'), preferencias: { provedor: 'groq' }, chaves: { groq: 'gsk-teste-de-mentira-GROQ' } })
     await waitFor(() => expect(Array.from(seletor('Modelo da voz').options, (o) => o.textContent)).toEqual(['Padrão do provedor', 'whisper-large-v3-turbo', 'whisper-large-v3']))
   })
 
@@ -547,7 +612,9 @@ describe('o modelo da voz', () => {
     await screen.findByRole('button', { name: /Um ditado/ }, espera)
     fireEvent.click(screen.getByRole('button', { name: 'Configurações' }))
     await within(secao()).findByText('Não deu para ler os modelos. Vale o padrão do provedor.', undefined, espera)
-    expect(Array.from(seletor('Modelo da voz').options, (o) => o.textContent)).toEqual(['Padrão do provedor'])
+    // O modelo que a conta tem (o padrão do servidor, pelo nome) continua à mão.
+    expect(Array.from(seletor('Modelo da voz').options, (o) => o.textContent)).toEqual(['Padrão do provedor', 'gpt-4o-mini-transcribe'])
+    expect(seletor('Modelo da voz').value).toBe('gpt-4o-mini-transcribe')
   })
 })
 
@@ -559,7 +626,7 @@ describe('a dica', () => {
     expect(secao().textContent).toContain('Eles vão ao provedor junto com a voz, em todo ditado, e podem ser nomes de clientes ou de outras pessoas.')
     fireEvent.click(dica)
     await waitFor(() => expect(srv.daConta.preferencias.dica).toBe(true))
-    expect(doCaminho(srv, 'PUT', '/api/v1/dictation/settings')[0]!.corpo).toMatchObject({ dica: true, polish: false })
+    expect(doCaminho(srv, 'PUT', '/api/v1/dictation/settings')[0]!.corpo).toMatchObject({ dica: true, polish: { ligado: false } })
     await waitFor(() => expect(within(secao()).getByRole<HTMLInputElement>('checkbox', { name: 'Mandar os termos aprendidos como dica' }).checked).toBe(true))
     fireEvent.click(within(secao()).getByRole('checkbox', { name: 'Mandar os termos aprendidos como dica' }))
     await waitFor(() => expect(srv.daConta.preferencias.dica).toBe(false))
@@ -575,16 +642,58 @@ describe('o Polish', () => {
     expect(within(secao()).queryByLabelText('Modelo do Polish')).toBeNull()
   })
 
-  it('ligar com a OpenAI (já no aceite) salva na hora: a mesma chave serve, e os modelos são os de texto', async () => {
+  it('marcar com a OpenAI (já no aceite) mostra o provedor, a chave e o modelo, sem escrever na conta: o servidor só liga o Polish com um modelo', async () => {
     const { srv } = await ligadaComChave()
-    fireEvent.click(within(secao()).getByRole('checkbox', { name: 'Organizar o texto com o Polish' }))
+    const caixa = () => within(secao()).getByRole<HTMLInputElement>('checkbox', { name: 'Organizar o texto com o Polish' })
+    fireEvent.click(caixa())
     await within(secao()).findByLabelText('Provedor do Polish', undefined, espera)
     expect(screen.queryByRole('dialog')).toBeNull()
-    expect(srv.daConta.preferencias).toMatchObject({ polish: true, polish_provedor: 'openai' })
+    // A caixa fica marcada aqui; a conta continua com o Polish desligado, e nada foi escrito.
+    expect(caixa().checked).toBe(true)
+    expect(escritas(srv)).toEqual([])
+    expect(srv.daConta.preferencias.polish).toBe(false)
     expect(seletor('Provedor do Polish').value).toBe('openai')
     expect(Array.from(seletor('Provedor do Polish').options, (o) => o.textContent)).toEqual(['OpenAI', 'Anthropic'])
     expect(within(secao()).getByText('A chave da OpenAI, acima, também serve ao Polish.')).toBeTruthy()
-    await waitFor(() => expect(Array.from(seletor('Modelo do Polish').options, (o) => o.textContent)).toEqual(['Padrão do provedor', 'gpt-4o', 'gpt-4o-mini']))
+    // Os modelos são os de texto, e não há "Padrão do provedor": o Polish não tem modelo padrão.
+    await waitFor(() => expect(Array.from(seletor('Modelo do Polish').options, (o) => o.textContent)).toEqual(['Escolha um modelo', 'gpt-4o', 'gpt-4o-mini']))
+    expect(seletor('Modelo do Polish').value).toBe('')
+    expect(seletor('Modelo do Polish').options[0]!.disabled).toBe(true)
+    expect(within(secao()).getByText('Escolha o modelo para o Polish agir nos seus ditados.')).toBeTruthy()
+
+    // Escolhido o modelo, a conta passa a ter o Polish ligado, com ele.
+    fireEvent.change(seletor('Modelo do Polish'), { target: { value: 'gpt-4o-mini' } })
+    await waitFor(() => expect(srv.daConta.preferencias).toMatchObject({ polish: true, polish_provedor: 'openai', polish_modelo: 'gpt-4o-mini' }))
+    expect(doCaminho(srv, 'PUT', '/api/v1/dictation/settings')[0]!.corpo).toEqual({
+      transcricao: { provedor: 'openai', modelo: 'gpt-4o-mini-transcribe' },
+      dica: false,
+      polish: { ligado: true, provedor: 'openai', modelo: 'gpt-4o-mini' },
+    })
+    expect(escritas(srv)).toEqual(['PUT /api/v1/dictation/settings'])
+    await waitFor(() => expect(seletor('Modelo do Polish').value).toBe('gpt-4o-mini'))
+    // Com o modelo escolhido, o "Escolha um modelo" sai da lista (que a tela lê de novo).
+    await waitFor(() => expect(Array.from(seletor('Modelo do Polish').options, (o) => o.textContent)).toEqual(['gpt-4o', 'gpt-4o-mini']))
+    expect(caixa().checked).toBe(true)
+  })
+
+  it('desmarcar o Polish que ainda não tem modelo também não escreve nada, e some o que a caixa mostrou', async () => {
+    const { srv } = await ligadaComChave()
+    const caixa = () => within(secao()).getByRole<HTMLInputElement>('checkbox', { name: 'Organizar o texto com o Polish' })
+    fireEvent.click(caixa())
+    await within(secao()).findByLabelText('Provedor do Polish', undefined, espera)
+    fireEvent.click(caixa())
+    await waitFor(() => expect(within(secao()).queryByLabelText('Provedor do Polish')).toBeNull())
+    expect(caixa().checked).toBe(false)
+    expect(escritas(srv)).toEqual([])
+  })
+
+  it('marcar um Polish que já teve modelo (desligado depois) liga na hora, com o modelo de antes', async () => {
+    const { srv } = await ligadaComChave({ preferencias: { polish_modelo: 'gpt-4o' } })
+    fireEvent.click(within(secao()).getByRole('checkbox', { name: 'Organizar o texto com o Polish' }))
+    await within(secao()).findByLabelText('Provedor do Polish', undefined, espera)
+    expect(escritas(srv)).toEqual(['PUT /api/v1/dictation/settings'])
+    expect(srv.daConta.preferencias).toMatchObject({ polish: true, polish_provedor: 'openai', polish_modelo: 'gpt-4o' })
+    await waitFor(() => expect(seletor('Modelo do Polish').value).toBe('gpt-4o'))
   })
 
   it('ligar com um provedor fora do aceite abre a folha com o bloco dele; sem o Aceito, continua desligado', async () => {
@@ -602,7 +711,7 @@ describe('o Polish', () => {
   })
 
   it('trocar o provedor do Polish para a Anthropic reabre a folha; aceitando, pede a chave dela, e o aceite leva os dois', async () => {
-    const { srv } = await ligadaComChave({ preferencias: { polish: true } })
+    const { srv } = await ligadaComChave({ preferencias: { polish: true, polish_modelo: 'gpt-4o' } })
     await within(secao()).findByLabelText('Provedor do Polish', undefined, espera)
     fireEvent.change(seletor('Provedor do Polish'), { target: { value: 'anthropic' } })
     await folha()
@@ -610,8 +719,12 @@ describe('o Polish', () => {
       fireEvent.click(aceito())
     })
     await within(secao()).findByText('Chave da Anthropic', undefined, espera)
-    expect(doCaminho(srv, 'POST', '/api/v1/dictation/consent')[0]!.corpo).toEqual({ versao: versaoDoAviso, provedores: ['openai', 'anthropic'] })
-    expect(srv.daConta.preferencias).toMatchObject({ polish: true, polish_provedor: 'anthropic', polish_modelo: '' })
+    expect(doCaminho(srv, 'POST', '/api/v1/dictation/consent')[0]!.corpo).toEqual({ versao: VERSAO_DO_AVISO, transcricao: 'openai', polish: 'anthropic' })
+    // O modelo é o do provedor antigo e sai; sem modelo o servidor não liga o
+    // Polish, então a conta guarda o provedor novo com o Polish desligado, e a
+    // tela continua marcada, esperando o modelo.
+    expect(srv.daConta.preferencias).toMatchObject({ polish: false, polish_provedor: 'anthropic', polish_modelo: '' })
+    expect(within(secao()).getByRole<HTMLInputElement>('checkbox', { name: 'Organizar o texto com o Polish' }).checked).toBe(true)
     expect(within(secao()).getByText('Nenhuma chave guardada.')).toBeTruthy()
 
     // A chave da Anthropic é colada ali, com o mesmo cuidado.
@@ -624,14 +737,38 @@ describe('o Polish', () => {
     expect(doCaminho(srv, 'PUT', '/api/v1/ai-keys/anthropic')[0]!.corpo).toEqual({ chave: 'sk-ant-teste-do-polish-QRST' })
     expect(document.body.textContent).not.toContain('sk-ant-teste-do-polish')
     await waitFor(() => expect(within(secao()).getAllByText('Chave terminada em', { exact: false })).toHaveLength(2))
+
+    // Com a chave, vêm os modelos dela; escolhido um, o Polish liga na conta.
+    await waitFor(() => expect(Array.from(seletor('Modelo do Polish').options, (o) => o.textContent)).toEqual(['Escolha um modelo', 'claude-haiku-4-5', 'claude-sonnet-4-5']))
+    fireEvent.change(seletor('Modelo do Polish'), { target: { value: 'claude-haiku-4-5' } })
+    await waitFor(() => expect(srv.daConta.preferencias).toMatchObject({ polish: true, polish_provedor: 'anthropic', polish_modelo: 'claude-haiku-4-5' }))
   })
 
   it('desligar o Polish salva na hora', async () => {
-    const { srv } = await ligadaComChave({ preferencias: { polish: true } })
+    const { srv } = await ligadaComChave({ preferencias: { polish: true, polish_modelo: 'gpt-4o' } })
     await within(secao()).findByLabelText('Provedor do Polish', undefined, espera)
     fireEvent.click(within(secao()).getByRole('checkbox', { name: 'Organizar o texto com o Polish' }))
     await waitFor(() => expect(within(secao()).queryByLabelText('Provedor do Polish')).toBeNull())
-    expect(srv.daConta.preferencias.polish).toBe(false)
+    // Desligado, o modelo fica guardado (desligar não é apagar a escolha).
+    expect(srv.daConta.preferencias).toMatchObject({ polish: false, polish_modelo: 'gpt-4o' })
+    expect(doCaminho(srv, 'PUT', '/api/v1/dictation/settings')[0]!.corpo).toMatchObject({ polish: { ligado: false, modelo: 'gpt-4o' } })
+  })
+
+  it('o Polish ligado na conta abre marcado, com o modelo dela', async () => {
+    await ligadaComChave({ preferencias: { polish: true, polish_modelo: 'gpt-4o' } })
+    expect(within(secao()).getByRole<HTMLInputElement>('checkbox', { name: 'Organizar o texto com o Polish' }).checked).toBe(true)
+    await waitFor(() => expect(seletor('Modelo do Polish').value).toBe('gpt-4o'))
+  })
+
+  it('o Polish sem modelo na lista da conta: a ajuda diz que não há modelo, sem prometer um padrão que o Polish não tem', async () => {
+    const srv = servidorFalsoNuvem([itemNuvem({ id: 'd1', created_at: new Date(2026, 9, 9, 14).toISOString(), final_text: 'Um ditado.' })], pronto())
+    srv.interceptar((x) => (x.caminho === '/api/v1/ai-keys/openai/models' ? new Response(JSON.stringify({ error: { message: 'x' } }), { status: 502 }) : undefined))
+    render(<AppNuvem buscar={srv.buscar} irPara={vi.fn()} plataformaDeDitar={plataformaFalsa().plataforma} />)
+    await screen.findByRole('button', { name: /Um ditado/ }, espera)
+    fireEvent.click(screen.getByRole('button', { name: 'Configurações' }))
+    fireEvent.click(await within(secao()).findByRole('checkbox', { name: 'Organizar o texto com o Polish' }, espera))
+    await within(secao()).findAllByText('Não deu para ler os modelos. Tente de novo mais tarde.', undefined, espera)
+    expect(Array.from(seletor('Modelo do Polish').options, (o) => o.textContent)).toEqual(['Escolha um modelo'])
   })
 })
 

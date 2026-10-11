@@ -7,25 +7,39 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ErroDaApi, ForaDoAr, SemSessao } from '../../api'
+import { VERSAO_DO_AVISO } from '../avisoDoDitado'
+import type { ClienteNuvem } from '../cliente'
 import type { Aceite } from './estado'
-import { versaoDoAviso } from './aviso'
 import { Folha, type PedidoDeAceite, type ResultadoDoAceite } from './folha'
 import { FolhaDoAceite } from './FolhaDoAceite'
 
 afterEach(cleanup)
 
-type Provedores = Parameters<ConstructorParameters<typeof Folha>[0]['aceitarAviso']>[1]
+type Aceitar = ClienteNuvem['aceitarAviso']
 
-function montar(aceitar?: (versao: string, provedores: Provedores) => Promise<Aceite>) {
-  const aceitarAviso = vi.fn(aceitar ?? (async (versao: string, provedores: Provedores): Promise<Aceite> => ({ versao, provedores: [...provedores], aceito_em: '' })))
-  const folha = new Folha({ aceitarAviso })
+// O aceite que o servidor devolve ao gravar (a folha só espera que ele diga que
+// gravou).
+const gravado = (versao: number, transcricao: Aceite['transcricao'], polish: Aceite['polish']): Aceite => ({
+  versao,
+  transcricao,
+  polish,
+  aceito_em: '',
+  vigente: true,
+})
+
+// montar: o cliente e o "recarregar" são dublês (o recarregar é o que o app faz
+// com o AVISO_DESATUALIZADO).
+function montar(aceitar?: Aceitar) {
+  const aceitarAviso = vi.fn<Aceitar>(aceitar ?? (async (versao, transcricao, polish) => gravado(versao, transcricao, polish)))
+  const recarregar = vi.fn()
+  const folha = new Folha({ aceitarAviso }, recarregar)
   render(
     <>
       <button type="button">Ditar</button>
       <FolhaDoAceite folha={folha} />
     </>,
   )
-  return { folha, aceitarAviso }
+  return { folha, aceitarAviso, recarregar }
 }
 
 // abrir pede a folha e devolve a promessa do resultado, dentro de um objeto:
@@ -34,7 +48,7 @@ function montar(aceitar?: (versao: string, provedores: Provedores) => Promise<Ac
 async function abrir(folha: Folha, pedido: Partial<PedidoDeAceite> = {}) {
   let resultado!: Promise<ResultadoDoAceite | null>
   await act(async () => {
-    resultado = folha.pedirAceite({ voz: 'openai', jaAceitos: [], ...pedido })
+    resultado = folha.pedirAceite({ voz: 'openai', ...pedido })
   })
   return { resultado }
 }
@@ -136,24 +150,28 @@ describe('Aceito', () => {
       fireEvent.click(aceito())
     })
     expect(aceitarAviso).toHaveBeenCalledTimes(1)
-    expect(aceitarAviso).toHaveBeenCalledWith(versaoDoAviso, ['openai'])
+    // A versão do aviso do app (a única, a VERSAO_DO_AVISO), a transcrição e,
+    // sem Polish na folha, null.
+    expect(aceitarAviso).toHaveBeenCalledWith(VERSAO_DO_AVISO, 'openai', null)
     expect(await resultado).toEqual({ voz: 'openai' })
     expect(folhaNaTela()).toBeNull()
   })
 
-  it('o aceite novo mantém os provedores que já valiam', async () => {
+  it('o aceite é só o que a folha mostrou: a voz que ela mostra, e nada do que valia antes', async () => {
+    // O servidor guarda dois lugares (a transcrição e o Polish) e cada aceite
+    // novo substitui o anterior: trocar para a Groq aceita a Groq.
     const { folha, aceitarAviso } = montar()
-    const { resultado } = await abrir(folha, { voz: 'groq', jaAceitos: ['openai'] })
+    const { resultado } = await abrir(folha, { voz: 'groq' })
     await act(async () => {
       fireEvent.click(aceito())
     })
-    expect(aceitarAviso).toHaveBeenCalledWith(versaoDoAviso, ['openai', 'groq'])
+    expect(aceitarAviso).toHaveBeenCalledWith(VERSAO_DO_AVISO, 'groq', null)
     expect(await resultado).toEqual({ voz: 'groq' })
   })
 
   it('ligando o Polish: mostra o bloco do provedor dele, e o aceite leva os dois', async () => {
     const { folha, aceitarAviso } = montar()
-    const { resultado } = await abrir(folha, { voz: 'openai', polish: 'anthropic', jaAceitos: ['openai'] })
+    const { resultado } = await abrir(folha, { voz: 'openai', polish: 'anthropic' })
     const t = screen.getByRole('dialog').textContent!
     expect(t).toContain('O Polish que você está ligando: o texto do ditado, para Anthropic')
     expect(t).toContain('Anthropic. Ela diz que pode guardar o texto por até 30 dias')
@@ -162,18 +180,18 @@ describe('Aceito', () => {
     await act(async () => {
       fireEvent.click(aceito())
     })
-    expect(aceitarAviso).toHaveBeenCalledWith(versaoDoAviso, ['openai', 'anthropic'])
+    expect(aceitarAviso).toHaveBeenCalledWith(VERSAO_DO_AVISO, 'openai', 'anthropic')
     expect(await resultado).toEqual({ voz: 'openai' })
   })
 
-  it('o mesmo provedor da voz e do Polish tem um bloco só, e o aceite não repete', async () => {
+  it('o mesmo provedor da voz e do Polish tem um bloco só, e o aceite leva o provedor nos dois lugares', async () => {
     const { folha, aceitarAviso } = montar()
     const { resultado } = await abrir(folha, { voz: 'openai', polish: 'openai' })
     expect(screen.getAllByText(/^OpenAI\.$/)).toHaveLength(1)
     await act(async () => {
       fireEvent.click(aceito())
     })
-    expect(aceitarAviso).toHaveBeenCalledWith(versaoDoAviso, ['openai'])
+    expect(aceitarAviso).toHaveBeenCalledWith(VERSAO_DO_AVISO, 'openai', 'openai')
     await resultado
   })
 
@@ -182,7 +200,7 @@ describe('Aceito', () => {
     const { folha, aceitarAviso } = montar(
       () =>
         new Promise((resolver) => {
-          terminar = () => resolver({ versao: versaoDoAviso, provedores: ['openai'], aceito_em: '' })
+          terminar = () => resolver(gravado(VERSAO_DO_AVISO, 'openai', null))
         }),
     )
     const { resultado } = await abrir(folha)
@@ -275,7 +293,7 @@ describe('a escolha do provedor da voz (o primeiro uso)', () => {
     await act(async () => {
       fireEvent.click(aceito())
     })
-    expect(aceitarAviso).toHaveBeenCalledWith(versaoDoAviso, ['groq'])
+    expect(aceitarAviso).toHaveBeenCalledWith(VERSAO_DO_AVISO, 'groq', null)
     expect(await resultado).toEqual({ voz: 'groq' })
   })
 })
@@ -283,7 +301,7 @@ describe('a escolha do provedor da voz (o primeiro uso)', () => {
 describe('só ler o aviso', () => {
   it('quem já aceitou relê: só Fechar, e nada é gravado', async () => {
     const { folha, aceitarAviso } = montar()
-    const { resultado } = await abrir(folha, { somenteLer: true, jaAceitos: ['openai'] })
+    const { resultado } = await abrir(folha, { somenteLer: true })
     expect(within(screen.getByRole('dialog')).getAllByRole('button').map((b) => b.textContent)).toEqual(['Fechar'])
     expect(screen.getByRole('dialog').textContent).toContain('Você já aceitou este aviso')
     expect(screen.getByRole('dialog').textContent).not.toContain('Se você tocar em "Agora não"')
@@ -298,9 +316,9 @@ describe('só ler o aviso', () => {
 describe('quando o aceite não chega ao servidor', () => {
   it('sem rede: a folha fica, com a frase, e dá para tentar de novo', async () => {
     let falhar = true
-    const { folha, aceitarAviso } = montar(async (versao, provedores) => {
+    const { folha, aceitarAviso } = montar(async (versao, transcricao, polish) => {
       if (falhar) throw new ForaDoAr()
-      return { versao, provedores: [...provedores], aceito_em: '' }
+      return gravado(versao, transcricao, polish)
     })
     const { resultado } = await abrir(folha)
     await act(async () => {
@@ -359,6 +377,37 @@ describe('quando o aceite não chega ao servidor', () => {
     expect(await resultado).toBeNull()
     expect(folhaNaTela()).toBeNull()
     expect(semSessao).toHaveBeenCalledTimes(1)
+  })
+
+  it('o aviso que o app mostrou não é o atual (AVISO_DESATUALIZADO, 409): a folha fecha sem aceite e o app recarrega', async () => {
+    const velho = new ErroDaApi(409, 'o aviso que o app mostrou não é o atual')
+    velho.codigo = 'AVISO_DESATUALIZADO'
+    const { folha, aceitarAviso, recarregar } = montar(async () => {
+      throw velho
+    })
+    const { resultado } = await abrir(folha)
+    expect(recarregar).not.toHaveBeenCalled()
+    await act(async () => {
+      fireEvent.click(aceito())
+    })
+    expect(aceitarAviso).toHaveBeenCalledTimes(1)
+    // Não é aceite, e não fica uma folha com o texto velho esperando outro toque.
+    expect(await resultado).toBeNull()
+    expect(folhaNaTela()).toBeNull()
+    expect(recarregar).toHaveBeenCalledTimes(1)
+  })
+
+  it('o 409 que não diz AVISO_DESATUALIZADO não recarrega: é um erro como os outros', async () => {
+    const { folha, recarregar } = montar(async () => {
+      throw new ErroDaApi(409, 'x')
+    })
+    await abrir(folha)
+    await act(async () => {
+      fireEvent.click(aceito())
+    })
+    expect(screen.getByRole('alert').textContent).toBe('Não deu para guardar o aceite. Tente de novo.')
+    expect(folhaNaTela()).not.toBeNull()
+    expect(recarregar).not.toHaveBeenCalled()
   })
 })
 

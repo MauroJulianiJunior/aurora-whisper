@@ -15,7 +15,7 @@ function api(status: number, codigo?: string, esperaSeg?: number): ErroDaApi {
 describe('a falha do envio, pelo código', () => {
   const tabela: [string, unknown, Partial<ErroDoDitado>][] = [
     ['SEM_ACEITE', api(403, 'SEM_ACEITE'), { tipo: 'sem-aceite', retem: true, vai: 'aceite' }],
-    ['SEM_CHAVE', api(403, 'SEM_CHAVE'), { tipo: 'sem-chave', frase: 'Falta a chave do provedor.', retem: true, vai: 'configuracoes' }],
+    ['SEM_CHAVE', api(409, 'SEM_CHAVE'), { tipo: 'sem-chave', frase: 'Falta a chave do provedor.', retem: true, vai: 'configuracoes' }],
     ['UM_POR_VEZ', api(429, 'UM_POR_VEZ', 7), { tipo: 'espere', frase: 'Espere um pouco. Tente de novo em 7 s.', retem: true }],
     ['LIMITE', api(429, 'LIMITE', 30), { tipo: 'espere', frase: 'Espere um pouco. Tente de novo em 30 s.', retem: true }],
     ['OCUPADO', api(503, 'OCUPADO', 2), { tipo: 'espere', frase: 'Espere um pouco. Tente de novo em 2 s.', retem: true }],
@@ -119,15 +119,17 @@ describe('erroSemFala', () => {
 })
 
 describe('fraseDaChave: a falha de guardar a chave de um provedor', () => {
-  it('pelo código do envelope', () => {
+  it('pelo código do envelope (os status são os do 06: 422, 502, 502 e 429)', () => {
     expect(fraseDaChave(api(422, 'PROVEDOR_RECUSOU_CHAVE'))).toBe('O provedor recusou a chave.')
     expect(fraseDaChave(api(502, 'PROVEDOR_FORA'))).toBe('O provedor não respondeu agora. Tente de novo.')
-    expect(fraseDaChave(api(429, 'PROVEDOR_LIMITE'))).toBe('O provedor não respondeu agora. Tente de novo.')
+    expect(fraseDaChave(api(502, 'PROVEDOR_LIMITE'))).toBe('O provedor não respondeu agora. Tente de novo.')
     expect(fraseDaChave(api(429, 'LIMITE', 30))).toBe('Espere um pouco. Tente de novo em 30 s.')
   })
 
   it('sem código que o app conheça, pelo status', () => {
     expect(fraseDaChave(api(400))).toBe('Essa chave não parece válida. Confira e cole de novo.')
+    // O corpo acima de 16 KiB (colou muito mais que uma chave): 413 PAYLOAD_TOO_LARGE.
+    expect(fraseDaChave(api(413, 'PAYLOAD_TOO_LARGE'))).toBe('Essa chave não parece válida. Confira e cole de novo.')
     expect(fraseDaChave(api(422, 'OUTRO'))).toBe('Essa chave não parece válida. Confira e cole de novo.')
     expect(fraseDaChave(api(404))).toBe('Este servidor não tem o ditado pelo celular.')
     expect(fraseDaChave(api(429, undefined, 120))).toBe('Espere um pouco. Tente de novo em 2 min.')

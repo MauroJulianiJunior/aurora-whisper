@@ -9,7 +9,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { type OpcoesDaNuvem, itemNuvem, servidorFalsoNuvem } from '../../testes/servidorFalsoNuvem'
 import AppNuvem from '../AppNuvem'
-import { versaoDoAviso } from './aviso'
+import { VERSAO_DO_AVISO } from '../avisoDoDitado'
 import { plataformaFalsa } from './plataformaFalsa'
 
 const em = (dia: number, hora: number) => new Date(2026, 9, dia, hora).toISOString()
@@ -29,8 +29,9 @@ afterEach(() => {
 function montar(opcoes: OpcoesDaNuvem = {}) {
   const srv = servidorFalsoNuvem([itemNuvem({ id: 'd1', created_at: em(9, 14), final_text: 'Manda o relatório amanhã.' })], opcoes)
   const p = plataformaFalsa()
-  render(<AppNuvem buscar={srv.buscar} irPara={vi.fn()} abrirJanela={vi.fn(() => true)} plataformaDeDitar={p.plataforma} />)
-  return { srv, p }
+  const recarregar = vi.fn()
+  render(<AppNuvem buscar={srv.buscar} irPara={vi.fn()} abrirJanela={vi.fn(() => true)} plataformaDeDitar={p.plataforma} recarregar={recarregar} />)
+  return { srv, p, recarregar }
 }
 
 type Servidor = ReturnType<typeof servidorFalsoNuvem>
@@ -56,8 +57,14 @@ async function tocarNoMicrofone() {
 const folha = () => screen.findByRole('dialog', undefined, espera)
 const aceito = () => screen.getByRole('button', { name: 'Aceito' })
 
-// O aceite de um servidor que já o tem: as chaves, o aceite de uma versão.
-const aceiteDe = (provedores: ('openai' | 'groq' | 'anthropic')[], versao = versaoDoAviso) => ({ versao, provedores, aceito_em: '2026-10-09T12:00:00.000Z' })
+// O aceite de um servidor que já o tem: o provedor da transcrição, o do Polish
+// (ou nenhum) e a versão do aviso.
+const aceiteDe = (transcricao: 'openai' | 'groq', polish: 'openai' | 'anthropic' | null = null, versao = VERSAO_DO_AVISO) => ({
+  versao,
+  transcricao,
+  polish,
+  aceito_em: '2026-10-09T12:00:00.000Z',
+})
 
 describe('sem o aceite, o microfone nem abre', () => {
   it('o toque mostra a folha; nem o getUserMedia nem o pedido da chave acontecem', async () => {
@@ -103,8 +110,8 @@ describe('sem o aceite, o microfone nem abre', () => {
     expect(daConta(srv)).toEqual(['GET /api/v1/dictation'])
   })
 
-  it('o aviso mudou (o aceite é de uma versão velha): a folha abre de novo, sem o microfone', async () => {
-    const { p } = montar({ ditado: { aceite: aceiteDe(['openai'], '2026-01-01'), chaves: { openai: 'sk-teste-1234567890' } } })
+  it('o aviso mudou (o servidor diz que o aceite não é vigente): a folha abre de novo, sem o microfone', async () => {
+    const { p } = montar({ ditado: { aceite: aceiteDe('openai', null, VERSAO_DO_AVISO - 1), chaves: { openai: 'sk-teste-1234567890' } } })
     await abrirOHistorico()
     await tocarNoMicrofone()
     await folha()
@@ -114,8 +121,8 @@ describe('sem o aceite, o microfone nem abre', () => {
   it('ligar o Polish com um provedor fora do aceite também pede a folha, com o bloco dele', async () => {
     const { p } = montar({
       ditado: {
-        preferencias: { polish: true, polish_provedor: 'anthropic' },
-        aceite: aceiteDe(['openai']),
+        preferencias: { polish: true, polish_provedor: 'anthropic', polish_modelo: 'claude-haiku-4-5' },
+        aceite: aceiteDe('openai'),
         chaves: { openai: 'sk-teste-1234567890', anthropic: 'sk-ant-teste-1234567890' },
       },
     })
@@ -137,11 +144,11 @@ describe('o primeiro uso, do aceite à chave', () => {
       fireEvent.click(aceito())
     })
 
-    // O aceite ficou no servidor, com a versão do aviso e o provedor.
-    expect(srv.daConta.aceite).toMatchObject({ versao: versaoDoAviso, provedores: ['openai'] })
+    // O aceite ficou no servidor, com a versão do aviso e o provedor da transcrição.
+    expect(srv.daConta.aceite).toMatchObject({ versao: VERSAO_DO_AVISO, transcricao: 'openai', polish: null })
     const consent = srv.pedidos.find((x) => x.caminho === '/api/v1/dictation/consent')
     expect(consent?.metodo).toBe('POST')
-    expect(consent?.corpo).toEqual({ versao: versaoDoAviso, provedores: ['openai'] })
+    expect(consent?.corpo).toEqual({ versao: VERSAO_DO_AVISO, transcricao: 'openai' })
     // Sem a chave, o app leva a pessoa a colá-la, na seção do ditado: o
     // microfone não abre, e a chave só é pedida depois do aceite.
     await screen.findByRole('heading', { level: 1, name: 'Configurações' }, espera)
@@ -181,7 +188,7 @@ describe('o primeiro uso, do aceite à chave', () => {
     await act(async () => {
       fireEvent.click(aceito())
     })
-    expect(srv.daConta.aceite).toMatchObject({ provedores: ['groq'] })
+    expect(srv.daConta.aceite).toMatchObject({ transcricao: 'groq', polish: null })
     expect(srv.daConta.preferencias.provedor).toBe('groq')
     await waitFor(() => expect(aviso().textContent).toBe('Falta a chave da Groq. Cole a chave nas Configurações.'))
     expect(p.estado.abriu).toBe(0)
@@ -201,6 +208,28 @@ describe('o primeiro uso, do aceite à chave', () => {
     await screen.findByRole('button', { name: 'Parar e enviar' }, espera)
     expect(p.estado.abriu).toBe(2)
     expect(daConta(srv)).toEqual(['GET /api/v1/dictation'])
+  })
+})
+
+describe('quando o aviso do servidor é mais novo que o do app (AVISO_DESATUALIZADO)', () => {
+  it('o Aceito recebe 409: a folha fecha, nada é gravado, o microfone não abre, e o app recarrega para ler o texto novo', async () => {
+    const { srv, p, recarregar } = montar({ ditado: {} })
+    await abrirOHistorico()
+    await tocarNoMicrofone()
+    await folha()
+    // O deploy aconteceu com a folha na tela: o texto que ela mostra é o velho.
+    srv.subirOAvisoPorFora()
+    expect(recarregar).not.toHaveBeenCalled()
+    await act(async () => {
+      fireEvent.click(aceito())
+    })
+    await waitFor(() => expect(recarregar).toHaveBeenCalledTimes(1))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(p.estado.abriu).toBe(0)
+    expect(srv.daConta.aceite).toBeNull()
+    expect(daConta(srv)).toEqual(['GET /api/v1/dictation', 'POST /api/v1/dictation/consent'])
+    // Sem frase de erro: o app vai ser lido de novo, e o texto novo vem na próxima folha.
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 })
 
@@ -262,6 +291,16 @@ describe('quando o servidor recusa o ditado por falta de aceite', () => {
 })
 
 describe('quando a chave falta, o app leva à seção do ditado', () => {
+  it('a chave que o servidor guardava e já não decifra (colar_de_novo) pede para colar de novo, e a seção diz o mesmo', async () => {
+    const { p } = montar({ ditado: { aceite: aceiteDe('openai'), colarDeNovo: ['openai'] } })
+    await abrirOHistorico()
+    await tocarNoMicrofone()
+    await screen.findByRole('heading', { level: 1, name: 'Configurações' }, espera)
+    expect(aviso().textContent).toBe('Cole a chave da OpenAI de novo nas Configurações.')
+    expect(p.estado.abriu).toBe(0)
+    expect(document.querySelector('.estado-chave')!.textContent).toBe('A chave guardada não vale mais neste servidor. Cole a chave de novo.')
+  })
+
   it('"Abrir as Configurações" abre as Configurações com o foco no título da seção; e o toque seguinte confere a conta de novo', async () => {
     const { srv, p } = montar()
     await abrirOHistorico()

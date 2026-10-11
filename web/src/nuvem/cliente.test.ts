@@ -359,19 +359,31 @@ describe('ditar', () => {
   })
 })
 
-// O ditado pelo celular na conta (ADR-021, C6b): o estado, o aceite, as
-// preferências e as chaves. A forma exata do JSON é a que o servidor da C3a e
-// da C3b deve entregar (06-api-contract.md); aqui se prova o que o app envia
-// e como lê o que recebe.
+// O ditado pelo celular na conta (ADR-021, C3a, C3b e C6b): o estado, o aceite,
+// as preferências e as chaves, no contrato REAL do servidor (06-api-contract.md;
+// as formas dele estão presas ao 06 em contratoDoDitado.test.ts). Aqui se prova
+// o que o app envia e como lê o que recebe.
 describe('o ditado pelo celular na conta', () => {
-  const aceite = { versao: '2026-10-10', provedores: ['openai' as const], aceito_em: '2026-10-09T12:00:00.000Z' }
-  const preferencias = { provedor: 'openai' as const, modelo: '', dica: false, polish: false, polish_provedor: 'openai' as const, polish_modelo: '' }
-  const vazias = { openai: { configurada: false, final: '' }, groq: { configurada: false, final: '' }, anthropic: { configurada: false, final: '' } }
+  const aceite = { versao: 1, transcricao: 'openai' as const, polish: null, aceito_em: '2026-10-09T12:00:00.000Z' }
+  // Como o app lê o aceite em aberto: com o `vigente` que o servidor diz.
+  const lido = { ...aceite, vigente: true }
+  // As preferências de uma conta nova: o servidor guarda sempre o modelo de
+  // verdade (o padrão do provedor), e o Polish desligado não tem modelo.
+  const preferencias = {
+    provedor: 'openai' as const,
+    modelo: 'gpt-4o-mini-transcribe',
+    dica: false,
+    polish: false,
+    polish_provedor: 'openai' as const,
+    polish_modelo: '',
+  }
+  const semChave = { configurada: false, final: '', colar_de_novo: false }
+  const vazias = { openai: semChave, groq: semChave, anthropic: semChave }
 
-  it('o estado é um GET sem query: as preferências, o aceite vigente e as chaves (só `configurada` e o final)', async () => {
+  it('o estado é um GET sem query: as preferências, o aceite e as chaves (só `configurada`, o final e o `colar_de_novo`)', async () => {
     const { srv, cliente } = montar({ ditado: { aceite, chaves: { openai: 'sk-teste-de-mentira-WXYZ' } } })
     const estado = await cliente.estadoDoDitado()
-    expect(estado).toEqual({ preferencias, aceite, chaves: { ...vazias, openai: { configurada: true, final: 'WXYZ' } } })
+    expect(estado).toEqual({ preferencias, aceite: lido, chaves: { ...vazias, openai: { configurada: true, final: 'WXYZ', colar_de_novo: false } } })
     expect(srv.pedidos.map((p) => [p.metodo, p.caminho, p.busca.toString()])).toEqual([['GET', '/api/v1/dictation', '']])
     // A chave inteira não vem na resposta, nem de passagem.
     expect(JSON.stringify(estado)).not.toContain('sk-teste')
@@ -382,43 +394,112 @@ describe('o ditado pelo celular na conta', () => {
     expect(await cliente.estadoDoDitado()).toEqual({ preferencias, aceite: null, chaves: vazias })
   })
 
+  it('o Polish do aceite e o das preferências chegam como o servidor os manda', async () => {
+    const { cliente } = montar({
+      ditado: {
+        aceite: { ...aceite, transcricao: 'groq', polish: 'anthropic' },
+        preferencias: { provedor: 'groq', dica: true, polish: true, polish_provedor: 'anthropic', polish_modelo: 'claude-haiku-4-5' },
+      },
+    })
+    const estado = await cliente.estadoDoDitado()
+    expect(estado.aceite).toEqual({ ...aceite, transcricao: 'groq', polish: 'anthropic', vigente: true })
+    expect(estado.preferencias).toEqual({
+      provedor: 'groq',
+      modelo: 'whisper-large-v3-turbo',
+      dica: true,
+      polish: true,
+      polish_provedor: 'anthropic',
+      polish_modelo: 'claude-haiku-4-5',
+    })
+  })
+
+  it('o aceite de uma versão velha do aviso vem com vigente: false (o servidor é quem diz)', async () => {
+    const { cliente } = montar({ ditado: { aceite }, versaoDoAviso: 2 })
+    expect((await cliente.estadoDoDitado()).aceite).toEqual({ ...aceite, vigente: false })
+  })
+
+  it('a chave que o servidor já não decifra vem como colar_de_novo, sem configurada nem final', async () => {
+    const { cliente } = montar({ ditado: { aceite, chaves: { groq: 'gsk-teste-de-mentira-GROQ' }, colarDeNovo: ['openai'] } })
+    expect((await cliente.estadoDoDitado()).chaves).toEqual({
+      openai: { configurada: false, final: '', colar_de_novo: true },
+      groq: { configurada: true, final: 'GROQ', colar_de_novo: false },
+      anthropic: semChave,
+    })
+  })
+
   it('lê com tolerância: o que falta ou não tem a forma esperada vira o padrão mais fechado, e o final nunca passa de 4 caracteres', async () => {
     const { srv, cliente } = montar()
     srv.interceptar(
       () =>
         new Response(
           JSON.stringify({
-            preferencias: { provedor: 'gemini', modelo: 3, dica: 'sim', polish: 1, polish_provedor: 'groq' },
-            aceite: { versao: '', provedores: ['openai'] },
-            chaves: { openai: { configurada: true, final: 'sk-inteira-123456' }, groq: { configurada: 'sim', final: 'abcd' }, anthropic: null },
+            aviso: { versao: 'x' },
+            preferencias: {
+              transcricao: { provedor: 'gemini', modelo: 3 },
+              dica: 'sim',
+              polish: { ligado: 1, provedor: 'groq', modelo: 7 },
+            },
+            aceite: { versao: 'a', transcricao: 'openai', polish: null, aceito_em: '', vigente: true },
+            chaves: [
+              { provedor: 'openai', configurada: true, final: 'sk-inteira-123456', colar_de_novo: true },
+              { provedor: 'groq', configurada: 'sim', final: 'abcd' },
+              { provedor: 'gemini', configurada: true, final: 'zzzz' },
+              null,
+              'groq',
+            ],
           }),
         ),
     )
     expect(await cliente.estadoDoDitado()).toEqual({
-      preferencias,
+      preferencias: { ...preferencias, modelo: '' },
       aceite: null,
-      chaves: { ...vazias, openai: { configurada: true, final: '3456' } },
+      // A chave que vale não pede para ser colada de novo; o provedor que o app
+      // não conhece e a entrada que não é uma chave não viram nada.
+      chaves: { ...vazias, openai: { configurada: true, final: '3456', colar_de_novo: false } },
     })
-    srv.interceptar(() => new Response(JSON.stringify({ aceite: { versao: '2026-10-10', provedores: ['openai', 'openai', 'gemini', 7] } })))
-    expect((await cliente.estadoDoDitado()).aceite).toEqual({ versao: '2026-10-10', provedores: ['openai'], aceito_em: '' })
+    // O formato antigo (um objeto no lugar da lista) não é o do servidor.
+    srv.interceptar(() => new Response(JSON.stringify({ chaves: { openai: { configurada: true, final: 'WXYZ' } } })))
+    expect((await cliente.estadoDoDitado()).chaves).toEqual(vazias)
+    // Um aceite que não é de um provedor de voz, ou sem versão, ou com versão que não é um inteiro, não é aceite.
+    for (const ruim of [{ versao: 1, transcricao: 'anthropic' }, { versao: '1', transcricao: 'openai' }, { versao: 1.5, transcricao: 'openai' }, { transcricao: 'openai' }, 'sim']) {
+      srv.interceptar(() => new Response(JSON.stringify({ aceite: ruim })))
+      expect((await cliente.estadoDoDitado()).aceite).toBeNull()
+    }
+    // O Polish que o app não conhece é "sem Polish": cobre menos, não mais.
+    srv.interceptar(() => new Response(JSON.stringify({ aceite: { versao: 1, transcricao: 'groq', polish: 'gemini', aceito_em: 7, vigente: 'sim' } })))
+    expect((await cliente.estadoDoDitado()).aceite).toEqual({ versao: 1, transcricao: 'groq', polish: null, aceito_em: '', vigente: false })
   })
 
-  it('aceitar é um POST com a versão do aviso e os provedores, no corpo', async () => {
+  it('aceitar é um POST com a versão do aviso, a transcrição e o Polish, no corpo; sem Polish, o campo não vai', async () => {
     const { srv, cliente } = montar({ ditado: {} })
-    const aceito = await cliente.aceitarAviso('2026-10-10', ['openai', 'groq'])
-    expect(aceito).toMatchObject({ versao: '2026-10-10', provedores: ['openai', 'groq'] })
+    const aceito = await cliente.aceitarAviso(1, 'groq', 'anthropic')
+    expect(aceito).toEqual({ versao: 1, transcricao: 'groq', polish: 'anthropic', aceito_em: expect.any(String), vigente: true })
     const [p] = srv.pedidos
     expect([p!.metodo, p!.caminho, p!.busca.toString()]).toEqual(['POST', '/api/v1/dictation/consent', ''])
-    expect(p!.corpo).toEqual({ versao: '2026-10-10', provedores: ['openai', 'groq'] })
-    expect(srv.daConta.aceite).toMatchObject({ provedores: ['openai', 'groq'] })
+    expect(p!.corpo).toEqual({ versao: 1, transcricao: 'groq', polish: 'anthropic' })
+    expect(srv.daConta.aceite).toMatchObject({ versao: 1, transcricao: 'groq', polish: 'anthropic' })
+
+    // Aceitar de novo substitui o aceite em aberto; o aviso sem Polish não o leva.
+    await cliente.aceitarAviso(1, 'openai', null)
+    expect(srv.pedidos[1]!.corpo).toEqual({ versao: 1, transcricao: 'openai' })
+    expect(srv.daConta.aceite).toMatchObject({ transcricao: 'openai', polish: null })
   })
 
-  it('só a versão atual do aviso vale: a velha é recusada (ErroDaApi 400), e nada é gravado', async () => {
-    const { srv, cliente } = montar({ ditado: {} })
-    const e = (await cliente.aceitarAviso('2025-01-01', ['openai']).catch((x: unknown) => x)) as ErroDaApi
+  it('só a versão atual do aviso vale: a velha é 409 AVISO_DESATUALIZADO (ErroDaApi.codigo, e não Conflito), e nada é gravado', async () => {
+    // O servidor passou à versão 2 depois de este app abrir com o texto da 1.
+    const { srv, cliente } = montar({ ditado: {}, versaoDoAviso: 2 })
+    const e = (await cliente.aceitarAviso(1, 'openai', null).catch((x: unknown) => x)) as ErroDaApi
     expect(e).toBeInstanceOf(ErroDaApi)
-    expect(e.status).toBe(400)
+    expect([e.status, e.codigo]).toEqual([409, 'AVISO_DESATUALIZADO'])
     expect(srv.daConta.aceite).toBeNull()
+  })
+
+  it('um 200 sem o aceite gravado não é um aceite: ErroDaApi, e a folha não fecha como se tivesse dado certo', async () => {
+    const { srv, cliente } = montar({ ditado: {} })
+    srv.interceptar(() => new Response(JSON.stringify({ aceite: null })))
+    const e = (await cliente.aceitarAviso(1, 'openai', null).catch((x: unknown) => x)) as ErroDaApi
+    expect(e).toBeInstanceOf(ErroDaApi)
+    expect(e.status).toBe(502)
   })
 
   it('desligar é um DELETE do aceite: revoga e apaga as chaves', async () => {
@@ -429,26 +510,54 @@ describe('o ditado pelo celular na conta', () => {
     expect(srv.daConta.chaves).toEqual({})
   })
 
-  it('as preferências são um PUT com o objeto inteiro; a resposta é a que ficou', async () => {
-    const { srv, cliente } = montar({ ditado: { aceite: { ...aceite, provedores: ['openai', 'groq'] } } })
-    const novas = { ...preferencias, provedor: 'groq' as const, dica: true }
-    expect(await cliente.salvarPreferencias(novas)).toEqual(novas)
+  it('as preferências são um PUT com {transcricao, dica, polish} inteiros; a resposta é o estado, e as preferências que ficaram voltam', async () => {
+    const { srv, cliente } = montar({ ditado: { aceite: { ...aceite, transcricao: 'groq', polish: 'anthropic' } } })
+    const novas = {
+      provedor: 'groq' as const,
+      modelo: '',
+      dica: true,
+      polish: true,
+      polish_provedor: 'anthropic' as const,
+      polish_modelo: 'claude-haiku-4-5',
+    }
+    // O modelo vazio é o padrão do provedor: o servidor o resolve e devolve o de verdade.
+    expect(await cliente.salvarPreferencias(novas)).toEqual({ ...novas, modelo: 'whisper-large-v3-turbo' })
     const [p] = srv.pedidos
     expect([p!.metodo, p!.caminho, p!.busca.toString()]).toEqual(['PUT', '/api/v1/dictation/settings', ''])
-    expect(p!.corpo).toEqual(novas)
+    expect(p!.corpo).toEqual({
+      transcricao: { provedor: 'groq', modelo: '' },
+      dica: true,
+      polish: { ligado: true, provedor: 'anthropic', modelo: 'claude-haiku-4-5' },
+    })
+    expect(srv.daConta.preferencias).toEqual({ ...novas, modelo: 'whisper-large-v3-turbo' })
   })
 
-  it('um provedor fora do aceite é SEM_ACEITE (403), como ErroDaApi.codigo', async () => {
-    const { cliente } = montar({ ditado: { aceite } })
+  it('um provedor fora do aceite é SEM_ACEITE (403), como ErroDaApi.codigo; o do Polish só conta com o Polish ligado', async () => {
+    const { srv, cliente } = montar({ ditado: { aceite } })
     const e = (await cliente.salvarPreferencias({ ...preferencias, provedor: 'groq' }).catch((x: unknown) => x)) as ErroDaApi
     expect(e).toBeInstanceOf(ErroDaApi)
     expect([e.status, e.codigo]).toEqual([403, 'SEM_ACEITE'])
+    // Com o Polish desligado, o provedor dele é só uma escolha guardada.
+    await cliente.salvarPreferencias({ ...preferencias, polish_provedor: 'anthropic' })
+    expect(srv.daConta.preferencias.polish_provedor).toBe('anthropic')
+    // Ligado, o provedor dele tem de estar no aceite.
+    const ligado = (await cliente
+      .salvarPreferencias({ ...preferencias, polish: true, polish_provedor: 'anthropic', polish_modelo: 'claude-haiku-4-5' })
+      .catch((x: unknown) => x)) as ErroDaApi
+    expect([ligado.status, ligado.codigo]).toEqual([403, 'SEM_ACEITE'])
+  })
+
+  it('o servidor só liga o Polish com um modelo: sem ele é VALIDATION (400), e nada é gravado', async () => {
+    const { srv, cliente } = montar({ ditado: { aceite } })
+    const e = (await cliente.salvarPreferencias({ ...preferencias, polish: true }).catch((x: unknown) => x)) as ErroDaApi
+    expect([e.status, e.codigo]).toEqual([400, 'VALIDATION'])
+    expect(srv.daConta.preferencias.polish).toBe(false)
   })
 
   it('a chave vai só no corpo do PUT (nunca na URL), e a resposta traz `configurada` e o final', async () => {
     const { srv, cliente } = montar({ ditado: { aceite } })
     const guardada = await cliente.guardarChave('openai', 'sk-teste-do-celular-ABCD')
-    expect(guardada).toEqual({ configurada: true, final: 'ABCD' })
+    expect(guardada).toEqual({ configurada: true, final: 'ABCD', colar_de_novo: false })
     const [p] = srv.pedidos
     expect([p!.metodo, p!.caminho, p!.busca.toString()]).toEqual(['PUT', '/api/v1/ai-keys/openai', ''])
     expect(p!.corpo).toEqual({ chave: 'sk-teste-do-celular-ABCD' })
@@ -464,6 +573,13 @@ describe('o ditado pelo celular na conta', () => {
     expect([recusada.status, recusada.codigo]).toEqual([422, 'PROVEDOR_RECUSOU_CHAVE'])
   })
 
+  it('guardar a chave de novo tira o colar_de_novo: a linha velha deu lugar à nova', async () => {
+    const { cliente } = montar({ ditado: { aceite, colarDeNovo: ['openai'] } })
+    expect((await cliente.estadoDoDitado()).chaves.openai).toEqual({ configurada: false, final: '', colar_de_novo: true })
+    await cliente.guardarChave('openai', 'sk-teste-do-celular-ABCD')
+    expect((await cliente.estadoDoDitado()).chaves.openai).toEqual({ configurada: true, final: 'ABCD', colar_de_novo: false })
+  })
+
   it('remover é um DELETE do provedor; os modelos, um GET, e a lista vem como o provedor a dá', async () => {
     const { srv, cliente } = montar({ ditado: { aceite, chaves: { openai: 'sk-teste-de-mentira-WXYZ' } } })
     expect(await cliente.modelosDaChave('openai')).toContain('gpt-4o-mini-transcribe')
@@ -475,6 +591,14 @@ describe('o ditado pelo celular na conta', () => {
     // Sem chave, não há lista: SEM_CHAVE.
     const e = (await cliente.modelosDaChave('openai').catch((x: unknown) => x)) as ErroDaApi
     expect([e.status, e.codigo]).toEqual([409, 'SEM_CHAVE'])
+  })
+
+  it('a lista de modelos pede o aceite do provedor (SEM_ACEITE antes de SEM_CHAVE), e a chave que não decifra mais é SEM_CHAVE', async () => {
+    const { cliente } = montar({ ditado: { aceite, chaves: { groq: 'gsk-teste-de-mentira-GROQ' }, colarDeNovo: ['openai'] } })
+    const semAceite = (await cliente.modelosDaChave('groq').catch((x: unknown) => x)) as ErroDaApi
+    expect([semAceite.status, semAceite.codigo]).toEqual([403, 'SEM_ACEITE'])
+    const velha = (await cliente.modelosDaChave('openai').catch((x: unknown) => x)) as ErroDaApi
+    expect([velha.status, velha.codigo]).toEqual([409, 'SEM_CHAVE'])
   })
 
   it('a rota que o servidor não tem (sem a chave de cifra) é ErroDaApi 404; sem sessão, SemSessao; sem rede, ForaDoAr', async () => {
@@ -495,7 +619,7 @@ describe('o ditado pelo celular na conta', () => {
     const { srv, cliente } = montar({ ditado: { aceite } })
     await cliente.estadoDoDitado()
     await cliente.salvarPreferencias(preferencias)
-    await cliente.aceitarAviso('2026-10-10', ['openai'])
+    await cliente.aceitarAviso(1, 'openai', null)
     await cliente.guardarChave('openai', 'sk-teste-do-celular-ABCD')
     await cliente.modelosDaChave('openai')
     await cliente.removerChave('openai')

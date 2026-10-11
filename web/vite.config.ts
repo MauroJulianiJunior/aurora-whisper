@@ -113,9 +113,11 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: nuvem ? [react(), entradaDaNuvem, appInstalavel] : [react()],
     // marca.test.tsx confere as marcas do painel contra os SVG originais, em
-    // docs/marca, fora da pasta web. Só essa pasta a mais: o resto do
+    // docs/marca, fora da pasta web; nuvem/contratoDoDitado.test.ts confere o
+    // servidor de mentira e o cliente contra o contrato da API, em
+    // docs/ai-spec/06-api-contract.md. Só essas pastas a mais: o resto do
     // repositório continua fora do alcance do servidor de desenvolvimento.
-    server: { fs: { allow: ['.', '../docs/marca'] } },
+    server: { fs: { allow: ['.', '../docs/marca', '../docs/ai-spec'] } },
     build: {
       // O Agent serve o painel da pasta "painel" ao lado do executável
       // (cmd/agent/main.go, subirPainel), e o executável fica em bin\. O

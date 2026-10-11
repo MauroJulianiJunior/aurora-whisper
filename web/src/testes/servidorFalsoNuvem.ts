@@ -120,16 +120,37 @@ export function aprendido(parcial: Partial<AprendidoNuvem> & { variante: string;
 }
 
 // O ditado pelo celular na conta (ADR-021, C3a e C3b), do lado do servidor de
-// mentira. Os tipos são DESTE arquivo, e não os de src/nuvem: o servidor não
-// importa o app (o ESLint também não deixa src/ importar src/nuvem), e quem os
-// prende um ao outro é o teste de nuvem/ditar/aviso.test.ts.
+// mentira. Ele fala o contrato REAL do servidor (06-api-contract.md, "As chaves
+// da IA" e "O aceite e as preferências do ditado no celular"; o código em
+// internal/server/ditado_celular.go e chaves_ia.go, e a suíte executável em
+// internal/server/chavestest): o que sai e o que entra é o JSON do servidor, e
+// o contratoDoDitado.test.ts prende as formas dele ao 06. Os tipos são DESTE
+// arquivo, e não os de src/nuvem: o servidor não importa o app (o ESLint também
+// não deixa src/ importar src/nuvem), e quem os prende um ao outro é o teste
+// de nuvem/ditar/aviso.test.ts.
 export type ProvedorFalso = 'openai' | 'groq' | 'anthropic'
 const provedoresFalsos: ProvedorFalso[] = ['openai', 'groq', 'anthropic']
+const provedoresDeVozFalsos: string[] = ['openai', 'groq']
+const provedoresDePolishFalsos: string[] = ['openai', 'anthropic']
 
-// A versão do aviso que o servidor de mentira considera a atual. É a mesma de
-// web/src/nuvem/ditar/aviso.ts (provisória até a C3b criar a do servidor).
-export const versaoDoAvisoNoServidorFalso = '2026-10-10'
+// A versão do aviso que o servidor de mentira considera a atual (no de verdade,
+// cloudstore.VersaoDoAviso). É um inteiro, e é a mesma de
+// web/src/nuvem/avisoDoDitado.ts (VERSAO_DO_AVISO): quem prende os dois é o
+// aviso.test.ts, e quem prende aquela à do servidor de verdade é o teste do Go
+// TestVersaoDoAviso_AppEServidorConferem.
+export const versaoDoAvisoNoServidorFalso = 1
 
+// Os modelos padrão da transcrição (cloudstore.ModeloPadraoOpenAI e
+// ModeloPadraoGroq): o PUT com o modelo vazio os resolve, e o que se lê é sempre
+// o nome de um modelo. O Polish não tem modelo padrão.
+export const modeloPadraoFalso: Record<'openai' | 'groq', string> = {
+  openai: 'gpt-4o-mini-transcribe',
+  groq: 'whisper-large-v3-turbo',
+}
+
+// As preferências como o servidor de mentira as guarda: planas, como a tela as
+// vê. No fio elas são {transcricao, dica, polish}, e é assim que o servidor as
+// lê e as devolve.
 export interface PreferenciasFalsas {
   provedor: 'openai' | 'groq'
   modelo: string
@@ -139,19 +160,26 @@ export interface PreferenciasFalsas {
   polish_modelo: string
 }
 
+// AceiteFalso é o aceite em aberto da conta, como o servidor o guarda: a versão
+// do aviso, o provedor da transcrição e o do Polish (null: o aviso não incluía o
+// Polish). Um aceite novo substitui o anterior.
 export interface AceiteFalso {
-  versao: string
-  provedores: ProvedorFalso[]
+  versao: number
+  transcricao: 'openai' | 'groq'
+  polish: 'openai' | 'anthropic' | null
   aceito_em: string
 }
 
 // DitadoDaConta é o que o servidor de mentira guarda do ditado pelo celular. As
 // chaves ficam INTEIRAS aqui (é o servidor): o que o app recebe é só o final, e
-// os testes conferem que a chave inteira não volta.
+// os testes conferem que a chave inteira não volta. colarDeNovo são os
+// provedores que têm uma linha cifrada por outra chave de cifra: o servidor não
+// a decifra, e a tela pede a chave de novo.
 export interface DitadoDaConta {
   preferencias: PreferenciasFalsas
   aceite: AceiteFalso | null
   chaves: Partial<Record<ProvedorFalso, string>>
+  colarDeNovo: ProvedorFalso[]
 }
 
 // Os modelos que cada provedor lista para a chave (os de voz e os de texto,
@@ -189,9 +217,10 @@ export interface OpcoesDaNuvem {
     preferencias?: Partial<PreferenciasFalsas>
     aceite?: AceiteFalso | null
     chaves?: Partial<Record<ProvedorFalso, string>>
+    colarDeNovo?: ProvedorFalso[]
   }
   // versaoDoAviso: a versão do aviso que o servidor aceita no consentimento.
-  versaoDoAviso?: string
+  versaoDoAviso?: number
 }
 
 const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
@@ -218,9 +247,11 @@ export function servidorFalsoNuvem(
     aprendidos = [],
     tetoDosAprendidos = 500,
     ditado: ditadoInicial,
-    versaoDoAviso: versaoAtual = versaoDoAvisoNoServidorFalso,
+    versaoDoAviso: versaoInicial = versaoDoAvisoNoServidorFalso,
   }: OpcoesDaNuvem = {},
 ) {
+  // A versão do aviso que o servidor aceita agora (sobe com subirOAvisoPorFora).
+  let versaoAtual = versaoInicial
   const itens = inicial.map((i) => ({ ...i }))
   const listaDeSessoes = sessoes.map((s) => ({ ...s }))
   const listaDeAparelhos = aparelhos.map((a) => ({ ...a }))
@@ -240,103 +271,189 @@ export function servidorFalsoNuvem(
   let comoDitar: ComoDitar = { texto: 'Texto ditado pelo celular.' }
 
   // O ditado pelo celular da conta: aceite, preferências e chaves. Sem a opção
-  // `ditado`, a conta nasce pronta (tudo aceito, uma chave de cada).
-  const padraoDasPreferencias: PreferenciasFalsas = {
-    provedor: 'openai',
-    modelo: '',
-    dica: false,
-    polish: false,
-    polish_provedor: 'openai',
-    polish_modelo: '',
+  // `ditado`, a conta nasce pronta (aceite da OpenAI para a voz e da Anthropic
+  // para o Polish, uma chave de cada, as preferências no padrão do servidor).
+  const preferenciasIniciais = (parcial: Partial<PreferenciasFalsas> = {}): PreferenciasFalsas => {
+    const p: PreferenciasFalsas = {
+      provedor: 'openai',
+      modelo: '',
+      dica: false,
+      polish: false,
+      polish_provedor: 'openai',
+      polish_modelo: '',
+      ...parcial,
+    }
+    // O servidor guarda sempre o modelo de verdade, o padrão do provedor se
+    // ninguém escolheu (cloudstore.PreferenciasPadrao).
+    if (p.modelo === '') p.modelo = modeloPadraoFalso[p.provedor]
+    // E nunca guarda o Polish ligado sem modelo (ConferirPreferencias): um
+    // teste que parte disso parte de uma conta que não existe.
+    if (p.polish && p.polish_modelo === '') throw new Error('servidorFalsoNuvem: o servidor só guarda o Polish ligado com um modelo')
+    return p
   }
   const daConta: DitadoDaConta = ditadoInicial
     ? {
-        preferencias: { ...padraoDasPreferencias, ...ditadoInicial.preferencias },
-        aceite: ditadoInicial.aceite ? { ...ditadoInicial.aceite, provedores: [...ditadoInicial.aceite.provedores] } : null,
+        preferencias: preferenciasIniciais(ditadoInicial.preferencias),
+        aceite: ditadoInicial.aceite ? { ...ditadoInicial.aceite } : null,
         chaves: { ...ditadoInicial.chaves },
+        colarDeNovo: [...(ditadoInicial.colarDeNovo ?? [])],
       }
     : {
-        preferencias: { ...padraoDasPreferencias },
-        aceite: { versao: versaoAtual, provedores: [...provedoresFalsos], aceito_em: '2026-10-10T12:00:00.000Z' },
+        preferencias: preferenciasIniciais(),
+        aceite: { versao: versaoAtual, transcricao: 'openai', polish: 'anthropic', aceito_em: '2026-10-10T12:00:00.000Z' },
         chaves: { openai: 'sk-teste-de-mentira-OPEN', groq: 'gsk-teste-de-mentira-GROQ', anthropic: 'sk-ant-teste-de-mentira-ANTH' },
+        colarDeNovo: [],
       }
-  const conferido = (provedores: ProvedorFalso[]) =>
-    daConta.aceite !== null && daConta.aceite.versao === versaoAtual && provedores.every((p) => daConta.aceite!.provedores.includes(p))
+  // cobre é a conferência do servidor (cloudstore.Aceite.Vigente e Inclui): o
+  // aceite em aberto, da versão atual do aviso, que tem o provedor num dos dois
+  // lugares, o da transcrição ou o do Polish.
+  const cobre = (provedor: string) => {
+    const a = daConta.aceite
+    return a !== null && a.versao === versaoAtual && (a.transcricao === provedor || a.polish === provedor)
+  }
+  const conferido = (provedores: ProvedorFalso[]) => provedores.every(cobre)
   const exigidos = (p: PreferenciasFalsas): ProvedorFalso[] => (p.polish && p.polish_provedor !== p.provedor ? [p.provedor, p.polish_provedor] : [p.provedor])
   const daChave = (p: ProvedorFalso) => {
     const chave = daConta.chaves[p]
-    return chave ? { configurada: true, final: chave.slice(-4) } : { configurada: false, final: '' }
+    if (chave) return { provedor: p, configurada: true, final: chave.slice(-4), colar_de_novo: false }
+    return { provedor: p, configurada: false, final: '', colar_de_novo: daConta.colarDeNovo.includes(p) }
   }
+  // O estado como o servidor o manda: no GET, e também no PUT das preferências e
+  // no POST do aceite (200).
   const estadoDoDitado = () => ({
-    preferencias: daConta.preferencias,
-    aceite: daConta.aceite,
-    chaves: { openai: daChave('openai'), groq: daChave('groq'), anthropic: daChave('anthropic') },
+    aviso: { versao: versaoAtual },
+    aceite: daConta.aceite && { ...daConta.aceite, vigente: daConta.aceite.versao === versaoAtual },
+    preferencias: {
+      transcricao: { provedor: daConta.preferencias.provedor, modelo: daConta.preferencias.modelo },
+      dica: daConta.preferencias.dica,
+      polish: { ligado: daConta.preferencias.polish, provedor: daConta.preferencias.polish_provedor, modelo: daConta.preferencias.polish_modelo },
+    },
+    chaves: provedoresFalsos.map(daChave),
   })
   const ehProvedor = (v: unknown): v is ProvedorFalso => provedoresFalsos.includes(v as ProvedorFalso)
+  const ehObjeto = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v)
+  // soTem: o objeto não tem campo fora da lista (o decodificador do servidor
+  // recusa o campo desconhecido).
+  const soTem = (o: Record<string, unknown>, campos: string[]) => Object.keys(o).every((k) => campos.includes(k))
+  const formaDeModelo = /^[A-Za-z0-9._:/@-]{1,100}$/
 
   // As rotas do ditado pelo celular na conta (ADR-021, "O aceite e as
-  // preferências" e "As chaves"): o aceite só com a versão atual do aviso e
-  // provedores conhecidos; as preferências e a chave só para um provedor dentro
-  // do aceite vigente (SEM_ACEITE, 403); revogar o aceite apaga as chaves; a
-  // chave inteira nunca volta (só `configurada` e o final); o provedor que
-  // recusa a chave é a que começa com "recusada".
+  // preferências" e "As chaves"), como o servidor as responde: o estado nos três
+  // verbos que o devolvem (GET, PUT das preferências, POST do aceite); o aceite
+  // só com a versão atual do aviso (a outra é 409 AVISO_DESATUALIZADO) e
+  // provedores conhecidos; as preferências, a chave e a lista de modelos só para
+  // um provedor dentro do aceite vigente (SEM_ACEITE, 403); o Polish só liga com
+  // um modelo; o modelo da transcrição vazio vira o padrão do provedor; revogar o
+  // aceite apaga as chaves e deixa as preferências; a chave inteira nunca volta
+  // (só `configurada`, o final e o `colar_de_novo`); o provedor que recusa a
+  // chave é a que começa com "recusada". Corpo com campo fora da lista ou de tipo
+  // errado é 400 BAD_REQUEST, com uma frase fixa.
   function rotaDoDitado(p: PedidoNuvem): Response | undefined {
     if (p.caminho === '/api/v1/dictation' && p.metodo === 'GET') return json(estadoDoDitado())
-    if (p.caminho === '/api/v1/dictation/settings' && p.metodo === 'PUT') {
-      const c = p.corpo ?? {}
-      const valido =
-        (c.provedor === 'openai' || c.provedor === 'groq') &&
-        (c.polish_provedor === 'openai' || c.polish_provedor === 'anthropic') &&
-        typeof c.modelo === 'string' &&
-        typeof c.polish_modelo === 'string' &&
-        typeof c.dica === 'boolean' &&
-        typeof c.polish === 'boolean'
-      if (!valido) return erro(400, 'VALIDATION', 'preferências inválidas')
-      const novas = c as unknown as PreferenciasFalsas
-      if (!conferido(exigidos(novas))) return erro(403, 'SEM_ACEITE', 'falta o aceite do aviso')
-      daConta.preferencias = {
-        provedor: novas.provedor,
-        modelo: novas.modelo,
-        dica: novas.dica,
-        polish: novas.polish,
-        polish_provedor: novas.polish_provedor,
-        polish_modelo: novas.polish_modelo,
-      }
-      return json(daConta.preferencias)
-    }
-    if (p.caminho === '/api/v1/dictation/consent' && p.metodo === 'POST') {
-      const c = p.corpo ?? {}
-      const provedores = Array.isArray(c.provedores) ? c.provedores : []
-      if (c.versao !== versaoAtual || provedores.length === 0 || !provedores.every(ehProvedor)) return erro(400, 'VALIDATION', 'aceite inválido')
-      daConta.aceite = { versao: versaoAtual, provedores: Array.from(new Set(provedores)), aceito_em: new Date().toISOString() }
-      return json(daConta.aceite, 201)
-    }
+    if (p.caminho === '/api/v1/dictation/settings' && p.metodo === 'PUT') return gravarPreferencias(p)
+    if (p.caminho === '/api/v1/dictation/consent' && p.metodo === 'POST') return gravarAceite(p)
     if (p.caminho === '/api/v1/dictation/consent' && p.metodo === 'DELETE') {
       daConta.aceite = null
       daConta.chaves = {}
+      daConta.colarDeNovo = []
       return vazio()
     }
     const rotaDaChave = p.caminho.match(/^\/api\/v1\/ai-keys\/([^/]+)(\/models)?$/)
-    if (rotaDaChave) {
-      const provedor = decodeURIComponent(rotaDaChave[1]!)
-      if (!ehProvedor(provedor)) return erro(404, 'NOT_FOUND', 'provedor desconhecido')
-      if (rotaDaChave[2]) {
-        if (p.metodo !== 'GET') return erro(404, 'NOT_FOUND', 'rota não encontrada')
-        if (!daConta.chaves[provedor]) return erro(409, 'SEM_CHAVE', 'falta a chave')
-        return json({ modelos: modelosFalsos[provedor] })
+    if (rotaDaChave) return rotaDeChave(p, decodeURIComponent(rotaDaChave[1]!), rotaDaChave[2] !== undefined)
+    return undefined
+  }
+
+  // PUT /dictation/settings: o corpo, a forma, o aceite, a gravação.
+  function gravarPreferencias(p: PedidoNuvem): Response {
+    const frase = 'corpo inválido: mande transcricao, dica e polish'
+    const c = p.corpo
+    if (!ehObjeto(c) || !soTem(c, ['transcricao', 'dica', 'polish'])) return erro(400, 'BAD_REQUEST', frase)
+    const { transcricao, dica, polish } = c
+    // Os três campos são obrigatórios (faltando um, VALIDATION). Dentro deles, o
+    // campo que falta vale o vazio (ou falso), e o de tipo errado é BAD_REQUEST.
+    if (transcricao == null || dica == null || polish == null) return erro(400, 'VALIDATION', 'faltam campos: mande transcricao, dica e polish')
+    if (!ehObjeto(transcricao) || !soTem(transcricao, ['provedor', 'modelo'])) return erro(400, 'BAD_REQUEST', frase)
+    if (!ehObjeto(polish) || !soTem(polish, ['ligado', 'provedor', 'modelo'])) return erro(400, 'BAD_REQUEST', frase)
+    const texto = (o: Record<string, unknown>, campo: string) => (o[campo] === undefined ? '' : o[campo])
+    const provedor = texto(transcricao, 'provedor')
+    const modelo = texto(transcricao, 'modelo')
+    const ligado = polish.ligado === undefined ? false : polish.ligado
+    const polishProvedor = texto(polish, 'provedor')
+    const polishModelo = texto(polish, 'modelo')
+    if (typeof dica !== 'boolean' || typeof ligado !== 'boolean') return erro(400, 'BAD_REQUEST', frase)
+    if (typeof provedor !== 'string' || typeof modelo !== 'string' || typeof polishProvedor !== 'string' || typeof polishModelo !== 'string') {
+      return erro(400, 'BAD_REQUEST', frase)
+    }
+    const novas = { provedor, modelo, dica, polish: ligado, polish_provedor: polishProvedor, polish_modelo: polishModelo } as PreferenciasFalsas
+    // O modelo da transcrição vazio é o padrão do provedor.
+    if (novas.modelo === '' && (novas.provedor === 'openai' || novas.provedor === 'groq')) novas.modelo = modeloPadraoFalso[novas.provedor]
+    // ConferirPreferencias, na ordem do servidor.
+    if (!provedoresDeVozFalsos.includes(novas.provedor)) return erro(400, 'VALIDATION', 'a transcrição é feita pela openai ou pela groq')
+    if (!formaDeModelo.test(novas.modelo)) return erro(400, 'VALIDATION', 'o nome do modelo só pode ter letras, dígitos e . _ : / @ - (de 1 a 100 caracteres)')
+    if (!provedoresDePolishFalsos.includes(novas.polish_provedor)) return erro(400, 'VALIDATION', 'o Polish é feito pela openai ou pela anthropic')
+    if (novas.polish_modelo !== '' && !formaDeModelo.test(novas.polish_modelo)) return erro(400, 'VALIDATION', 'o nome do modelo só pode ter letras, dígitos e . _ : / @ - (de 1 a 100 caracteres)')
+    if (novas.polish && novas.polish_modelo === '') return erro(400, 'VALIDATION', 'o Polish ligado precisa de um modelo')
+    if (!conferido(exigidos(novas))) return erro(403, 'SEM_ACEITE', 'aceite o aviso do ditado no celular para este provedor antes')
+    daConta.preferencias = novas
+    return json(estadoDoDitado())
+  }
+
+  // POST /dictation/consent: o corpo, a versão (AVISO_DESATUALIZADO), os
+  // provedores, a gravação. O aceite em aberto é substituído; aceitar de novo o
+  // mesmo não muda a data da primeira vez.
+  function gravarAceite(p: PedidoNuvem): Response {
+    const frase = 'corpo inválido: mande versao, transcricao e, se houver, polish'
+    const c = p.corpo
+    if (!ehObjeto(c) || !soTem(c, ['versao', 'transcricao', 'polish'])) return erro(400, 'BAD_REQUEST', frase)
+    const { versao, transcricao, polish } = c
+    if (versao !== undefined && !(typeof versao === 'number' && Number.isInteger(versao))) return erro(400, 'BAD_REQUEST', frase)
+    if (transcricao !== undefined && typeof transcricao !== 'string') return erro(400, 'BAD_REQUEST', frase)
+    if (polish !== undefined && polish !== null && typeof polish !== 'string') return erro(400, 'BAD_REQUEST', frase)
+    if (versao === undefined || transcricao === undefined) return erro(400, 'VALIDATION', 'faltam campos: mande versao e transcricao')
+    if (versao !== versaoAtual) {
+      return erro(409, 'AVISO_DESATUALIZADO', 'o aviso que o app mostrou não é o atual: recarregue o app e leia o aviso de novo')
+    }
+    // "" não é um provedor: "sem Polish" é null ou a falta do campo.
+    if (polish === '') return erro(400, 'VALIDATION', 'o Polish é feito pela openai ou pela anthropic')
+    if (!provedoresDeVozFalsos.includes(transcricao as string)) return erro(400, 'VALIDATION', 'a transcrição é feita pela openai ou pela groq')
+    if (typeof polish === 'string' && !provedoresDePolishFalsos.includes(polish)) return erro(400, 'VALIDATION', 'o Polish é feito pela openai ou pela anthropic')
+    const voz = transcricao as AceiteFalso['transcricao']
+    const pol = (typeof polish === 'string' ? polish : null) as AceiteFalso['polish']
+    const atual = daConta.aceite
+    const igual = atual !== null && atual.versao === versao && atual.transcricao === voz && atual.polish === pol
+    if (!igual) daConta.aceite = { versao, transcricao: voz, polish: pol, aceito_em: new Date().toISOString() }
+    return json(estadoDoDitado())
+  }
+
+  // /ai-keys/{provedor} e /ai-keys/{provedor}/models. O provedor desconhecido é
+  // 404 antes de qualquer outra conferência; o aceite, antes de ler o corpo.
+  function rotaDeChave(p: PedidoNuvem, provedor: string, modelos: boolean): Response | undefined {
+    if (!ehProvedor(provedor)) return erro(404, 'NOT_FOUND', 'provedor desconhecido')
+    if (modelos) {
+      if (p.metodo !== 'GET') return erro(404, 'NOT_FOUND', 'rota não encontrada')
+      if (!cobre(provedor)) return erro(403, 'SEM_ACEITE', 'aceite o aviso do ditado no celular para este provedor antes')
+      // Sem chave, ou com a que o servidor já não decifra: o mesmo SEM_CHAVE.
+      if (!daConta.chaves[provedor]) return erro(409, 'SEM_CHAVE', 'nenhuma chave guardada para este provedor')
+      return json({ provedor, modelos: modelosFalsos[provedor] })
+    }
+    if (p.metodo === 'PUT') {
+      if (!cobre(provedor)) return erro(403, 'SEM_ACEITE', 'aceite o aviso do ditado no celular para este provedor antes')
+      const c = p.corpo
+      if (!ehObjeto(c) || !soTem(c, ['chave']) || (c.chave !== undefined && typeof c.chave !== 'string')) {
+        return erro(400, 'BAD_REQUEST', 'corpo inválido: mande só {"chave": "..."}')
       }
-      if (p.metodo === 'PUT') {
-        if (!conferido([provedor])) return erro(403, 'SEM_ACEITE', 'falta o aceite do aviso')
-        const chave = p.corpo?.chave
-        if (typeof chave !== 'string' || !/^[\x21-\x7e]{8,200}$/.test(chave)) return erro(400, 'VALIDATION', 'chave inválida')
-        if (chave.startsWith('recusada')) return erro(422, 'PROVEDOR_RECUSOU_CHAVE', 'o provedor recusou a chave')
-        daConta.chaves[provedor] = chave
-        return json(daChave(provedor))
-      }
-      if (p.metodo === 'DELETE') {
-        delete daConta.chaves[provedor]
-        return vazio()
-      }
+      const chave = c.chave ?? ''
+      if (!/^[\x21-\x7e]{8,200}$/.test(chave)) return erro(400, 'VALIDATION', 'chave inválida')
+      if (chave.startsWith('recusada')) return erro(422, 'PROVEDOR_RECUSOU_CHAVE', 'o provedor recusou a chave')
+      daConta.chaves[provedor] = chave
+      daConta.colarDeNovo = daConta.colarDeNovo.filter((x) => x !== provedor)
+      const { provedor: nome, configurada, final } = daChave(provedor)
+      return json({ provedor: nome, configurada, final })
+    }
+    if (p.metodo === 'DELETE') {
+      delete daConta.chaves[provedor]
+      daConta.colarDeNovo = daConta.colarDeNovo.filter((x) => x !== provedor)
+      return vazio()
     }
     return undefined
   }
@@ -376,7 +493,7 @@ export function servidorFalsoNuvem(
       raw_text: comoDitar.texto,
       final_text: comoDitar.texto,
       asr_provider: prefs.provedor,
-      asr_model: prefs.modelo || (prefs.provedor === 'groq' ? 'whisper-large-v3-turbo' : 'gpt-4o-mini-transcribe'),
+      asr_model: prefs.modelo,
       duration_ms: duracaoMs,
       device_id: null,
       source_platform: 'web',
@@ -489,7 +606,8 @@ export function servidorFalsoNuvem(
       // O aceite, as preferências e as chaves também (ADR-021, C3b).
       daConta.aceite = null
       daConta.chaves = {}
-      daConta.preferencias = { ...padraoDasPreferencias }
+      daConta.colarDeNovo = []
+      daConta.preferencias = preferenciasIniciais()
       for (let i = listaDeSessoes.length - 1; i >= 0; i--) if (!listaDeSessoes[i]!.atual) listaDeSessoes.splice(i, 1)
       // Os aparelhos também (decisão 3 da F3): os PCs ficam desconectados.
       listaDeAparelhos.splice(0, listaDeAparelhos.length)
@@ -594,15 +712,34 @@ export function servidorFalsoNuvem(
     revogarAceitePorFora() {
       daConta.aceite = null
       daConta.chaves = {}
+      daConta.colarDeNovo = []
     },
-    // aceitarPorFora: outro aparelho aceitou (os provedores e a versão dados).
-    aceitarPorFora(provedores: ProvedorFalso[], versao = versaoAtual) {
-      daConta.aceite = { versao, provedores: [...provedores], aceito_em: '2026-10-10T12:00:00.000Z' }
+    // aceitarPorFora: outro aparelho aceitou (os dois provedores e a versão
+    // dados).
+    aceitarPorFora(transcricao: AceiteFalso['transcricao'], polish: AceiteFalso['polish'] = null, versao = versaoAtual) {
+      daConta.aceite = { versao, transcricao, polish, aceito_em: '2026-10-10T12:00:00.000Z' }
     },
     // envelhecerAceitePorFora: o aviso mudou (o texto ganhou outra versão) e o
-    // aceite que a conta tinha já não vale; as chaves continuam guardadas.
+    // aceite que a conta tinha já não vale; as chaves continuam guardadas. O
+    // app que pergunta já tem o texto novo: o aceite novo que ele mandar vale.
     envelhecerAceitePorFora() {
-      if (daConta.aceite) daConta.aceite = { ...daConta.aceite, versao: '2026-01-01' }
+      if (daConta.aceite) daConta.aceite = { ...daConta.aceite, versao: versaoAtual - 1 }
+    },
+    // subirOAvisoPorFora: o servidor passou a uma versão nova do aviso depois de
+    // este app abrir (um deploy): o app ainda tem o texto velho, o aceite que a
+    // conta tinha deixa de valer, e o POST do aceite com a versão velha é 409
+    // AVISO_DESATUALIZADO.
+    subirOAvisoPorFora() {
+      versaoAtual += 1
+    },
+    // trocarChaveDeCifraPorFora: o servidor passou a cifrar com outra chave de
+    // cifra (o arquivo trocou, ou o backup voltou sem ele): a chave guardada de
+    // cada provedor deixa de valer, e a tela pede para colar de novo.
+    trocarChaveDeCifraPorFora() {
+      for (const p of provedoresFalsos) {
+        if (daConta.chaves[p] !== undefined && !daConta.colarDeNovo.includes(p)) daConta.colarDeNovo.push(p)
+      }
+      daConta.chaves = {}
     },
     get logado() {
       return sessao

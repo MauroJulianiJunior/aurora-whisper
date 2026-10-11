@@ -17,7 +17,7 @@ import { ErroDaApi, ForaDoAr, SemSessao } from '../../api'
 import type { SecaoDasConfiguracoes } from '../../ambiente'
 import type { ClienteNuvem } from '../cliente'
 import { nomeDoProvedor } from './aviso'
-import { type EstadoDoDitado, aceiteVigente, aceitoPara, provedoresExigidos } from './estado'
+import { type EstadoDoDitado, aceitoPara, provedoresExigidos } from './estado'
 import type { Folha } from './folha'
 
 // GanchosDaPorta é o que a porta pede ao Painel: o aviso da pílula, as
@@ -52,7 +52,6 @@ export function criarPorta(cliente: Pick<ClienteNuvem, 'estadoDoDitado' | 'salva
   const pedido = (estado: EstadoDoDitado, escolherVoz: boolean) => ({
     voz: estado.preferencias.provedor,
     polish: estado.preferencias.polish ? estado.preferencias.polish_provedor : undefined,
-    jaAceitos: aceiteVigente(estado)?.provedores ?? [],
     escolherVoz,
   })
 
@@ -90,10 +89,12 @@ export function criarPorta(cliente: Pick<ClienteNuvem, 'estadoDoDitado' | 'salva
       }
 
       // A chave só é pedida depois do aceite, e é colada nas Configurações, no
-      // lugar de sempre: o app leva a pessoa até lá.
+      // lugar de sempre: o app leva a pessoa até lá. A que o servidor guardava e
+      // já não decifra (colar_de_novo) é colada de novo, no mesmo lugar.
       const semChave = provedoresExigidos(estado.preferencias).find((p) => !estado.chaves[p].configurada)
       if (semChave) {
-        g.avisar(`Falta a chave da ${nomeDoProvedor[semChave]}. Cole a chave nas Configurações.`)
+        const nome = nomeDoProvedor[semChave]
+        g.avisar(estado.chaves[semChave].colar_de_novo ? `Cole a chave da ${nome} de novo nas Configurações.` : `Falta a chave da ${nome}. Cole a chave nas Configurações.`)
         g.abrirConfiguracoes('ditar')
         return false
       }

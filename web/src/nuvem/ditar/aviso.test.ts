@@ -1,19 +1,19 @@
-// O aviso do ditado pelo celular (aviso.ts, estado.ts): a versão dele presa à do
-// servidor de mentira, o que cada provedor diz sem afirmar país que a página
-// dele não afirma, e as regras puras do aceite (quem está dentro, quem precisa
-// da folha, quais modelos a tela mostra).
+// O aviso do ditado pelo celular (aviso.ts, estado.ts): o que cada provedor diz
+// sem afirmar país que a página dele não afirma, e as regras puras do aceite
+// (quem está dentro, quem precisa da folha, quais modelos a tela mostra). A
+// versão do aviso (avisoDoDitado.ts) tem o teste dela, ao lado.
 
 import { describe, expect, it } from 'vitest'
 import { versaoDoAvisoNoServidorFalso } from '../../testes/servidorFalsoNuvem'
-import { blocoDoProvedor, ehProvedor, nomeDoProvedor, versaoDoAviso } from './aviso'
-import { type EstadoDoDitado, aceiteVigente, aceitoPara, chavesVazias, modelosDeVoz, modelosDoPolish, preferenciasPadrao, provedoresExigidos } from './estado'
+import { VERSAO_DO_AVISO } from '../avisoDoDitado'
+import { blocoDoProvedor, ehProvedor, nomeDoProvedor } from './aviso'
+import { type Aceite, type EstadoDoDitado, aceiteVigente, aceitoPara, chavesVazias, modelosDeVoz, modelosDoPolish, preferenciasPadrao, provedoresExigidos } from './estado'
 
 describe('a versão do aviso', () => {
-  it('é uma data (AAAA-MM-DD), e é a mesma do servidor de mentira', () => {
-    expect(versaoDoAviso).toMatch(/^\d{4}-\d{2}-\d{2}$/)
-    // Quem prende o app ao servidor de verdade é o teste da C3b; aqui, ao dublê.
-    // A versão é PROVISÓRIA até a constante do servidor existir (aviso.ts).
-    expect(versaoDoAvisoNoServidorFalso).toBe(versaoDoAviso)
+  it('a do servidor de mentira é a do app (a do servidor de verdade é presa à do app pelo teste do Go)', () => {
+    // O servidor de mentira não importa o app (src/ não importa src/nuvem), e
+    // este teste é o que prende os dois números.
+    expect(versaoDoAvisoNoServidorFalso).toBe(VERSAO_DO_AVISO)
   })
 })
 
@@ -60,20 +60,35 @@ function estado(parcial: Partial<EstadoDoDitado> = {}): EstadoDoDitado {
 }
 
 describe('o aceite vigente', () => {
-  const aceite = (versao: string, provedores: ('openai' | 'groq' | 'anthropic')[]) => ({ versao, provedores, aceito_em: '2026-10-10T12:00:00.000Z' })
+  const aceite = (transcricao: Aceite['transcricao'], polish: Aceite['polish'] = null, vigente = true): Aceite => ({
+    versao: VERSAO_DO_AVISO,
+    transcricao,
+    polish,
+    aceito_em: '2026-10-10T12:00:00.000Z',
+    vigente,
+  })
 
-  it('só vale com a versão do aviso de agora', () => {
-    expect(aceiteVigente(estado({ aceite: aceite(versaoDoAviso, ['openai']) }))).not.toBeNull()
-    expect(aceiteVigente(estado({ aceite: aceite('2026-01-01', ['openai']) }))).toBeNull()
+  it('só vale quando o servidor diz que é o do aviso de agora (vigente)', () => {
+    expect(aceiteVigente(estado({ aceite: aceite('openai') }))).not.toBeNull()
+    // O aceite de uma versão velha continua gravado, mas não vale.
+    expect(aceiteVigente(estado({ aceite: aceite('openai', null, false) }))).toBeNull()
     expect(aceiteVigente(estado())).toBeNull()
   })
 
-  it('cobre só os provedores que a pessoa aceitou', () => {
-    const e = estado({ aceite: aceite(versaoDoAviso, ['openai']) })
+  it('cobre só os provedores que a pessoa aceitou, nos dois lugares do aceite (a transcrição e o Polish)', () => {
+    const e = estado({ aceite: aceite('openai') })
     expect(aceitoPara(e, ['openai'])).toBe(true)
     expect(aceitoPara(e, ['groq'])).toBe(false)
     expect(aceitoPara(e, ['openai', 'anthropic'])).toBe(false)
-    expect(aceitoPara(estado({ aceite: aceite('2026-01-01', ['openai']) }), ['openai'])).toBe(false)
+    expect(aceitoPara(estado({ aceite: aceite('openai', null, false) }), ['openai'])).toBe(false)
+
+    const comPolish = estado({ aceite: aceite('groq', 'anthropic') })
+    expect(aceitoPara(comPolish, ['groq'])).toBe(true)
+    expect(aceitoPara(comPolish, ['groq', 'anthropic'])).toBe(true)
+    expect(aceitoPara(comPolish, ['openai'])).toBe(false)
+    // O conjunto vale, seja qual for o uso (cloudstore.Aceite.Inclui): a OpenAI
+    // aceita para o Polish cobre a OpenAI como provedor da voz.
+    expect(aceitoPara(estado({ aceite: aceite('groq', 'openai') }), ['openai'])).toBe(true)
   })
 
   it('os provedores que as preferências usam: o da voz e, com o Polish, o dele', () => {

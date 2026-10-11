@@ -9,6 +9,11 @@
 // estava), e o servidor que recusar o PUT por falta de aceite (SEM_ACEITE: o
 // aceite acabou em outro aparelho) também abre a folha. A dica e o Polish
 // começam desligados.
+//
+// O Polish só liga na conta com um modelo (o servidor não tem modelo padrão do
+// Polish): marcar a caixa mostra o provedor, a chave e o modelo, e a conta passa
+// a tê-lo ligado quando o modelo é escolhido. Até lá a caixa fica marcada só
+// aqui (rascunhoDoPolish) e a conta continua com o Polish desligado.
 
 import { type ReactNode, useEffect, useEffectEvent, useRef, useState } from 'react'
 import { ErroDaApi, problemaDe } from '../../api'
@@ -36,6 +41,15 @@ interface Props {
   // guardava que estava tudo pronto, confere de novo.
   aoMudar(): void
 }
+
+// iguais: as preferências da tela são as que a conta já tem (nada a gravar).
+const iguais = (a: Preferencias, b: Preferencias) =>
+  a.provedor === b.provedor &&
+  a.modelo === b.modelo &&
+  a.dica === b.dica &&
+  a.polish === b.polish &&
+  a.polish_provedor === b.polish_provedor &&
+  a.polish_modelo === b.polish_modelo
 
 // fraseDeLer: a leitura do estado falhou por outra razão que a ligação.
 function fraseDeLer(e: unknown): string {
@@ -65,6 +79,10 @@ export function DitarPeloCelular({ cliente, folha, visivel, leitura, secao, aoPe
   const lendoModelos = useRef(new Set<Provedor>())
   const titulo = useRef<HTMLHeadingElement>(null)
   const atendida = useRef(0)
+  // O Polish marcado e ainda sem modelo: vale só para a leitura da conta em que
+  // foi marcado (se a conta mudou por fora, o rascunho se perde).
+  const [rascunhoDoPolish, setRascunhoDoPolish] = useState<number | null>(null)
+  const polishAberto = rascunhoDoPolish === leitura
 
   // ─── Desligar ───
   const [desligando, setDesligando] = useState<'fechado' | 'aberto' | 'indo'>('fechado')
@@ -107,7 +125,7 @@ export function DitarPeloCelular({ cliente, folha, visivel, leitura, secao, aoPe
   useEffect(() => {
     if (!estado) return
     const usados: Provedor[] = [estado.preferencias.provedor]
-    if (estado.preferencias.polish) usados.push(estado.preferencias.polish_provedor)
+    if (estado.preferencias.polish || polishAberto) usados.push(estado.preferencias.polish_provedor)
     for (const p of usados) {
       if (!estado.chaves[p].configurada || p in modelos || lendoModelos.current.has(p)) continue
       lendoModelos.current.add(p)
@@ -123,7 +141,7 @@ export function DitarPeloCelular({ cliente, folha, visivel, leitura, secao, aoPe
         },
       )
     }
-  }, [cliente, estado, modelos])
+  }, [cliente, estado, modelos, polishAberto])
 
   useEffect(() => {
     if (desligando === 'aberto') botaoCancelarDesligar.current?.focus()
@@ -160,13 +178,17 @@ export function DitarPeloCelular({ cliente, folha, visivel, leitura, secao, aoPe
     else setErroDeSalvar(fraseDeSalvar(e))
   }
 
+  // querido são as preferências que a pessoa quer: as da conta, com o Polish
+  // marcado aqui mesmo que a conta ainda o tenha desligado (falta o modelo).
+  const querido = (prefs: Preferencias): Preferencias => ({ ...prefs, polish: prefs.polish || polishAberto })
+
   // pedidoDeAceite monta o pedido da folha a partir das preferências que
-  // valerão e do aceite que já vale.
-  function pedidoDeAceite(prefs: Preferencias, base: EstadoDoDitado, extra: { escolherVoz?: boolean; somenteLer?: boolean } = {}) {
+  // valerão: o provedor da voz e, com o Polish, o dele. O aceite que a folha
+  // grava é só o que ela mostra.
+  function pedidoDeAceite(prefs: Preferencias, extra: { escolherVoz?: boolean; somenteLer?: boolean } = {}) {
     return {
       voz: prefs.provedor,
       polish: prefs.polish ? prefs.polish_provedor : undefined,
-      jaAceitos: aceiteVigente(base)?.provedores ?? [],
       ...extra,
     }
   }
@@ -178,7 +200,7 @@ export function DitarPeloCelular({ cliente, folha, visivel, leitura, secao, aoPe
     setAplicando(true)
     setErroDeSalvar(null)
     try {
-      const r = await folha.pedirAceite(pedidoDeAceite(estado.preferencias, estado, { escolherVoz: true }))
+      const r = await folha.pedirAceite(pedidoDeAceite(querido(estado.preferencias), { escolherVoz: true }))
       if (!r) return
       if (r.voz !== estado.preferencias.provedor) {
         await cliente.salvarPreferencias({ ...estado.preferencias, provedor: r.voz, modelo: '' })
@@ -196,7 +218,7 @@ export function DitarPeloCelular({ cliente, folha, visivel, leitura, secao, aoPe
     if (!estado || aplicando) return
     setAplicando(true)
     try {
-      await folha.pedirAceite(pedidoDeAceite(estado.preferencias, estado, { somenteLer: true }))
+      await folha.pedirAceite(pedidoDeAceite(querido(estado.preferencias), { somenteLer: true }))
     } finally {
       setAplicando(false)
     }
@@ -208,12 +230,23 @@ export function DitarPeloCelular({ cliente, folha, visivel, leitura, secao, aoPe
   // abre a folha, e o PUT é refeito se a pessoa aceitar.
   async function aplicar(mudanca: Partial<Preferencias>) {
     if (!estado || aplicando) return
-    const novas: Preferencias = { ...estado.preferencias, ...mudanca }
+    // quer é o que a pessoa pediu; novas, o que a conta passa a guardar: o
+    // servidor só liga o Polish com um modelo, então o Polish marcado sem modelo
+    // fica desligado lá (e marcado aqui, no rascunho) até o modelo ser escolhido.
+    const quer: Preferencias = { ...querido(estado.preferencias), ...mudanca }
+    const novas: Preferencias = quer.polish && quer.polish_modelo === '' ? { ...quer, polish: false } : quer
+    const rascunho = quer.polish && !novas.polish
     setAplicando(true)
     setErroDeSalvar(null)
     try {
-      if (!aceitoPara(estado, provedoresExigidos(novas))) {
-        if (!(await folha.pedirAceite(pedidoDeAceite(novas, estado)))) return
+      if (!aceitoPara(estado, provedoresExigidos(quer))) {
+        if (!(await folha.pedirAceite(pedidoDeAceite(quer)))) return
+      }
+      if (iguais(novas, estado.preferencias)) {
+        // Nada muda na conta (marcar o Polish sem modelo, ou desmarcar o
+        // rascunho): só a tela.
+        setRascunhoDoPolish(rascunho ? leitura : null)
+        return
       }
       try {
         await cliente.salvarPreferencias(novas)
@@ -223,12 +256,13 @@ export function DitarPeloCelular({ cliente, folha, visivel, leitura, secao, aoPe
         // abre com o aceite que vale de verdade. Sem o "Aceito", a tela passa
         // a dizer o que o servidor diz.
         const atual = await cliente.estadoDoDitado()
-        if (!(await folha.pedirAceite(pedidoDeAceite(novas, atual)))) {
+        if (!(await folha.pedirAceite(pedidoDeAceite(quer)))) {
           setEstado(atual)
           return
         }
         await cliente.salvarPreferencias(novas)
       }
+      setRascunhoDoPolish(rascunho ? leitura : null)
       await mudou()
     } catch (e) {
       tratar(e)
@@ -243,7 +277,7 @@ export function DitarPeloCelular({ cliente, folha, visivel, leitura, secao, aoPe
   // pessoa aceitar); sem o "Aceito", ela passa a dizer o que o servidor diz.
   async function aoSemAceite(): Promise<boolean> {
     const atual = await cliente.estadoDoDitado()
-    const r = await folha.pedirAceite(pedidoDeAceite(atual.preferencias, atual))
+    const r = await folha.pedirAceite(pedidoDeAceite(querido(atual.preferencias)))
     if (r) await mudou()
     else setEstado(atual)
     return r !== null
@@ -262,6 +296,7 @@ export function DitarPeloCelular({ cliente, folha, visivel, leitura, secao, aoPe
       return
     }
     setDesligando('fechado')
+    setRascunhoDoPolish(null)
     await mudou()
     avisar('Ditar pelo celular desligado.')
     // O Desligar saiu de cena com o aceite: o foco vai para o título da seção.
@@ -271,6 +306,8 @@ export function DitarPeloCelular({ cliente, folha, visivel, leitura, secao, aoPe
   const prefs = estado?.preferencias
   const aceite = estado ? aceiteVigente(estado) : null
   const ligado = aceite !== null
+  // O Polish que a pessoa vê marcado: o da conta, ou o rascunho sem modelo.
+  const polishMarcado = (prefs?.polish ?? false) || polishAberto
 
   return (
     <section className="secao" aria-labelledby="cfg-ditar">
@@ -424,13 +461,13 @@ export function DitarPeloCelular({ cliente, folha, visivel, leitura, secao, aoPe
 
               <div className="ajuste">
                 <label className="marcar">
-                  <input type="checkbox" checked={prefs.polish} disabled={aplicando} onChange={(e) => void aplicar({ polish: e.target.checked })} />
+                  <input type="checkbox" checked={polishMarcado} disabled={aplicando} onChange={(e) => void aplicar({ polish: e.target.checked })} />
                   Organizar o texto com o Polish
                 </label>
                 <p className="ajuda">O texto do ditado vai ao provedor do Polish.</p>
               </div>
 
-              {prefs.polish && (
+              {polishMarcado && (
                 <>
                   <div className="ajuste">
                     <label className="ajuste-nome" htmlFor="cfg-ditar-polish-provedor">
@@ -475,6 +512,7 @@ export function DitarPeloCelular({ cliente, folha, visivel, leitura, secao, aoPe
                     lista={modelos[prefs.polish_provedor]}
                     temChave={estado.chaves[prefs.polish_provedor].configurada}
                     filtro={modelosDoPolish}
+                    semPadrao
                     desabilitado={aplicando}
                     aoEscolher={(polish_modelo) => void aplicar({ polish_modelo })}
                   />
@@ -497,6 +535,12 @@ export function DitarPeloCelular({ cliente, folha, visivel, leitura, secao, aoPe
 // Modelo é a lista dos modelos que a chave alcança, com "Padrão do provedor"
 // no começo. O modelo que a conta tem e a lista não mostra (o provedor mudou a
 // lista) continua escolhível, para a tela não mentir sobre o que vale.
+//
+// O servidor guarda sempre o modelo de verdade: "Padrão do provedor" é o pedido
+// ao servidor de escolher o padrão (o "" do PUT), e o que volta é o nome dele.
+// semPadrao é o modelo do Polish, que não tem padrão: enquanto não há modelo, a
+// lista diz "Escolha um modelo" (que não se escolhe de volta), e a ajuda diz que
+// falta escolher.
 function Modelo({
   id,
   rotulo,
@@ -504,6 +548,7 @@ function Modelo({
   lista,
   temChave,
   filtro,
+  semPadrao = false,
   desabilitado,
   aoEscolher,
 }: {
@@ -513,22 +558,33 @@ function Modelo({
   lista: string[] | null | undefined
   temChave: boolean
   filtro(lista: readonly string[]): string[]
+  semPadrao?: boolean
   desabilitado: boolean
   aoEscolher(modelo: string): void
 }) {
   const modelos = lista ? filtro(lista) : []
+  const valePadrao = semPadrao ? '' : ' Vale o padrão do provedor.'
   let ajuda = ''
   if (!temChave) ajuda = 'Cole a chave para ver os modelos da sua conta.'
   else if (lista === undefined) ajuda = 'Lendo os modelos da sua conta…'
-  else if (lista === null) ajuda = 'Não deu para ler os modelos. Vale o padrão do provedor.'
-  else if (modelos.length === 0) ajuda = 'A sua conta não mostrou nenhum modelo para este uso. Vale o padrão do provedor.'
+  else if (lista === null) ajuda = `Não deu para ler os modelos.${semPadrao ? ' Tente de novo mais tarde.' : valePadrao}`
+  else if (modelos.length === 0) ajuda = `A sua conta não mostrou nenhum modelo para este uso.${valePadrao}`
+  else if (semPadrao && valor === '') ajuda = 'Escolha o modelo para o Polish agir nos seus ditados.'
   return (
     <div className="ajuste">
       <label className="ajuste-nome" htmlFor={id}>
         {rotulo}
       </label>
       <select id={id} className="entrada" value={valor} disabled={desabilitado || !temChave} aria-describedby={`${id}-ajuda`} onChange={(e) => aoEscolher(e.target.value)}>
-        <option value="">Padrão do provedor</option>
+        {semPadrao ? (
+          valor === '' && (
+            <option value="" disabled>
+              Escolha um modelo
+            </option>
+          )
+        ) : (
+          <option value="">Padrão do provedor</option>
+        )}
         {modelos.map((m) => (
           <option key={m} value={m}>
             {m}

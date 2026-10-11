@@ -5,12 +5,18 @@
 //
 // Quem pede recebe uma promessa: o provedor da voz que valeu, se a pessoa
 // aceitou; null, se tocou em "Agora não", apertou o Esc ou só leu o aviso. O
-// aceite fica gravado no servidor, por conta, com a versão do aviso e os
-// provedores (POST /api/v1/dictation/consent); o celular não guarda nada.
+// aceite fica gravado no servidor, por conta, com a versão do aviso e os dois
+// provedores que a folha mostrou, o da transcrição e o do Polish, se houver
+// (POST /api/v1/dictation/consent); o celular não guarda nada.
+//
+// O aceite do servidor tem esses dois lugares e cada aceite novo substitui o
+// anterior: o que a pessoa aceita é o que a folha mostrou agora, e nada que
+// valia antes é carregado para o aceite novo.
 
 import { ErroDaApi, ForaDoAr, SemSessao } from '../../api'
+import { VERSAO_DO_AVISO } from '../avisoDoDitado'
 import type { ClienteNuvem } from '../cliente'
-import { type Provedor, type ProvedorDeVoz, type ProvedorDoPolish, versaoDoAviso } from './aviso'
+import type { ProvedorDeVoz, ProvedorDoPolish } from './aviso'
 import { textoDaEspera } from './erros'
 
 export interface PedidoDeAceite {
@@ -20,8 +26,6 @@ export interface PedidoDeAceite {
   // polish é o provedor do Polish que está sendo ligado (ou que já está ligado,
   // quando a pessoa relê o aviso). Sem ele, o Polish não entra no pedido.
   polish?: ProvedorDoPolish
-  // jaAceitos são os provedores do aceite vigente: o aceite novo os mantém.
-  jaAceitos: readonly Provedor[]
   // escolherVoz mostra a escolha do provedor da voz (o primeiro uso). Nas
   // Configurações, o provedor já foi escolhido ali.
   escolherVoz?: boolean
@@ -59,9 +63,14 @@ export class Folha {
   private vez = 0
   private semSessao: (() => void) | null = null
   private cliente: Pick<ClienteNuvem, 'aceitarAviso'>
+  private recarregar: () => void
 
-  constructor(cliente: Pick<ClienteNuvem, 'aceitarAviso'>) {
+  // recarregar é o que o app faz quando o servidor diz que o aviso que ele
+  // mostrou não é o atual (AVISO_DESATUALIZADO): ler a página de novo, para vir
+  // o texto novo. Os testes põem um dublê.
+  constructor(cliente: Pick<ClienteNuvem, 'aceitarAviso'>, recarregar: () => void = () => window.location.reload()) {
     this.cliente = cliente
+    this.recarregar = recarregar
   }
 
   // estado e assinar são o contrato do useSyncExternalStore.
@@ -101,21 +110,28 @@ export class Folha {
   }
 
   // aceitar é o "Aceito": grava o aceite no servidor, com a versão do aviso e
-  // os provedores (os que já valiam, o da voz e o do Polish). A folha só fecha
-  // com o servidor dizendo que gravou.
+  // os provedores que a folha mostrou (o da voz e, se houver, o do Polish). A
+  // folha só fecha com o servidor dizendo que gravou.
   async aceitar(): Promise<void> {
     const a = this.aberta
     if (!a || a.enviando || a.pedido.somenteLer) return
     const vez = this.vez
     this.mudar({ ...a, enviando: true, erro: null })
-    const provedores = Array.from(new Set<Provedor>([...a.pedido.jaAceitos, a.voz, ...(a.pedido.polish ? [a.pedido.polish] : [])]))
     try {
-      await this.cliente.aceitarAviso(versaoDoAviso, provedores)
+      await this.cliente.aceitarAviso(VERSAO_DO_AVISO, a.voz, a.pedido.polish ?? null)
     } catch (e) {
       if (vez !== this.vez || !this.aberta) return
       if (e instanceof SemSessao) {
         this.fechar(null)
         this.semSessao?.()
+        return
+      }
+      if (e instanceof ErroDaApi && e.codigo === 'AVISO_DESATUALIZADO') {
+        // O servidor tem outra versão do aviso: este app mostrou o texto velho,
+        // e nada foi gravado. A folha fecha sem aceite e o app é lido de novo,
+        // para a pessoa ler o texto novo no próximo toque.
+        this.fechar(null)
+        this.recarregar()
         return
       }
       this.mudar({ ...this.aberta, enviando: false, erro: fraseDoErro(e) })

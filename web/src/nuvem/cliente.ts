@@ -21,7 +21,7 @@ import {
   buscadorPadrao,
   pedir,
 } from '../api'
-import { type Provedor, ehProvedor, todosOsProvedores } from './ditar/aviso'
+import { type Provedor, type ProvedorDeVoz, type ProvedorDoPolish, ehProvedor } from './ditar/aviso'
 import {
   type Aceite,
   type ChaveGuardada,
@@ -135,20 +135,24 @@ export interface ClienteNuvem extends ClienteDoHistorico {
   // chegam em ErroDaApi.codigo; o sinal é o prazo de 90 s do celular.
   ditar(pedido: PedidoDeDitado, sinal?: AbortSignal): Promise<DitadoGravado>
   // O ditado pelo celular na conta (ADR-021, "O aceite e as preferências" e "As
-  // chaves"). Os erros chegam em ErroDaApi.codigo (SEM_ACEITE...). A chave vai
-  // só no corpo do PUT (nunca na URL), e nenhuma resposta a devolve: só
-  // `configurada` e o `final`.
+  // chaves"; o contrato é o do 06-api-contract.md, fixado pela C3a e pela C3b).
+  // Os erros chegam em ErroDaApi.codigo (SEM_ACEITE, AVISO_DESATUALIZADO...). A
+  // chave vai só no corpo do PUT (nunca na URL), e nenhuma resposta a devolve:
+  // só `configurada`, o `final` e o `colar_de_novo`.
   //
-  // estadoDoDitado: GET /dictation (as preferências, o aceite vigente, as
+  // estadoDoDitado: GET /dictation (o aviso, o aceite, as preferências, as
   // chaves). salvarPreferencias: PUT /dictation/settings (SEM_ACEITE para um
-  // provedor fora do aceite). aceitarAviso: POST /dictation/consent, só com a
-  // versão atual do aviso. desligarDitado: DELETE /dictation/consent (revoga o
-  // aceite e apaga as chaves). guardarChave/removerChave: PUT e DELETE em
-  // /ai-keys/{provedor}. modelosDaChave: GET /ai-keys/{provedor}/models, todos
-  // os modelos que a chave alcança (quem filtra é o app, estado.ts).
+  // provedor fora do aceite; o Polish só liga com um modelo). aceitarAviso: POST
+  // /dictation/consent, com a versão do aviso que o app mostrou (VERSAO_DO_AVISO)
+  // e os dois provedores que a folha mostrou, o da transcrição e, se houver, o
+  // do Polish; o servidor só aceita a versão atual (AVISO_DESATUALIZADO, 409).
+  // desligarDitado: DELETE /dictation/consent (revoga o aceite e apaga as
+  // chaves). guardarChave/removerChave: PUT e DELETE em /ai-keys/{provedor}.
+  // modelosDaChave: GET /ai-keys/{provedor}/models, todos os modelos que a chave
+  // alcança (quem filtra é o app, estado.ts).
   estadoDoDitado(): Promise<EstadoDoDitado>
   salvarPreferencias(preferencias: Preferencias): Promise<Preferencias>
-  aceitarAviso(versao: string, provedores: readonly Provedor[]): Promise<Aceite>
+  aceitarAviso(versao: number, transcricao: ProvedorDeVoz, polish: ProvedorDoPolish | null): Promise<Aceite>
   desligarDitado(): Promise<void>
   guardarChave(provedor: Provedor, chave: string): Promise<ChaveGuardada>
   removerChave(provedor: Provedor): Promise<void>
@@ -216,34 +220,85 @@ function daPagina(p: { items?: ItemDaNuvem[] | null; next_cursor?: string | null
   return pagina
 }
 
-// O estado do ditado como a nuvem o manda (GET /api/v1/dictation, ADR-021). O
-// app lê com tolerância: o que falta ou não tem a forma esperada vira o padrão
+// O estado do ditado como a nuvem o manda (GET /api/v1/dictation; também a
+// resposta do PUT das preferências e do POST do aceite; 06, "O aceite e as
+// preferências do ditado no celular"):
+//
+//   { aviso: { versao },
+//     aceite: { versao, transcricao, polish | null, aceito_em, vigente } | null,
+//     preferencias: { transcricao: { provedor, modelo }, dica, polish: { ligado, provedor, modelo } },
+//     chaves: [ { provedor, configurada, final, colar_de_novo } ] }
+//
+// O app lê com tolerância: o que falta ou não tem a forma esperada vira o padrão
 // mais fechado (sem aceite, sem chave, tudo desligado), e nunca mostra da chave
-// mais que o final de 4 caracteres, mesmo que o servidor mandasse mais.
+// mais que o final de 4 caracteres, mesmo que o servidor mandasse mais. A tela
+// usa a forma plana de Preferencias (estado.ts); estas funções traduzem.
+const objeto = (v: unknown): Record<string, unknown> => (v !== null && typeof v === 'object' ? (v as Record<string, unknown>) : {})
+
 function daChave(v: unknown): ChaveGuardada {
-  const c = (v ?? {}) as { configurada?: unknown; final?: unknown }
+  const c = objeto(v)
   const configurada = c.configurada === true
-  return { configurada, final: configurada && typeof c.final === 'string' ? c.final.slice(-4) : '' }
+  return {
+    configurada,
+    final: configurada && typeof c.final === 'string' ? c.final.slice(-4) : '',
+    // Uma chave que vale não pede para ser colada de novo.
+    colar_de_novo: !configurada && c.colar_de_novo === true,
+  }
 }
 
 function dasPreferencias(v: unknown): Preferencias {
-  const p = (v ?? {}) as Record<string, unknown>
+  const p = objeto(v)
+  const voz = objeto(p.transcricao)
+  const polish = objeto(p.polish)
   return {
-    provedor: p.provedor === 'groq' ? 'groq' : preferenciasPadrao.provedor,
-    modelo: typeof p.modelo === 'string' ? p.modelo : '',
+    provedor: voz.provedor === 'groq' ? 'groq' : preferenciasPadrao.provedor,
+    modelo: typeof voz.modelo === 'string' ? voz.modelo : '',
     dica: p.dica === true,
-    polish: p.polish === true,
-    polish_provedor: p.polish_provedor === 'anthropic' ? 'anthropic' : preferenciasPadrao.polish_provedor,
-    polish_modelo: typeof p.polish_modelo === 'string' ? p.polish_modelo : '',
+    polish: polish.ligado === true,
+    polish_provedor: polish.provedor === 'anthropic' ? 'anthropic' : preferenciasPadrao.polish_provedor,
+    polish_modelo: typeof polish.modelo === 'string' ? polish.modelo : '',
+  }
+}
+
+// paraPreferencias é o corpo do PUT /dictation/settings: as preferências
+// inteiras, nos três campos que o servidor exige (transcricao, dica e polish).
+function paraPreferencias(p: Preferencias) {
+  return {
+    transcricao: { provedor: p.provedor, modelo: p.modelo },
+    dica: p.dica,
+    polish: { ligado: p.polish, provedor: p.polish_provedor, modelo: p.polish_modelo },
   }
 }
 
 function doAceite(v: unknown): Aceite | null {
-  if (!v || typeof v !== 'object') return null
-  const a = v as { versao?: unknown; provedores?: unknown; aceito_em?: unknown }
-  if (typeof a.versao !== 'string' || a.versao === '') return null
-  const provedores = Array.isArray(a.provedores) ? a.provedores.filter(ehProvedor) : []
-  return { versao: a.versao, provedores: Array.from(new Set(provedores)), aceito_em: typeof a.aceito_em === 'string' ? a.aceito_em : '' }
+  if (v === null || typeof v !== 'object') return null
+  const a = objeto(v)
+  // A versão do aviso é um inteiro. Quem diz se ela vale é o `vigente`, não o app.
+  if (typeof a.versao !== 'number' || !Number.isInteger(a.versao)) return null
+  if (a.transcricao !== 'openai' && a.transcricao !== 'groq') return null
+  return {
+    versao: a.versao,
+    transcricao: a.transcricao,
+    // Um Polish que o app não conhece é "sem Polish": cobre menos, não mais.
+    polish: a.polish === 'openai' || a.polish === 'anthropic' ? a.polish : null,
+    aceito_em: typeof a.aceito_em === 'string' ? a.aceito_em : '',
+    vigente: a.vigente === true,
+  }
+}
+
+// doEstado lê o estado inteiro. A lista de chaves traz uma entrada por
+// provedor; o provedor que o app não conhece não vira chave, e o que falta
+// fica sem chave.
+function doEstado(v: unknown): EstadoDoDitado {
+  const e = objeto(v)
+  const chaves = chavesVazias()
+  if (Array.isArray(e.chaves)) {
+    for (const c of e.chaves) {
+      const provedor = objeto(c).provedor
+      if (ehProvedor(provedor)) chaves[provedor] = daChave(c)
+    }
+  }
+  return { preferencias: dasPreferencias(e.preferencias), aceite: doAceite(e.aceite), chaves }
 }
 
 export function criarClienteNuvem(buscar: Buscador = buscadorPadrao): ClienteNuvem {
@@ -320,18 +375,23 @@ export function criarClienteNuvem(buscar: Buscador = buscadorPadrao): ClienteNuv
     },
     async estadoDoDitado() {
       const r = await pedir(buscar, '/api/v1/dictation', daOrigem(), false)
-      const v = (await r.json()) as { preferencias?: unknown; aceite?: unknown; chaves?: Record<string, unknown> | null }
-      const chaves = chavesVazias()
-      for (const p of todosOsProvedores) chaves[p] = daChave(v.chaves?.[p])
-      return { preferencias: dasPreferencias(v.preferencias), aceite: doAceite(v.aceite), chaves }
+      return doEstado(await r.json())
     },
     async salvarPreferencias(preferencias) {
-      const r = await pedir(buscar, '/api/v1/dictation/settings', comJson('PUT', preferencias), false)
-      return dasPreferencias(await r.json())
+      // A resposta é o estado inteiro; daqui só as preferências voltam (quem
+      // quer o resto lê o estado de novo).
+      const r = await pedir(buscar, '/api/v1/dictation/settings', comJson('PUT', paraPreferencias(preferencias)), false)
+      return doEstado(await r.json()).preferencias
     },
-    async aceitarAviso(versao, provedores) {
-      const r = await pedir(buscar, '/api/v1/dictation/consent', comJson('POST', { versao, provedores }), false)
-      return doAceite(await r.json()) ?? { versao, provedores: [...provedores], aceito_em: '' }
+    async aceitarAviso(versao, transcricao, polish) {
+      // O Polish sem provedor é um campo ausente (o aviso não o incluía).
+      const corpo = polish ? { versao, transcricao, polish } : { versao, transcricao }
+      const r = await pedir(buscar, '/api/v1/dictation/consent', comJson('POST', corpo), false)
+      const aceite = doEstado(await r.json()).aceite
+      // Um 200 sem o aceite que acabou de ser gravado não é um aceite: a folha
+      // não fecha como se tivesse dado certo.
+      if (aceite === null) throw new ErroDaApi(502, 'o servidor não confirmou o aceite')
+      return aceite
     },
     async desligarDitado() {
       await pedir(buscar, '/api/v1/dictation/consent', daOrigem({ method: 'DELETE' }), false)
