@@ -364,3 +364,42 @@ prova", acima, precisa ser lida junto com estes números, não substituída por 
 > - **O que falta:** o teste manual com o `bin\` (`docs/teste-manual-nuvem-f8.md`), que o Mauro roda; o
 >   que é do Windows (a troca do dicionário no runtime, a inserção) fica nele, e não nos testes
 >   automáticos.
+
+> **Atualização de 11-out-2026 (ADR-021, subfatia C5c, `a8cf426`).** A C5c tirou do repositório o
+> servidor em memória da F1-D inteiro (16 arquivos apagados de `internal/server`, 11 de código e 5 de
+> teste, entre eles `asr_gateway.go`, `asr_gateway_test.go`, `isolation_test.go`, `server_test.go`,
+> `sync_test.go` e `platform_test.go`; o `auth.go`, o `doc.go` e o `httpx.go` foram enxugados). As
+> linhas da tabela acima que citam esses testes (AC-028, AC-035, AC-041, AC-042 e NFR-012) valem como
+> registro da Fase 1. A prova de hoje é a que segue. A classificação não muda (continuam VERDE POR
+> MOCK), e a prova passou a ser contra a nuvem de verdade (o `Cloud` de `internal/server`, na memória
+> e num Postgres 18):
+> - **AC-028 e AC-041 (o áudio não aparece em arquivo, banco nem log; o backend não grava áudio).**
+>   Hoje o backend não transcreve: repassa a voz ao provedor da pessoa (`POST /api/v1/dictations`,
+>   ADR-021). A prova é `chavestest.testDitarCanario` (`Ditar_Canario`, em
+>   `internal/server/chavestest/ditar_prazos.go`; roda em `TestChaves_Memoria` e `TestChaves_Postgres`).
+>   Um áudio sentinela e um texto sentinela passam por todos os desfechos (o ditado criado com e sem o
+>   Polish, a falha do provedor em três status, o sem fala, o formato errado, o corpo grande demais e a
+>   gravação que falha), e o teste varre o log de acesso e o log padrão, todas as respostas, o despejo
+>   do banco e o diretório temporário: o áudio não está em nenhum deles, o texto não está no log nem
+>   numa resposta de erro, e o diretório temporário não ganha arquivo. A chave e o corpo de erro do
+>   provedor também não aparecem.
+> - **AC-035 e NFR-012 (os dados da nuvem são isolados por usuário; o `user_id` vem da credencial, nunca
+>   do corpo; sem credencial, `401`).** `contracttest.testIsolation` (o mesmo id em duas contas são duas
+>   linhas; o CRUD e o push de B no item de A não passam; um `user_id` forjado no corpo é ignorado; o
+>   mesmo `mutation_id` nas duas contas), `authtest.testEscopo` (a tabela de rotas inteira contra o
+>   token do PC, a sessão e o Bearer inválido) e `authtest.testAparelhosEscopo`, todos na memória e no
+>   Postgres (`TestContrato_StoreEmMemoria` e `TestContrato_Postgres`, `TestAuth_Memoria` e
+>   `TestAuth_Postgres`).
+> - **AC-042 (a API aceita Android).** `internal/server/cloudstore`:
+>   `TestNewTranscription_OAppNativoTambemNaoTemAparelho` e `TestIsCloudPlatform` já cobriam o caminho do
+>   app, e a C5c acrescentou `TestDecidePush_AceitaQualquerOrigemDeTextoLivre` (`windows`, `android`,
+>   `web`, `ios`, `a` e um nome de 32 caracteres, aplicados pelas regras do push de verdade). O
+>   `source_platform` continua sem enum fechado a `windows`.
+> - **As rotas de saúde** (`/health/live` e `/health/ready` sem sessão, que estavam no `server_test.go`
+>   apagado): `internal/server/health_test.go` (`TestHealthLive_Responde200SemDependencia` e
+>   `TestHealthReady_SoDaOkSeTodosPassam`, que também prova que o erro de um checker não vai à
+>   resposta). O `200` do `ready` contra o Postgres continua em `cmd/server/serve_pg_test.go`.
+> - **O que não mudou:** `POST /asr/transcribe` e `POST /transcriptions` seguem `404` com qualquer
+>   credencial e método, agora sem código atrás (`authtest.testNaoMontadas` e
+>   `contracttest.testUnmountedRoutes`, na memória e no Postgres). A prova do AC-058 da nota de
+>   05-out-2026 continua valendo.

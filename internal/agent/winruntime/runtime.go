@@ -959,13 +959,20 @@ func (rt *Runtime) UsarVocabulario(v string) { rt.vocabulario = v }
 // aviso no log.
 //
 // Medido em 27-set-2026 (BenchmarkSmartResolve_DicionarioReal): 2,3 ms
-// numa frase de 25 palavras com 43 termos no dicionário. O custo cresce
-// com tokens VEZES tamanho do dicionário, e o dicionário cresce a cada
-// termo aprendido — então este caminho fica mais lento com o uso, de
-// forma gradual e sem causa visível, que é o pior tipo de regressão.
+// numa frase de 25 palavras com 43 termos no dicionário. Naquela medida
+// o custo crescia com tokens VEZES tamanho do dicionário, e o dicionário
+// cresce a cada termo aprendido — então este caminho ficaria mais lento
+// com o uso, de forma gradual e sem causa visível, que é o pior tipo de
+// regressão.
 //
-// 25 ms é uma ordem de grandeza acima do medido: passar disso significa
-// que o dicionário cresceu a ponto de merecer índice, não que o ditado
+// Desde 10-out-2026 (ADR-021, C2) a busca do dicionário em memória tem um
+// índice, mantido por cada gravação (internal/dictionary/indice.go), e o
+// mesmo benchmark caiu de 6,03 ms para 0,24 ms na máquina de referência,
+// sem mudar o resultado. O custo já não cresce com o tamanho do dicionário
+// do jeito de antes.
+//
+// 25 ms continua uma ordem de grandeza acima do medido: passar disso
+// significa que o Smart ou a máquina ficaram lentos, não que o ditado
 // quebrou.
 const limiarResolveLento = 25 * time.Millisecond
 

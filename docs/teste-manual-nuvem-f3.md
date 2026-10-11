@@ -59,8 +59,8 @@ $env:DATABASE_URL = (Get-Content "$env:USERPROFILE\.aurora-whisper-dev\postgres-
 go -C C:\Desenvolvimento\aurora-whisper run ./cmd/server migrate
 ```
 
-O que você deve ver: `migrate: 16 aplicadas agora, 0 já estavam aplicadas` (ou `nada a aplicar`, se já
-rodou). Se ele recusar dizendo que a `0001_users_table.sql` **mudou** depois de aplicada, é porque esse
+O que você deve ver: `migrate: 19 aplicadas agora, 0 já estavam aplicadas` (ou `nada a aplicar`, se já
+rodou; as 19 incluem a 0017, a 0018 e a 0019, do ditado pelo celular, ADR-021). Se ele recusar dizendo que a `0001_users_table.sql` **mudou** depois de aplicada, é porque esse
 banco recebeu a versão antiga dela (a F3 a corrigiu no lugar): recrie o contêiner, que é descartável,
 leia o endereço de novo (o primeiro comando desta seção) e rode o `migrate` outra vez.
 
