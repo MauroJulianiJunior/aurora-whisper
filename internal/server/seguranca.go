@@ -17,6 +17,13 @@ import (
 // não tem script nem estilo embutido para caber nela.
 const csp = "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'"
 
+// permissionsPolicy deixa o microfone só para a própria origem (ADR-021,
+// escolha menor 18). O app grava o ditado do celular, e nenhuma moldura nem
+// página de outra origem pode pedi-lo, mesmo que um dia o frame-ancestors da
+// csp deixe de barrar a moldura. É o único recurso que o app usa; os outros
+// ficam como o navegador os deixa.
+const permissionsPolicy = "microphone=(self)"
+
 // hsts: um ano, sem includeSubDomains (o domínio pode ter outros serviços).
 // Só com PUBLIC_BASE_URL em https: em http://localhost ele não vale nada, e
 // o navegador o ignora.
@@ -29,6 +36,7 @@ func (c *Cloud) cabecalhos(next http.Handler) http.Handler {
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("Referrer-Policy", "no-referrer")
 		h.Set("Cross-Origin-Opener-Policy", "same-origin")
+		h.Set("Permissions-Policy", permissionsPolicy)
 		if c.https {
 			h.Set("Strict-Transport-Security", hsts)
 		}

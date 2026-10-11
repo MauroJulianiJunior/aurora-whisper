@@ -231,6 +231,13 @@ export class ErroDaApi extends Error {
   // contagem mudou: o número novo, ao lado do envelope de erro (06, "Retenção
   // no PC"). Ausente em todo outro erro.
   previa?: number
+  // codigo: o error.code do envelope, em maiúsculas (ADR-021, "A rota": o
+  // app decide pelo código, nunca pela frase). Ausente quando o corpo não é
+  // o envelope (um proxy, um erro do navegador).
+  codigo?: string
+  // esperaSeg: o Retry-After da resposta (429 e 503), em segundos. Ausente
+  // quando o servidor não mandou, ou mandou uma data.
+  esperaSeg?: number
   constructor(status: number, mensagem: string, previa?: number) {
     super(mensagem)
     this.name = 'ErroDaApi'
@@ -270,14 +277,21 @@ export async function pedir(buscar: Buscador, caminho: string, init: RequestInit
   if (resposta.status === 409 && conflitoEhVersao) throw new Conflito()
   let mensagem = `erro ${resposta.status}`
   let previa: number | undefined
+  let codigo: string | undefined
   try {
-    const corpo = (await resposta.json()) as { error?: { message?: string }; previa?: unknown }
+    const corpo = (await resposta.json()) as { error?: { message?: string; code?: unknown }; previa?: unknown }
     if (corpo.error?.message) mensagem = corpo.error.message
+    if (typeof corpo.error?.code === 'string' && corpo.error.code !== '') codigo = corpo.error.code
     if (typeof corpo.previa === 'number') previa = corpo.previa
   } catch {
     // corpo que não é JSON: fica o status
   }
-  throw new ErroDaApi(resposta.status, mensagem, previa)
+  const erro = new ErroDaApi(resposta.status, mensagem, previa)
+  if (codigo) erro.codigo = codigo
+  // Retry-After em segundos inteiros; uma data (a outra forma do cabeçalho) não conta.
+  const espera = resposta.headers?.get('Retry-After') ?? ''
+  if (/^\d{1,5}$/.test(espera)) erro.esperaSeg = Number(espera)
+  throw erro
 }
 
 // ClienteDoHistorico é o que o Painel usa do histórico, nos dois modos: o

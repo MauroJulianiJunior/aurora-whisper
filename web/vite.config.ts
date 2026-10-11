@@ -134,6 +134,10 @@ export default defineConfig(({ mode }) => {
     },
     test: {
       environment: 'jsdom',
+      // Os findBy esperam 5 s, e cada teste, 20 s: a máquina ocupada não pode
+      // derrubar a suíte (testes/preparar.ts).
+      setupFiles: ['./src/testes/preparar.ts'],
+      testTimeout: 20_000,
       // O vitest troca todo CSS por texto vazio. O index.css passa pelo
       // Vite de verdade para que estilo.test.ts leia os tokens e confira o
       // contraste no próprio arquivo; fontes.css e os CSS dos pacotes

@@ -510,12 +510,15 @@ pergunta conta as trocas aprendidas (o `previa_trocas` do `06`, o M).
 - **A Privacidade do PC**, com o PC conectado: "Com a nuvem conectada, o texto dos seus ditados e as
   trocas que você aprendeu vão para a sua nuvem, em {endereço}. O áudio e o que está nas outras janelas
   nunca vão." (o `08` do plano dizia "e o que você aprendeu"; "as trocas que você aprendeu" é o que a D1
-  limita: só o botão Aprender). A do app do celular: "Vão para a nuvem: o texto dos ditados, com a data,
-  o PC de origem e os detalhes da transcrição, e as trocas aprendidas."
+  limita: só o botão Aprender). A do app do celular: "Configurações do celular", abaixo (ADR-021, D0).
 - **Para ver as telas** sem Agent nem nuvem: `pnpm -C web dev` e `/telas-dev.html?cenario=estados` (o
   painel do PC; também `so-estados`, `pergunta`, `so-trocas`, `conectado` e `freio`) ou
-  `/telas-dev-nuvem.html?cenario=lista` (o app da nuvem; também `vazio`, `teto`, `erro` e `longa`). São
-  só do `pnpm dev`: nenhum build as inclui.
+  `/telas-dev-nuvem.html?cenario=lista` (o app da nuvem; também `vazio`, `teto`, `erro` e `longa` e,
+  para o ditado do celular, `gravando`, `enviando`, `erro-rede`, `sessao` e `chegou`: um microfone de
+  mentira fala sozinho, num relógio parado; e, para o aceite e as Configurações do ditado, `aceite` (o
+  toque no microfone de uma conta sem aceite, com a folha), `ditar-desligado`, `ditar-ligado` e
+  `ditar-polish`). A calibração do microfone, `/calibracao-dev.html` ("A calibração do microfone no
+  Android", abaixo). São só do `pnpm dev`: nenhum build as inclui.
 - **O teste manual** (F8i, 08-out-2026): `docs/teste-manual-nuvem-f8.md` confere, no `bin\` e no app, com
   a nuvem de teste, a pergunta do envio com a troca e o **Desfazer** do **Aprendido** do app e do
   **Aprendido no painel**, nos dois sentidos. É um PC só: as etiquetas de estado e o "não aplicado neste
@@ -642,7 +645,11 @@ com ponteiro de toque, os botões (as abas inclusive) e a busca têm 44 px.
   continua só no PC (ADR-017). Entrou na F8h (07-out-2026), nas Configurações do celular
   (`web/src/nuvem/AprendidoNaNuvem.tsx`; "Configurações do celular", abaixo).
 - **Configurações do celular** (abaixo).
-- Não tem: ditar, chave de API, atalho, microfone, modelo de voz, modo de texto, preferências.
+- **Ditar pelo celular** (ADR-021, C6a e C6b): o microfone ao lado da busca, a faixa da onda e o ditado
+  que chega no topo ("Ditar pelo celular", abaixo); a **folha do aceite**, que vem antes do microfone
+  ("A folha do aceite", abaixo); e, nas Configurações, o estado, o provedor, a chave, o modelo, a dica e
+  o Polish ("Ditar pelo celular", em "Configurações do celular").
+- Não tem: a chave de API **do PC**, atalho, modo de texto e as outras preferências dos PCs.
 - Salvar uma edição só diz "Texto salvo.": a nuvem nunca sugere aprender.
 - O histórico vazio diz "Nenhum ditado ainda." e "O que você ditar num PC conectado aparece aqui."
 
@@ -738,10 +745,265 @@ com ponteiro de toque, os botões (as abas inclusive) e a busca têm 44 px.
     outra conta e a do erro dizem o que fazer, e ficam inteiras.
   - A página da janela, "Você entrou de novo.", tem o link **Abrir o histórico**, para quando o
     navegador não a fechar (ou a abriu na mesma aba).
+  - **Um ditado gravado e ainda não enviado** (ADR-021, C6a) conta como texto não salvo: o `401`
+    não troca a tela inteira, e a faixa diz "**Sua sessão terminou.** Seu ditado continua aqui; entre
+    de novo para enviar." (com texto também: "Seu texto e seu ditado continuam aqui; entre de novo
+    para salvar."). Não há o que copiar de um áudio: com a janela bloqueada, a faixa diz "Entrar
+    nesta aba descarta o ditado que não foi enviado." e só oferece **Entrar nesta aba**. A página
+    também não sai sem perguntar. Depois de entrar de novo, **Tentar de novo** reenvia o áudio com o
+    mesmo id.
 - Cada tela inteira leva o foco ao título dela, para o leitor de tela anunciar a troca. Ao entrar,
   ou quando o **Tentar de novo** abre o histórico, o botão some com a tela, e o foco vai para o
   título do histórico ("Histórico", que só o leitor de tela vê). Aberto com a sessão do cookie, o
   foco fica onde o navegador o pôs.
+
+### Ditar pelo celular (ADR-021, C6a e C6b)
+O ditado do celular entra pelo **microfone** do app: toque para começar, toque para parar. A voz vai
+ao servidor, que a repassa ao provedor que a pessoa escolheu; o texto volta como um ditado do
+histórico, e desce aos PCs pelo sync. "O menor que funciona", com forma e movimento no lugar de
+texto (referência do Mauro: o Wispr Flow). Tudo em tons de cinza: o verde é da ação, e o vermelho, do
+erro (sempre com a frase); gravar não é nenhum dos dois. **O que está aqui é o gravador e o envio
+(C6a). A porta do aceite antes do microfone, a folha, a chave e as preferências (C6b) estão nas duas
+seções seguintes; a calibração do limiar e da onda no Android (C6c), no fim deste bloco.**
+- **A porta antes do microfone (C6b).** O toque no microfone confere a conta antes de abrir o
+  `getUserMedia` (um `GET /api/v1/dictation`): **sem o aceite do aviso para os provedores das
+  preferências, o microfone nem abre, a chave não é pedida e nada é enviado**. Sem o aceite, o toque
+  mostra a folha; sem o "Aceito", fica assim. Com o aceite e a chave na conta (o caso de todo ditado
+  depois do primeiro), a porta passa direto, e a conferência não se repete nesta página: o ditado sem
+  rede continua gravando, e o áudio espera o "Tentar de novo". Sem rede **no primeiro toque**, ou sem a
+  sessão, o microfone não abre ("Sem conexão." na pílula; a tela da sessão): sem saber do aceite, não
+  abre. O servidor sem o ditado (`404`, sem a chave de cifra): "Este servidor não tem o ditado pelo
+  celular.".
+  - **Depois da folha, o microfone não começa sozinho** (a pessoa acabou de ler um aviso longo): a
+    pílula diz "Aceito. Toque no microfone para ditar.", e o toque seguinte grava.
+  - **Sem a chave** (depois do aceite): a pílula diz "Falta a chave da OpenAI. Cole a chave nas
+    Configurações." (o nome é o do provedor), e o app abre as Configurações **na seção "Ditar pelo
+    celular"**, com o foco no título dela. A chave é colada ali, no lugar de sempre.
+  - O que a porta sabia deixa de valer quando a pessoa muda algo nas Configurações (o aceite, o
+    provedor, a chave, "Desligar", "Apagar meus dados") e quando o servidor recusa um ditado por
+    `SEM_ACEITE`, `SEM_CHAVE` ou `PROVEDOR_RECUSOU_CHAVE`.
+- **O botão:** um quadrado pequeno ao lado da busca, no cabeçalho (40 px; 44 px no toque), com o
+  ícone de microfone, "Ditar" no rótulo e no `title`. Só no app da nuvem, e só se o navegador grava
+  (`getUserMedia`, `MediaRecorder` e `AudioContext`): sem isso, o microfone nem aparece. Nas
+  Configurações ele some, a não ser que haja uma gravação ou um áudio à espera.
+- **Gravando:** a linha da busca vira uma faixa do mesmo tamanho e contorno, com a **onda**, o
+  **tempo** (`m:ss`, na IBM Plex Mono) e o **Cancelar**; o microfone vira o botão de **parar** (um
+  quadrado cheio, "Parar e enviar"). "Gravando" só o leitor de tela ouve (região viva); a onda e o
+  tempo ficam escondidos dele. O foco fica no mesmo botão do começo ao fim. O Esc na faixa também
+  cancela.
+- **A onda** é a do overlay do PC (ADR-014): 33 barras de 2 px com 1 px entre elas, espelhadas, em
+  cinza, o brilho acompanhando a altura, cada uma resumindo uns 39 ms da janela de 1,3 s pelo
+  **pico**. O nível vem do `AnalyserNode` (RMS, em dBFS), e a altura espalha de -48 a -14 dBFS sobre o
+  curso da barra. **Esses limites são os do microfone do PC: a C6c os recalibra no Android, e a onda
+  é renderizada antes de concluir.** Em celulares de até 340 px as 5 barras mais antigas saem da
+  vista, para a onda inteira caber ao lado do tempo e do Cancelar.
+- **Cancelar** descarta a gravação sem enviar: nada sai do aparelho.
+- **Parando:** o microfone desliga na hora. Com menos de **300 ms de fala**, sem contar os últimos
+  200 ms (o toque), o app não envia: o aviso da pílula diz "Não ouvi nada.". Com fala, a faixa diz
+  "Transcrevendo…" e o botão fica ocupado (`aria-disabled`, rótulo "Transcrevendo"): gravar o próximo
+  enquanto o anterior transcreve fica fora. A medição de fala usa o mesmo `AnalyserNode`, com o RMS
+  de 0,03 do PC como limiar de partida (a C6c calibra).
+- **O teto** é de 120 s: o app para sozinho e envia o que gravou; o aviso do ditado que chega diz
+  "Parei no limite de 2 minutos.".
+- **Tela apagada e segundo plano.** O app pede a tela acesa (Wake Lock) ao começar e a solta ao parar;
+  se o pedido não vem, a faixa avisa, embaixo, em texto pequeno: "A tela pode apagar e parar o
+  ditado.". Se a página sai da frente (`visibilitychange`), ou a faixa do microfone fica muda ou acaba
+  (uma ligação recebida), o app **para e envia o que já gravou**, se houver fala, e diz "Parei quando o
+  app saiu da frente." ou "O microfone foi interrompido." (no aviso do ditado que chegou, ou, sem
+  fala, antes do "Não ouvi nada."). **No passo 1 não existe ditado em segundo plano nem com a tela
+  apagada.**
+- **Quando chega:** o ditado entra **no topo do histórico, em destaque** (o fundo do que entrou, mais a
+  etiqueta "novo", que dura 10 s ou até a pessoa abrir uma linha ou trocar de vista), com o **Copiar**
+  que toda linha tem (sempre à vista no toque), e o aviso diz "Ditado no topo do histórico.". Se o
+  Polish caiu para o texto do Smart, o aviso acrescenta "O Polish não agiu: {motivo}." (o motivo é um
+  código do servidor, nunca texto dele; o que o app não conhece fica só "O Polish não agiu."). Numa
+  busca, na Lixeira ou nas Configurações o ditado não entra na lista que está na tela, e o aviso diz
+  "Ditado salvo no histórico.". **Copiar sozinho ao chegar não existe**: escrever na área de
+  transferência pede um gesto recente, e a resposta chega segundos depois do toque (escolha menor 14,
+  a conferir no aparelho).
+- **As falhas** (o app decide pelo `error.code`, nunca pela frase do servidor). As que **não guardam o
+  áudio** viram o aviso da pílula, e a linha volta ao normal:
+
+  | Situação | Frase |
+  |---|---|
+  | permissão negada | "Sem acesso ao microfone. Libere nas permissões do site." |
+  | sem microfone, em uso por outro app, sem suporte, sem webm/opus | "Não achei um microfone." / "Não consegui abrir o microfone. Outro app pode estar usando." / "Este navegador não grava áudio." / "Este navegador não grava no formato certo." |
+  | `SEM_FALA` ou menos de 300 ms de fala | "Não ouvi nada." |
+  | `PAYLOAD_TOO_LARGE` | "Ficou longo demais." |
+  | `FORMATO` | "Não deu para ler o áudio." |
+  | `APAGADO` | "Esse ditado foi apagado." |
+  | `404` (o servidor sem a chave de cifra) | "Este servidor não tem o ditado pelo celular." |
+
+  As que **guardam o áudio** na memória (só aí, até **Tentar de novo** ou **Descartar**, e some ao
+  fechar o app) abrem uma **nota de erro** embaixo da linha, com a frase e os botões **Tentar de
+  novo** (reenvia com o **mesmo id**: se o primeiro envio chegou, o servidor devolve o ditado já
+  gravado, sem cobrar de novo) e **Descartar**. Enquanto o áudio espera, o microfone fica ocupado: não
+  se grava por cima dele.
+
+  | Situação | Frase |
+  |---|---|
+  | sem rede | "Sem conexão." |
+  | os 90 s do envio estouraram | "O envio demorou demais." |
+  | `401` | "O ditado espera você entrar de novo." (e a faixa da sessão, acima) |
+  | `UM_POR_VEZ`, `LIMITE` ou `OCUPADO` (`429`/`503`) | "Espere um pouco. Tente de novo em {n} s." (o `Retry-After`) |
+  | `PROVEDOR_LIMITE` ou `PROVEDOR_FORA` | "O provedor não respondeu agora." |
+  | `PROVEDOR_RECUSOU_CHAVE` | "O provedor recusou a chave." e **Abrir as Configurações** |
+  | `SEM_CHAVE` | "Falta a chave do provedor." e **Abrir as Configurações** |
+  | `SEM_ACEITE` | "Falta aceitar o aviso do ditado pelo celular." e **Ver o aviso** |
+  | qualquer outra | "Não deu para enviar o ditado." |
+
+  **Abrir as Configurações** (a chave recusada ou que falta) leva à seção "Ditar pelo celular", com o
+  foco no título dela, e o áudio espera na nota, à vista nas Configurações. **Ver o aviso** (o aceite
+  acabou em outro aparelho, ou o aviso mudou, com o áudio já gravado) abre a folha: aceitando, o áudio
+  que esperava é reenviado **com o mesmo id** e chega; "Agora não" o deixa na nota, com **Tentar de
+  novo** e **Descartar**.
+- **Só na memória.** O áudio vive numa variável do gravador, do fim da gravação até o envio dar certo
+  ou a pessoa descartar. Nada em `IndexedDB`, `localStorage`, `Cache` ou arquivo; o `bundle.test.ts`
+  trava isso, e que o gravador só existe no build da nuvem. O `MediaRecorder` entrega um `Blob` que o
+  Chrome pode paginar em disco: não verificado (ADR-021, Riscos).
+- **O cabeçalho** `Permissions-Policy: microphone=(self)` sai em toda resposta do servidor da nuvem
+  (escolha menor 18).
+- **Os testes** usam dublês do `getUserMedia`, do `MediaRecorder`, do Wake Lock e da área de
+  transferência: nenhum abre o microfone de verdade.
+
+### A folha do aceite (ADR-021, decisão H; C6b)
+**Uma folha só, em destaque, específica e separada das outras finalidades**, que aparece **no primeiro
+toque no microfone, antes de o microfone abrir e antes de pedir a chave**, e de novo quando muda o que a
+pessoa aceitou (trocar de provedor, ligar o Polish com outro provedor, ou o texto do aviso mudar: **a
+versão do aviso**). O texto é o da D0 (`docs/politica-de-privacidade.md`); **qualquer mudança nele muda a
+versão** (`web/src/nuvem/ditar/aviso.ts`) e pede o aceite de novo.
+- **A versão do aviso é PROVISÓRIA** (`2026-10-10`, a data da ADR) até a C3b criar a do servidor: o
+  `POST /api/v1/dictation/consent` só aceita a versão atual, e um teste tem de prender o app ao servidor.
+- **A tela.** Uma folha colada embaixo no celular (no PC, centrada, com no máximo 40 rem), por cima da
+  tela inteira, com um fundo escuro que só escurece o que está atrás. O texto rola dentro dela; **os
+  botões ficam sempre à vista**, no rodapé. É um diálogo modal (`role="dialog"`, `aria-modal`): o foco
+  nasce no título, o Tab não sai da folha, o **Esc é "Agora não"**, e o foco volta ao que o tinha (o
+  microfone, o seletor de provedor).
+- **O título:** "Ditar pelo celular manda a sua voz a um provedor que não diz processar no Brasil."
+  Depois: "Leia antes de aceitar. Por isso tratamos o envio como uma transferência internacional. Se você
+  tocar em "Agora não", o microfone não abre, nada é enviado e o resto do app continua igual."
+- **O provedor da voz** (só no primeiro uso, a pedido do app): "OpenAI" e "Groq", duas opções de rádio, a
+  OpenAI marcada. O bloco do provedor, mais abaixo, muda com a escolha.
+- **O que vai:**
+  - **A voz de cada ditado.** Passa pelo servidor desta nuvem, **só na memória**, e vai ao provedor
+    escolhido. **Não é gravada no aparelho nem no servidor.** O provedor pode guardá-la: veja abaixo.
+  - **A sua chave de API.** Colada uma vez. O servidor a guarda cifrada, mas **quem administra o servidor
+    consegue decifrá-la**. Use uma chave só para o celular, com limite de gasto no provedor.
+  - **Se ligar a dica:** os termos que a pessoa ensinou, junto com a voz, em todo ditado; **podem ser
+    nomes de clientes ou de outras pessoas**. A dica começa desligada.
+  - **Se ligar o Polish:** o texto do ditado, para a OpenAI ou a Anthropic, com a chave dela. O Polish
+    começa desligado. (Ao ligá-lo, a folha diz "O Polish que você está ligando" e o nome do provedor.)
+- **Para onde, e por quanto tempo fica lá:** um bloco por provedor em uso, com **só o que a documentação
+  dele diz** (lida em 10-out-2026; a Anthropic, em 29-set-2026, não relida): a retenção (até 30 dias), o
+  treino, e **o país só quando a página afirma**. A OpenAI processa nos EUA ou na Europa **se a conta
+  fixou a residência de dados**, e senão a documentação não diz o país. A Groq retém nos EUA o que guarda,
+  e a documentação não diz onde a transcrição roda. O aviso diz que não confere a conta de quem dita (a
+  residência de dados e a retenção zero).
+- **Dados de outras pessoas:** "A voz e os termos podem ter dados de outras pessoas (clientes, quem está
+  perto de você). O seu aceite vale por você, e não por elas. Se você dita dado de cliente, veja se isso
+  cabe no que você deve a ele."
+- **O que isto não faz:** não funciona com a tela apagada nem com o app em segundo plano (se a tela
+  apagar, o ditado para), e a voz não é usada para identificar a pessoa.
+- **Você pode desfazer:** em Configurações, "Desligar o ditado no celular" tira o aceite e apaga as
+  chaves do servidor; revogue também a chave no provedor, porque uma cópia cifrada dela fica nos backups
+  por cerca de 30 dias.
+- **Os botões:** **Aceito** (o primário) e **Agora não**. O Aceito grava o aceite **no servidor, por
+  conta** (`POST /api/v1/dictation/consent`, com a versão do aviso e os provedores: os que já valiam, o da
+  voz e, com o Polish, o dele) e só então fecha; durante, diz "Guardando…" e o resto espera. Sem rede, a
+  folha fica, com "Sem conexão. Tente de novo."; as outras falhas dizem "Não deu para guardar o aceite.
+  Tente de novo." (a frase é nossa, nunca a do servidor); a sessão que acabou fecha a folha e acende a
+  faixa da sessão. **Agora não** não grava nada.
+- **Só ler:** "Ler o aviso", nas Configurações, reabre a folha de quem já aceitou, só para reler: "Você
+  já aceitou este aviso; ele está aqui para você reler.", e um botão só, **Fechar**.
+
+### Ditar pelo celular nas Configurações (ADR-021, C6b)
+A seção **"Ditar pelo celular"** fica **logo depois da Conta** (é o que o app faz). Tudo age na hora, sem
+"Salvar": cada mudança é um `PUT /api/v1/dictation/settings` com as preferências inteiras, e nada disso
+desce aos PCs. A seção diz de saída: "Fale no celular e o texto entra no histórico. A voz vai ao
+provedor que você escolher, com a sua chave. O ditado não funciona com a tela apagada nem com o app em
+segundo plano."
+- **O estado:** "Desligado." (com **Ligar**, o botão primário, que abre a folha com a escolha do
+  provedor), "Ligado desde 10/10/2026." (a data do aceite; com **Ler o aviso** e **Desligar**) ou, se o
+  aceite é de um aviso velho, "Desligado. O aviso mudou: leia e aceite de novo para ligar.". **Sem o
+  aceite, só o estado e o Ligar aparecem:** nada de provedor, chave nem modelo.
+- **Desligar** pergunta ali mesmo (o padrão do Revogar): "Desligar o ditado no celular. Isto tira o seu
+  aceite e apaga as suas chaves do servidor. Não apaga os ditados já feitos. Revogue as chaves no
+  provedor.", com **Desligar** (botão de risco) e **Cancelar** (o foco vai para o Cancelar; o Esc cancela
+  e devolve o foco ao Desligar). Feito: o aviso "Ditar pelo celular desligado.", e o foco vai para o
+  título da seção. Como o aceite acabou, o microfone volta a pedir a folha.
+- **Provedor da voz:** uma lista, "OpenAI" ou "Groq". **Trocar para um provedor fora do aceite reabre a
+  folha** (sem a escolha do provedor, que já foi feita ali), e sem o "Aceito" nada muda (a lista volta ao
+  que era). O aceite novo **mantém os provedores que já valiam**; trocar para um provedor que já está no
+  aceite não pede nada. O modelo volta ao padrão do provedor.
+- **O servidor que recusa por falta de aceite** (`SEM_ACEITE` no `PUT` das preferências: o aceite acabou
+  em outro aparelho) **também abre a folha**: o app relê a conta, a folha abre com o aceite que vale de
+  verdade, e, aceitando, o `PUT` é refeito. Sem o "Aceito", a seção passa a dizer o que o servidor diz
+  ("Desligado. O aviso mudou…"). O mesmo vale ao guardar uma chave: a chave colada fica no campo enquanto
+  a folha está aberta, e vale se a pessoa aceitar.
+- **A chave** (uma por provedor, a do provedor da voz aqui e, com o Polish, a do dele):
+  - Sem chave: "Chave da OpenAI", "Nenhuma chave guardada.", um campo de senha ("Cole a chave aqui", sem
+    preenchimento automático) e **Guardar chave** (só vale com algo colado; o Enter também guarda), e
+    a ajuda "Use uma chave só para o celular, com limite de gasto no provedor.".
+  - **A chave vai só no corpo do `PUT /api/v1/ai-keys/{provedor}`, nunca na URL, e não volta:** o servidor
+    a testa no provedor, a cifra e devolve só `configurada` e o final. O campo esvazia ao guardar.
+  - Guardada: **"Chave terminada em WXYZ."** (só o final, de **4 caracteres no máximo**, mesmo que o
+    servidor mande mais), com **Trocar** e **Remover**. **Trocar** abre o campo com "Revogue também esta
+    chave no provedor. Uma cópia cifrada dela fica nos backups por cerca de 30 dias." e **Cancelar**;
+    **Remover** pergunta ali mesmo, com o mesmo lembrete, **Remover** (risco) e **Cancelar** (o foco vai
+    para o Cancelar; o Esc cancela). Feito: "Chave guardada." / "Chave removida.", e o foco vai para o
+    controle que ocupou o lugar.
+  - **Os erros** têm frase nossa, escolhida pelo `error.code` ou pelo status, **nunca pela mensagem do
+    servidor** (que pode trazer um pedaço da chave): "O provedor recusou a chave." (`PROVEDOR_RECUSOU_CHAVE`),
+    "O provedor não respondeu agora. Tente de novo." (`PROVEDOR_LIMITE`, `PROVEDOR_FORA`), "Espere um
+    pouco. Tente de novo em N s." (`LIMITE`, `429`), "Essa chave não parece válida. Confira e cole de
+    novo." (`400` ou `422`), "Este servidor não tem o ditado pelo celular." (`404`) e "Não deu para
+    guardar a chave.". A chave que falhou continua no campo, para conferir. Sem rede ou sem sessão, a
+    faixa de sempre.
+- **Modelo da voz:** "Padrão do provedor" (o servidor resolve: escolhas menores 1 e 2) e os modelos da
+  conta, lidos com a chave (`GET /api/v1/ai-keys/{provedor}/models`) e **filtrados no app**: os de voz são
+  os que têm "transcribe" ou "whisper" no nome; os do Polish, os outros. Sem chave: "Cole a chave para ver
+  os modelos da sua conta." e o campo fechado; a lista que não veio: "Não deu para ler os modelos. Vale o
+  padrão do provedor.". O modelo que a conta tem e a lista não mostra continua escolhível. Mudar só o
+  modelo não pede o aceite de novo.
+- **A dica:** a caixa "Mandar os termos aprendidos como dica", **desligada**, com "Eles vão ao provedor
+  junto com a voz, em todo ditado, e podem ser nomes de clientes ou de outras pessoas.".
+- **O Polish:** a caixa "Organizar o texto com o Polish", **desligada**, com "O texto do ditado vai ao
+  provedor do Polish.". Ligado: **Provedor do Polish** ("OpenAI" ou "Anthropic"; um provedor fora do
+  aceite reabre a folha, que mostra o bloco dele), a chave dele (com a OpenAI, "A chave da OpenAI, acima,
+  também serve ao Polish.") e **Modelo do Polish**. Ligar com um provedor fora do aceite abre a folha, e
+  sem o "Aceito" continua desligado.
+- **Os erros do salvar:** "Não deu para salvar. Tente de novo." (nunca a mensagem do servidor); a leitura
+  que não veio: "Não deu para ver o ditado pelo celular. Tente de novo mais tarde.", e o `404`, "Este
+  servidor não tem o ditado pelo celular.".
+- **"Apagar meus dados da nuvem"** apaga também o aceite, as preferências e as chaves (o servidor, na
+  C3b): a seção lê de novo e fica "Desligada", e o microfone volta a pedir a folha.
+
+### A calibração do microfone no Android (ADR-021, C6c)
+Uma página **só do `pnpm dev`** (`web/calibracao-dev.html`, como a `telas-dev-nuvem.html`), que **não está
+em nenhum dos dois builds** (o `bundle.test.ts` prova: nem a página, nem o texto, nem o CSS dela, e nada
+do app a importa). Serve a **calibrar, com os números do Android**, o limiar de fala (hoje RMS 0,03), a
+onda (hoje -48 a -14 dBFS) e o bitrate (hoje 32 kbit/s), que partem dos valores do PC.
+- **Como abrir** (com o OK do Mauro; ADR-021, "Pontos de parada"): `pnpm -C web dev`, o celular no cabo
+  USB, e o encaminhamento de porta do `docs/teste-manual-nuvem-f4.md`, §9, **para a porta do Vite
+  (5173), no lugar da 8080**; no Chrome do celular, `http://localhost:5173/calibracao-dev.html`.
+  `localhost` é um contexto seguro: o microfone abre.
+- **O que mede**, com **as mesmas restrições do `getUserMedia`** do gravador (o mesmo objeto,
+  `restricoesDoMicrofone`) e **a mesma medição**: o nível sai do mesmo `AnalyserNode` (a mesma janela de
+  1024 amostras, o RMS), a fala é somada pelo mesmo `MedidorDeFala` (o limiar e os 200 ms do fim), e o
+  `MediaRecorder` grava no mesmo formato e bitrate. Duas medições: **o silêncio** (6 s) e **a fala**
+  (12 s); cada uma refaz o resultado dela, e há **Parar agora** e **Zerar**.
+- **O que mostra: só números.** Para cada medição: o nível por percentil (mínimo, p5 como o piso, p10 a
+  p99 e o máximo como o pico), em RMS e em dBFS; o **tempo acima de cada limiar de RMS** (0,003 a 0,2, com
+  o do app marcado); **a fala medida e se o app enviaria** (300 ms); a **distribuição do nível** em
+  bandas de 6 dB (de -96 a 0 dBFS); os **bytes por segundo do `MediaRecorder`** (pedaços de 1 s, **só
+  contados e jogados fora**: total, menor e maior pedaço, kbit/s, o que 120 s ocupariam contra o teto de
+  1 MiB); e o que o navegador diz da captura (taxa, canais, eco, ruído, ganho, tipo, bitrate).
+- **Nenhum arquivo, nenhum envio.** Sem botão de salvar, baixar, copiar ou enviar; sem rede, sem
+  armazenamento, sem `Blob`, sem som. O `calibracao.test.ts` lê o código-fonte e recusa tudo isso. Quem
+  calibra tira uma **captura da tela** e passa os números.
+- **O que falta:** a **calibração com o aparelho é do Mauro**, depois; só então o limiar de fala, a
+  onda e o `getUserMedia` (hoje no padrão do Chrome) são fixados com os números do celular, e a **onda é
+  renderizada com eles antes de concluir**.
 
 ### Configurações do celular
 - **Conta:** "Entrou como {e-mail}." e **Sair** (volta para Entrar). Com um texto não salvo na tela,
@@ -749,6 +1011,8 @@ com ponteiro de toque, os botões (as abas inclusive) e a busca têm 44 px.
   não salvou. Se você sair, ele se perde.", com **Sair e descartar o texto** e **Cancelar** (o foco
   vai para o Cancelar, e o Esc cancela). Com a faixa da sessão na tela, o Sair passa por fora do
   portão: o `POST /auth/logout` chega ao servidor.
+- **Ditar pelo celular** (ADR-021, C6b; logo depois da Conta): o estado, o provedor da voz, a chave, o
+  modelo, a dica e o Polish. Está em "Ditar pelo celular nas Configurações", acima.
 - **Aparelhos** (F6, entre a Conta e as Sessões abertas): uma linha por PC, "{nome}" e
   "Windows · versão {v} · último uso {data}", com **Revogar**, que pergunta na própria linha:
   "Revogar {nome}? O PC para de sincronizar e continua funcionando nele.", com **Revogar** (botão de
@@ -795,12 +1059,21 @@ com ponteiro de toque, os botões (as abas inclusive) e a busca têm 44 px.
   exemplo, "Android · Chrome", com "último uso 05/10, 14:32"); a atual leva a etiqueta "este
   aparelho" e não tem botão; as outras têm **Encerrar** (o aviso: "Sessão encerrada."). Sem outra:
   "Nenhuma outra sessão aberta."
-- **Privacidade:** "Vão para a nuvem: o texto dos ditados, com a data, o PC de origem e os detalhes da
-  transcrição, e as trocas aprendidas." (as trocas entraram na F8h) e "Nunca vão: o áudio, o que está nas outras janelas, a chave do Polish e as
-  configurações dos PCs." Depois, **Apagar meus dados da nuvem** (botão de risco), que abre ali mesmo:
-  "Apaga tudo desta conta na nuvem e desconecta os PCs. Os PCs ficam com a cópia deles.", o campo
-  "Para confirmar, digite apagar", **Apagar tudo** (só funciona com "apagar" digitado) e **Cancelar**
-  (Esc também). Feito: o aviso "Seus dados foram apagados da nuvem.", e o histórico lê de novo.
+- **Privacidade** (ADR-021, D0; o texto é o da `docs/politica-de-privacidade.md`):
+  - "Vão para a nuvem: o texto dos ditados, com a data, o PC de origem e os detalhes da transcrição, e as
+    trocas aprendidas. O texto fica legível para quem administra o servidor." (as trocas entraram na F8h)
+  - "Ficam 6 meses (a lixeira, 30 dias). Uma cópia cifrada guarda tudo por cerca de 30 dias além disso."
+  - "Do PC nunca vão: o áudio, o que está nas outras janelas, a chave do Polish e as configurações dos
+    PCs; **a chave do PC continua no PC**." (A frase não cita onde a chave mora: o build da nuvem não
+    pode trazer "Gerenciador de Credenciais", e o `bundle.test.ts` a recusa.)
+  - "Ditar pelo celular é opcional. Se você ligar, a voz de cada ditado vai ao provedor que você escolher
+    (OpenAI ou Groq), com a sua chave, que o servidor guarda cifrada. A voz não é gravada: fica na
+    memória e é descartada ao fim."
+  - Depois, **Apagar meus dados da nuvem** (botão de risco), que abre ali mesmo: "Apaga tudo desta conta
+    na nuvem e desconecta os PCs. Os PCs ficam com a cópia deles. A cópia de segurança guarda por até
+    cerca de 30 dias. Apaga também o aceite do ditado no celular, as preferências e as chaves.", o campo
+    "Para confirmar, digite apagar", **Apagar tudo** (só funciona com "apagar" digitado) e **Cancelar**
+    (Esc também). Feito: o aviso "Seus dados foram apagados da nuvem.", e o histórico lê de novo.
 
 ### O selo de conflito
 - Quando o mesmo ditado foi mudado em dois lugares antes de sincronizar, a linha mostra a etiqueta

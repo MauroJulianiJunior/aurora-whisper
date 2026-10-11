@@ -27,6 +27,7 @@ import { Painel } from '../Painel'
 import { ambienteNuvem } from './ambienteNuvem'
 import { AprovarPC } from './AprovarPC'
 import { type ClienteNuvem, type Eu, criarClienteNuvem, criarPortao, pareceIdDePedido } from './cliente'
+import type { Plataforma } from './ditar/gravador'
 import { abrirJanelaPadrao, avisarQueEntrou, modoDaJanela, useLoginDeTeste } from './entrar'
 import { JanelaDeEntrar } from './EntrarDeNovo'
 import { Abrindo, Entrar, NaoAbriu, SemConexao } from './Telas'
@@ -63,6 +64,10 @@ interface Props {
   trocarPara?(url: string): void
   avisarQueEntrou?(): void
   fecharJanela?(): void
+  // plataformaDeDitar: o microfone e o resto do navegador do gravador do
+  // ditado (ADR-021). Os testes e as telas de desenvolvimento trocam; sem ela,
+  // é o navegador de verdade.
+  plataformaDeDitar?: Plataforma
 }
 
 const irParaPadrao = (url: string) => window.location.assign(url)
@@ -99,9 +104,10 @@ function AppDaConta({
   irPara = irParaPadrao,
   host = window.location.hostname,
   abrirJanela = abrirJanelaPadrao,
+  plataformaDeDitar,
   pedido,
   trocarPara,
-}: Pick<Props, 'buscar' | 'irPara' | 'host' | 'abrirJanela'> & { pedido: string | null; trocarPara(url: string): void }) {
+}: Pick<Props, 'buscar' | 'irPara' | 'host' | 'abrirJanela' | 'plataformaDeDitar'> & { pedido: string | null; trocarPara(url: string): void }) {
   const [cliente] = useState<ClienteNuvem>(() => criarClienteNuvem(buscar))
   const [tela, setTela] = useState<Tela>({ tipo: 'abrindo' })
   const [tentando, setTentando] = useState(false)
@@ -123,11 +129,12 @@ function AppDaConta({
           aoSemSessao: () => setTela({ tipo: 'entrar', expirada: true }),
           aoSair: () => setTela({ tipo: 'entrar', expirada: false }),
           reentrada: { cliente, eu, portao, host, abrirJanela, irPara },
+          plataformaDeDitar,
         }),
         focar,
       }
     },
-    [cliente, buscar, host, abrirJanela, irPara, pedido],
+    [cliente, buscar, host, abrirJanela, irPara, pedido, plataformaDeDitar],
   )
 
   useEffect(() => {

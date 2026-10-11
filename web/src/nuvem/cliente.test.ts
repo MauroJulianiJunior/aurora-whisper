@@ -60,9 +60,10 @@ describe('cliente da nuvem', () => {
     await cliente.desfazerAprendido('0192f0a1-7c3e-7d4a-9b2f-000000000000').catch(() => undefined)
     await cliente.loginDeTeste()
     await cliente.inicioDoGoogle()
+    await cliente.ditar({ id: '0192f0a1-7c3e-7d4a-9b2f-000000000009', audio: new Blob([new Uint8Array([1])]), duracaoMs: 1000, falaMs: 800 })
     await cliente.apagarMeusDados()
     await cliente.sair()
-    expect(srv.pedidos.length).toBeGreaterThanOrEqual(15)
+    expect(srv.pedidos.length).toBeGreaterThanOrEqual(16)
     for (const p of srv.pedidos) {
       expect(Object.keys(p.cabecalhos).map((k) => k.toLowerCase())).not.toContain('authorization')
       expect(p.credentials).toBe('same-origin')
@@ -202,5 +203,307 @@ describe('cliente da nuvem', () => {
     await cliente.sair()
     expect(srv.pedidos.at(-1)).toMatchObject({ metodo: 'POST', caminho: '/auth/logout' })
     await expect(cliente.eu()).rejects.toBeInstanceOf(SemSessao)
+  })
+})
+
+// O ditado do celular (ADR-021, C6a): o POST /api/v1/dictations com o áudio
+// cru, o id e o que o app mediu nos cabeçalhos, e os códigos de erro em
+// ErroDaApi.codigo.
+describe('ditar', () => {
+  const id = '0192f0a1-7c3e-7d4a-9b2f-000000000001'
+  const audio = new Blob([new Uint8Array([1, 2, 3, 4, 5])], { type: 'audio/webm;codecs=opus' })
+  const pedido = { id, audio, duracaoMs: 4200.4, falaMs: 3100.6 }
+
+  it('o corpo é o áudio cru; o id, a duração e a fala vão em cabeçalhos; o texto nunca vai à URL', async () => {
+    const { srv, cliente } = montar()
+    srv.aoDitar({ texto: 'Manda o relatório amanhã.' })
+    const g = await cliente.ditar(pedido)
+
+    const [p] = srv.pedidos
+    expect(p).toMatchObject({ metodo: 'POST', caminho: '/api/v1/dictations', credentials: 'same-origin' })
+    expect(p?.busca.toString()).toBe('')
+    expect(p?.corpo).toBeUndefined()
+    expect(p?.audio).toBe(audio)
+    expect(p?.cabecalhos).toEqual({
+      'Content-Type': 'audio/webm',
+      'Ditado-Id': id,
+      'Ditado-Duracao-Ms': '4200',
+      'Ditado-Fala-Ms': '3101',
+    })
+    expect(srv.ditados).toEqual([{ id, bytes: 5, tipo: 'audio/webm', duracaoMs: 4200, falaMs: 3101, chamouOProvedor: true }])
+    expect(g.ditado.final_text).toBe('Manda o relatório amanhã.')
+    expect(g.aviso).toBeUndefined()
+  })
+
+  it('o ditado volta no formato do painel: veio da web, sem aparelho, e o que é null fica ausente', async () => {
+    const { srv, cliente } = montar()
+    const { ditado } = await cliente.ditar(pedido)
+    expect('deleted_at' in ditado).toBe(false)
+    expect('versao_em_conflito' in ditado).toBe(false)
+    expect(srv.itens.find((i) => i.id === id)).toMatchObject({ source_platform: 'web', device_id: null })
+    expect(ditado.id).toBe(id)
+  })
+
+  it('quando o Polish caiu para o Smart, o motivo vem como aviso (e fica fora do ditado)', async () => {
+    const { srv, cliente } = montar()
+    srv.aoDitar({ texto: 'Texto.', aviso: 'chave_recusada' })
+    const g = await cliente.ditar(pedido)
+    expect(g.aviso).toBe('chave_recusada')
+    expect('aviso' in g.ditado).toBe(false)
+  })
+
+  it('o mesmo id de novo: o servidor devolve o que está gravado, sem chamar o provedor', async () => {
+    const { srv, cliente } = montar()
+    const a = await cliente.ditar(pedido)
+    const b = await cliente.ditar(pedido)
+    expect(b.ditado).toEqual(a.ditado)
+    expect(srv.ditados.map((d) => d.chamouOProvedor)).toEqual([true, false])
+    expect(srv.chamadasAoProvedor).toBe(1)
+    expect(srv.itens.filter((i) => i.id === id)).toHaveLength(1)
+  })
+
+  it('o sinal chega ao fetch: o prazo de 90 s corta o envio', async () => {
+    const { srv } = montar()
+    const ctrl = new AbortController()
+    let sinal: AbortSignal | null | undefined
+    const buscar = (e: string, init?: RequestInit) => {
+      sinal = init?.signal
+      return srv.buscar(e, init)
+    }
+    await criarClienteNuvem(buscar).ditar(pedido, ctrl.signal)
+    expect(sinal).toBe(ctrl.signal)
+  })
+
+  it('o envio cortado pelo prazo é AbortError, como veio (e não vira "Sem conexão")', async () => {
+    const ctrl = new AbortController()
+    ctrl.abort()
+    const abortado = criarClienteNuvem(() => Promise.reject(new DOMException('abortado', 'AbortError')))
+    const e = await abortado.ditar(pedido, ctrl.signal).catch((x: unknown) => x)
+    expect(e).toBeInstanceOf(DOMException)
+    expect((e as DOMException).name).toBe('AbortError')
+    expect(e).not.toBeInstanceOf(ForaDoAr)
+  })
+
+  it('401 é SemSessao; a rede que cai é ForaDoAr', async () => {
+    const { srv, cliente } = montar({ logado: false })
+    await expect(cliente.ditar(pedido)).rejects.toBeInstanceOf(SemSessao)
+    srv.derrubar(true)
+    await expect(cliente.ditar(pedido)).rejects.toBeInstanceOf(ForaDoAr)
+  })
+
+  it('o código do envelope vai em ErroDaApi.codigo, e o Retry-After em esperaSeg', async () => {
+    const { srv, cliente } = montar()
+    srv.interceptar(
+      () =>
+        new Response(JSON.stringify({ error: { code: 'LIMITE', message: 'tentativas demais', request_id: 'r1' } }), {
+          status: 429,
+          headers: { 'Retry-After': '12' },
+        }),
+    )
+    const e = (await cliente.ditar(pedido).catch((x: unknown) => x)) as ErroDaApi
+    expect(e).toBeInstanceOf(ErroDaApi)
+    expect(e.status).toBe(429)
+    expect(e.codigo).toBe('LIMITE')
+    expect(e.esperaSeg).toBe(12)
+  })
+
+  it.each([
+    [403, 'SEM_ACEITE'],
+    [403, 'SEM_CHAVE'],
+    [429, 'UM_POR_VEZ'],
+    [503, 'OCUPADO'],
+    [413, 'PAYLOAD_TOO_LARGE'],
+    [415, 'FORMATO'],
+    [422, 'SEM_FALA'],
+    [502, 'PROVEDOR_RECUSOU_CHAVE'],
+    [502, 'PROVEDOR_LIMITE'],
+    [502, 'PROVEDOR_FORA'],
+    [410, 'APAGADO'],
+  ])('%d %s chega com o código', async (status, code) => {
+    const { srv, cliente } = montar()
+    srv.interceptar(() => new Response(JSON.stringify({ error: { code, message: 'a frase do servidor' } }), { status }))
+    const e = (await cliente.ditar(pedido).catch((x: unknown) => x)) as ErroDaApi
+    expect(e).toBeInstanceOf(ErroDaApi)
+    expect(e.codigo).toBe(code)
+  })
+
+  it('o 409 não é versão velha: chega como ErroDaApi, não como Conflito', async () => {
+    const { srv, cliente } = montar()
+    srv.interceptar(() => new Response(JSON.stringify({ error: { code: 'CONFLICT', message: 'x' } }), { status: 409 }))
+    const e = await cliente.ditar(pedido).catch((x: unknown) => x)
+    expect(e).toBeInstanceOf(ErroDaApi)
+    expect(e).not.toBeInstanceOf(Conflito)
+  })
+
+  it('sem o envelope (um proxy), fica o status; o Retry-After que é uma data não conta', async () => {
+    const { srv, cliente } = montar()
+    srv.interceptar(() => new Response('<html>bad gateway</html>', { status: 502, headers: { 'Retry-After': 'Wed, 21 Oct 2026 07:28:00 GMT' } }))
+    const e = (await cliente.ditar(pedido).catch((x: unknown) => x)) as ErroDaApi
+    expect(e.status).toBe(502)
+    expect(e.codigo).toBeUndefined()
+    expect(e.esperaSeg).toBeUndefined()
+    expect(e.message).toBe('erro 502')
+  })
+
+  it('o fake confere o que o servidor confere: id v7, fala mínima, formato, lápide', async () => {
+    const { srv, cliente } = montar()
+    const status = async (p: Parameters<typeof cliente.ditar>[0]) => ((await cliente.ditar(p).catch((x: unknown) => x)) as ErroDaApi).status
+    expect(await status({ ...pedido, id: 'não-é-uuid' })).toBe(400)
+    expect(await status({ ...pedido, falaMs: 299 })).toBe(422)
+    // A lápide: o id apagado de vez é 410, sem provedor.
+    await cliente.ditar(pedido)
+    await cliente.moverParaLixeira(id)
+    await cliente.excluirDeVez(id)
+    expect(await status(pedido)).toBe(410)
+    expect(srv.chamadasAoProvedor).toBe(1)
+  })
+})
+
+// O ditado pelo celular na conta (ADR-021, C6b): o estado, o aceite, as
+// preferências e as chaves. A forma exata do JSON é a que o servidor da C3a e
+// da C3b deve entregar (06-api-contract.md); aqui se prova o que o app envia
+// e como lê o que recebe.
+describe('o ditado pelo celular na conta', () => {
+  const aceite = { versao: '2026-10-10', provedores: ['openai' as const], aceito_em: '2026-10-09T12:00:00.000Z' }
+  const preferencias = { provedor: 'openai' as const, modelo: '', dica: false, polish: false, polish_provedor: 'openai' as const, polish_modelo: '' }
+  const vazias = { openai: { configurada: false, final: '' }, groq: { configurada: false, final: '' }, anthropic: { configurada: false, final: '' } }
+
+  it('o estado é um GET sem query: as preferências, o aceite vigente e as chaves (só `configurada` e o final)', async () => {
+    const { srv, cliente } = montar({ ditado: { aceite, chaves: { openai: 'sk-teste-de-mentira-WXYZ' } } })
+    const estado = await cliente.estadoDoDitado()
+    expect(estado).toEqual({ preferencias, aceite, chaves: { ...vazias, openai: { configurada: true, final: 'WXYZ' } } })
+    expect(srv.pedidos.map((p) => [p.metodo, p.caminho, p.busca.toString()])).toEqual([['GET', '/api/v1/dictation', '']])
+    // A chave inteira não vem na resposta, nem de passagem.
+    expect(JSON.stringify(estado)).not.toContain('sk-teste')
+  })
+
+  it('sem aceite, é null; o estado de uma conta nova é o mais fechado', async () => {
+    const { cliente } = montar({ ditado: {} })
+    expect(await cliente.estadoDoDitado()).toEqual({ preferencias, aceite: null, chaves: vazias })
+  })
+
+  it('lê com tolerância: o que falta ou não tem a forma esperada vira o padrão mais fechado, e o final nunca passa de 4 caracteres', async () => {
+    const { srv, cliente } = montar()
+    srv.interceptar(
+      () =>
+        new Response(
+          JSON.stringify({
+            preferencias: { provedor: 'gemini', modelo: 3, dica: 'sim', polish: 1, polish_provedor: 'groq' },
+            aceite: { versao: '', provedores: ['openai'] },
+            chaves: { openai: { configurada: true, final: 'sk-inteira-123456' }, groq: { configurada: 'sim', final: 'abcd' }, anthropic: null },
+          }),
+        ),
+    )
+    expect(await cliente.estadoDoDitado()).toEqual({
+      preferencias,
+      aceite: null,
+      chaves: { ...vazias, openai: { configurada: true, final: '3456' } },
+    })
+    srv.interceptar(() => new Response(JSON.stringify({ aceite: { versao: '2026-10-10', provedores: ['openai', 'openai', 'gemini', 7] } })))
+    expect((await cliente.estadoDoDitado()).aceite).toEqual({ versao: '2026-10-10', provedores: ['openai'], aceito_em: '' })
+  })
+
+  it('aceitar é um POST com a versão do aviso e os provedores, no corpo', async () => {
+    const { srv, cliente } = montar({ ditado: {} })
+    const aceito = await cliente.aceitarAviso('2026-10-10', ['openai', 'groq'])
+    expect(aceito).toMatchObject({ versao: '2026-10-10', provedores: ['openai', 'groq'] })
+    const [p] = srv.pedidos
+    expect([p!.metodo, p!.caminho, p!.busca.toString()]).toEqual(['POST', '/api/v1/dictation/consent', ''])
+    expect(p!.corpo).toEqual({ versao: '2026-10-10', provedores: ['openai', 'groq'] })
+    expect(srv.daConta.aceite).toMatchObject({ provedores: ['openai', 'groq'] })
+  })
+
+  it('só a versão atual do aviso vale: a velha é recusada (ErroDaApi 400), e nada é gravado', async () => {
+    const { srv, cliente } = montar({ ditado: {} })
+    const e = (await cliente.aceitarAviso('2025-01-01', ['openai']).catch((x: unknown) => x)) as ErroDaApi
+    expect(e).toBeInstanceOf(ErroDaApi)
+    expect(e.status).toBe(400)
+    expect(srv.daConta.aceite).toBeNull()
+  })
+
+  it('desligar é um DELETE do aceite: revoga e apaga as chaves', async () => {
+    const { srv, cliente } = montar({ ditado: { aceite, chaves: { openai: 'sk-teste-de-mentira-WXYZ' } } })
+    await cliente.desligarDitado()
+    expect(srv.pedidos.map((p) => [p.metodo, p.caminho])).toEqual([['DELETE', '/api/v1/dictation/consent']])
+    expect(srv.daConta.aceite).toBeNull()
+    expect(srv.daConta.chaves).toEqual({})
+  })
+
+  it('as preferências são um PUT com o objeto inteiro; a resposta é a que ficou', async () => {
+    const { srv, cliente } = montar({ ditado: { aceite: { ...aceite, provedores: ['openai', 'groq'] } } })
+    const novas = { ...preferencias, provedor: 'groq' as const, dica: true }
+    expect(await cliente.salvarPreferencias(novas)).toEqual(novas)
+    const [p] = srv.pedidos
+    expect([p!.metodo, p!.caminho, p!.busca.toString()]).toEqual(['PUT', '/api/v1/dictation/settings', ''])
+    expect(p!.corpo).toEqual(novas)
+  })
+
+  it('um provedor fora do aceite é SEM_ACEITE (403), como ErroDaApi.codigo', async () => {
+    const { cliente } = montar({ ditado: { aceite } })
+    const e = (await cliente.salvarPreferencias({ ...preferencias, provedor: 'groq' }).catch((x: unknown) => x)) as ErroDaApi
+    expect(e).toBeInstanceOf(ErroDaApi)
+    expect([e.status, e.codigo]).toEqual([403, 'SEM_ACEITE'])
+  })
+
+  it('a chave vai só no corpo do PUT (nunca na URL), e a resposta traz `configurada` e o final', async () => {
+    const { srv, cliente } = montar({ ditado: { aceite } })
+    const guardada = await cliente.guardarChave('openai', 'sk-teste-do-celular-ABCD')
+    expect(guardada).toEqual({ configurada: true, final: 'ABCD' })
+    const [p] = srv.pedidos
+    expect([p!.metodo, p!.caminho, p!.busca.toString()]).toEqual(['PUT', '/api/v1/ai-keys/openai', ''])
+    expect(p!.corpo).toEqual({ chave: 'sk-teste-do-celular-ABCD' })
+    expect(Object.keys(p!.cabecalhos).map((k) => k.toLowerCase())).not.toContain('authorization')
+    expect(JSON.stringify(guardada)).not.toContain('sk-teste')
+  })
+
+  it('a chave de um provedor fora do aceite é SEM_ACEITE, e a que o provedor recusa é PROVEDOR_RECUSOU_CHAVE', async () => {
+    const { cliente } = montar({ ditado: { aceite } })
+    const semAceite = (await cliente.guardarChave('groq', 'gsk-teste-1234567').catch((x: unknown) => x)) as ErroDaApi
+    expect([semAceite.status, semAceite.codigo]).toEqual([403, 'SEM_ACEITE'])
+    const recusada = (await cliente.guardarChave('openai', 'recusada-pelo-provedor').catch((x: unknown) => x)) as ErroDaApi
+    expect([recusada.status, recusada.codigo]).toEqual([422, 'PROVEDOR_RECUSOU_CHAVE'])
+  })
+
+  it('remover é um DELETE do provedor; os modelos, um GET, e a lista vem como o provedor a dá', async () => {
+    const { srv, cliente } = montar({ ditado: { aceite, chaves: { openai: 'sk-teste-de-mentira-WXYZ' } } })
+    expect(await cliente.modelosDaChave('openai')).toContain('gpt-4o-mini-transcribe')
+    await cliente.removerChave('openai')
+    expect(srv.pedidos.map((p) => [p.metodo, p.caminho, p.busca.toString()])).toEqual([
+      ['GET', '/api/v1/ai-keys/openai/models', ''],
+      ['DELETE', '/api/v1/ai-keys/openai', ''],
+    ])
+    // Sem chave, não há lista: SEM_CHAVE.
+    const e = (await cliente.modelosDaChave('openai').catch((x: unknown) => x)) as ErroDaApi
+    expect([e.status, e.codigo]).toEqual([409, 'SEM_CHAVE'])
+  })
+
+  it('a rota que o servidor não tem (sem a chave de cifra) é ErroDaApi 404; sem sessão, SemSessao; sem rede, ForaDoAr', async () => {
+    const { srv, cliente } = montar()
+    srv.interceptar(() => new Response(JSON.stringify({ error: { code: 'NOT_FOUND', message: 'rota não encontrada' } }), { status: 404 }))
+    const e = (await cliente.estadoDoDitado().catch((x: unknown) => x)) as ErroDaApi
+    expect(e).toBeInstanceOf(ErroDaApi)
+    expect(e.status).toBe(404)
+    srv.interceptar(null)
+    srv.expirar()
+    await expect(cliente.estadoDoDitado()).rejects.toBeInstanceOf(SemSessao)
+    srv.entrar()
+    srv.derrubar(true)
+    await expect(cliente.estadoDoDitado()).rejects.toBeInstanceOf(ForaDoAr)
+  })
+
+  it('nenhuma chamada do ditado pela conta leva Authorization ou sai da mesma origem', async () => {
+    const { srv, cliente } = montar({ ditado: { aceite } })
+    await cliente.estadoDoDitado()
+    await cliente.salvarPreferencias(preferencias)
+    await cliente.aceitarAviso('2026-10-10', ['openai'])
+    await cliente.guardarChave('openai', 'sk-teste-do-celular-ABCD')
+    await cliente.modelosDaChave('openai')
+    await cliente.removerChave('openai')
+    await cliente.desligarDitado()
+    expect(srv.pedidos).toHaveLength(7)
+    for (const p of srv.pedidos) {
+      expect(Object.keys(p.cabecalhos).map((k) => k.toLowerCase())).not.toContain('authorization')
+      expect(p.credentials).toBe('same-origin')
+    }
   })
 })

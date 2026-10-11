@@ -24,6 +24,10 @@ interface Props {
   edicaoSemConexao?: string
   // aoEscolher: a escolha do selo. Sem ele, o selo aparece sem os botões.
   aoEscolher?(escolha: EscolhaDoSelo): Promise<void>
+  // novo: o ditado que o celular acabou de gravar (ADR-021). Fica em destaque
+  // no topo, com a etiqueta "novo" (o fundo sozinho não diz nada a quem não vê
+  // a cor).
+  novo?: boolean
 }
 
 // TextoDaLinha é o texto que a linha mostra. Ditado que falhou antes de
@@ -94,8 +98,9 @@ export function ItemDitado(props: Props) {
   const paraCopiar = textoInicial(item)
   const copiavel = paraCopiar.trim() !== ''
 
+  const novo = props.novo === true
   return (
-    <li className={copiavel ? 'item com-copia' : 'item'} data-item={item.id}>
+    <li className={[copiavel ? 'item com-copia' : 'item', novo ? 'chegou' : ''].filter(Boolean).join(' ')} data-item={item.id}>
       <button ref={botao} type="button" className="linha" data-linha aria-expanded="false" onClick={props.aoAbrir}>
         <time className="hora" dateTime={item.created_at}>
           {formatarHora(item.created_at)}
@@ -103,8 +108,9 @@ export function ItemDitado(props: Props) {
         {/* Os espaços entre as partes são para o nome acessível do botão:
             sem eles, o leitor de tela junta "14:32" e a primeira palavra. */}
         <TextoDaLinha item={item} />{' '}
-        {(pendente || falhou || naLixeira || selo) && (
+        {(novo || pendente || falhou || naLixeira || selo) && (
           <span className="etiquetas">
+            {novo && <span className="etiqueta">novo</span>}{' '}
             {pendente && <span className="etiqueta forte">não salvo</span>}{' '}
             {falhou && <span className="etiqueta risco">falhou</span>}{' '}
             {naLixeira && <span className="etiqueta">na lixeira</span>}{' '}

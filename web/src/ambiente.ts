@@ -8,10 +8,19 @@
 import type { ComponentType, ReactNode } from 'react'
 import type { Aprendida, ClienteDoHistorico, Ditado, EscolhaDoSelo, Problema, Sugestao } from './api'
 
+// SecaoDasConfiguracoes é uma seção das Configurações que o Painel pode pedir
+// que a tela leve à vista: hoje, só a do ditado pelo celular (a nuvem; ADR-021),
+// aonde o app leva quem precisa colar a chave do provedor.
+export type SecaoDasConfiguracoes = 'ditar'
+
 // PropsDasConfiguracoes é o que o Painel passa à tela de Configurações do
 // modo. A tela fica montada depois de aberta, e só se esconde (visivel).
 export interface PropsDasConfiguracoes {
   visivel: boolean
+  // secao: a seção que o Painel pediu (vez sobe a cada pedido, para o mesmo
+  // pedido de novo valer de novo). Só a nuvem a usa; o PC não tem seções
+  // pedidas.
+  secao?: { nome: SecaoDasConfiguracoes; vez: number } | null
   // aoPerderLigacao: a falha foi da ligação (sem sessão, fora do ar); o
   // Painel decide o que mostrar.
   aoPerderLigacao(e: unknown): void
@@ -62,6 +71,37 @@ export interface PropsDaFaixa {
   // sair do lugar. O PC não usa.
   textoNaoSalvo?: string
   aoEntrarDeNovo?(): void
+  // ditadoNaoEnviado: a sessão acabou com um ditado gravado e ainda não
+  // enviado (ADR-021: o áudio conta como texto não salvo). Só a nuvem.
+  ditadoNaoEnviado?: boolean
+}
+
+// PropsDoDitar é o que o Painel passa ao gravador do ditado (ADR-021). O
+// gravador mora na nuvem (ambiente.ditar): o Painel só lhe dá o campo de busca
+// para pôr ao lado do microfone e recebe de volta o que chegou.
+export interface PropsDoDitar {
+  // busca: o campo de busca do Painel. O gravador o mostra ao lado do
+  // microfone e o troca pela faixa da onda enquanto grava; null nas
+  // Configurações, onde não há busca.
+  busca: ReactNode
+  // escondido: o Painel está nas Configurações. O microfone sai de cena, mas
+  // uma gravação em curso, ou um áudio que espera "Tentar de novo", fica.
+  escondido: boolean
+  // aoChegar: o servidor gravou o ditado. nota é o que o app fez sozinho
+  // ("Parei quando o app saiu da frente."); aviso, a frase de o Polish não
+  // ter agido.
+  aoChegar(ditado: Ditado, extra: { nota?: string; aviso?: string }): void
+  // aoAudioPendente: passou a haver, ou deixou de haver, um ditado gravado e
+  // não enviado, só na memória. Conta como texto não salvo: a sessão que acaba
+  // não troca a tela inteira (o áudio se perderia).
+  aoAudioPendente(pendente: boolean): void
+  // aoSemSessao: o envio levou 401. O áudio fica, e o Painel acende a faixa
+  // da sessão.
+  aoSemSessao(): void
+  // abrirConfiguracoes: a falha se resolve nas Configurações (a chave do
+  // provedor). Com secao, o Painel leva a seção à vista.
+  abrirConfiguracoes(secao?: SecaoDasConfiguracoes): void
+  avisar(texto: ReactNode): void
 }
 
 export interface Ambiente {
@@ -93,4 +133,9 @@ export interface Ambiente {
   // na nuvem, a lista é relida só ao voltar à aba. A leitura que falha é
   // ignorada; o 404 de um Agent de antes da S faz o Painel parar de perguntar.
   mudancasDoSync?(sinal: AbortSignal): Promise<number>
+  // ditar é o microfone do celular (ADR-021, C6a): o botão ao lado da busca, a
+  // faixa da onda e o envio. Só a nuvem o tem, e o código do gravador só entra
+  // no build dela (bundle.test.ts). Um componente por ambiente: o gravador, e o
+  // áudio que ele guarda até o envio, ficam entre um render e outro.
+  ditar?: ComponentType<PropsDoDitar>
 }

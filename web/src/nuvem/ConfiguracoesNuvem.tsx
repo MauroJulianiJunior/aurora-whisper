@@ -1,11 +1,11 @@
 // As Configurações no app da nuvem (ADR-019, F4; 08-ui-ux-spec.md,
-// "Configurações do celular"): a conta e o Sair, os aparelhos (os PCs
-// conectados, com o Revogar; F6), o aprendido (as trocas dos PCs, com o
-// Desfazer; F8), as sessões abertas (o celular perdido), o que vai e o que
-// nunca vai para a nuvem, e o "apagar
-// meus dados da nuvem", com a confirmação digitada. Nada do PC: chave de
-// API, microfone, atalho, início automático e modo de texto ficam em cada PC
-// (decisão 8).
+// "Configurações do celular"): a conta e o Sair, o ditado pelo celular (o
+// aceite, o provedor, a chave, o modelo, a dica e o Polish; ADR-021), os
+// aparelhos (os PCs conectados, com o Revogar; F6), o aprendido (as trocas
+// dos PCs, com o Desfazer; F8), as sessões abertas (o celular perdido), o que
+// vai e o que nunca vai para a nuvem, e o "apagar meus dados da nuvem", com a
+// confirmação digitada. Nada do PC: chave de API do PC, microfone, atalho,
+// início automático e modo de texto ficam em cada PC (decisão 8).
 
 import { type KeyboardEvent, useEffect, useEffectEvent, useRef, useState } from 'react'
 import { ErroDaApi, SemSessao, problemaDe } from '../api'
@@ -13,17 +13,36 @@ import type { PropsDasConfiguracoes } from '../ambiente'
 import { formatarCurta } from '../datas'
 import { AprendidoNaNuvem } from './AprendidoNaNuvem'
 import { type Aparelho, type ClienteNuvem, type Eu, type Sessao, confirmacaoDeApagar } from './cliente'
+import { DitarPeloCelular } from './ditar/DitarPeloCelular'
+import type { Folha } from './ditar/folha'
 
 interface Props extends PropsDasConfiguracoes {
   cliente: ClienteNuvem
   eu: Eu
   // aoSair: a sessão foi encerrada aqui; o app volta para Entrar.
   aoSair(): void
+  // folha: a folha do aceite do ditado pelo celular (a mesma que o gravador usa).
+  folha: Folha
+  // aoMudarDitado: o ditado pelo celular da conta mudou aqui (o aceite, a chave,
+  // o provedor): o gravador confere de novo antes do próximo microfone.
+  aoMudarDitado(): void
 }
 
 const mensagem = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
-export function ConfiguracoesNuvem({ cliente, eu, aoSair, visivel, aoPerderLigacao, avisar, recarregarHistorico, comTextoNaoSalvo }: Props) {
+export function ConfiguracoesNuvem({
+  cliente,
+  eu,
+  aoSair,
+  folha,
+  aoMudarDitado,
+  visivel,
+  secao,
+  aoPerderLigacao,
+  avisar,
+  recarregarHistorico,
+  comTextoNaoSalvo,
+}: Props) {
   const perderLigacao = useEffectEvent(aoPerderLigacao)
   const titulo = useRef<HTMLHeadingElement>(null)
 
@@ -266,7 +285,10 @@ export function ConfiguracoesNuvem({ cliente, eu, aoSair, visivel, aoPerderLigac
     }
     fecharApagar()
     avisar('Seus dados foram apagados da nuvem.')
-    // O histórico ficou vazio, e as outras sessões foram encerradas.
+    // O histórico ficou vazio, e as outras sessões foram encerradas. O aceite do
+    // ditado pelo celular, as preferências e as chaves também foram: o gravador
+    // não pode mais achar que está tudo pronto.
+    aoMudarDitado()
     recarregarHistorico()
     setLeitura((n) => n + 1)
   }
@@ -331,6 +353,19 @@ export function ConfiguracoesNuvem({ cliente, eu, aoSair, visivel, aoPerderLigac
           </p>
         )}
       </section>
+
+      {/* O ditado pelo celular (ADR-021): logo depois da conta, porque é o que o
+          app faz. O aceite, o provedor, a chave, o modelo, a dica e o Polish. */}
+      <DitarPeloCelular
+        cliente={cliente}
+        folha={folha}
+        visivel={visivel}
+        leitura={leitura}
+        secao={secao}
+        aoPerderLigacao={aoPerderLigacao}
+        avisar={avisar}
+        aoMudar={aoMudarDitado}
+      />
 
       <section className="secao" aria-labelledby="cfg-aparelhos">
         <h2 id="cfg-aparelhos" className="secao-titulo" ref={tituloAparelhos} tabIndex={-1}>
@@ -450,8 +485,18 @@ export function ConfiguracoesNuvem({ cliente, eu, aoSair, visivel, aoPerderLigac
           Privacidade
         </h2>
         <ul className="fatos">
-          <li>Vão para a nuvem: o texto dos ditados, com a data, o PC de origem e os detalhes da transcrição, e as trocas aprendidas.</li>
-          <li>Nunca vão: o áudio, o que está nas outras janelas, a chave do Polish e as configurações dos PCs.</li>
+          <li>
+            Vão para a nuvem: o texto dos ditados, com a data, o PC de origem e os detalhes da transcrição, e as trocas aprendidas. O texto fica legível para quem
+            administra o servidor.
+          </li>
+          <li>Ficam 6 meses (a lixeira, 30 dias). Uma cópia cifrada guarda tudo por cerca de 30 dias além disso.</li>
+          <li>
+            Do PC nunca vão: o áudio, o que está nas outras janelas, a chave do Polish e as configurações dos PCs; a chave do PC continua no PC.
+          </li>
+          <li>
+            Ditar pelo celular é opcional. Se você ligar, a voz de cada ditado vai ao provedor que você escolher (OpenAI ou Groq), com a sua chave, que o servidor guarda
+            cifrada. A voz não é gravada: fica na memória e é descartada ao fim.
+          </li>
         </ul>
 
         <div className="ajuste apagar">
@@ -465,7 +510,8 @@ export function ConfiguracoesNuvem({ cliente, eu, aoSair, visivel, aoPerderLigac
                 Apagar meus dados da nuvem
               </p>
               <p className="ajuda" id="cfg-apagar-efeito">
-                Apaga tudo desta conta na nuvem e desconecta os PCs. Os PCs ficam com a cópia deles.
+                Apaga tudo desta conta na nuvem e desconecta os PCs. Os PCs ficam com a cópia deles. A cópia de segurança guarda por até cerca de 30 dias. Apaga também o
+                aceite do ditado no celular, as preferências e as chaves.
               </p>
               <label className="ajuste-nome rotulo-campo" htmlFor="cfg-apagar">
                 Para confirmar, digite <span className="termo">apagar</span>

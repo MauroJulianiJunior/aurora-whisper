@@ -31,6 +31,10 @@ const texto: [string, ...string[]][] = [
   ['acento', 'pilula', 'risco-fundo'],
   // O que entrou no diff, e o texto selecionado.
   ['texto', 'entrou', 'selecao'],
+  // O ditado que acabou de chegar (ADR-021): a linha inteira, com a hora e a
+  // etiqueta "novo" em cinza, sobre o fundo do que entrou.
+  ['texto-2', 'entrou'],
+  ['texto-3', 'entrou'],
 ]
 
 const contorno: [string, ...string[]][] = [
@@ -364,7 +368,7 @@ describe('regras que o jsdom não aplica', () => {
   // sessão que acaba com um texto não salvo).
   it('no toque, os botões, a busca, as abas, o copiar e os botões da faixa têm 44 px', () => {
     const toque = bloco('@media (pointer: coarse)')
-    for (const seletor of ['.botao', '.busca', '.vistas button', '.copiar-linha', '.faixa .aviso-acao']) {
+    for (const seletor of ['.botao', '.busca', '.vistas button', '.copiar-linha', '.faixa .aviso-acao', '.ditar-botao', '.ditar-faixa']) {
       const corpo = toque.match(new RegExp(`(?:^|\\n)\\s*${seletor.replace(/\./g, '\\.')}\\s*\\{([^}]*)\\}`))?.[1]
       expect(corpo, seletor).toBeDefined()
       expect(valor(corpo!, 'height'), seletor).toBe('44px')
@@ -440,6 +444,79 @@ describe('regras que o jsdom não aplica', () => {
     expect(valor(regra('.aprendidos .sessao'), 'flex')).toBe('1 1 8rem')
     expect(valor(regra('.aprendidos .sessao-nome'), 'overflow-wrap')).toBe('anywhere')
     expect(valor(regra('.aprendidos .sessao-uso'), 'overflow-wrap')).toBe('anywhere')
+  })
+
+  // O ditado no celular (ADR-021, C6a): o microfone ao lado da busca, e a faixa
+  // da onda que a troca enquanto grava.
+  describe('o microfone e a faixa da onda', () => {
+    const regra = (seletor: string) => {
+      const r = regras.find((x) => x.seletor === seletor)
+      expect(r, seletor).toBeDefined()
+      return r!.corpo
+    }
+
+    // Tons de cinza, como a pílula do overlay do PC: o verde é da ação e o
+    // vermelho, do erro; gravar não é nenhum dos dois (e o teste do papel de
+    // cada cor trava que estas regras não entrem nas listas deles).
+    it('a onda é cinza: as barras usam --texto-2, 2 px de largura e 1 px entre elas, como o overlay do PC', () => {
+      const barra = regra('.onda-barra')
+      expect(valor(barra, 'background')).toBe('var(--texto-2)')
+      expect(valor(barra, 'width')).toBe('2px')
+      expect(valor(regra('.onda'), 'gap')).toBe('1px')
+      // Em repouso: 12% da altura e 45% do brilho (o JS sobe os dois com a voz).
+      expect(valor(barra, 'transform')).toBe('scaleY(0.12)')
+      expect(valor(barra, 'opacity')).toBe('0.45')
+    })
+
+    it('a faixa tem o contorno e a altura da busca; o botão, a altura dela', () => {
+      const faixa = regra('.ditar-faixa')
+      const busca = bloco('\n.busca {')
+      expect(valor(faixa, 'border')).toBe(valor(busca, 'border'))
+      expect(valor(faixa, 'height')).toBe(valor(busca, 'height'))
+      expect(valor(faixa, 'border-radius')).toBe(valor(busca, 'border-radius'))
+      expect(valor(regra('.ditar-botao'), 'height')).toBe(valor(faixa, 'height'))
+      expect(valor(regra('.ditar-botao'), 'width')).toBe(valor(faixa, 'height'))
+    })
+
+    it('no toque, o Cancelar preenche o miolo da faixa (44 px menos as duas bordas)', () => {
+      const toque = bloco('@media (pointer: coarse)')
+      const cancelar = toque.match(/\.ditar-cancelar\s*\{([^}]*)\}/)?.[1]
+      expect(valor(cancelar!, 'height')).toBe('42px')
+    })
+
+    it('em 320 px a onda perde as 5 barras mais antigas, e não as pontas: 28 barras (83 px) cabem', () => {
+      const media = bloco('@media (max-width: 340px)')
+      expect(media).toMatch(/\.onda-barra:nth-child\(-n \+ 5\)\s*\{\s*display:\s*none/)
+      // 33 barras de 2 px com 1 px entre elas são 98 px; 28 são 83.
+      const largura = (n: number) => n * 2 + (n - 1)
+      expect(largura(33)).toBe(98)
+      expect(largura(28)).toBe(83)
+    })
+
+    it('o "Transcrevendo" pulsa, e quem pede menos movimento não o vê pulsar', () => {
+      expect(valor(regra('.ditar-enviando'), 'animation')).toMatch(/^pulsar /)
+      const reduzido = bloco('@media (prefers-reduced-motion: reduce)')
+      expect(reduzido).toMatch(/\.ditar-enviando\s*\{[^}]*animation:\s*none/)
+    })
+
+    it('o ocupado continua legível: o microfone sem resposta usa --texto-3, que passa em 4,5:1', () => {
+      expect(valor(regra(".ditar-botao[aria-disabled='true']"), 'color')).toBe('var(--texto-3)')
+      for (const t of Object.values(temas)) expect(contraste(t['texto-3']!, t['superficie']!)).toBeGreaterThanOrEqual(4.5)
+    })
+
+    it('Temas de Contraste: as barras da onda (só fundo) continuam visíveis', () => {
+      const forcado = bloco('@media (forced-colors: active)')
+      expect(forcado).toMatch(/\.onda-barra\s*\{[^}]*forced-color-adjust:\s*none[^}]*background:\s*CanvasText/)
+    })
+
+    it('o ditado que chegou tem o fundo do que entrou', () => {
+      expect(valor(regra('.item.chegou > .linha'), 'background')).toBe('var(--entrou)')
+    })
+
+    it('a falha que guarda o áudio é a nota de erro de sempre (o vermelho não ganha regra nova)', () => {
+      const usam = regras.filter((r) => /var\(--risco/.test(r.corpo)).map((r) => r.seletor)
+      expect(usam.some((s) => s.includes('ditar'))).toBe(false)
+    })
   })
 
   it('linha da Lixeira: sem fundo de passar o ponteiro, e com o texto inteiro', () => {

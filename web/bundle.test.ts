@@ -129,6 +129,30 @@ describe('o bundle local (bin\\painel)', () => {
     // F8h: o Desfazer do celular (a /api/v1/learned, a pergunta na linha) é só do app.
     'Desfeito em todos os aparelhos',
     'Nada aprendido ainda',
+    // C6a (ADR-021): o gravador do ditado e o envio são só do app. O painel do
+    // PC nunca abre o microfone do navegador: o Agent captura o áudio, e o
+    // áudio do PC não sai dele.
+    'getUserMedia',
+    'MediaRecorder',
+    'AudioContext',
+    'createAnalyser',
+    'wakeLock',
+    '/api/v1/dictations',
+    'Ditado-Id',
+    'Ditado-Duracao-Ms',
+    'Ditado-Fala-Ms',
+    'audio/webm',
+    'Transcrevendo',
+    // C6b (ADR-021): o aceite, as chaves e as preferências do ditado pelo celular
+    // são só do app: o painel do PC não tem a folha, nem as rotas da conta, nem
+    // a chave que o servidor guarda cifrada (a do PC fica no PC).
+    '/api/v1/dictation',
+    '/api/v1/ai-keys',
+    'Ditar pelo celular',
+    'transferência internacional',
+    'Chave terminada em',
+    'Revogue também esta chave',
+    'Organizar o texto com o Polish',
   ])('não tem %s', (texto) => {
     expect(local.js).not.toContain(texto)
   })
@@ -154,6 +178,73 @@ describe('o bundle da nuvem (dist-nuvem)', () => {
     expect(nuvem.js).toContain('/api/v1/learned/undo')
     expect(nuvem.js).toContain('Desfeito em todos os aparelhos.')
   })
+
+  // C6a (ADR-021): o gravador e o envio do ditado. O microfone, o MediaRecorder
+  // em webm/opus, o AnalyserNode da onda e da fala, o Wake Lock, e a rota nova
+  // com os três cabeçalhos.
+  it('tem o gravador do ditado e o envio', () => {
+    for (const texto of [
+      'getUserMedia',
+      'MediaRecorder',
+      'audio/webm;codecs=opus',
+      'createAnalyser',
+      'wakeLock',
+      '/api/v1/dictations',
+      'Ditado-Id',
+      'Ditado-Duracao-Ms',
+      'Ditado-Fala-Ms',
+      'Transcrevendo',
+      'Tentar de novo',
+    ]) {
+      expect(nuvem.js, texto).toContain(texto)
+    }
+  })
+
+  // C6b (ADR-021): o aceite antes do microfone, as chaves do provedor (guardadas
+  // cifradas no servidor) e as preferências do ditado. As rotas da conta, o
+  // texto do aviso (o que sai, para quem, o dado de terceiro, o áudio que não
+  // fica gravado) e a Privacidade com "a chave do PC continua no PC".
+  it('tem o aceite, as chaves e as preferências do ditado pelo celular', () => {
+    for (const texto of [
+      '/api/v1/dictation',
+      '/api/v1/dictation/settings',
+      '/api/v1/dictation/consent',
+      '/api/v1/ai-keys',
+      'Ditar pelo celular manda a sua voz a um provedor que não diz processar no Brasil.',
+      'Não é gravada no seu aparelho nem no servidor.',
+      'quem administra o servidor consegue decifrá-la',
+      'A voz e os termos podem ter dados de outras pessoas',
+      'Se você dita dado de cliente',
+      'Chave terminada em',
+      'Revogue também esta chave no provedor. Uma cópia cifrada dela fica nos backups por cerca de 30 dias.',
+      'Mandar os termos aprendidos como dica',
+      'Organizar o texto com o Polish',
+      'a chave do PC continua no PC',
+      'A voz não é gravada: fica na memória e é descartada ao fim.',
+    ]) {
+      expect(nuvem.js, texto).toContain(texto)
+    }
+  })
+
+  // O build da nuvem não conhece o Windows: o aviso e a Privacidade do app dizem
+  // que a chave do PC continua no PC sem citar onde ela mora.
+  it('a chave do PC é citada sem o Gerenciador de Credenciais', () => {
+    expect(nuvem.js).toContain('a chave do PC continua no PC')
+    expect(nuvem.js).not.toContain('Gerenciador de Credenciais')
+    expect(nuvem.js).not.toContain('Credential Manager')
+  })
+
+  // O áudio vive só numa variável da página: nada em IndexedDB, Cache ou
+  // localStorage (o it.each de baixo trava as três frases do armazenamento do
+  // navegador), nem salvo em arquivo, nem tocado de volta. O analisador não é
+  // ligado a nenhuma saída, e o AudioWorklet fica de fora: a CSP default-src
+  // 'self' não muda.
+  it.each(['caches.', 'createObjectURL', 'showSaveFilePicker', 'FileReader', 'new Audio(', 'audioWorklet', 'AudioWorklet', 'navigator.storage'])(
+    'o gravador não guarda nem toca o áudio: sem %s',
+    (texto) => {
+      expect(nuvem.js).not.toContain(texto)
+    },
+  )
 
   // Nada do PC: o bilhete, o token, a Local API, as Configurações do PC. E
   // nada guardado no aparelho.
@@ -242,6 +333,69 @@ describe('os arquivos de cada build', () => {
 
   it('o da nuvem: os mesmos, mais o manifest, os ícones e o sw.js', () => {
     expect(daRaiz(nuvem)).toEqual(['favicon.svg', 'index.html', 'licencas-fontes.txt', ...daRaizDaNuvem].sort())
+  })
+})
+
+// C6c (ADR-021): a página de calibração do microfone é só do `pnpm dev`
+// (calibracao-dev.html, como a telas-dev-nuvem.html). Ela abre o microfone e
+// mostra números; nada dela, nem o texto, nem o CSS, nem o HTML, vai para o
+// painel do PC ou para o app da nuvem.
+describe('a página de calibração do microfone (C6c)', () => {
+  const daCalibracao = [
+    'Calibração do microfone',
+    'Medir o silêncio',
+    'Medir a fala',
+    'O que o app usa hoje',
+    'Nível por percentil',
+    'Tempo acima de cada limiar de RMS',
+    'Fala medida pelo app',
+    'Distribuição do nível, em bandas de 6 dB',
+    'contados e jogados fora',
+    'Parar agora',
+  ]
+
+  describe.each([
+    ['local', () => local],
+    ['nuvem', () => nuvem],
+  ])('o bundle %s', (_, bundle) => {
+    it.each(daCalibracao)('não tem %s', (texto) => {
+      expect(bundle().js).not.toContain(texto)
+    })
+
+    it('não tem a página, o HTML nem o CSS dela', () => {
+      expect(bundle().arquivos.filter((f) => /calibr/i.test(f))).toEqual([])
+      expect(bundle().html).not.toMatch(/calibr/i)
+      expect(bundle().css).not.toContain('calibracao')
+    })
+  })
+
+  it('o vite.config.ts e o index.html não a conhecem: a entrada do build é uma só', async () => {
+    expect(await readFile(path.join(raiz, 'vite.config.ts'), 'utf8')).not.toMatch(/calibr/i)
+    expect(await readFile(path.join(raiz, 'index.html'), 'utf8')).not.toMatch(/calibr/i)
+  })
+
+  it('a página existe para o dev: um HTML próprio, com a entrada dela', async () => {
+    const html = await readFile(path.join(raiz, 'calibracao-dev.html'), 'utf8')
+    expect(html).toContain('<script type="module" src="/src/nuvem/ditar/calibracaoDev.tsx"></script>')
+    expect(html).toContain('(só no pnpm dev)')
+  })
+
+  it('nenhum código do app importa a calibração: só os arquivos dela se conhecem', async () => {
+    const arquivos = (await readdir(path.join(raiz, 'src'), { recursive: true })).map((f) => f.split(path.sep).join('/')).filter((f) => /\.(ts|tsx)$/.test(f))
+    const dela = /(^|\/)(calibracao|PaginaDeCalibracao|calibracaoDev)(\.test)?\.tsx?$/
+    expect(arquivos.filter((f) => dela.test(f)).sort()).toEqual([
+      'nuvem/ditar/PaginaDeCalibracao.test.tsx',
+      'nuvem/ditar/PaginaDeCalibracao.tsx',
+      'nuvem/ditar/calibracao.test.ts',
+      'nuvem/ditar/calibracao.ts',
+      'nuvem/ditar/calibracaoDev.tsx',
+    ])
+    // Nenhuma forma de importar: `from '...'`, `import '...'` (sem efeito, o Rollup
+    // a descarta do bundle e o teste de cima não a veria) e `import('...')`.
+    for (const f of arquivos.filter((x) => !dela.test(x))) {
+      const texto = await readFile(path.join(raiz, 'src', f), 'utf8')
+      expect(texto, f).not.toMatch(/['"][^'"\n]*\/(calibracao|PaginaDeCalibracao|calibracaoDev)(\.tsx?|\.css)?(\?[^'"\n]*)?['"]/)
+    }
   })
 })
 
@@ -533,6 +687,8 @@ describe('o service worker emitido (sw.js)', () => {
       ['GET /api/v1/me, navegando', pedido('/api/v1/me', { mode: 'navigate' })],
       ['GET /api/v1/transcriptions', pedido('/api/v1/transcriptions?trash=false')],
       ['POST /api/v1/transcriptions/search', pedido('/api/v1/transcriptions/search', { method: 'POST' })],
+      // ADR-021: o áudio do ditado vai direto à rede, e o service worker nem o vê.
+      ['POST /api/v1/dictations', pedido('/api/v1/dictations', { method: 'POST' })],
       ['POST /api/v1/device-auth/start', pedido('/api/v1/device-auth/start', { method: 'POST' })],
       ['POST /auth/start', pedido('/auth/start', { method: 'POST' })],
       ['GET /auth/google/callback, navegando', pedido('/auth/google/callback?code=c&state=s', { mode: 'navigate' })],

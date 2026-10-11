@@ -81,6 +81,12 @@ func TestPainel_ServeOBuild(t *testing.T) {
 		if hd.Get("Content-Security-Policy") != csp || hd.Get("X-Content-Type-Options") != "nosniff" {
 			t.Errorf("GET %s sem os cabeçalhos de segurança: %v", c.path, hd)
 		}
+		// O app grava o ditado do celular (ADR-021, escolha menor 18): o
+		// microfone é só da própria origem, em todo arquivo dele (a página, o
+		// sw.js, o manifest, os assets).
+		if got := hd.Get("Permissions-Policy"); got != "microphone=(self)" {
+			t.Errorf("GET %s: Permissions-Policy %q, quero microphone=(self)", c.path, got)
+		}
 		// O app é a casca: nenhum arquivo dele abre sessão.
 		if hd.Get("Set-Cookie") != "" {
 			t.Errorf("GET %s grava cookie: %q", c.path, hd.Get("Set-Cookie"))
