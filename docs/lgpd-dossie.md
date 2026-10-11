@@ -269,7 +269,7 @@ entra aqui.
 
 | Item pedido pelo `09` ("LGPD", pré-condição do deploy) | Resposta | Onde |
 |---|---|---|
-| Base legal e transparência (texto da tela e política) | consentimento (proposta); a política como modelo, com os campos de cada instância; o texto novo do app está na política, **ainda não aplicado**. **Ditado no celular:** um consentimento à parte, na folha do aceite | "Quem é quem"; `docs/politica-de-privacidade.md`; `web/src/nuvem/ConfiguracoesNuvem.tsx:448-456` |
+| Base legal e transparência (texto da tela e política) | consentimento (proposta); a política como modelo, com os campos de cada instância; o texto novo do app está na política e no app desde 11-out-2026 (C6b). **Ditado no celular:** um consentimento à parte, na folha do aceite | "Quem é quem"; `docs/politica-de-privacidade.md`; `web/src/nuvem/ConfiguracoesNuvem.tsx:448-456` |
 | Retenção na nuvem, backup (o giro) e cópias no PC | seção 3 | acima |
 | Direitos: excluir definitivamente, "apagar meus dados", acesso | seção 5; duas lacunas (cadastro, exportar) | seção 7, pontos 2 e 3 |
 | O aprendido, no servidor e no espelho do PC, inclusive a linha desfeita | seção 3; aceito na D3 (ADR-019) | `09`, "Retenção" |

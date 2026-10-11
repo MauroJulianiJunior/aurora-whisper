@@ -44,8 +44,7 @@ a pessoa quase nunca precisar abri-lo.
 - **Local-first.** O ASR roda na própria máquina, em CPU (whisper.cpp `small` q4_0). Áudio nunca é
   persistido, nem em disco nem na nuvem. O áudio **do PC** não sai do PC. Contexto de outras janelas é
   efêmero e nunca sincronizado.
-- **O celular, quando ditar (ADR-021, decidido e ainda não implementado), é um caminho à parte e
-  opcional.** A voz vai, só em memória, ao provedor de transcrição que a pessoa escolhe (OpenAI ou
+- **O celular, quando dita (ADR-021, desde 11-out-2026), é um caminho à parte e opcional.** A voz vai, só em memória, ao provedor de transcrição que a pessoa escolhe (OpenAI ou
   Groq), com a chave dela, pelo servidor da nuvem dela. Começa com um aceite específico, é descartada ao
   fim e nunca é gravada. A chave dela fica cifrada no servidor. Não muda o PC.
 - **Português primeiro, com dicionário pessoal que aprende.** Termos do domínio de quem usa são
@@ -116,16 +115,10 @@ Ainda não existe (não inventar na interface):
 - no painel do PC, excluir um ditado definitivamente, ou esvaziar a lixeira à mão (o app da nuvem
   exclui de vez, um por um, desde a F4);
 - mostrar quantos dias faltam para um ditado sair da lixeira;
-- o celular com os ditados de verdade. A nuvem e o celular estão decididos na ADR-019 (etapa 5): o
-  servidor (F1 a F3), o app da nuvem (F4), que já se instala (F5), a conexão do PC (F6), o sync do
-  histórico (F7) e do que o painel aprendeu (F8) e a retenção (F9 e F10) existem, mas só contra a
-  nuvem de teste do PC: nada roda num servidor de verdade (F11);
-- **ditar pelo celular** (ADR-021, aprovada em 10-out-2026, sem código ainda). O passo 1 é um botão de
-  microfone no app (toque para começar e toque para parar), discreto e no estilo do painel; o texto
-  entra no histórico e desce aos PCs. A voz vai ao provedor que a pessoa escolhe, com a chave dela, só
-  depois de um aceite específico (veja `docs/politica-de-privacidade.md`). O passo 2, o app nativo do
-  Android com a bolha flutuante ou o teclado, é outra ADR. Não inventar na interface nada disso antes de
-  existir.
+- o **app nativo do Android** (o passo 2 da ADR-021), com a bolha flutuante ou o teclado que escreve
+  em qualquer campo: é outra ADR. Hoje o celular dita só dentro do app da nuvem (o passo 1, no ar
+  desde 11-out-2026: o microfone ao lado da busca, o texto no histórico e o "Copiar"). Não inventar na
+  interface nada do passo 2 antes de existir.
 
 ## Brand Commitments
 

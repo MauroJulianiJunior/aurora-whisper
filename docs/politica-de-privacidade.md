@@ -11,8 +11,8 @@
 >
 > **O ditado no celular** (as partes marcadas "ditado no celular") só vale se a sua nuvem o tiver
 > ligado: o servidor só o monta com a chave de cifra (`AI_KEYS_SECRET_FILE`). Se você não vai ligá-lo,
-> tire essas partes. **Ele ainda não existe no código**: este texto descreve o que a ADR-021 promete e
-> só passa a valer quando existir. Antes do primeiro áudio real na sua nuvem, o responsável lê e
+> tire essas partes. Ele está no código desde 11-out-2026 (ADR-021). Antes do primeiro áudio real na
+> sua nuvem, o responsável lê e
 > aprova estas partes e o dossiê. O que é da sua instância (o responsável, o contato, as regiões, a
 > condição do art. 33) fica nos campos **[A PREENCHER]**, e a cópia preenchida fica fora do repositório.
 
@@ -317,10 +317,10 @@ de novo.
 
 ---
 
-# Texto proposto para o app (ainda não aplicado)
+# Os textos do app sobre privacidade
 
-Nada abaixo foi aplicado. Quando for, o texto entra no app junto com os testes que conferem as frases
-(subfatia C6b da ADR-021). **Duas regras de código:** o build da nuvem não pode trazer a frase
+Aplicados no app em 11-out-2026 (subfatia C6b da ADR-021), com os testes que conferem as frases. O
+código é a fonte: se este anexo e o app divergirem, vale o app, e este anexo se corrige. **Duas regras de código:** o build da nuvem não pode trazer a frase
 "Gerenciador de Credenciais" (o `bundle.test` a recusa), e a tela não afirma o que não foi medido.
 
 **App da nuvem, seção Privacidade** (`web/src/nuvem/ConfiguracoesNuvem.tsx`, no lugar das duas frases de

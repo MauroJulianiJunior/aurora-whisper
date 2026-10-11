@@ -10,8 +10,8 @@ ditados e as configurações.
 dicionário, inserção, bandeja, overlay e painel. A nuvem é opcional e serve para ver e editar o
 histórico no celular e nos outros PCs; o projeto não tem servidor central, e cada pessoa sobe a sua,
 num servidor seu (o código está em `cmd/server`, o deploy em `deploy/` e o roteiro em
-`docs/deploy-f11.md`; o desenho, na ADR-019). **Ditar pelo celular** está decidido (ADR-021), mas ainda
-não existe no código. Ainda não há Setup publicado: falta abrir o portão do
+`docs/deploy-f11.md`; o desenho, na ADR-019). **Ditar pelo celular** existe desde 11-out-2026
+(ADR-021): no app da nuvem, com o provedor e a chave de quem dita. Ainda não há Setup publicado: falta abrir o portão do
 workflow de release e publicar o release do modelo (veja "Montar o Setup"). Quem quer usar hoje
 monta do código.
 
@@ -177,8 +177,7 @@ Segure `Ctrl+Win`, fale, solte. O roteiro de teste manual da bandeja e do painel
   janelas nunca vão. Sem conectar, o Agent não abre conexão nenhuma. Quem hospeda uma nuvem para
   outras pessoas tem um modelo de política de privacidade em `docs/politica-de-privacidade.md` e o
   dossiê de LGPD em `docs/lgpd-dossie.md`. O desenho está na ADR-019.
-- **Ditar no celular** (opcional, **decidido na ADR-021 e ainda não implementado**: o texto abaixo é o
-  que o desenho promete, e vale só depois que existir). No app do celular, a voz vai ao servidor da
+- **Ditar no celular** (opcional, ADR-021, no código desde 11-out-2026). No app do celular, a voz vai ao servidor da
   nuvem **de quem hospeda** e dele ao provedor de transcrição que você escolher, **OpenAI ou Groq**,
   **com a sua chave de API**. Isso muda a regra do PC, e por isso começa com um **aceite específico**
   seu, antes do microfone abrir:
