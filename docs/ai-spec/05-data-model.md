@@ -111,6 +111,23 @@ Unique `(user_id, install_id)`.
 > ele, mesmo com a versão acima da base (a mudança mesclada do próprio PC). `raw_text` e `final_text`
 > têm teto de 64 KiB na aplicação (não no banco). **Confirmado pelo Mauro em 05-out-2026** (ADR-019, "Decisões da
 > F2", "Revisão da F2").
+>
+> **ADR-021, C1 (10-out-2026): o ditado que nasce na nuvem (o do celular).** Sem migration: a 0003 já
+> aceita `device_id` nulo e `source_platform` em texto livre. O `Store.Create` grava a linha pelo ponto
+> único de gravação, com a regra de criar do push:
+> - `device_id`, `text_device_id` e `trash_device_id` **nulos** (nenhum PC o criou), `source_platform`
+>   `web` (o app do celular) ou `android` (o app nativo, passo 2) — a lista fechada das origens da
+>   nuvem; `status` `done`; `version`, `text_version` e `trash_version` 1; sem lixeira nem selo;
+> - `created_at` e `updated_at` são o **relógio do servidor** (nos ditados do PC, `created_at` é a data
+>   do PC); a retenção conta por ele do mesmo jeito;
+> - o evento de sync é `upsert`, versão 1, `device_id` nulo, com o `seq` do contador;
+> - o `Create` confere o `sync_epoch` esperado **dentro** da transação que trava o contador (sem janela
+>   para o "apagar meus dados" ou um backup restaurado) e confere só o id, o usuário e o epoch, nunca o
+>   texto: o mesmo id na conta devolve a linha gravada, e o id com lápide não é recriado;
+> - o `Store.Situacao(user_id, id)` lê, sem travar, se o id é um ditado, uma lápide ou nada (o `Get` não
+>   mostra a lápide), junto com o epoch da conta.
+>
+> Não há coluna de áudio nem de contexto: o áudio só existe em memória, durante o pedido (ADR-021).
 
 ### DictionaryEntry
 - id uuid
@@ -407,6 +424,18 @@ Espelho útil de Transcription +:
 >   que não mudou aqui, a igual e a que só difere porque a **nuvem** a pôs na lixeira recebem o estado
 >   da nuvem (revisão da F7c: subir o ditado fora da lixeira não mudava nada lá, e o PC reconciliava
 >   a cada rodada).
+>
+> **ADR-021, C1 (10-out-2026), sem migration: a origem "pelo app".** O ditado que o celular criou na
+> nuvem chega com `device_id` nulo e `source_platform` `web` (ou `android`, no app nativo): o pull o
+> aplica como `recebido`, e o histórico o mostra como "pelo app". Como o `device_id` nulo era o que
+> dizia "nasceu neste PC", **a origem entra na conta**: "nasceu aqui" é `device_id` nulo **e**
+> `source_platform` fora de `web` e `android` (um só filtro, `nasceuAquiSQL`, em `internal/storage/
+> origem.go`). Ele vale no envio inicial (a prévia, o envio e a completação), no "Esquecer esta nuvem"
+> (que anota `nuvem_ditados_em_outra` só se a nuvem esquecida confirmou um ditado nascido aqui) e na
+> fila do sync (o `Put` de um ditado novo sem a versão da nuvem). Sem isso, o ditado do app, sem
+> aparelho e sem `server_version` depois do esquecer, seria enviado como histórico deste PC para uma
+> conta nova. O que o celular criou e o PC recebeu, e editou aqui, sobe como qualquer ditado que a
+> nuvem tem (a base é a `server_version`).
 
 ### local_dictionary_entries / aliases / corrections
 Espelhos sincronizáveis.

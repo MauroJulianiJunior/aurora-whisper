@@ -53,6 +53,12 @@ export function TextoDaLinha({ item, id }: { item: Ditado; id?: string }) {
   )
 }
 
+// peloApp diz se o ditado nasceu na nuvem, pelo app do celular (ADR-021):
+// source_platform "web", ou "android" no app nativo. O do PC é "windows".
+function peloApp(item: Ditado): boolean {
+  return item.source_platform === 'web' || item.source_platform === 'android'
+}
+
 export function ItemDitado(props: Props) {
   const { item, aberto, rascunho } = props
   const botao = useRef<HTMLButtonElement>(null)
@@ -208,6 +214,9 @@ function Editor({
 
   const meta = [
     formatarCompleta(item.created_at),
+    // A origem só é dita quando não é o comum: o ditado que o celular criou na
+    // nuvem diz "pelo app" (ADR-021); o do PC não diz nada.
+    peloApp(item) && 'pelo app',
     item.asr_model ? `${item.asr_provider} · ${item.asr_model}` : item.asr_provider,
     item.duration_ms != null && `${formatarSegundos(item.duration_ms)} de áudio`,
     item.processing_ms != null && `transcrito em ${formatarSegundos(item.processing_ms)}`,

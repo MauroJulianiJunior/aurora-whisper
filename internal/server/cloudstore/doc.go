@@ -11,6 +11,12 @@
 // funde por seq aos ditados e às lápides, e o "apagar meus dados" o leva
 // junto.
 //
+// Desde a C1 da ADR-021, também o ditado que nasce na nuvem (criar.go): o do
+// celular, que o servidor transcreve e grava (Store.Create), sem aparelho e
+// com o epoch esperado conferido sob a trava do contador, e o Store.Situacao,
+// que diz se um id é um ditado, uma lápide ou nada. A regra é a de criar do
+// push, e a validação, a do payload dele.
+//
 // A implementação Postgres está em internal/server/pgstore. As duas chamam as
 // MESMAS regras deste pacote, e a mesma suíte de contrato
 // (internal/server/contracttest) roda contra as duas: o servidor em memória e

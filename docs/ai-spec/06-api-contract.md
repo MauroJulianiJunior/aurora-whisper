@@ -294,7 +294,10 @@ Todas só com sessão (o token do PC não alcança o CRUD).
   from/to, device_id, mode, trash.
 - **`POST /transcriptions/search`**: a busca, com o texto no corpo, para ele nunca parar num log de
   acesso. Corpo: `q` e os mesmos filtros do `GET`. Mesma resposta do `GET`.
-- **`POST /transcriptions`: não é montada.** O ditado só nasce no PC e sobe pelo sync.
+- **`POST /transcriptions`: não é montada.** O ditado nasce no PC e sobe pelo sync. **ADR-021 (C1,
+  10-out-2026):** ele também pode nascer na nuvem, o que o celular dita (`Store.Create`, abaixo em "O
+  ditado que nasce na nuvem"); a rota que o chama, `POST /api/v1/dictations`, é da C5b e **ainda não
+  está montada**. `POST /transcriptions` continua `404`: o texto nunca vem do cliente.
 - **`PATCH /transcriptions/{id}`**: como acima. `409` com a versão velha. Não devolve `sugestoes`:
   aprender continua só no PC (ADR-017).
 - **O selo de conflito:** um item pode trazer `versao_em_conflito` (o texto que perdeu, o aparelho e
@@ -330,6 +333,10 @@ Todas só com sessão (o token do PC não alcança o CRUD).
   `deleted_at` e `versao_em_conflito` vêm sempre (`null` quando não há). O selo:
   `{ "final_text": "...", "device_id": "uuid ou null", "conflict_at": "..." }`. O "excluir
   definitivamente" já existe no `Store` (`Purge`, com a lápide); a rota foi montada na F3 (abaixo).
+  **ADR-021 (C1):** `source_platform` é `"windows"` (nasceu num PC), `"web"` (o que o app do celular
+  ditou) ou `"android"` (o app nativo, passo 2); as duas últimas são a lista fechada das origens da
+  nuvem, e nelas `device_id` é sempre `null`. O texto do PC e o do app são o mesmo item, com as mesmas
+  rotas (editar, lixeira, restaurar, excluir de vez).
 - **F3 (05-out-2026):** o token do PC recebe `403` em todas estas rotas. `GET /transcriptions` com `q`
   na URL (qualquer valor, até vazio) é `400`. `POST /transcriptions/search`, corpo de até 16 KiB:
   `{ "q": "...", "cursor": "...", "limit": 50, "from": "RFC3339", "to": "RFC3339", "device_id": "uuid",
@@ -342,6 +349,31 @@ Todas só com sessão (o token do PC não alcança o CRUD).
   página da listagem para no item em que o texto acumulado (bruto, final e selo) chega a 2 MiB, com
   `next_cursor` para o resto, mesmo abaixo do `limit`. Os dois números são [ASSUMPTION] (ADR-019,
   "Decisões da F2").
+
+### O ditado que nasce na nuvem (ADR-021, C1)
+O ditado do celular não vem de um PC: o servidor o transcreve e o grava. Esta seção é o contrato do
+`Store` que a rota `POST /api/v1/dictations` (C5b) vai chamar; **a rota ainda não existe**, e nada
+aqui muda o que a API responde hoje. A suíte `internal/server/contracttest` (`criar.go`) é o contrato
+executável, contra o Store em memória e o Postgres.
+- **`Store.Create`** grava pelo ponto único de gravação, com a regra de criar do push (`decideCreate`)
+  sobre o payload validado pelas mesmas regras do push (a lista fechada, o teto de 64 KiB, `mode`,
+  `status`, `confidence`): uma linha da versão 1, o `seq` do contador e o evento `upsert` **sem
+  aparelho**. `device_id`, `text_device_id` e `trash_device_id` ficam nulos. O `Actor` é o da sessão,
+  sem aparelho; com aparelho, é erro (o ditado não é atribuído a um PC em silêncio).
+- **O que o servidor decide:** `created_at` e `updated_at` são o relógio do servidor, o `status` é
+  `done`, e a origem é `web` ou `android`. Não há `target_app`, áudio nem contexto.
+- **O epoch esperado:** `Create` recebe o `sync_epoch` que quem chama leu antes (`Situacao`), e o
+  confere **dentro da transação que trava o contador**: se a conta apagou os dados (ou um backup foi
+  restaurado) depois da leitura, recusa (`ErrEpochChanged`) e não grava nem gasta `seq`. Um epoch vazio
+  nunca confere.
+- **O id:** só o id, o usuário e o epoch são conferidos, nunca o texto. Se o id já existe na conta
+  (também na lixeira), `Create` devolve o que está gravado (`created = false`), sem gravar nem gastar
+  `seq`: o segundo de uma corrida recebe o que o primeiro gravou. O mesmo id em duas contas são dois
+  ditados. Um id com **lápide** não é recriado (`ErrTombstoned`).
+- **`Store.Situacao(user_id, id)`** só lê: `ditado` (com a linha, também o da lixeira), `lapide` ou
+  `nada`, e o epoch da conta, tudo no mesmo instante. Existe porque o `Get` não mostra a lápide. O id
+  de outra conta é `nada`.
+- **Sem migration:** a 0003 já aceita `device_id` nulo e `source_platform` livre. Nenhuma coluna nova.
 
 ## Learned (ADR-019)
 O aprendido no painel dos PCs, para ver e desfazer no celular. Só com sessão. O texto nunca vai na
@@ -612,7 +644,9 @@ depois de `N` (cada uma com `seq` igual ao `last_seq` dela) e as **lápides**
   do `limit`.
 - **Pull:** o `payload` de um `upsert` é o item (o mesmo JSON do CRUD, abaixo); o `device_id` da
   mudança falta quando ela veio do celular. O `410` da marca d'água, que este contrato previa para a
-  F9, não existe (F9, D2).
+  F9, não existe (F9, D2). **ADR-021 (C1):** o ditado que nasceu na nuvem vem como `upsert` da versão
+  1, sem `device_id` na mudança, e com `source_platform` `"web"` (ou `"android"`) e `device_id` nulo no
+  item; o PC o aplica como `recebido`, como o de outro PC.
 - **A retenção na nuvem (F9; ADR-019, "Decisões da F9").** Não há rota nem configuração: é um job no
   processo do servidor, na subida e de hora em hora, por usuário. O que o cliente vê:
   - o **ativo** com 6 meses, pela data do ditado que o PC mandou, some do `GET /transcriptions` e do
@@ -680,6 +714,12 @@ depois de `N` (cada uma com `seq` igual ao `last_seq` dela) e as **lápides**
   (ou é pulada, com marcador: o push recebe o `gone`). O que não vale no PC (tipo desconhecido, id que
   não é UUID, payload de outro id, texto acima de 64 KiB, sem data) é "não aplicado" e o cursor anda;
   só um erro de E/S o segura. `has_more` com o cursor parado é falha.
+  **ADR-021 (C1), a origem "pelo app":** o ditado que nasceu na nuvem (`source_platform` `web` ou
+  `android`, sem `device_id`) é aplicado como qualquer outro (`recebido`, sem marcador, a
+  `server_version` guardada), com a origem como veio, e o histórico do PC o mostra como "pelo app". O
+  PC não o conta como "nascido aqui": o envio inicial e o "Esquecer esta nuvem", que olhavam só o
+  `device_id` nulo, olham também a origem (`source_platform` fora de `web` e `android`). Sem isso, ele
+  subiria como histórico deste PC para uma conta nova.
   **F7c, a reconciliação (D3):** um ditado que existe aqui sem `server_version`, sem marcador, que
   mudou aqui (depois do "Esquecer esta nuvem", ou sem esquecer) e em que o lado do PC pode vencer
   (outro texto, ou na lixeira só aqui) não é sobrescrito: ganha um marcador de criar e sobe inteiro,

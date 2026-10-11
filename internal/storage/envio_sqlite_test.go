@@ -50,6 +50,8 @@ type semente struct {
 	aparelho  string
 	situacao  string
 	comMarcas bool
+	// origem é o source_platform; vazio é "windows", o do PC.
+	origem string
 }
 
 func (e envioDeTeste) semear(t *testing.T, s semente) {
@@ -64,6 +66,9 @@ func (e envioDeTeste) semear(t *testing.T, s semente) {
 	tr.FinalText = "texto de " + s.id + " com acento: ação"
 	tr.SyncState = s.situacao
 	tr.ServerVersion = s.servidor
+	if s.origem != "" {
+		tr.SourcePlatform = s.origem
+	}
 	if s.aparelho != "" {
 		a := s.aparelho
 		tr.DeviceID = &a
@@ -139,6 +144,11 @@ func TestEnvio_CadaFiltroEPreviaIgualAoQueMarca(t *testing.T) {
 		{id: id(10), criado: agoraDoEnvio.Add(-time.Hour), comMarcas: true},                       // fica: já está na fila
 		{id: id(11), criado: agoraDoEnvio.Add(-time.Hour), dono: "outro-dono"},                    // fica: outro dono
 		{id: id(12), criado: agoraDoEnvio.Add(-24 * time.Hour * 100)},                             // sobe: cem dias
+		// O ditado que o celular criou na nuvem e o PC recebeu: sem aparelho,
+		// mas não nasceu aqui (ADR-021).
+		{id: id(13), criado: agoraDoEnvio.Add(-time.Hour), origem: storage.PlataformaWeb},     // fica: pelo app
+		{id: id(14), criado: agoraDoEnvio.Add(-time.Hour), origem: storage.PlataformaAndroid}, // fica: pelo app nativo
+		{id: id(15), criado: agoraDoEnvio.Add(-time.Hour), origem: "windows"},                 // sobe: o do PC, dito por extenso
 	}
 	for _, s := range sementes {
 		e.semear(t, s)
@@ -152,7 +162,7 @@ func TestEnvio_CadaFiltroEPreviaIgualAoQueMarca(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	quero := []string{id(1), id(2), id(12)}
+	quero := []string{id(1), id(2), id(12), id(15)}
 	sort.Strings(quero)
 	if got := e.marcadosInicial(t); strings.Join(got, ",") != strings.Join(quero, ",") {
 		t.Fatalf("marcados %v; quero %v", got, quero)
@@ -174,7 +184,7 @@ func TestEnvio_CadaFiltroEPreviaIgualAoQueMarca(t *testing.T) {
 	if n, _ := e.fila.Previa(ctx, agoraDoEnvio); n != 0 {
 		t.Errorf("a prévia depois do envio: %d", n)
 	}
-	if v, ok := e.chave(t, storage.ChaveNuvemEnvioTotal); !ok || v != "3" {
+	if v, ok := e.chave(t, storage.ChaveNuvemEnvioTotal); !ok || v != fmt.Sprint(len(quero)) {
 		t.Errorf("o total do envio: %q, %v", v, ok)
 	}
 	if _, ok := e.chave(t, storage.ChaveNuvemEnvioAceitoEm); !ok {
@@ -588,6 +598,46 @@ func TestEmissao_DeOutroPCSemVersaoNaoSobe(t *testing.T) {
 	}
 	if m, ok := ms[id(2)]; !ok || m.Campos != storage.CampoTexto|storage.CampoLixeira {
 		t.Errorf("o ditado de outro PC com a versão: %+v, %v", m, ok)
+	}
+}
+
+// O ditado que o celular criou na nuvem (source_platform web, sem aparelho)
+// não é um ditado novo deste PC: o Put dele, conectado e sem a versão da nuvem,
+// não entra na fila (o envio inicial o levaria à conta nova). Com a versão da
+// nuvem, a mudança feita aqui sobe como a de qualquer ditado. O do PC, com a
+// mesma forma, entra: é o controle do teste.
+func TestEmissao_DitadoDoAppNaoNasceuAqui(t *testing.T) {
+	ctx := context.Background()
+	e := novoEnvioDeTeste(t)
+	e.conectar(t)
+	put := func(n int, origem string, servidor *int64) {
+		t.Helper()
+		tr := newTranscription(id(n), donoDaFila, agoraDoEnvio)
+		tr.SourcePlatform, tr.ServerVersion = origem, servidor
+		if err := e.repo.Put(tr); err != nil {
+			t.Fatal(err)
+		}
+	}
+	put(1, "windows", nil)
+	put(2, storage.PlataformaWeb, nil)
+	put(3, storage.PlataformaAndroid, nil)
+	put(4, storage.PlataformaWeb, versao(1))
+	executar(t, e.db, `DELETE FROM sync_outbox WHERE entity_id = ?`, id(4)) // o Put com versão já pôs o dele
+	ms := e.marcadores(t)
+	if m, ok := ms[id(1)]; !ok || m.Campos != 0 {
+		t.Errorf("o ditado novo do PC: %+v, %v; quero um marcador de criar", m, ok)
+	}
+	for _, n := range []int{2, 3} {
+		if _, ok := ms[id(n)]; ok {
+			t.Errorf("o ditado do app (%d) sem a versão da nuvem entrou na fila", n)
+		}
+	}
+	// Recebido da nuvem e editado aqui: sobe, com a base certa.
+	if _, err := e.repo.UpdateFinalText(ctx, donoDaFila, id(4), 1, "editado no PC"); err != nil {
+		t.Fatal(err)
+	}
+	if m, ok := e.marcadores(t)[id(4)]; !ok || m.Campos != storage.CampoTexto {
+		t.Errorf("a edição do ditado do app, que a nuvem tem: %+v, %v; quero o campo do texto", m, ok)
 	}
 }
 

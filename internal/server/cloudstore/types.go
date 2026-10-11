@@ -18,7 +18,8 @@ type Transcription struct {
 	UserID string
 	// DeviceID é o aparelho onde o ditado nasceu (o que fez o push que o
 	// criou). Não muda depois. O aparelho da ÚLTIMA mudança é outra coisa:
-	// mora no sync_event e sai no pull como o device_id da mudança.
+	// mora no sync_event e sai no pull como o device_id da mudança. Nulo no
+	// ditado que nasceu na nuvem (Store.Create; SourcePlatform web ou android).
 	DeviceID       *string
 	SourcePlatform string
 	RawText        string
@@ -448,7 +449,54 @@ var (
 	// ErrUnknownDevice: o aparelho não é do usuário (o Postgres recusa pela
 	// chave estrangeira composta; o servidor em memória imita).
 	ErrUnknownDevice = errors.New("cloudstore: aparelho desconhecido")
+
+	// Os erros do Create (o ditado que nasce na nuvem; ADR-021, C1).
+	//
+	// ErrInvalidID: o id do ditado não é um UUID (Create e Situacao).
+	ErrInvalidID = errors.New("cloudstore: id de ditado inválido")
+	// ErrInvalidDictation: o ditado novo não passa na validação do payload de
+	// criar (os mesmos campos, tamanhos e valores do push), ou a origem não é
+	// uma das da nuvem. Nada foi gravado. A mensagem leva só o código de recusa,
+	// de uma lista fechada, nunca o texto.
+	ErrInvalidDictation = errors.New("cloudstore: ditado novo inválido")
+	// ErrDeviceNotAllowed: o ditado da nuvem não nasce de um aparelho (device_id
+	// fica nulo, também no app nativo do passo 2): o Create recusa um Actor com
+	// aparelho, em vez de atribuir o ditado a ele em silêncio.
+	ErrDeviceNotAllowed = errors.New("cloudstore: o ditado da nuvem não nasce de um aparelho")
+	// ErrEpochChanged: o epoch esperado não é o da conta agora. Os dados dela
+	// foram trocados (o "apagar meus dados" ou um backup restaurado) depois de
+	// o epoch ser lido, e nada foi gravado. Um epoch vazio nunca confere.
+	ErrEpochChanged = errors.New("cloudstore: os dados da conta foram trocados depois de o epoch ser lido")
+	// ErrTombstoned: o id tem lápide (o ditado foi apagado de vez). O Create
+	// não o recria.
+	ErrTombstoned = errors.New("cloudstore: o ditado foi apagado de vez")
 )
+
+// EstadoDoId é o que a nuvem sabe de um id de ditado de um usuário.
+type EstadoDoId int
+
+const (
+	// IdNada: não há ditado nem lápide com esse id na conta.
+	IdNada EstadoDoId = iota
+	// IdDitado: há o ditado, fora da lixeira ou nela.
+	IdDitado
+	// IdLapide: o ditado foi apagado de vez e a lápide ainda existe. Uma lápide
+	// vencida que o job de retenção ainda não apagou também conta: a resposta
+	// é a conservadora (o app nunca reusa um id, a não ser para reenviar).
+	IdLapide
+)
+
+// SituacaoDoId é a resposta de Store.Situacao: uma leitura só de um id, e o
+// epoch da conta lido junto, no mesmo instante.
+type SituacaoDoId struct {
+	Estado EstadoDoId
+	// Ditado é o ditado, só em IdDitado.
+	Ditado *Transcription
+	// Epoch é o sync_epoch da conta no instante da leitura. É o epoch esperado
+	// que o Create recebe: se a conta apagar os dados entre a leitura e a
+	// gravação, o Create recusa.
+	Epoch string
+}
 
 // Store é o que o servidor HTTP da etapa 5 usa para o histórico e o sync.
 // Toda escrita passa pelo ponto único de gravação da implementação.
@@ -456,6 +504,31 @@ type Store interface {
 	// List e Get só leem.
 	List(ctx context.Context, f ListFilter) (Page, error)
 	Get(ctx context.Context, userID, id string) (Transcription, error)
+
+	// Situacao diz o que a nuvem sabe do id na conta do usuário: o ditado (também
+	// o da lixeira), a lápide, ou nada. É o que o Get não mostra: ele não vê a
+	// lápide. Só lê, não trava nada e não gasta seq. Devolve também o epoch da
+	// conta (SituacaoDoId.Epoch). O id de outro usuário é IdNada, de propósito
+	// (o mesmo id em duas contas são dois ditados); o que não é UUID é
+	// ErrInvalidID, e o usuário sem contador, ErrUnknownUser.
+	Situacao(ctx context.Context, userID, id string) (SituacaoDoId, error)
+	// Create grava um ditado que nasceu na nuvem (o do celular; ADR-021), pelo
+	// ponto único de gravação: a regra de criar do push (decideCreate) sobre o
+	// payload validado como o do push, o evento de sync sem aparelho e o seq. O
+	// Actor não tem aparelho (ErrDeviceNotAllowed). A data do ditado é now, o
+	// relógio do servidor, e a origem é SourcePlatformWeb ou
+	// SourcePlatformAndroid.
+	//
+	// epoch é o sync_epoch que quem chama leu antes (SituacaoDoId.Epoch). A
+	// conferência é feita dentro da transação que trava o contador, então não
+	// tem janela: se a conta trocou os dados desde então, ErrEpochChanged e nada
+	// é gravado.
+	//
+	// O Create confere só o id, o usuário e o epoch, nunca o texto: se o id já
+	// existe na conta (também na lixeira), devolve o que está gravado, com
+	// created=false, sem gravar nem gastar seq. Numa corrida, o segundo recebe o
+	// que o primeiro gravou. O id com lápide é ErrTombstoned.
+	Create(ctx context.Context, a Actor, epoch, id string, n NewDictation, now time.Time) (t Transcription, created bool, err error)
 
 	// Edit troca o texto final, só sobre a versão atual (ErrVersionConflict).
 	Edit(ctx context.Context, a Actor, id string, baseVersion int64, finalText string, now time.Time) (Transcription, error)

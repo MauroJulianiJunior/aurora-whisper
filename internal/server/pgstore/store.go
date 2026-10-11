@@ -6,8 +6,9 @@
 //
 // # A transação de gravação
 //
-// Toda escrita (CRUD, push, "excluir definitivamente") é uma transação curta
-// em READ COMMITTED, cujo PRIMEIRO comando é
+// Toda escrita (CRUD, push, "excluir definitivamente", e o ditado criado na
+// nuvem, Create, em criar.go) é uma transação curta em READ COMMITTED, cujo
+// PRIMEIRO comando é
 //
 //	UPDATE user_sync_counters SET last_seq = last_seq + 1
 //	WHERE user_id = $1 RETURNING last_seq, sync_epoch

@@ -386,3 +386,32 @@ func TestEsquecer_SemNadaConfirmadoNaoDizOutraNuvem(t *testing.T) {
 		t.Errorf("a referência da reconciliação: %q, %v", v, ok)
 	}
 }
+
+// O ditado que o celular criou na nuvem e o PC recebeu (sem aparelho, com a
+// versão da nuvem) não é "daqui": confirmado na nuvem esquecida, ele não faz a
+// pergunta seguinte dizer que os ditados deste PC "já foram para outra nuvem"
+// (ADR-021). O do PC, com a mesma forma, faz: é o controle.
+func TestEsquecer_DitadoDoAppNaoContaComoDestePC(t *testing.T) {
+	ctx := context.Background()
+	for _, c := range []struct {
+		nome   string
+		origem string
+		quero  bool
+	}{
+		{"do PC", "windows", true},
+		{"pelo app", storage.PlataformaWeb, false},
+		{"pelo app nativo", storage.PlataformaAndroid, false},
+	} {
+		t.Run(c.nome, func(t *testing.T) {
+			e := novoEnvioDeTeste(t)
+			e.semear(t, semente{id: id(1), criado: agoraDoEnvio.Add(-time.Hour), servidor: versao(2), origem: c.origem})
+			executar(t, e.db, `INSERT INTO instalacao (nome, valor) VALUES ('nuvem_url', 'u'), ('nuvem_envio_aceito_em', 'x')`)
+			if err := e.fila.EsquecerNuvem(ctx, agoraDoEnvio); err != nil {
+				t.Fatal(err)
+			}
+			if _, ok := e.chave(t, storage.ChaveNuvemDitadosEmOutra); ok != c.quero {
+				t.Errorf("anotou a outra nuvem = %v; quero %v", ok, c.quero)
+			}
+		})
+	}
+}

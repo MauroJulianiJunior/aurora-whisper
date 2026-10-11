@@ -6,6 +6,10 @@
 
 export interface Ditado {
   id: string
+  // source_platform: de onde o ditado nasceu. "windows" é o do PC; "web" é o que
+  // o celular criou na nuvem (o app), e "android", o do app nativo (ADR-021).
+  // Ausente em quem não manda o campo (os dublês antigos dos testes).
+  source_platform?: string
   raw_text: string
   final_text: string
   mode: string

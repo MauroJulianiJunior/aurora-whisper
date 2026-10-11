@@ -26,7 +26,9 @@ import (
 //   - Elegível (elegiveis, o filtro único da prévia, do envio e da
 //     completação): do dono; sem server_version (a nuvem não o tem); fora da
 //     lixeira; sem recusa nem "fora da janela" (sync_state pending); nascido
-//     neste PC (device_id nulo: o que veio de outro PC é dele, D2); dentro da
+//     neste PC (device_id nulo e origem que não é da nuvem, nasceuAquiSQL: o que
+//     veio de outro PC é dele, D2, e o que o celular criou, "pelo app", é da
+//     nuvem, ADR-021); dentro da
 //     janela de 6 meses (a conta da nuvem, retention.ActiveExpiryAt); e sem
 //     marcador (o que já está na fila sobe por ela).
 //   - A pessoa clica em "Enviar o histórico" (D1): EnviarHistorico faz a
@@ -182,7 +184,7 @@ type ResumoDoEnvio struct {
 // AS t), sem a janela de 6 meses, que é conferida em Go. Os argumentos são
 // argsElegivel.
 const filtroElegivel = `t.user_id = ? AND t.server_version IS NULL AND t.deleted_at IS NULL
-	AND t.sync_state = ? AND t.device_id IS NULL`
+	AND t.sync_state = ? AND ` + nasceuAquiTSQL
 
 func (f *Fila) argsElegivel() []any { return []any{f.dono, SituacaoNormal} }
 

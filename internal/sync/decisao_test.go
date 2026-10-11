@@ -246,6 +246,61 @@ func TestLinhaDoItem(t *testing.T) {
 	}
 }
 
+// O ditado que o celular criou na nuvem (ADR-021, C1) chega sem aparelho e com
+// a origem web (ou android, do app nativo): o PC o aplica como "recebido", como
+// o de outro PC, guarda a origem como veio e não o põe na fila (aplicar não
+// ecoa). Uma mudança dele que chega depois também se aplica, e a mesma versão
+// é o eco.
+func TestDecidirMudanca_DitadoDoApp(t *testing.T) {
+	for _, origem := range []string{"web", "android"} {
+		t.Run(origem, func(t *testing.T) {
+			item := &Item{
+				ID: idDoTeste, DeviceID: nil, SourcePlatform: origem, RawText: "bruto do app", FinalText: "Dito no celular.",
+				Mode: "smart", ASRProvider: "openai", ASRModel: strPtr("gpt-4o-mini-transcribe"), Status: "done",
+				CreatedAt: time.Date(2026, 10, 10, 15, 0, 0, 0, time.UTC), UpdatedAt: time.Date(2026, 10, 10, 15, 0, 0, 0, time.UTC),
+				Version: 1,
+			}
+			upsert := func(versao int64) Change {
+				it := *item
+				it.Version = versao
+				return Change{Seq: 9, EntityType: storage.EntidadeDitado, EntityID: idDoTeste, Operation: OpUpsert, EntityVersion: versao, DeviceID: nil, Payload: &it}
+			}
+
+			d := DecidirMudanca(storage.EstadoDoItem{ID: idDoTeste}, upsert(1))
+			if d.Tipo != TipoRecebido || d.Acao.Gravar == nil {
+				t.Fatalf("o ditado novo do app: tipo %q, ação %+v; quero recebido com a linha", d.Tipo, d.Acao)
+			}
+			g := d.Acao.Gravar
+			if g.SourcePlatform != origem || g.DeviceID != nil || g.FinalText != "Dito no celular." || g.ASRProvider != "openai" || g.TargetApp != nil {
+				t.Errorf("linha gravada: %+v", g)
+			}
+			if d.Acao.ServerVersion == nil || *d.Acao.ServerVersion != 1 || d.Acao.Marcador != storage.MarcadorFica || d.Acao.ApagarLinha {
+				t.Errorf("ação: %+v; quero a versão 1 da nuvem, sem marcador (aplicar não ecoa)", d.Acao)
+			}
+
+			// A mudança seguinte (o celular editou) se aplica sobre a versão 1.
+			if d := DecidirMudanca(semMarcadorComVersao(1), upsert(2)); d.Tipo != TipoRecebido || d.Acao.Gravar == nil || d.Acao.Gravar.SourcePlatform != origem {
+				t.Errorf("a versão 2: tipo %q, ação %+v", d.Tipo, d.Acao)
+			}
+			// A mesma versão é o eco.
+			if d := DecidirMudanca(semMarcadorComVersao(1), upsert(1)); d.Tipo != TipoEco {
+				t.Errorf("a mesma versão: tipo %q, quero eco", d.Tipo)
+			}
+			// A lápide dele apaga, como a de qualquer ditado.
+			tomb := Change{EntityType: storage.EntidadeDitado, EntityID: idDoTeste, Operation: OpTombstone}
+			if d := DecidirMudanca(semMarcadorComVersao(1), tomb); d.Tipo != TipoApagado || !d.Acao.ApagarLinha {
+				t.Errorf("a lápide: tipo %q, ação %+v", d.Tipo, d.Acao)
+			}
+		})
+	}
+}
+
+func strPtr(s string) *string { return &s }
+
+// semMarcadorComVersao é o ditado que a nuvem já confirmou na versão sv, sem
+// marcador na fila.
+func semMarcadorComVersao(sv int64) storage.EstadoDoItem { return estado(1, i64(sv), 0, 0) }
+
 // semVersaoOutroTexto2 é um ditado que a nuvem já confirmou (versão 2) com
 // outro texto: a mudança de outro aparelho é aplicada, sem reconciliar.
 func semVersaoOutroTexto2() storage.EstadoDoItem {
