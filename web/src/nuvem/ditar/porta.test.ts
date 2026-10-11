@@ -6,15 +6,15 @@
 
 import { describe, expect, it, vi } from 'vitest'
 import { ErroDaApi, ForaDoAr, SemSessao } from '../../api'
-import { versaoDoAviso } from './aviso'
+import { VERSAO_DO_AVISO } from '../avisoDoDitado'
 import { type EstadoDoDitado, chavesVazias, preferenciasPadrao } from './estado'
 import type { Folha, PedidoDeAceite } from './folha'
 import { type GanchosDaPorta, criarPorta } from './porta'
 
 const pronto = (): EstadoDoDitado => ({
   preferencias: { ...preferenciasPadrao },
-  aceite: { versao: versaoDoAviso, provedores: ['openai'], aceito_em: '2026-10-10T12:00:00.000Z' },
-  chaves: { ...chavesVazias(), openai: { configurada: true, final: 'WXYZ' } },
+  aceite: { versao: VERSAO_DO_AVISO, transcricao: 'openai', polish: null, aceito_em: '2026-10-10T12:00:00.000Z', vigente: true },
+  chaves: { ...chavesVazias(), openai: { configurada: true, final: 'WXYZ', colar_de_novo: false } },
 })
 
 const semAceite = (): EstadoDoDitado => ({ ...pronto(), aceite: null, chaves: chavesVazias() })
@@ -65,7 +65,17 @@ describe('com o aceite e a chave na conta', () => {
     const m = montar([e], () => null)
     expect(await m.porta.liberar(m.ganchos)).toBe(false)
     expect(m.pedirAceite).toHaveBeenCalledTimes(1)
-    expect(m.pedirAceite.mock.calls[0]![0]).toMatchObject({ voz: 'openai', polish: 'anthropic', jaAceitos: ['openai'] })
+    expect(m.pedirAceite.mock.calls[0]![0]).toEqual({ voz: 'openai', polish: 'anthropic', escolherVoz: true })
+  })
+
+  it('o aceite que cobre os dois (a voz e o Polish) não pede folha', async () => {
+    const e = pronto()
+    e.preferencias = { ...e.preferencias, polish: true, polish_provedor: 'anthropic', polish_modelo: 'claude-haiku-4-5' }
+    e.aceite = { ...e.aceite!, polish: 'anthropic' }
+    e.chaves = { ...e.chaves, anthropic: { configurada: true, final: 'ANTH', colar_de_novo: false } }
+    const m = montar([e])
+    expect(await m.porta.liberar(m.ganchos)).toBe(true)
+    expect(m.pedirAceite).not.toHaveBeenCalled()
   })
 })
 
@@ -74,19 +84,19 @@ describe('sem o aceite', () => {
     const m = montar([semAceite()], () => null)
     expect(await m.porta.liberar(m.ganchos)).toBe(false)
     expect(m.pedirAceite).toHaveBeenCalledTimes(1)
-    expect(m.pedirAceite.mock.calls[0]![0]).toEqual({ voz: 'openai', polish: undefined, jaAceitos: [], escolherVoz: true })
+    expect(m.pedirAceite.mock.calls[0]![0]).toEqual({ voz: 'openai', polish: undefined, escolherVoz: true })
     expect(m.salvarPreferencias).not.toHaveBeenCalled()
     // Nenhum aviso e nenhuma ida às Configurações: a pessoa disse "Agora não".
     expect(m.ganchos.avisar).not.toHaveBeenCalled()
     expect(m.ganchos.abrirConfiguracoes).not.toHaveBeenCalled()
   })
 
-  it('o aceite de um aviso velho não vale: a folha abre sem os provedores dele', async () => {
+  it('o aceite de um aviso velho (o servidor diz vigente: false) não vale: a folha abre, e o microfone não', async () => {
     const e = pronto()
-    e.aceite = { versao: '2026-01-01', provedores: ['openai'], aceito_em: '' }
+    e.aceite = { ...e.aceite!, vigente: false }
     const m = montar([e], () => null)
-    await m.porta.liberar(m.ganchos)
-    expect(m.pedirAceite.mock.calls[0]![0]).toMatchObject({ jaAceitos: [] })
+    expect(await m.porta.liberar(m.ganchos)).toBe(false)
+    expect(m.pedirAceite).toHaveBeenCalledTimes(1)
   })
 
   it('com o Aceito e a chave na conta: avisa e NÃO abre o microfone (a pessoa toca de novo)', async () => {
@@ -107,7 +117,7 @@ describe('sem o aceite', () => {
   })
 
   it('o provedor escolhido na folha vira o das preferências, com o modelo no padrão', async () => {
-    const aceito = { ...pronto(), aceite: { versao: versaoDoAviso, provedores: ['groq' as const], aceito_em: '' } }
+    const aceito: EstadoDoDitado = { ...pronto(), aceite: { versao: VERSAO_DO_AVISO, transcricao: 'groq', polish: null, aceito_em: '', vigente: true } }
     aceito.preferencias = { ...aceito.preferencias, provedor: 'groq' }
     const m = montar([semAceite(), aceito], () => ({ voz: 'groq' }))
     await m.porta.liberar(m.ganchos)
@@ -130,6 +140,15 @@ describe('sem a chave, com o aceite', () => {
     expect(await m.porta.liberar(m.ganchos)).toBe(false)
     expect(m.pedirAceite).not.toHaveBeenCalled()
     expect(m.ganchos.avisar).toHaveBeenCalledWith('Falta a chave da OpenAI. Cole a chave nas Configurações.')
+    expect(m.ganchos.abrirConfiguracoes).toHaveBeenCalledWith('ditar')
+  })
+
+  it('a chave que o servidor já não decifra (colar_de_novo) pede para colar de novo, no mesmo lugar', async () => {
+    const e = { ...pronto(), chaves: { ...chavesVazias(), openai: { configurada: false, final: '', colar_de_novo: true } } }
+    const m = montar([e])
+    expect(await m.porta.liberar(m.ganchos)).toBe(false)
+    expect(m.pedirAceite).not.toHaveBeenCalled()
+    expect(m.ganchos.avisar).toHaveBeenCalledWith('Cole a chave da OpenAI de novo nas Configurações.')
     expect(m.ganchos.abrirConfiguracoes).toHaveBeenCalledWith('ditar')
   })
 
@@ -177,7 +196,7 @@ describe('reabrir o aceite (o servidor recusou o ditado por falta dele)', () => 
   it('abre a folha para as preferências de agora, sem a escolha do provedor, e diz se aceitou', async () => {
     const m = montar([pronto()])
     expect(await m.porta.reabrirAceite(m.ganchos)).toBe(true)
-    expect(m.pedirAceite.mock.calls[0]![0]).toEqual({ voz: 'openai', polish: undefined, jaAceitos: ['openai'], escolherVoz: false })
+    expect(m.pedirAceite.mock.calls[0]![0]).toEqual({ voz: 'openai', polish: undefined, escolherVoz: false })
 
     const nao = montar([pronto()], () => null)
     expect(await nao.porta.reabrirAceite(nao.ganchos)).toBe(false)

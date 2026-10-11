@@ -68,6 +68,10 @@ interface Props {
   // ditado (ADR-021). Os testes e as telas de desenvolvimento trocam; sem ela,
   // é o navegador de verdade.
   plataformaDeDitar?: Plataforma
+  // recarregar lê o app de novo: é o que a folha do aceite faz quando o servidor
+  // diz que o aviso que ela mostrou não é o atual (AVISO_DESATUALIZADO). Os
+  // testes trocam.
+  recarregar?(): void
 }
 
 const irParaPadrao = (url: string) => window.location.assign(url)
@@ -105,9 +109,10 @@ function AppDaConta({
   host = window.location.hostname,
   abrirJanela = abrirJanelaPadrao,
   plataformaDeDitar,
+  recarregar,
   pedido,
   trocarPara,
-}: Pick<Props, 'buscar' | 'irPara' | 'host' | 'abrirJanela' | 'plataformaDeDitar'> & { pedido: string | null; trocarPara(url: string): void }) {
+}: Pick<Props, 'buscar' | 'irPara' | 'host' | 'abrirJanela' | 'plataformaDeDitar' | 'recarregar'> & { pedido: string | null; trocarPara(url: string): void }) {
   const [cliente] = useState<ClienteNuvem>(() => criarClienteNuvem(buscar))
   const [tela, setTela] = useState<Tela>({ tipo: 'abrindo' })
   const [tentando, setTentando] = useState(false)
@@ -130,11 +135,12 @@ function AppDaConta({
           aoSair: () => setTela({ tipo: 'entrar', expirada: false }),
           reentrada: { cliente, eu, portao, host, abrirJanela, irPara },
           plataformaDeDitar,
+          recarregar,
         }),
         focar,
       }
     },
-    [cliente, buscar, host, abrirJanela, irPara, pedido, plataformaDeDitar],
+    [cliente, buscar, host, abrirJanela, irPara, pedido, plataformaDeDitar, recarregar],
   )
 
   useEffect(() => {

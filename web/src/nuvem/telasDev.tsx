@@ -36,7 +36,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import '../fontes.css'
 import '../index.css'
-import { versaoDoAviso } from './ditar/aviso'
+import { VERSAO_DO_AVISO } from './avisoDoDitado'
 import { plataformaFalsa } from './ditar/plataformaFalsa'
 import { type OpcoesDaNuvem, aprendido, itemNuvem, servidorFalsoNuvem } from '../testes/servidorFalsoNuvem'
 import AppNuvem from './AppNuvem'
@@ -58,16 +58,21 @@ const longas = [
 
 // O ditado pelo celular da conta, nos cenários do aceite e das Configurações;
 // nos outros, a conta já está pronta (o microfone abre direto).
-const aceiteDeHoje = (provedores: ('openai' | 'groq' | 'anthropic')[]) => ({ versao: versaoDoAviso, provedores, aceito_em: hora(9, 12) })
+const aceiteDeHoje = (transcricao: 'openai' | 'groq', polish: 'openai' | 'anthropic' | null = null) => ({
+  versao: VERSAO_DO_AVISO,
+  transcricao,
+  polish,
+  aceito_em: hora(9, 12),
+})
 const ditadoDoCenario: OpcoesDaNuvem['ditado'] =
   cenario === 'aceite' || cenario === 'ditar-desligado'
     ? {}
     : cenario === 'ditar-ligado'
-      ? { aceite: aceiteDeHoje(['openai']), chaves: { openai: 'sk-teste-de-mentira-WXYZ' } }
+      ? { aceite: aceiteDeHoje('openai'), chaves: { openai: 'sk-teste-de-mentira-WXYZ' } }
       : cenario === 'ditar-polish'
         ? {
-            preferencias: { polish: true, polish_provedor: 'anthropic' },
-            aceite: aceiteDeHoje(['openai', 'anthropic']),
+            preferencias: { polish: true, polish_provedor: 'anthropic', polish_modelo: 'claude-haiku-4-5' },
+            aceite: aceiteDeHoje('openai', 'anthropic'),
             chaves: { openai: 'sk-teste-de-mentira-WXYZ' },
           }
         : undefined

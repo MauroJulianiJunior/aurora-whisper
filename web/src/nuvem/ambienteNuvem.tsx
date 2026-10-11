@@ -27,10 +27,14 @@ interface Ganchos {
   // (ADR-021). Sem ela, o do navegador de verdade; os testes e as telas de
   // desenvolvimento põem um dublê.
   plataformaDeDitar?: Plataforma
+  // recarregar: o app é lido de novo quando o servidor recusa o aceite por ele
+  // ter mostrado um aviso desatualizado (a folha, folha.ts). Sem ele, a página
+  // recarrega.
+  recarregar?: () => void
 }
 
 // cliente: o do Painel, atrás do portão da reentrada (cliente.ts, Portao).
-export function ambienteNuvem(cliente: ClienteNuvem, eu: Eu, { aoSemSessao, aoSair, reentrada, plataformaDeDitar }: Ganchos): Ambiente {
+export function ambienteNuvem(cliente: ClienteNuvem, eu: Eu, { aoSemSessao, aoSair, reentrada, plataformaDeDitar, recarregar }: Ganchos): Ambiente {
   // O Sair é da sessão, não do histórico: passa por fora do portão. Com o
   // portão fechado (a faixa da sessão na tela), ele voltaria 401 sem sair da
   // página, e o Sair contaria como "já saiu" sem o servidor saber: o texto
@@ -39,7 +43,7 @@ export function ambienteNuvem(cliente: ClienteNuvem, eu: Eu, { aoSemSessao, aoSa
   // A folha do aceite e a porta do microfone (ADR-021, decisão H): um par por
   // sessão, que o gravador e as Configurações dividem. A porta lembra que a
   // conta está pronta; as Configurações a avisam quando algo mudou.
-  const folha = new Folha(cliente)
+  const folha = new Folha(cliente, recarregar)
   const porta = criarPorta(cliente, folha)
   return {
     cliente,

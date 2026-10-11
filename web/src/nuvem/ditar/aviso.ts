@@ -1,21 +1,17 @@
 // O aviso do ditado pelo celular (ADR-021, decisão H e "O que a D0 reescreve"):
-// a versão dele e o que cada provedor diz. O texto da folha do aceite está em
+// o que cada provedor diz. O texto da folha do aceite está em
 // FolhaDoAceite.tsx; o que muda de um provedor para outro está aqui, em dados.
+//
+// A VERSÃO do aviso não mora aqui: é a VERSAO_DO_AVISO de ../avisoDoDitado.ts,
+// a única do app (presa à do servidor por um teste do Go). QUALQUER mudança no
+// texto da folha ou nos blocos abaixo muda aquela versão, nos dois lados, e
+// quem aceitou a anterior aceita de novo (decisão H, escolha menor 21); o
+// avisoDoDitado.test.ts quebra se o texto mudar sem a versão.
 //
 // Tudo o que o aviso diz sobre um provedor é o que a documentação dele diz,
 // lida em 10-out-2026 (ADR-021, "O motor"). O aviso não afirma o país onde o
 // provedor processa quando a página dele não afirma, nem afirma que a conta de
 // quem dita tem uma proteção que o servidor não consegue conferir.
-
-// A versão do aviso. QUALQUER mudança no texto da folha muda esta versão, e
-// quem aceitou a anterior aceita de novo (decisão H, escolha menor 21).
-//
-// PROVISÓRIA: o valor é a data da ADR. Quem decide a versão de verdade é o
-// servidor, na C3b ("O aceite e as preferências": o app e o servidor leem o
-// mesmo valor, e um teste prende os dois). Quando a constante do servidor
-// existir, este valor tem de ser IGUAL a ela, no merge das duas frentes: o
-// POST /api/v1/dictation/consent só aceita a versão atual do aviso.
-export const versaoDoAviso = '2026-10-10'
 
 // Os provedores que o ditado fala: a voz vai à OpenAI ou à Groq; o Polish, à
 // OpenAI ou à Anthropic. A chave de cada um é uma só, qualquer que seja o uso.

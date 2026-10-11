@@ -181,6 +181,10 @@ export function ChaveDoProvedor({ cliente, provedor, chave, aoMudar, aoSemAceite
           <>
             Chave terminada em <span className="final">{chave.final}</span>.
           </>
+        ) : chave.colar_de_novo ? (
+          // Havia uma chave e o servidor já não a decifra (a chave de cifra
+          // trocou, ou o backup voltou sem ela): a pessoa cola de novo.
+          'A chave guardada não vale mais neste servidor. Cole a chave de novo.'
         ) : (
           'Nenhuma chave guardada.'
         )}

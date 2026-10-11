@@ -518,7 +518,10 @@ pergunta conta as trocas aprendidas (o `previa_trocas` do `06`, o M).
   mentira fala sozinho, num relógio parado; e, para o aceite e as Configurações do ditado, `aceite` (o
   toque no microfone de uma conta sem aceite, com a folha), `ditar-desligado`, `ditar-ligado` e
   `ditar-polish`). A calibração do microfone, `/calibracao-dev.html` ("A calibração do microfone no
-  Android", abaixo). São só do `pnpm dev`: nenhum build as inclui.
+  Android", abaixo). São só do `pnpm dev`: nenhum build as inclui. A nuvem de mentira dessas telas e
+  dos testes do app (`web/src/testes/servidorFalsoNuvem.ts`) fala o contrato do `06` para o ditado no
+  celular (`/dictation`, `/dictation/settings`, `/dictation/consent` e `/ai-keys`), e o
+  `contratoDoDitado.test.ts` prende os campos e os status dela ao `06`.
 - **O teste manual** (F8i, 08-out-2026): `docs/teste-manual-nuvem-f8.md` confere, no `bin\` e no app, com
   a nuvem de teste, a pergunta do envio com a troca e o **Desfazer** do **Aprendido** do app e do
   **Aprendido no painel**, nos dois sentidos. É um PC só: as etiquetas de estado e o "não aplicado neste
@@ -778,7 +781,10 @@ seções seguintes; a calibração do limiar e da onda no Android (C6c), no fim 
     pílula diz "Aceito. Toque no microfone para ditar.", e o toque seguinte grava.
   - **Sem a chave** (depois do aceite): a pílula diz "Falta a chave da OpenAI. Cole a chave nas
     Configurações." (o nome é o do provedor), e o app abre as Configurações **na seção "Ditar pelo
-    celular"**, com o foco no título dela. A chave é colada ali, no lugar de sempre.
+    celular"**, com o foco no título dela. A chave é colada ali, no lugar de sempre. Se o servidor
+    guardava uma chave e já não a decifra (a chave de cifra trocou, ou o backup voltou sem ela:
+    `colar_de_novo` no `GET /dictation`), a pílula diz "Cole a chave da OpenAI de novo nas
+    Configurações.", e a seção diz o mesmo.
   - O que a porta sabia deixa de valer quando a pessoa muda algo nas Configurações (o aceite, o
     provedor, a chave, "Desligar", "Apagar meus dados") e quando o servidor recusa um ditado por
     `SEM_ACEITE`, `SEM_CHAVE` ou `PROVEDOR_RECUSOU_CHAVE`.
@@ -871,9 +877,26 @@ seções seguintes; a calibração do limiar e da onda no Android (C6c), no fim 
 toque no microfone, antes de o microfone abrir e antes de pedir a chave**, e de novo quando muda o que a
 pessoa aceitou (trocar de provedor, ligar o Polish com outro provedor, ou o texto do aviso mudar: **a
 versão do aviso**). O texto é o da D0 (`docs/politica-de-privacidade.md`); **qualquer mudança nele muda a
-versão** (`web/src/nuvem/ditar/aviso.ts`) e pede o aceite de novo.
-- **A versão do aviso é PROVISÓRIA** (`2026-10-10`, a data da ADR) até a C3b criar a do servidor: o
-  `POST /api/v1/dictation/consent` só aceita a versão atual, e um teste tem de prender o app ao servidor.
+versão** e pede o aceite de novo.
+- **A versão do aviso** é **um inteiro, e uma só no app**: `VERSAO_DO_AVISO`
+  (`web/src/nuvem/avisoDoDitado.ts`), presa ao `cloudstore.VersaoDoAviso` do servidor pelo teste do Go
+  `TestVersaoDoAviso_AppEServidorConferem` (subir uma sem a outra quebra a suíte). O app a manda no
+  `POST /api/v1/dictation/consent`, e o servidor só aceita a atual. **O texto e a versão andam juntos:**
+  o `avisoDoDitado.test.ts` guarda uma impressão do que a folha mostra (os blocos de cada provedor e o
+  texto dela) para cada versão, e quebra se o texto mudar sem a versão. Subir o aviso é mudar o texto,
+  os dois números e acrescentar a impressão da versão nova.
+- **O aviso do servidor é mais novo que o do app** (o app abriu antes de um deploy que mudou o texto):
+  o `POST` do aceite volta `409` `AVISO_DESATUALIZADO`, nada é gravado, **a folha fecha sem aceite e o
+  app recarrega** (a página é lida de novo, e a folha seguinte mostra o texto novo). Um ditado gravado e
+  ainda não enviado, que esperava na memória, **se perde** com o recarregar (limite conhecido: o
+  recarregar é da página, e o áudio só mora na memória dela).
+- **O aceite do servidor tem dois lugares**, o provedor da transcrição e o do Polish (o do Polish pode
+  faltar), e cada aceite novo substitui o anterior: **o que a folha grava é só o que ela mostrou**
+  (a voz e, com o Polish, o provedor dele), e nada do que valia antes é carregado para o aceite novo.
+  Trocar a voz da OpenAI para a Groq tira a OpenAI do aceite, e voltar a ela pede a folha de novo. O
+  aceite cobre o conjunto dos dois provedores, seja qual for o uso. **`vigente`** (do `GET
+  /dictation`) é o que diz se o aceite vale com o aviso de agora; com `vigente: false` a folha abre de
+  novo e a seção diz "Desligado. O aviso mudou…".
 - **A tela.** Uma folha colada embaixo no celular (no PC, centrada, com no máximo 40 rem), por cima da
   tela inteira, com um fundo escuro que só escurece o que está atrás. O texto rola dentro dela; **os
   botões ficam sempre à vista**, no rodapé. É um diálogo modal (`role="dialog"`, `aria-modal`): o foco
@@ -908,8 +931,8 @@ versão** (`web/src/nuvem/ditar/aviso.ts`) e pede o aceite de novo.
   chaves do servidor; revogue também a chave no provedor, porque uma cópia cifrada dela fica nos backups
   por cerca de 30 dias.
 - **Os botões:** **Aceito** (o primário) e **Agora não**. O Aceito grava o aceite **no servidor, por
-  conta** (`POST /api/v1/dictation/consent`, com a versão do aviso e os provedores: os que já valiam, o da
-  voz e, com o Polish, o dele) e só então fecha; durante, diz "Guardando…" e o resto espera. Sem rede, a
+  conta** (`POST /api/v1/dictation/consent`, com `{ versao, transcricao, polish }`: a versão do aviso, o
+  provedor da voz e, com o Polish, o dele) e só então fecha; durante, diz "Guardando…" e o resto espera. Sem rede, a
   folha fica, com "Sem conexão. Tente de novo."; as outras falhas dizem "Não deu para guardar o aceite.
   Tente de novo." (a frase é nossa, nunca a do servidor); a sessão que acabou fecha a folha e acende a
   faixa da sessão. **Agora não** não grava nada.
@@ -918,7 +941,8 @@ versão** (`web/src/nuvem/ditar/aviso.ts`) e pede o aceite de novo.
 
 ### Ditar pelo celular nas Configurações (ADR-021, C6b)
 A seção **"Ditar pelo celular"** fica **logo depois da Conta** (é o que o app faz). Tudo age na hora, sem
-"Salvar": cada mudança é um `PUT /api/v1/dictation/settings` com as preferências inteiras, e nada disso
+"Salvar": cada mudança é um `PUT /api/v1/dictation/settings` com as preferências inteiras
+(`{ transcricao, dica, polish }`, o formato do `06`), e nada disso
 desce aos PCs. A seção diz de saída: "Fale no celular e o texto entra no histórico. A voz vai ao
 provedor que você escolher, com a sua chave. O ditado não funciona com a tela apagada nem com o app em
 segundo plano."
@@ -933,8 +957,9 @@ segundo plano."
   título da seção. Como o aceite acabou, o microfone volta a pedir a folha.
 - **Provedor da voz:** uma lista, "OpenAI" ou "Groq". **Trocar para um provedor fora do aceite reabre a
   folha** (sem a escolha do provedor, que já foi feita ali), e sem o "Aceito" nada muda (a lista volta ao
-  que era). O aceite novo **mantém os provedores que já valiam**; trocar para um provedor que já está no
-  aceite não pede nada. O modelo volta ao padrão do provedor.
+  que era). O aceite novo é **só o que a folha mostrou** (a voz nova e, com o Polish ligado, o provedor
+  dele): o provedor de antes sai do aceite. Trocar para um provedor que já está no aceite (nos dois
+  lugares dele) não pede nada. O modelo volta ao padrão do provedor novo.
 - **O servidor que recusa por falta de aceite** (`SEM_ACEITE` no `PUT` das preferências: o aceite acabou
   em outro aparelho) **também abre a folha**: o app relê a conta, a folha abre com o aceite que vale de
   verdade, e, aceitando, o `PUT` é refeito. Sem o "Aceito", a seção passa a dizer o que o servidor diz
@@ -946,6 +971,10 @@ segundo plano."
     a ajuda "Use uma chave só para o celular, com limite de gasto no provedor.".
   - **A chave vai só no corpo do `PUT /api/v1/ai-keys/{provedor}`, nunca na URL, e não volta:** o servidor
     a testa no provedor, a cifra e devolve só `configurada` e o final. O campo esvazia ao guardar.
+  - **A chave que o servidor guardava e já não decifra** (`colar_de_novo`: a chave de cifra trocou, ou
+    o backup voltou sem ela): "A chave guardada não vale mais neste servidor. Cole a chave de novo.", com
+    o campo à mão (como sem chave), sem Trocar nem Remover e sem ler a lista de modelos. Guardar a
+    chave nova a substitui.
   - Guardada: **"Chave terminada em WXYZ."** (só o final, de **4 caracteres no máximo**, mesmo que o
     servidor mande mais), com **Trocar** e **Remover**. **Trocar** abre o campo com "Revogue também esta
     chave no provedor. Uma cópia cifrada dela fica nos backups por cerca de 30 dias." e **Cancelar**;
@@ -956,13 +985,16 @@ segundo plano."
     servidor** (que pode trazer um pedaço da chave): "O provedor recusou a chave." (`PROVEDOR_RECUSOU_CHAVE`),
     "O provedor não respondeu agora. Tente de novo." (`PROVEDOR_LIMITE`, `PROVEDOR_FORA`), "Espere um
     pouco. Tente de novo em N s." (`LIMITE`, `429`), "Essa chave não parece válida. Confira e cole de
-    novo." (`400` ou `422`), "Este servidor não tem o ditado pelo celular." (`404`) e "Não deu para
+    novo." (`400`, `413` ou `422`), "Este servidor não tem o ditado pelo celular." (`404`) e "Não deu para
     guardar a chave.". A chave que falhou continua no campo, para conferir. Sem rede ou sem sessão, a
     faixa de sempre.
-- **Modelo da voz:** "Padrão do provedor" (o servidor resolve: escolhas menores 1 e 2) e os modelos da
-  conta, lidos com a chave (`GET /api/v1/ai-keys/{provedor}/models`) e **filtrados no app**: os de voz são
-  os que têm "transcribe" ou "whisper" no nome; os do Polish, os outros. Sem chave: "Cole a chave para ver
-  os modelos da sua conta." e o campo fechado; a lista que não veio: "Não deu para ler os modelos. Vale o
+- **Modelo da voz:** "Padrão do provedor" (o `PUT` leva o modelo vazio e o servidor resolve: escolhas
+  menores 1 e 2) e os modelos da conta, lidos com a chave (`GET /api/v1/ai-keys/{provedor}/models`) e
+  **filtrados no app**: os de voz são os que têm "transcribe" ou "whisper" no nome; os do Polish, os
+  outros. **A conta guarda sempre o modelo de verdade**, pelo nome (o `gpt-4o-mini-transcribe` na OpenAI,
+  o `whisper-large-v3-turbo` na Groq): é ele que a lista mostra marcado, e escolher "Padrão do provedor"
+  de volta mostra o nome do padrão. Sem chave: "Cole a chave para ver os modelos da sua conta." e o
+  campo fechado, com o modelo da conta; a lista que não veio: "Não deu para ler os modelos. Vale o
   padrão do provedor.". O modelo que a conta tem e a lista não mostra continua escolhível. Mudar só o
   modelo não pede o aceite de novo.
 - **A dica:** a caixa "Mandar os termos aprendidos como dica", **desligada**, com "Eles vão ao provedor
@@ -972,6 +1004,18 @@ segundo plano."
   aceite reabre a folha, que mostra o bloco dele), a chave dele (com a OpenAI, "A chave da OpenAI, acima,
   também serve ao Polish.") e **Modelo do Polish**. Ligar com um provedor fora do aceite abre a folha, e
   sem o "Aceito" continua desligado.
+  - **O Polish não tem modelo padrão, e o servidor só o liga na conta com um modelo.** Marcar a caixa
+    mostra o provedor, a chave e o modelo, mas **não escreve nada na conta**: o modelo diz "Escolha um
+    modelo" (que não se escolhe de volta) e a ajuda, "Escolha o modelo para o Polish agir nos seus
+    ditados.". A conta passa a ter o Polish ligado **quando o modelo é escolhido** (um só `PUT`, com o
+    Polish ligado e o modelo). Até lá a caixa fica marcada só na tela, e a conta continua com o Polish
+    desligado; desmarcar o que ainda não tem modelo também não escreve nada, e a caixa marcada se perde
+    se a conta mudar por fora ("Apagar meus dados") ou for desligada. Trocar o provedor do Polish
+    zera o modelo (os modelos são de cada provedor): com o Polish ligado, a conta guarda o provedor novo
+    com o Polish desligado, e a caixa continua marcada, esperando o modelo. Marcar de novo um Polish que
+    já teve modelo (desligado depois, que o servidor guarda) liga na hora, com o modelo de antes. Sem
+    lista de modelos (a chave por colar, ou a lista que não veio), a ajuda diz isso, sem prometer um
+    padrão: "Não deu para ler os modelos. Tente de novo mais tarde.".
 - **Os erros do salvar:** "Não deu para salvar. Tente de novo." (nunca a mensagem do servidor); a leitura
   que não veio: "Não deu para ver o ditado pelo celular. Tente de novo mais tarde.", e o `404`, "Este
   servidor não tem o ditado pelo celular.".

@@ -136,7 +136,9 @@ export function fraseDaChave(e: unknown): string {
       case 'LIMITE':
         return `Espere um pouco.${textoDaEspera(e.esperaSeg)}`
     }
-    if (e.status === 400 || e.status === 422) return 'Essa chave não parece válida. Confira e cole de novo.'
+    // 400 (VALIDATION: vazia, longa, com caractere estranho), 413 (o corpo acima
+    // de 16 KiB: colou muito mais que uma chave) e 422 (o provedor a recusou).
+    if (e.status === 400 || e.status === 413 || e.status === 422) return 'Essa chave não parece válida. Confira e cole de novo.'
     if (e.status === 404) return 'Este servidor não tem o ditado pelo celular.'
     if (e.status === 429 || e.status === 503) return `Espere um pouco.${textoDaEspera(e.esperaSeg)}`
   }
