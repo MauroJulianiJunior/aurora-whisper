@@ -22,11 +22,16 @@ interface Props extends PropsDoDitar {
   // plataforma: o navegador de verdade, ou o dublê dos testes e das telas de
   // desenvolvimento.
   plataforma?: Plataforma
-  // liberar: a porta antes do microfone (a folha do aceite, na C6b).
+  // liberar: a porta antes do microfone (a folha do aceite, ADR-021; porta.ts).
+  // Sem o "sim" dela, o getUserMedia nem é chamado.
   liberar?(): Promise<boolean>
+  // reabrirAceite: o "Ver o aviso" da nota de SEM_ACEITE (o aceite acabou, ou o
+  // aviso mudou, com o áudio já gravado): abre a folha. true se a pessoa aceitou,
+  // e o áudio que esperava é reenviado, com o mesmo id.
+  reabrirAceite?(): Promise<boolean>
 }
 
-export function Ditar({ cliente, plataforma, liberar, busca, escondido, aoChegar, aoAudioPendente, aoSemSessao, abrirConfiguracoes, avisar }: Props) {
+export function Ditar({ cliente, plataforma, liberar, reabrirAceite, busca, escondido, aoChegar, aoAudioPendente, aoSemSessao, abrirConfiguracoes, avisar }: Props) {
   const [base] = useState(() => {
     const p = plataforma ?? plataformaDoNavegador()
     return { g: new Gravador({ plataforma: p, enviar: (pedido, sinal) => cliente.ditar(pedido, sinal), liberar }), suporta: p.suporta() }
@@ -134,9 +139,23 @@ export function Ditar({ cliente, plataforma, liberar, busca, escondido, aoChegar
         <div className="nota ditar-erro" role="alert">
           <span className="ditar-frase">{estado.erro.frase}</span>
           <span className="ditar-acoes">
-            {estado.erro.vai === 'configuracoes' && (
-              <button type="button" className="botao" onClick={() => ganchos.current.abrirConfiguracoes()}>
+            {(estado.erro.vai === 'configuracoes' || (estado.erro.vai === 'aceite' && !reabrirAceite)) && (
+              <button type="button" className="botao" onClick={() => ganchos.current.abrirConfiguracoes('ditar')}>
                 Abrir as Configurações
+              </button>
+            )}
+            {estado.erro.vai === 'aceite' && reabrirAceite && (
+              <button
+                type="button"
+                className="botao"
+                onClick={() => {
+                  // Aceitou: o áudio que esperava segue, com o mesmo id.
+                  void reabrirAceite().then((aceitou) => {
+                    if (aceitou) void g.tentarDeNovo()
+                  })
+                }}
+              >
+                Ver o aviso
               </button>
             )}
             <button type="button" className="botao" onClick={() => void g.tentarDeNovo()}>

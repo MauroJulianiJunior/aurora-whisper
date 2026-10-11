@@ -21,6 +21,15 @@ import {
   buscadorPadrao,
   pedir,
 } from '../api'
+import { type Provedor, ehProvedor, todosOsProvedores } from './ditar/aviso'
+import {
+  type Aceite,
+  type ChaveGuardada,
+  type EstadoDoDitado,
+  type Preferencias,
+  chavesVazias,
+  preferenciasPadrao,
+} from './ditar/estado'
 
 // Eu é a conta da sessão (GET /api/v1/me).
 export interface Eu {
@@ -125,6 +134,25 @@ export interface ClienteNuvem extends ClienteDoHistorico {
   // pelo Smart (e pelo Polish, se ligado) e grava o ditado (ADR-021). Os erros
   // chegam em ErroDaApi.codigo; o sinal é o prazo de 90 s do celular.
   ditar(pedido: PedidoDeDitado, sinal?: AbortSignal): Promise<DitadoGravado>
+  // O ditado pelo celular na conta (ADR-021, "O aceite e as preferências" e "As
+  // chaves"). Os erros chegam em ErroDaApi.codigo (SEM_ACEITE...). A chave vai
+  // só no corpo do PUT (nunca na URL), e nenhuma resposta a devolve: só
+  // `configurada` e o `final`.
+  //
+  // estadoDoDitado: GET /dictation (as preferências, o aceite vigente, as
+  // chaves). salvarPreferencias: PUT /dictation/settings (SEM_ACEITE para um
+  // provedor fora do aceite). aceitarAviso: POST /dictation/consent, só com a
+  // versão atual do aviso. desligarDitado: DELETE /dictation/consent (revoga o
+  // aceite e apaga as chaves). guardarChave/removerChave: PUT e DELETE em
+  // /ai-keys/{provedor}. modelosDaChave: GET /ai-keys/{provedor}/models, todos
+  // os modelos que a chave alcança (quem filtra é o app, estado.ts).
+  estadoDoDitado(): Promise<EstadoDoDitado>
+  salvarPreferencias(preferencias: Preferencias): Promise<Preferencias>
+  aceitarAviso(versao: string, provedores: readonly Provedor[]): Promise<Aceite>
+  desligarDitado(): Promise<void>
+  guardarChave(provedor: Provedor, chave: string): Promise<ChaveGuardada>
+  removerChave(provedor: Provedor): Promise<void>
+  modelosDaChave(provedor: Provedor): Promise<string[]>
   eu(): Promise<Eu>
   sessoes(): Promise<Sessao[]>
   encerrarSessao(id: string): Promise<void>
@@ -186,6 +214,36 @@ function daPagina(p: { items?: ItemDaNuvem[] | null; next_cursor?: string | null
   const pagina: Pagina = { items: (p.items ?? []).map(doServidor) }
   if (p.next_cursor) pagina.next_cursor = p.next_cursor
   return pagina
+}
+
+// O estado do ditado como a nuvem o manda (GET /api/v1/dictation, ADR-021). O
+// app lê com tolerância: o que falta ou não tem a forma esperada vira o padrão
+// mais fechado (sem aceite, sem chave, tudo desligado), e nunca mostra da chave
+// mais que o final de 4 caracteres, mesmo que o servidor mandasse mais.
+function daChave(v: unknown): ChaveGuardada {
+  const c = (v ?? {}) as { configurada?: unknown; final?: unknown }
+  const configurada = c.configurada === true
+  return { configurada, final: configurada && typeof c.final === 'string' ? c.final.slice(-4) : '' }
+}
+
+function dasPreferencias(v: unknown): Preferencias {
+  const p = (v ?? {}) as Record<string, unknown>
+  return {
+    provedor: p.provedor === 'groq' ? 'groq' : preferenciasPadrao.provedor,
+    modelo: typeof p.modelo === 'string' ? p.modelo : '',
+    dica: p.dica === true,
+    polish: p.polish === true,
+    polish_provedor: p.polish_provedor === 'anthropic' ? 'anthropic' : preferenciasPadrao.polish_provedor,
+    polish_modelo: typeof p.polish_modelo === 'string' ? p.polish_modelo : '',
+  }
+}
+
+function doAceite(v: unknown): Aceite | null {
+  if (!v || typeof v !== 'object') return null
+  const a = v as { versao?: unknown; provedores?: unknown; aceito_em?: unknown }
+  if (typeof a.versao !== 'string' || a.versao === '') return null
+  const provedores = Array.isArray(a.provedores) ? a.provedores.filter(ehProvedor) : []
+  return { versao: a.versao, provedores: Array.from(new Set(provedores)), aceito_em: typeof a.aceito_em === 'string' ? a.aceito_em : '' }
 }
 
 export function criarClienteNuvem(buscar: Buscador = buscadorPadrao): ClienteNuvem {
@@ -259,6 +317,38 @@ export function criarClienteNuvem(buscar: Buscador = buscadorPadrao): ClienteNuv
       const gravado: DitadoGravado = { ditado: doServidor(item) }
       if (typeof aviso === 'string' && aviso !== '') gravado.aviso = aviso
       return gravado
+    },
+    async estadoDoDitado() {
+      const r = await pedir(buscar, '/api/v1/dictation', daOrigem(), false)
+      const v = (await r.json()) as { preferencias?: unknown; aceite?: unknown; chaves?: Record<string, unknown> | null }
+      const chaves = chavesVazias()
+      for (const p of todosOsProvedores) chaves[p] = daChave(v.chaves?.[p])
+      return { preferencias: dasPreferencias(v.preferencias), aceite: doAceite(v.aceite), chaves }
+    },
+    async salvarPreferencias(preferencias) {
+      const r = await pedir(buscar, '/api/v1/dictation/settings', comJson('PUT', preferencias), false)
+      return dasPreferencias(await r.json())
+    },
+    async aceitarAviso(versao, provedores) {
+      const r = await pedir(buscar, '/api/v1/dictation/consent', comJson('POST', { versao, provedores }), false)
+      return doAceite(await r.json()) ?? { versao, provedores: [...provedores], aceito_em: '' }
+    },
+    async desligarDitado() {
+      await pedir(buscar, '/api/v1/dictation/consent', daOrigem({ method: 'DELETE' }), false)
+    },
+    async guardarChave(provedor, chave) {
+      // A chave vai só no corpo (nunca na URL) e não volta: a resposta traz
+      // `configurada` e o final.
+      const r = await pedir(buscar, `/api/v1/ai-keys/${encodeURIComponent(provedor)}`, comJson('PUT', { chave }), false)
+      return daChave(await r.json())
+    },
+    async removerChave(provedor) {
+      await pedir(buscar, `/api/v1/ai-keys/${encodeURIComponent(provedor)}`, daOrigem({ method: 'DELETE' }), false)
+    },
+    async modelosDaChave(provedor) {
+      const r = await pedir(buscar, `/api/v1/ai-keys/${encodeURIComponent(provedor)}/models`, daOrigem(), false)
+      const { modelos } = (await r.json()) as { modelos?: unknown }
+      return Array.isArray(modelos) ? modelos.filter((m): m is string => typeof m === 'string') : []
     },
     async eu() {
       const r = await pedir(buscar, '/api/v1/me', daOrigem())

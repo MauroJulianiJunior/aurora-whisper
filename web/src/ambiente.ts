@@ -8,10 +8,19 @@
 import type { ComponentType, ReactNode } from 'react'
 import type { Aprendida, ClienteDoHistorico, Ditado, EscolhaDoSelo, Problema, Sugestao } from './api'
 
+// SecaoDasConfiguracoes é uma seção das Configurações que o Painel pode pedir
+// que a tela leve à vista: hoje, só a do ditado pelo celular (a nuvem; ADR-021),
+// aonde o app leva quem precisa colar a chave do provedor.
+export type SecaoDasConfiguracoes = 'ditar'
+
 // PropsDasConfiguracoes é o que o Painel passa à tela de Configurações do
 // modo. A tela fica montada depois de aberta, e só se esconde (visivel).
 export interface PropsDasConfiguracoes {
   visivel: boolean
+  // secao: a seção que o Painel pediu (vez sobe a cada pedido, para o mesmo
+  // pedido de novo valer de novo). Só a nuvem a usa; o PC não tem seções
+  // pedidas.
+  secao?: { nome: SecaoDasConfiguracoes; vez: number } | null
   // aoPerderLigacao: a falha foi da ligação (sem sessão, fora do ar); o
   // Painel decide o que mostrar.
   aoPerderLigacao(e: unknown): void
@@ -89,9 +98,9 @@ export interface PropsDoDitar {
   // aoSemSessao: o envio levou 401. O áudio fica, e o Painel acende a faixa
   // da sessão.
   aoSemSessao(): void
-  // abrirConfiguracoes: a falha se resolve nas Configurações (a chave, o
-  // aceite).
-  abrirConfiguracoes(): void
+  // abrirConfiguracoes: a falha se resolve nas Configurações (a chave do
+  // provedor). Com secao, o Painel leva a seção à vista.
+  abrirConfiguracoes(secao?: SecaoDasConfiguracoes): void
   avisar(texto: ReactNode): void
 }
 

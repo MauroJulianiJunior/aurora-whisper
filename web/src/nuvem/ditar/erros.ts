@@ -36,8 +36,10 @@ export interface ErroDoDitado {
   frase: string
   // retem: o áudio fica na memória até "Tentar de novo" ou "Descartar".
   retem: boolean
-  // vai: a frase precisa de uma coisa que se resolve nas Configurações.
-  vai?: 'configuracoes'
+  // vai: onde a frase se resolve. 'aceite' é a folha do aviso (SEM_ACEITE: o
+  // aceite acabou, ou o aviso mudou); 'configuracoes', a seção do ditado nas
+  // Configurações (a chave do provedor).
+  vai?: 'configuracoes' | 'aceite'
 }
 
 // MicrofoneIndisponivel é o que a plataforma levanta quando o navegador não
@@ -92,7 +94,7 @@ export function erroDoEnvio(e: unknown): ErroDoDitado {
   if (!(e instanceof ErroDaApi)) return { tipo: 'outro', frase: 'Não deu para enviar o ditado.', retem: true }
   switch (e.codigo) {
     case 'SEM_ACEITE':
-      return { tipo: 'sem-aceite', frase: 'Falta aceitar o aviso do ditado pelo celular.', retem: true, vai: 'configuracoes' }
+      return { tipo: 'sem-aceite', frase: 'Falta aceitar o aviso do ditado pelo celular.', retem: true, vai: 'aceite' }
     case 'SEM_CHAVE':
       return { tipo: 'sem-chave', frase: 'Falta a chave do provedor.', retem: true, vai: 'configuracoes' }
     case 'UM_POR_VEZ':
@@ -118,6 +120,27 @@ export function erroDoEnvio(e: unknown): ErroDoDitado {
   if (e.status === 404) return { tipo: 'indisponivel', frase: 'Este servidor não tem o ditado pelo celular.', retem: false }
   if (e.status === 429 || e.status === 503) return { tipo: 'espere', frase: `Espere um pouco.${textoDaEspera(e.esperaSeg)}`, retem: true }
   return { tipo: 'outro', frase: 'Não deu para enviar o ditado.', retem: true }
+}
+
+// fraseDaChave traduz a falha de guardar a chave de um provedor (PUT
+// /api/v1/ai-keys/{provedor}, ADR-021). Pelo código, e nunca pela mensagem do
+// servidor: o decodificador dele pode trazer um pedaço do que foi colado.
+export function fraseDaChave(e: unknown): string {
+  if (e instanceof ErroDaApi) {
+    switch (e.codigo) {
+      case 'PROVEDOR_RECUSOU_CHAVE':
+        return 'O provedor recusou a chave.'
+      case 'PROVEDOR_LIMITE':
+      case 'PROVEDOR_FORA':
+        return 'O provedor não respondeu agora. Tente de novo.'
+      case 'LIMITE':
+        return `Espere um pouco.${textoDaEspera(e.esperaSeg)}`
+    }
+    if (e.status === 400 || e.status === 422) return 'Essa chave não parece válida. Confira e cole de novo.'
+    if (e.status === 404) return 'Este servidor não tem o ditado pelo celular.'
+    if (e.status === 429 || e.status === 503) return `Espere um pouco.${textoDaEspera(e.esperaSeg)}`
+  }
+  return 'Não deu para guardar a chave.'
 }
 
 // fraseDoAviso: o motivo (um ia.Motivo ou um motivo do Polish, nunca texto)

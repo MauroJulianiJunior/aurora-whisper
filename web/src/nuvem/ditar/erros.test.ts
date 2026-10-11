@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from 'vitest'
 import { ErroDaApi, ForaDoAr, SemSessao } from '../../api'
-import { type ErroDoDitado, MicrofoneIndisponivel, erroDoEnvio, erroDoMicrofone, erroSemFala, fraseDoAviso, textoDaEspera } from './erros'
+import { type ErroDoDitado, MicrofoneIndisponivel, erroDoEnvio, erroDoMicrofone, erroSemFala, fraseDaChave, fraseDoAviso, textoDaEspera } from './erros'
 
 function api(status: number, codigo?: string, esperaSeg?: number): ErroDaApi {
   const e = new ErroDaApi(status, 'a frase do servidor, que o app não usa')
@@ -14,7 +14,7 @@ function api(status: number, codigo?: string, esperaSeg?: number): ErroDaApi {
 
 describe('a falha do envio, pelo código', () => {
   const tabela: [string, unknown, Partial<ErroDoDitado>][] = [
-    ['SEM_ACEITE', api(403, 'SEM_ACEITE'), { tipo: 'sem-aceite', retem: true, vai: 'configuracoes' }],
+    ['SEM_ACEITE', api(403, 'SEM_ACEITE'), { tipo: 'sem-aceite', retem: true, vai: 'aceite' }],
     ['SEM_CHAVE', api(403, 'SEM_CHAVE'), { tipo: 'sem-chave', frase: 'Falta a chave do provedor.', retem: true, vai: 'configuracoes' }],
     ['UM_POR_VEZ', api(429, 'UM_POR_VEZ', 7), { tipo: 'espere', frase: 'Espere um pouco. Tente de novo em 7 s.', retem: true }],
     ['LIMITE', api(429, 'LIMITE', 30), { tipo: 'espere', frase: 'Espere um pouco. Tente de novo em 30 s.', retem: true }],
@@ -115,6 +115,30 @@ describe('erroSemFala', () => {
     expect(erroSemFala().frase).toBe('Não ouvi nada.')
     expect(erroSemFala('Parei quando o app saiu da frente.').frase).toBe('Parei quando o app saiu da frente. Não ouvi nada.')
     expect(erroSemFala().retem).toBe(false)
+  })
+})
+
+describe('fraseDaChave: a falha de guardar a chave de um provedor', () => {
+  it('pelo código do envelope', () => {
+    expect(fraseDaChave(api(422, 'PROVEDOR_RECUSOU_CHAVE'))).toBe('O provedor recusou a chave.')
+    expect(fraseDaChave(api(502, 'PROVEDOR_FORA'))).toBe('O provedor não respondeu agora. Tente de novo.')
+    expect(fraseDaChave(api(429, 'PROVEDOR_LIMITE'))).toBe('O provedor não respondeu agora. Tente de novo.')
+    expect(fraseDaChave(api(429, 'LIMITE', 30))).toBe('Espere um pouco. Tente de novo em 30 s.')
+  })
+
+  it('sem código que o app conheça, pelo status', () => {
+    expect(fraseDaChave(api(400))).toBe('Essa chave não parece válida. Confira e cole de novo.')
+    expect(fraseDaChave(api(422, 'OUTRO'))).toBe('Essa chave não parece válida. Confira e cole de novo.')
+    expect(fraseDaChave(api(404))).toBe('Este servidor não tem o ditado pelo celular.')
+    expect(fraseDaChave(api(429, undefined, 120))).toBe('Espere um pouco. Tente de novo em 2 min.')
+    expect(fraseDaChave(api(503))).toBe('Espere um pouco.')
+    expect(fraseDaChave(api(500))).toBe('Não deu para guardar a chave.')
+  })
+
+  it('o que não é da API também tem frase, e a mensagem do servidor (que pode trazer um pedaço da chave) nunca aparece', () => {
+    expect(fraseDaChave(new Error('sk-segredo'))).toBe('Não deu para guardar a chave.')
+    expect(fraseDaChave('sk-segredo')).toBe('Não deu para guardar a chave.')
+    for (const e of [api(400), api(422, 'PROVEDOR_RECUSOU_CHAVE'), api(500), api(404)]) expect(fraseDaChave(e)).not.toContain('servidor, que o app não usa')
   })
 })
 

@@ -30,7 +30,7 @@ const ditado = {
 
 const busca = <input type="search" className="busca" aria-label="Buscar no histórico" />
 
-function montar(plataforma: OpcoesDaPlataforma = {}, escondido = false) {
+function montar(plataforma: OpcoesDaPlataforma = {}, escondido = false, extras: { reabrirAceite?: () => Promise<boolean> } = {}) {
   const p = plataformaFalsa(plataforma)
   const ditar = vi.fn<(pedido: PedidoDeDitado, sinal?: AbortSignal) => Promise<DitadoGravado>>(async () => ({ ditado }))
   const cliente = { ditar } as unknown as ClienteNuvem
@@ -42,7 +42,7 @@ function montar(plataforma: OpcoesDaPlataforma = {}, escondido = false) {
     abrirConfiguracoes: vi.fn(),
     avisar: vi.fn<(t: ReactNode) => void>(),
   }
-  const ui = (esconder: boolean) => <Ditar cliente={cliente} plataforma={p.plataforma} busca={esconder ? null : busca} escondido={esconder} {...ganchos} />
+  const ui = (esconder: boolean) => <Ditar cliente={cliente} plataforma={p.plataforma} busca={esconder ? null : busca} escondido={esconder} {...ganchos} {...extras} />
   const r = render(ui(escondido))
   return { p, ditar, ganchos, chamadas, ...r, mudarEscondido: (e: boolean) => r.rerender(ui(e)) }
 }
@@ -328,11 +328,13 @@ describe('a falha que guarda o áudio: a nota, com "Tentar de novo" e "Descartar
     expect(microfone().hasAttribute('aria-disabled')).toBe(false)
   })
 
+  // SEM_ACEITE, sem quem abra a folha (um Ditar sem a porta do aceite), leva às
+  // Configurações como as outras; com ela, o botão é o "Ver o aviso" (abaixo).
   it.each([
     ['SEM_CHAVE', 'Falta a chave do provedor.'],
     ['SEM_ACEITE', 'Falta aceitar o aviso do ditado pelo celular.'],
     ['PROVEDOR_RECUSOU_CHAVE', 'O provedor recusou a chave.'],
-  ])('%s leva às Configurações', async (codigo, frase) => {
+  ])('%s leva às Configurações, na seção do ditado', async (codigo, frase) => {
     const m = montar()
     const e = new ErroDaApi(403, 'x')
     e.codigo = codigo
@@ -344,8 +346,53 @@ describe('a falha que guarda o áudio: a nota, com "Tentar de novo" e "Descartar
     expect(within(nota).getByText(frase)).toBeTruthy()
     fireEvent.click(within(nota).getByRole('button', { name: 'Abrir as Configurações' }))
     expect(m.ganchos.abrirConfiguracoes).toHaveBeenCalledTimes(1)
+    expect(m.ganchos.abrirConfiguracoes).toHaveBeenCalledWith('ditar')
     // E o áudio continua à espera.
     expect(within(nota).getByRole('button', { name: 'Tentar de novo' })).toBeTruthy()
+  })
+
+  describe('SEM_ACEITE com a folha do aceite à mão', () => {
+    async function recusado(aceita: boolean) {
+      const reabrirAceite = vi.fn(async () => aceita)
+      const m = montar({}, false, { reabrirAceite })
+      const e = new ErroDaApi(403, 'x')
+      e.codigo = 'SEM_ACEITE'
+      m.ditar.mockRejectedValueOnce(e)
+      await comecar()
+      falar(m, 2000)
+      await tocarParar()
+      return { m, reabrirAceite, nota: screen.getByRole('alert') }
+    }
+
+    it('o botão é "Ver o aviso", e não as Configurações; o áudio continua à espera', async () => {
+      const { nota } = await recusado(true)
+      expect(within(nota).getByText('Falta aceitar o aviso do ditado pelo celular.')).toBeTruthy()
+      expect(within(nota).getByRole('button', { name: 'Ver o aviso' })).toBeTruthy()
+      expect(within(nota).queryByRole('button', { name: 'Abrir as Configurações' })).toBeNull()
+      expect(within(nota).getByRole('button', { name: 'Tentar de novo' })).toBeTruthy()
+    })
+
+    it('aceitando, o áudio que esperava é reenviado com o MESMO id', async () => {
+      const { m, reabrirAceite, nota } = await recusado(true)
+      await act(async () => {
+        fireEvent.click(within(nota).getByRole('button', { name: 'Ver o aviso' }))
+      })
+      expect(reabrirAceite).toHaveBeenCalledTimes(1)
+      expect(m.ditar).toHaveBeenCalledTimes(2)
+      expect(m.ditar.mock.calls[1]![0].id).toBe(m.ditar.mock.calls[0]![0].id)
+      expect(m.ganchos.aoChegar).toHaveBeenCalledTimes(1)
+    })
+
+    it('sem o aceite ("Agora não"), nada é reenviado, e a nota fica', async () => {
+      const { m, reabrirAceite, nota } = await recusado(false)
+      await act(async () => {
+        fireEvent.click(within(nota).getByRole('button', { name: 'Ver o aviso' }))
+      })
+      expect(reabrirAceite).toHaveBeenCalledTimes(1)
+      expect(m.ditar).toHaveBeenCalledTimes(1)
+      expect(screen.getByRole('alert')).toBeTruthy()
+      expect(within(screen.getByRole('alert')).getByRole('button', { name: 'Tentar de novo' })).toBeTruthy()
+    })
   })
 
   it('"Espere um pouco." diz o tempo do Retry-After', async () => {

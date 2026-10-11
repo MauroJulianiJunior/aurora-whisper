@@ -6,6 +6,10 @@
 import { act, cleanup, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+// Importar a página inteira, com a máquina ocupada (os outros testes do
+// repositório rodam junto), passa dos 5 s padrão.
+vi.setConfig({ testTimeout: 20_000 })
+
 beforeEach(() => {
   document.body.innerHTML = '<div id="root"></div>'
 })

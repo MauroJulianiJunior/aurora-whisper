@@ -119,6 +119,49 @@ export function aprendido(parcial: Partial<AprendidoNuvem> & { variante: string;
   }
 }
 
+// O ditado pelo celular na conta (ADR-021, C3a e C3b), do lado do servidor de
+// mentira. Os tipos são DESTE arquivo, e não os de src/nuvem: o servidor não
+// importa o app (o ESLint também não deixa src/ importar src/nuvem), e quem os
+// prende um ao outro é o teste de nuvem/ditar/aviso.test.ts.
+export type ProvedorFalso = 'openai' | 'groq' | 'anthropic'
+const provedoresFalsos: ProvedorFalso[] = ['openai', 'groq', 'anthropic']
+
+// A versão do aviso que o servidor de mentira considera a atual. É a mesma de
+// web/src/nuvem/ditar/aviso.ts (provisória até a C3b criar a do servidor).
+export const versaoDoAvisoNoServidorFalso = '2026-10-10'
+
+export interface PreferenciasFalsas {
+  provedor: 'openai' | 'groq'
+  modelo: string
+  dica: boolean
+  polish: boolean
+  polish_provedor: 'openai' | 'anthropic'
+  polish_modelo: string
+}
+
+export interface AceiteFalso {
+  versao: string
+  provedores: ProvedorFalso[]
+  aceito_em: string
+}
+
+// DitadoDaConta é o que o servidor de mentira guarda do ditado pelo celular. As
+// chaves ficam INTEIRAS aqui (é o servidor): o que o app recebe é só o final, e
+// os testes conferem que a chave inteira não volta.
+export interface DitadoDaConta {
+  preferencias: PreferenciasFalsas
+  aceite: AceiteFalso | null
+  chaves: Partial<Record<ProvedorFalso, string>>
+}
+
+// Os modelos que cada provedor lista para a chave (os de voz e os de texto,
+// misturados como o /models de verdade: quem filtra é o app).
+const modelosFalsos: Record<ProvedorFalso, string[]> = {
+  openai: ['gpt-4o-transcribe', 'gpt-4o-mini-transcribe', 'whisper-1', 'gpt-4o', 'gpt-4o-mini'],
+  groq: ['whisper-large-v3-turbo', 'whisper-large-v3', 'llama-3.3-70b-versatile'],
+  anthropic: ['claude-haiku-4-5', 'claude-sonnet-4-5'],
+}
+
 export interface OpcoesDaNuvem {
   // logado: a sessão já existe ao abrir.
   logado?: boolean
@@ -138,6 +181,17 @@ export interface OpcoesDaNuvem {
   // tetoDosAprendidos: quantas o GET devolve antes de dizer has_more (o
   // servidor de verdade usa 500; o teste põe um número pequeno).
   tetoDosAprendidos?: number
+  // ditado: o ditado pelo celular da conta ao abrir (ADR-021). Sem esta opção,
+  // a conta já está pronta (aceite de todos os provedores, uma chave de cada),
+  // e os testes que não são do aceite não precisam prepará-la. Com ela, o que
+  // não vem é vazio: sem aceite, sem chaves, preferências no padrão.
+  ditado?: {
+    preferencias?: Partial<PreferenciasFalsas>
+    aceite?: AceiteFalso | null
+    chaves?: Partial<Record<ProvedorFalso, string>>
+  }
+  // versaoDoAviso: a versão do aviso que o servidor aceita no consentimento.
+  versaoDoAviso?: string
 }
 
 const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
@@ -163,6 +217,8 @@ export function servidorFalsoNuvem(
     pedidos: pedidosIniciais = {},
     aprendidos = [],
     tetoDosAprendidos = 500,
+    ditado: ditadoInicial,
+    versaoDoAviso: versaoAtual = versaoDoAvisoNoServidorFalso,
   }: OpcoesDaNuvem = {},
 ) {
   const itens = inicial.map((i) => ({ ...i }))
@@ -183,6 +239,108 @@ export function servidorFalsoNuvem(
   const lapides = new Set<string>()
   let comoDitar: ComoDitar = { texto: 'Texto ditado pelo celular.' }
 
+  // O ditado pelo celular da conta: aceite, preferências e chaves. Sem a opção
+  // `ditado`, a conta nasce pronta (tudo aceito, uma chave de cada).
+  const padraoDasPreferencias: PreferenciasFalsas = {
+    provedor: 'openai',
+    modelo: '',
+    dica: false,
+    polish: false,
+    polish_provedor: 'openai',
+    polish_modelo: '',
+  }
+  const daConta: DitadoDaConta = ditadoInicial
+    ? {
+        preferencias: { ...padraoDasPreferencias, ...ditadoInicial.preferencias },
+        aceite: ditadoInicial.aceite ? { ...ditadoInicial.aceite, provedores: [...ditadoInicial.aceite.provedores] } : null,
+        chaves: { ...ditadoInicial.chaves },
+      }
+    : {
+        preferencias: { ...padraoDasPreferencias },
+        aceite: { versao: versaoAtual, provedores: [...provedoresFalsos], aceito_em: '2026-10-10T12:00:00.000Z' },
+        chaves: { openai: 'sk-teste-de-mentira-OPEN', groq: 'gsk-teste-de-mentira-GROQ', anthropic: 'sk-ant-teste-de-mentira-ANTH' },
+      }
+  const conferido = (provedores: ProvedorFalso[]) =>
+    daConta.aceite !== null && daConta.aceite.versao === versaoAtual && provedores.every((p) => daConta.aceite!.provedores.includes(p))
+  const exigidos = (p: PreferenciasFalsas): ProvedorFalso[] => (p.polish && p.polish_provedor !== p.provedor ? [p.provedor, p.polish_provedor] : [p.provedor])
+  const daChave = (p: ProvedorFalso) => {
+    const chave = daConta.chaves[p]
+    return chave ? { configurada: true, final: chave.slice(-4) } : { configurada: false, final: '' }
+  }
+  const estadoDoDitado = () => ({
+    preferencias: daConta.preferencias,
+    aceite: daConta.aceite,
+    chaves: { openai: daChave('openai'), groq: daChave('groq'), anthropic: daChave('anthropic') },
+  })
+  const ehProvedor = (v: unknown): v is ProvedorFalso => provedoresFalsos.includes(v as ProvedorFalso)
+
+  // As rotas do ditado pelo celular na conta (ADR-021, "O aceite e as
+  // preferências" e "As chaves"): o aceite só com a versão atual do aviso e
+  // provedores conhecidos; as preferências e a chave só para um provedor dentro
+  // do aceite vigente (SEM_ACEITE, 403); revogar o aceite apaga as chaves; a
+  // chave inteira nunca volta (só `configurada` e o final); o provedor que
+  // recusa a chave é a que começa com "recusada".
+  function rotaDoDitado(p: PedidoNuvem): Response | undefined {
+    if (p.caminho === '/api/v1/dictation' && p.metodo === 'GET') return json(estadoDoDitado())
+    if (p.caminho === '/api/v1/dictation/settings' && p.metodo === 'PUT') {
+      const c = p.corpo ?? {}
+      const valido =
+        (c.provedor === 'openai' || c.provedor === 'groq') &&
+        (c.polish_provedor === 'openai' || c.polish_provedor === 'anthropic') &&
+        typeof c.modelo === 'string' &&
+        typeof c.polish_modelo === 'string' &&
+        typeof c.dica === 'boolean' &&
+        typeof c.polish === 'boolean'
+      if (!valido) return erro(400, 'VALIDATION', 'preferências inválidas')
+      const novas = c as unknown as PreferenciasFalsas
+      if (!conferido(exigidos(novas))) return erro(403, 'SEM_ACEITE', 'falta o aceite do aviso')
+      daConta.preferencias = {
+        provedor: novas.provedor,
+        modelo: novas.modelo,
+        dica: novas.dica,
+        polish: novas.polish,
+        polish_provedor: novas.polish_provedor,
+        polish_modelo: novas.polish_modelo,
+      }
+      return json(daConta.preferencias)
+    }
+    if (p.caminho === '/api/v1/dictation/consent' && p.metodo === 'POST') {
+      const c = p.corpo ?? {}
+      const provedores = Array.isArray(c.provedores) ? c.provedores : []
+      if (c.versao !== versaoAtual || provedores.length === 0 || !provedores.every(ehProvedor)) return erro(400, 'VALIDATION', 'aceite inválido')
+      daConta.aceite = { versao: versaoAtual, provedores: Array.from(new Set(provedores)), aceito_em: new Date().toISOString() }
+      return json(daConta.aceite, 201)
+    }
+    if (p.caminho === '/api/v1/dictation/consent' && p.metodo === 'DELETE') {
+      daConta.aceite = null
+      daConta.chaves = {}
+      return vazio()
+    }
+    const rotaDaChave = p.caminho.match(/^\/api\/v1\/ai-keys\/([^/]+)(\/models)?$/)
+    if (rotaDaChave) {
+      const provedor = decodeURIComponent(rotaDaChave[1]!)
+      if (!ehProvedor(provedor)) return erro(404, 'NOT_FOUND', 'provedor desconhecido')
+      if (rotaDaChave[2]) {
+        if (p.metodo !== 'GET') return erro(404, 'NOT_FOUND', 'rota não encontrada')
+        if (!daConta.chaves[provedor]) return erro(409, 'SEM_CHAVE', 'falta a chave')
+        return json({ modelos: modelosFalsos[provedor] })
+      }
+      if (p.metodo === 'PUT') {
+        if (!conferido([provedor])) return erro(403, 'SEM_ACEITE', 'falta o aceite do aviso')
+        const chave = p.corpo?.chave
+        if (typeof chave !== 'string' || !/^[\x21-\x7e]{8,200}$/.test(chave)) return erro(400, 'VALIDATION', 'chave inválida')
+        if (chave.startsWith('recusada')) return erro(422, 'PROVEDOR_RECUSOU_CHAVE', 'o provedor recusou a chave')
+        daConta.chaves[provedor] = chave
+        return json(daChave(provedor))
+      }
+      if (p.metodo === 'DELETE') {
+        delete daConta.chaves[provedor]
+        return vazio()
+      }
+    }
+    return undefined
+  }
+
   const cabecalho = (p: PedidoNuvem, nome: string) => Object.entries(p.cabecalhos).find(([k]) => k.toLowerCase() === nome.toLowerCase())?.[1]
 
   // ditar responde POST /api/v1/dictations como o servidor: o id procurado
@@ -190,6 +348,11 @@ export function servidorFalsoNuvem(
   // abaixo do mínimo recusada antes do corpo, o formato e os cabeçalhos
   // conferidos, e o ditado criado pela sessão, sem aparelho, como "web".
   function ditar(p: PedidoNuvem): Response {
+    // O aceite dos provedores que as preferências usam, e a chave deles, antes
+    // de qualquer outra coisa (ADR-021, "O caminho de um ditado", 6).
+    const prefs = daConta.preferencias
+    if (!conferido(exigidos(prefs))) return erro(403, 'SEM_ACEITE', 'falta o aceite do aviso')
+    if (!exigidos(prefs).every((prov) => daConta.chaves[prov])) return erro(409, 'SEM_CHAVE', 'falta a chave do provedor')
     const id = cabecalho(p, 'Ditado-Id') ?? ''
     if (!pareceUUID(id)) return erro(400, 'BAD_REQUEST', 'Ditado-Id inválido')
     const existente = itens.find((i) => i.id === id)
@@ -212,8 +375,8 @@ export function servidorFalsoNuvem(
       updated_at: agora,
       raw_text: comoDitar.texto,
       final_text: comoDitar.texto,
-      asr_provider: 'openai',
-      asr_model: 'gpt-4o-mini-transcribe',
+      asr_provider: prefs.provedor,
+      asr_model: prefs.modelo || (prefs.provedor === 'groq' ? 'whisper-large-v3-turbo' : 'gpt-4o-mini-transcribe'),
       duration_ms: duracaoMs,
       device_id: null,
       source_platform: 'web',
@@ -318,9 +481,15 @@ export function servidorFalsoNuvem(
 
     if (p.caminho === '/api/v1/me' && p.metodo === 'GET') return json(conta)
     if (p.caminho === '/api/v1/dictations' && p.metodo === 'POST') return ditar(p)
+    const doDitado = rotaDoDitado(p)
+    if (doDitado) return doDitado
     if (p.caminho === '/api/v1/me/data' && p.metodo === 'DELETE') {
       if (p.corpo?.confirmar !== 'apagar') return erro(400, 'VALIDATION', 'confirmação obrigatória')
       itens.splice(0, itens.length)
+      // O aceite, as preferências e as chaves também (ADR-021, C3b).
+      daConta.aceite = null
+      daConta.chaves = {}
+      daConta.preferencias = { ...padraoDasPreferencias }
       for (let i = listaDeSessoes.length - 1; i >= 0; i--) if (!listaDeSessoes[i]!.atual) listaDeSessoes.splice(i, 1)
       // Os aparelhos também (decisão 3 da F3): os PCs ficam desconectados.
       listaDeAparelhos.splice(0, listaDeAparelhos.length)
@@ -415,6 +584,25 @@ export function servidorFalsoNuvem(
     // aoDitar muda o que o provedor de mentira devolve nos próximos ditados.
     aoDitar(como: ComoDitar) {
       comoDitar = como
+    },
+    // O ditado pelo celular da conta (aceite, preferências e as chaves
+    // INTEIRAS, que o app nunca recebe): para o teste conferir o que ficou
+    // guardado.
+    daConta,
+    // revogarAceitePorFora: o aceite acabou em outro aparelho (ou a conta
+    // apagou os dados): o app, que ainda acha que vale, descobre pelo 403.
+    revogarAceitePorFora() {
+      daConta.aceite = null
+      daConta.chaves = {}
+    },
+    // aceitarPorFora: outro aparelho aceitou (os provedores e a versão dados).
+    aceitarPorFora(provedores: ProvedorFalso[], versao = versaoAtual) {
+      daConta.aceite = { versao, provedores: [...provedores], aceito_em: '2026-10-10T12:00:00.000Z' }
+    },
+    // envelhecerAceitePorFora: o aviso mudou (o texto ganhou outra versão) e o
+    // aceite que a conta tinha já não vale; as chaves continuam guardadas.
+    envelhecerAceitePorFora() {
+      if (daConta.aceite) daConta.aceite = { ...daConta.aceite, versao: '2026-01-01' }
     },
     get logado() {
       return sessao

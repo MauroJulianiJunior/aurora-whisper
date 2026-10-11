@@ -1776,6 +1776,100 @@ a.botao {
   gap: 8px;
 }
 
+/* A folha do aceite do ditado pelo celular (ADR-021, C6b): em destaque, por
+   cima da tela inteira, colada embaixo no celular e centrada no PC. O texto
+   é longo e rola dentro dela; os botões ficam sempre à vista, no rodapé. O
+   fundo é o escuro da pílula nos dois temas, e só escurece o que está atrás. */
+.folha-fundo {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  background: var(--pilula);
+  opacity: 0.6;
+}
+
+.folha {
+  position: fixed;
+  z-index: 11;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  width: min(100%, 40rem);
+  max-height: 92vh;
+  max-height: 92dvh;
+  margin: 0 auto;
+  border: 1px solid var(--linha-forte);
+  border-bottom: 0;
+  border-radius: var(--raio-lg) var(--raio-lg) 0 0;
+  background: var(--superficie);
+  color: var(--texto);
+  box-shadow: var(--sombra);
+}
+
+.folha-corpo {
+  min-height: 0;
+  padding: 20px 18px 8px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  font-size: 14px;
+}
+
+.folha-corpo p {
+  margin: 10px 0 0;
+}
+
+.folha-titulo {
+  margin: 0;
+  font-family: var(--fonte-titulo);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+
+.folha-sub {
+  margin: 20px 0 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.folha-lista {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: var(--texto);
+  font-size: 14px;
+}
+
+.folha-escolha {
+  margin-top: 14px;
+}
+
+.folha-escolha .ajuste-nome {
+  margin: 0;
+}
+
+.folha-rodape {
+  padding: 12px 18px calc(16px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--linha);
+}
+
+.folha-rodape .nota {
+  margin: 0 0 10px;
+}
+
+.folha-rodape .acoes {
+  margin-top: 0;
+}
+
+/* "Ligado desde 10/10/2026" e os botões, na linha da conta: os botões não
+   levam o respiro de cima que o .acoes dá quando vem embaixo do texto. */
+.conta .acoes {
+  margin-top: 0;
+}
+
 /* O ditado que acabou de chegar, no topo. O fundo é o do que entrou (--entrou);
    a etiqueta "novo" diz o mesmo a quem não vê a cor. */
 .item.chegou > .linha {

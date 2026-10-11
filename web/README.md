@@ -47,7 +47,7 @@ contra os dublês dos testes (em memória; nada sai da máquina), e que nenhum b
 `/telas-dev.html?cenario=estados` (o painel do PC; também `so-estados`, `pergunta`, `so-trocas`,
 `conectado`, `freio` e, para o bloco Histórico dos 6 meses, `historico`, `historico-simples`, `historico-1`,
 `historico-ligado`, `historico-pausado`, `historico-copias`, `historico-envio`, `historico-so-envio`, `historico-de-novo` e `historico-velho`) e `/telas-dev-nuvem.html?cenario=lista` (o app da nuvem; também `vazio`, `teto`, `erro` e
-`longa` e, para o ditado do celular, `gravando`, `enviando`, `erro-rede`, `sessao` e `chegou`, com um microfone de mentira que fala sozinho). Abrem as Configurações sozinhas (`&config=0` deixa no Histórico; os do ditado ficam no Histórico); claro e escuro seguem o
+`longa` e, para o ditado do celular, `gravando`, `enviando`, `erro-rede`, `sessao` e `chegou`, com um microfone de mentira que fala sozinho; e, para o aceite e as Configurações do ditado (ADR-021, C6b), `aceite` (o toque no microfone de uma conta sem aceite: a folha), `ditar-desligado`, `ditar-ligado` e `ditar-polish`). Abrem as Configurações sozinhas (`&config=0` deixa no Histórico; os do ditado ficam no Histórico, menos o `aceite`, que abre a folha); claro e escuro seguem o
 sistema do navegador, e 320 e 375 px, o modo de dispositivo. Os cenários estão no cabeçalho de
 `src/testes/telasDev.tsx` e `src/nuvem/telasDev.tsx`.
 

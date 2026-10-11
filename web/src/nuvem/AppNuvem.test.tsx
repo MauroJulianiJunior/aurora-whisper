@@ -255,11 +255,20 @@ describe('Configurações da nuvem', () => {
     await abrirConfiguracoes()
     const tela = document.querySelector<HTMLElement>('.config')!
     expect(within(tela).getByText(/Entrou como/).textContent).toBe('Entrou como voce@teste.local.')
-    expect(within(tela).getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Conta', 'Aparelhos', 'Aprendido', 'Sessões abertas', 'Privacidade'])
+    expect(within(tela).getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
+      'Conta',
+      'Ditar pelo celular',
+      'Aparelhos',
+      'Aprendido',
+      'Sessões abertas',
+      'Privacidade',
+    ])
     for (const doPC of ['Tecla de ditado', 'Microfone sempre pronto', 'Chave de API', 'Iniciar com o Windows', 'Salvar configurações', 'Literal']) {
       expect(tela.textContent).not.toContain(doPC)
     }
-    expect(tela.textContent).toContain('Nunca vão: o áudio, o que está nas outras janelas, a chave do Polish e as configurações dos PCs.')
+    // A Privacidade do app (ADR-021, D0): a chave do PC continua no PC, e o
+    // ditado pelo celular é opcional, com a voz só em memória.
+    expect(tela.textContent).toContain('Do PC nunca vão: o áudio, o que está nas outras janelas, a chave do Polish e as configurações dos PCs; a chave do PC continua no PC.')
   })
 
   it('a sessão atual é "este aparelho", sem Encerrar; encerrar outra a tira da lista', async () => {
@@ -292,7 +301,11 @@ describe('Configurações da nuvem', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Apagar meus dados da nuvem' }))
     const campo = screen.getByLabelText<HTMLInputElement>(/Para confirmar, digite/)
     expect(document.activeElement).toBe(campo)
-    expect(screen.getByText('Apaga tudo desta conta na nuvem e desconecta os PCs. Os PCs ficam com a cópia deles.')).toBeTruthy()
+    expect(
+      screen.getByText(
+        'Apaga tudo desta conta na nuvem e desconecta os PCs. Os PCs ficam com a cópia deles. A cópia de segurança guarda por até cerca de 30 dias. Apaga também o aceite do ditado no celular, as preferências e as chaves.',
+      ),
+    ).toBeTruthy()
     const apagarTudo = screen.getByRole('button', { name: 'Apagar tudo' })
     expect(apagarTudo.getAttribute('aria-disabled')).toBe('true')
     fireEvent.click(apagarTudo)

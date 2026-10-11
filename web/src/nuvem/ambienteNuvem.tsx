@@ -8,8 +8,10 @@
 import type { Ambiente } from '../ambiente'
 import type { ClienteNuvem, Eu } from './cliente'
 import { ConfiguracoesNuvem } from './ConfiguracoesNuvem'
-import { Ditar } from './ditar/Ditar'
+import { DitarNaNuvem } from './ditar/DitarNaNuvem'
+import { Folha } from './ditar/folha'
 import type { Plataforma } from './ditar/gravador'
+import { criarPorta } from './ditar/porta'
 import type { Reentrada } from './entrar'
 import { FaixaDaSessao } from './EntrarDeNovo'
 import { FaixaNuvem } from './Telas'
@@ -34,11 +36,18 @@ export function ambienteNuvem(cliente: ClienteNuvem, eu: Eu, { aoSemSessao, aoSa
   // página, e o Sair contaria como "já saiu" sem o servidor saber: o texto
   // sumiria, e uma sessão que voltou em outra aba continuaria válida.
   const clienteDasConfiguracoes: ClienteNuvem = { ...cliente, sair: () => reentrada.cliente.sair() }
+  // A folha do aceite e a porta do microfone (ADR-021, decisão H): um par por
+  // sessão, que o gravador e as Configurações dividem. A porta lembra que a
+  // conta está pronta; as Configurações a avisam quando algo mudou.
+  const folha = new Folha(cliente)
+  const porta = criarPorta(cliente, folha)
   return {
     cliente,
     // Um componente por ambiente (um por sessão): o estado da tela fica
     // entre um render e outro.
-    Configuracoes: (props) => <ConfiguracoesNuvem cliente={clienteDasConfiguracoes} eu={eu} aoSair={aoSair} {...props} />,
+    Configuracoes: (props) => (
+      <ConfiguracoesNuvem cliente={clienteDasConfiguracoes} eu={eu} aoSair={aoSair} folha={folha} aoMudarDitado={porta.invalidar} {...props} />
+    ),
     Faixa: (props) =>
       props.problema === 'sem-sessao' ? (
         <FaixaDaSessao
@@ -51,9 +60,10 @@ export function ambienteNuvem(cliente: ClienteNuvem, eu: Eu, { aoSemSessao, aoSa
         <FaixaNuvem {...props} />
       ),
     // O gravador do ditado (ADR-021): fala pelo cliente do Painel, atrás do
-    // portão, como o resto. Um componente por sessão: o áudio que espera
-    // "Tentar de novo" fica entre um render e outro.
-    ditar: (props) => <Ditar cliente={cliente} plataforma={plataformaDeDitar} {...props} />,
+    // portão, como o resto, e só abre o microfone depois da porta do aceite.
+    // Um componente por sessão: o áudio que espera "Tentar de novo" fica entre
+    // um render e outro.
+    ditar: (props) => <DitarNaNuvem cliente={cliente} plataforma={plataformaDeDitar} folha={folha} porta={porta} {...props} />,
     aoSemSessao,
     excluirDeVez: (id) => cliente.excluirDeVez(id),
     resolverConflito: (id, versao, escolha) => cliente.resolverConflito(id, versao, escolha),

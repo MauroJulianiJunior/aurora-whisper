@@ -20,6 +20,15 @@
 //   sessao     a sessão acabou com o ditado na memória: a faixa e a nota;
 //   chegou     o ditado novo no topo, em destaque, com a etiqueta e o Copiar.
 //
+// O aceite e as Configurações do ditado (ADR-021, C6b), numa conta sem aceite
+// nem chave (a nuvem de mentira, em memória; nada sai da máquina):
+//   aceite           o toque no microfone abre a folha do aceite (a escolha do
+//                    provedor da voz, o aviso, "Aceito" e "Agora não");
+//   ditar-desligado  as Configurações, com "Ditar pelo celular" desligado;
+//   ditar-ligado     as Configurações, ligado, com a chave da OpenAI guardada;
+//   ditar-polish     as Configurações, com o Polish na Anthropic e a chave dela
+//                    por colar.
+//
 // Claro e escuro seguem o sistema do navegador (no DevTools: Rendering,
 // "prefers-color-scheme"); 320 e 375 px, no modo de dispositivo.
 
@@ -27,8 +36,9 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import '../fontes.css'
 import '../index.css'
+import { versaoDoAviso } from './ditar/aviso'
 import { plataformaFalsa } from './ditar/plataformaFalsa'
-import { aprendido, itemNuvem, servidorFalsoNuvem } from '../testes/servidorFalsoNuvem'
+import { type OpcoesDaNuvem, aprendido, itemNuvem, servidorFalsoNuvem } from '../testes/servidorFalsoNuvem'
 import AppNuvem from './AppNuvem'
 
 const busca = new URLSearchParams(window.location.search)
@@ -46,6 +56,22 @@ const longas = [
   aprendido({ variante: 'supercalifragilisticexpialidocious', termo: 'SF', dominio: 'dominio-com-um-nome-muito-comprido-mesmo', restrito: true }),
 ]
 
+// O ditado pelo celular da conta, nos cenários do aceite e das Configurações;
+// nos outros, a conta já está pronta (o microfone abre direto).
+const aceiteDeHoje = (provedores: ('openai' | 'groq' | 'anthropic')[]) => ({ versao: versaoDoAviso, provedores, aceito_em: hora(9, 12) })
+const ditadoDoCenario: OpcoesDaNuvem['ditado'] =
+  cenario === 'aceite' || cenario === 'ditar-desligado'
+    ? {}
+    : cenario === 'ditar-ligado'
+      ? { aceite: aceiteDeHoje(['openai']), chaves: { openai: 'sk-teste-de-mentira-WXYZ' } }
+      : cenario === 'ditar-polish'
+        ? {
+            preferencias: { polish: true, polish_provedor: 'anthropic' },
+            aceite: aceiteDeHoje(['openai', 'anthropic']),
+            chaves: { openai: 'sk-teste-de-mentira-WXYZ' },
+          }
+        : undefined
+
 const srv = servidorFalsoNuvem(
   [
     itemNuvem({ id: 'd1', created_at: hora(7, 14), final_text: 'Manda o relatório amanhã cedo.' }),
@@ -57,6 +83,7 @@ const srv = servidorFalsoNuvem(
     aparelhos: [{ id: 'a1', nome: 'DELL-G15', plataforma: 'windows', versao: '0.1.0', conectado_em: hora(1, 9), ultimo_uso_em: hora(7, 16) }],
     aprendidos: cenario === 'vazio' || cenario === 'erro' ? [] : cenario === 'longa' ? longas : trocas,
     tetoDosAprendidos: cenario === 'teto' ? 2 : 500,
+    ditado: ditadoDoCenario,
   },
 )
 if (cenario === 'erro') {
@@ -104,6 +131,10 @@ if (ditar) {
       botaoDe('Parar e enviar')?.click()
     }, 120)
   })
+} else if (cenario === 'aceite') {
+  // O primeiro toque no microfone de uma conta sem aceite: a folha, e o
+  // microfone fechado.
+  quandoHouver('Ditar', (mic) => mic.click())
 } else if (busca.get('config') !== '0') {
   // Abre as Configurações sozinha: o botão da barra é o único com esse nome.
   quandoHouver('Configurações', (b) => b.click())

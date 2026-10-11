@@ -1,6 +1,6 @@
 import { type KeyboardEvent, type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { type Aprendida, Conflito, type Ditado, type EscolhaDoSelo, ForaDoAr, type Problema, type Sugestao, problemaDe } from './api'
-import type { Ambiente, Aprendiz } from './ambiente'
+import type { Ambiente, Aprendiz, SecaoDasConfiguracoes } from './ambiente'
 import { Aurora } from './Aurora'
 import { Aviso, type AvisoDados } from './Aviso'
 import { agruparPorDia, formatarCurta, formatarHora } from './datas'
@@ -73,6 +73,9 @@ export function Painel({ ambiente, focarNoTitulo = false }: Props) {
   // o que a pessoa mudou e não salvou não se perde ao olhar o histórico.
   const [configurando, setConfigurando] = useState(false)
   const [abriuConfiguracoes, setAbriuConfiguracoes] = useState(false)
+  // secaoPedida: a seção das Configurações que alguém pediu à vista (a chave do
+  // provedor, que o gravador não achou); vez sobe a cada pedido.
+  const [secaoPedida, setSecaoPedida] = useState<{ nome: SecaoDasConfiguracoes; vez: number } | null>(null)
   const [texto, setTexto] = useState('')
   const [busca, setBusca] = useState('')
   const [recarga, setRecarga] = useState(0)
@@ -382,7 +385,8 @@ export function Painel({ ambiente, focarNoTitulo = false }: Props) {
 
   // Ir às Configurações fecha o editor aberto, como trocar de vista: o
   // rascunho tocado fica, com a etiqueta "não salvo".
-  function abrirConfiguracoes() {
+  function abrirConfiguracoes(secao?: SecaoDasConfiguracoes) {
+    if (secao) setSecaoPedida((s) => ({ nome: secao, vez: (s?.vez ?? 0) + 1 }))
     if (configurando) return
     largar(aberto)
     setAberto(null)
@@ -863,7 +867,7 @@ export function Painel({ ambiente, focarNoTitulo = false }: Props) {
             <button type="button" aria-pressed={!configurando && naLixeira} onClick={() => trocarVista('lixeira')}>
               Lixeira
             </button>
-            <button type="button" aria-pressed={configurando} onClick={abrirConfiguracoes}>
+            <button type="button" aria-pressed={configurando} onClick={() => abrirConfiguracoes()}>
               Configurações
             </button>
           </div>
@@ -905,6 +909,7 @@ export function Painel({ ambiente, focarNoTitulo = false }: Props) {
         {abriuConfiguracoes && (
           <Configuracoes
             visivel={configurando}
+            secao={secaoPedida}
             aoPerderLigacao={falhar}
             avisar={avisar}
             aprendizado={aprendizado}

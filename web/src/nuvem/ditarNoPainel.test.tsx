@@ -50,6 +50,9 @@ async function comecar() {
 }
 
 async function pararEEnviar(p: ReturnType<typeof plataformaFalsa>, ms = 2000) {
+  // A porta do aceite confere a conta antes de o microfone abrir (um GET): o
+  // botão de parar aparece quando ela deixa passar.
+  await screen.findByRole('button', { name: 'Parar e enviar' }, espera)
   act(() => p.rodar(ms, 0.2))
   await act(async () => {
     fireEvent.click(screen.getByRole('button', { name: 'Parar e enviar' }))
@@ -253,8 +256,11 @@ describe('as falhas', () => {
   it('sem conexão: o áudio fica; "Tentar de novo" reenvia com o MESMO id e dá certo', async () => {
     const { srv, p } = montar()
     await abrirOHistorico()
+    // A rede cai com o microfone já aberto (a porta do aceite confere a conta
+    // antes de abrir, e sem rede ela não abre: porta.test.ts).
+    await comecar()
     srv.derrubar(true)
-    await ditar(p)
+    await pararEEnviar(p)
     const nota = await screen.findByRole('alert')
     expect(nota.textContent).toContain('Sem conexão.')
     srv.derrubar(false)
@@ -298,8 +304,9 @@ describe('as falhas', () => {
   it('Descartar solta o áudio e a nota sai', async () => {
     const { srv, p } = montar()
     await abrirOHistorico()
+    await comecar()
     srv.derrubar(true)
-    await ditar(p)
+    await pararEEnviar(p)
     const nota = await screen.findByRole('alert')
     fireEvent.click(within(nota).getByRole('button', { name: 'Descartar' }))
     expect(screen.queryByRole('alert')).toBeNull()
@@ -430,8 +437,9 @@ describe('a sessão que acaba no meio do envio (401)', () => {
   it('o 401 de outra chamada, com o áudio à espera por falta de rede, também preserva a tela', async () => {
     const { srv, p } = montar()
     await abrirOHistorico()
+    await comecar()
     srv.derrubar(true)
-    await ditar(p)
+    await pararEEnviar(p)
     await screen.findByRole('alert')
     srv.derrubar(false)
     srv.expirar()

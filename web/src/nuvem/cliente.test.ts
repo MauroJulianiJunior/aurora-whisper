@@ -358,3 +358,152 @@ describe('ditar', () => {
     expect(srv.chamadasAoProvedor).toBe(1)
   })
 })
+
+// O ditado pelo celular na conta (ADR-021, C6b): o estado, o aceite, as
+// preferências e as chaves. A forma exata do JSON é a que o servidor da C3a e
+// da C3b deve entregar (06-api-contract.md); aqui se prova o que o app envia
+// e como lê o que recebe.
+describe('o ditado pelo celular na conta', () => {
+  const aceite = { versao: '2026-10-10', provedores: ['openai' as const], aceito_em: '2026-10-09T12:00:00.000Z' }
+  const preferencias = { provedor: 'openai' as const, modelo: '', dica: false, polish: false, polish_provedor: 'openai' as const, polish_modelo: '' }
+  const vazias = { openai: { configurada: false, final: '' }, groq: { configurada: false, final: '' }, anthropic: { configurada: false, final: '' } }
+
+  it('o estado é um GET sem query: as preferências, o aceite vigente e as chaves (só `configurada` e o final)', async () => {
+    const { srv, cliente } = montar({ ditado: { aceite, chaves: { openai: 'sk-teste-de-mentira-WXYZ' } } })
+    const estado = await cliente.estadoDoDitado()
+    expect(estado).toEqual({ preferencias, aceite, chaves: { ...vazias, openai: { configurada: true, final: 'WXYZ' } } })
+    expect(srv.pedidos.map((p) => [p.metodo, p.caminho, p.busca.toString()])).toEqual([['GET', '/api/v1/dictation', '']])
+    // A chave inteira não vem na resposta, nem de passagem.
+    expect(JSON.stringify(estado)).not.toContain('sk-teste')
+  })
+
+  it('sem aceite, é null; o estado de uma conta nova é o mais fechado', async () => {
+    const { cliente } = montar({ ditado: {} })
+    expect(await cliente.estadoDoDitado()).toEqual({ preferencias, aceite: null, chaves: vazias })
+  })
+
+  it('lê com tolerância: o que falta ou não tem a forma esperada vira o padrão mais fechado, e o final nunca passa de 4 caracteres', async () => {
+    const { srv, cliente } = montar()
+    srv.interceptar(
+      () =>
+        new Response(
+          JSON.stringify({
+            preferencias: { provedor: 'gemini', modelo: 3, dica: 'sim', polish: 1, polish_provedor: 'groq' },
+            aceite: { versao: '', provedores: ['openai'] },
+            chaves: { openai: { configurada: true, final: 'sk-inteira-123456' }, groq: { configurada: 'sim', final: 'abcd' }, anthropic: null },
+          }),
+        ),
+    )
+    expect(await cliente.estadoDoDitado()).toEqual({
+      preferencias,
+      aceite: null,
+      chaves: { ...vazias, openai: { configurada: true, final: '3456' } },
+    })
+    srv.interceptar(() => new Response(JSON.stringify({ aceite: { versao: '2026-10-10', provedores: ['openai', 'openai', 'gemini', 7] } })))
+    expect((await cliente.estadoDoDitado()).aceite).toEqual({ versao: '2026-10-10', provedores: ['openai'], aceito_em: '' })
+  })
+
+  it('aceitar é um POST com a versão do aviso e os provedores, no corpo', async () => {
+    const { srv, cliente } = montar({ ditado: {} })
+    const aceito = await cliente.aceitarAviso('2026-10-10', ['openai', 'groq'])
+    expect(aceito).toMatchObject({ versao: '2026-10-10', provedores: ['openai', 'groq'] })
+    const [p] = srv.pedidos
+    expect([p!.metodo, p!.caminho, p!.busca.toString()]).toEqual(['POST', '/api/v1/dictation/consent', ''])
+    expect(p!.corpo).toEqual({ versao: '2026-10-10', provedores: ['openai', 'groq'] })
+    expect(srv.daConta.aceite).toMatchObject({ provedores: ['openai', 'groq'] })
+  })
+
+  it('só a versão atual do aviso vale: a velha é recusada (ErroDaApi 400), e nada é gravado', async () => {
+    const { srv, cliente } = montar({ ditado: {} })
+    const e = (await cliente.aceitarAviso('2025-01-01', ['openai']).catch((x: unknown) => x)) as ErroDaApi
+    expect(e).toBeInstanceOf(ErroDaApi)
+    expect(e.status).toBe(400)
+    expect(srv.daConta.aceite).toBeNull()
+  })
+
+  it('desligar é um DELETE do aceite: revoga e apaga as chaves', async () => {
+    const { srv, cliente } = montar({ ditado: { aceite, chaves: { openai: 'sk-teste-de-mentira-WXYZ' } } })
+    await cliente.desligarDitado()
+    expect(srv.pedidos.map((p) => [p.metodo, p.caminho])).toEqual([['DELETE', '/api/v1/dictation/consent']])
+    expect(srv.daConta.aceite).toBeNull()
+    expect(srv.daConta.chaves).toEqual({})
+  })
+
+  it('as preferências são um PUT com o objeto inteiro; a resposta é a que ficou', async () => {
+    const { srv, cliente } = montar({ ditado: { aceite: { ...aceite, provedores: ['openai', 'groq'] } } })
+    const novas = { ...preferencias, provedor: 'groq' as const, dica: true }
+    expect(await cliente.salvarPreferencias(novas)).toEqual(novas)
+    const [p] = srv.pedidos
+    expect([p!.metodo, p!.caminho, p!.busca.toString()]).toEqual(['PUT', '/api/v1/dictation/settings', ''])
+    expect(p!.corpo).toEqual(novas)
+  })
+
+  it('um provedor fora do aceite é SEM_ACEITE (403), como ErroDaApi.codigo', async () => {
+    const { cliente } = montar({ ditado: { aceite } })
+    const e = (await cliente.salvarPreferencias({ ...preferencias, provedor: 'groq' }).catch((x: unknown) => x)) as ErroDaApi
+    expect(e).toBeInstanceOf(ErroDaApi)
+    expect([e.status, e.codigo]).toEqual([403, 'SEM_ACEITE'])
+  })
+
+  it('a chave vai só no corpo do PUT (nunca na URL), e a resposta traz `configurada` e o final', async () => {
+    const { srv, cliente } = montar({ ditado: { aceite } })
+    const guardada = await cliente.guardarChave('openai', 'sk-teste-do-celular-ABCD')
+    expect(guardada).toEqual({ configurada: true, final: 'ABCD' })
+    const [p] = srv.pedidos
+    expect([p!.metodo, p!.caminho, p!.busca.toString()]).toEqual(['PUT', '/api/v1/ai-keys/openai', ''])
+    expect(p!.corpo).toEqual({ chave: 'sk-teste-do-celular-ABCD' })
+    expect(Object.keys(p!.cabecalhos).map((k) => k.toLowerCase())).not.toContain('authorization')
+    expect(JSON.stringify(guardada)).not.toContain('sk-teste')
+  })
+
+  it('a chave de um provedor fora do aceite é SEM_ACEITE, e a que o provedor recusa é PROVEDOR_RECUSOU_CHAVE', async () => {
+    const { cliente } = montar({ ditado: { aceite } })
+    const semAceite = (await cliente.guardarChave('groq', 'gsk-teste-1234567').catch((x: unknown) => x)) as ErroDaApi
+    expect([semAceite.status, semAceite.codigo]).toEqual([403, 'SEM_ACEITE'])
+    const recusada = (await cliente.guardarChave('openai', 'recusada-pelo-provedor').catch((x: unknown) => x)) as ErroDaApi
+    expect([recusada.status, recusada.codigo]).toEqual([422, 'PROVEDOR_RECUSOU_CHAVE'])
+  })
+
+  it('remover é um DELETE do provedor; os modelos, um GET, e a lista vem como o provedor a dá', async () => {
+    const { srv, cliente } = montar({ ditado: { aceite, chaves: { openai: 'sk-teste-de-mentira-WXYZ' } } })
+    expect(await cliente.modelosDaChave('openai')).toContain('gpt-4o-mini-transcribe')
+    await cliente.removerChave('openai')
+    expect(srv.pedidos.map((p) => [p.metodo, p.caminho, p.busca.toString()])).toEqual([
+      ['GET', '/api/v1/ai-keys/openai/models', ''],
+      ['DELETE', '/api/v1/ai-keys/openai', ''],
+    ])
+    // Sem chave, não há lista: SEM_CHAVE.
+    const e = (await cliente.modelosDaChave('openai').catch((x: unknown) => x)) as ErroDaApi
+    expect([e.status, e.codigo]).toEqual([409, 'SEM_CHAVE'])
+  })
+
+  it('a rota que o servidor não tem (sem a chave de cifra) é ErroDaApi 404; sem sessão, SemSessao; sem rede, ForaDoAr', async () => {
+    const { srv, cliente } = montar()
+    srv.interceptar(() => new Response(JSON.stringify({ error: { code: 'NOT_FOUND', message: 'rota não encontrada' } }), { status: 404 }))
+    const e = (await cliente.estadoDoDitado().catch((x: unknown) => x)) as ErroDaApi
+    expect(e).toBeInstanceOf(ErroDaApi)
+    expect(e.status).toBe(404)
+    srv.interceptar(null)
+    srv.expirar()
+    await expect(cliente.estadoDoDitado()).rejects.toBeInstanceOf(SemSessao)
+    srv.entrar()
+    srv.derrubar(true)
+    await expect(cliente.estadoDoDitado()).rejects.toBeInstanceOf(ForaDoAr)
+  })
+
+  it('nenhuma chamada do ditado pela conta leva Authorization ou sai da mesma origem', async () => {
+    const { srv, cliente } = montar({ ditado: { aceite } })
+    await cliente.estadoDoDitado()
+    await cliente.salvarPreferencias(preferencias)
+    await cliente.aceitarAviso('2026-10-10', ['openai'])
+    await cliente.guardarChave('openai', 'sk-teste-do-celular-ABCD')
+    await cliente.modelosDaChave('openai')
+    await cliente.removerChave('openai')
+    await cliente.desligarDitado()
+    expect(srv.pedidos).toHaveLength(7)
+    for (const p of srv.pedidos) {
+      expect(Object.keys(p.cabecalhos).map((k) => k.toLowerCase())).not.toContain('authorization')
+      expect(p.credentials).toBe('same-origin')
+    }
+  })
+})

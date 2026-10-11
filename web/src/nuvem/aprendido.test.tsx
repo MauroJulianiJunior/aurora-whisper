@@ -32,9 +32,11 @@ afterEach(() => {
 async function abrirConfiguracoes(opcoes: OpcoesDaNuvem = {}) {
   const srv = servidorFalsoNuvem([itemNuvem({ id: 'd1', created_at: em(7, 14), final_text: 'Um ditado.' })], opcoes)
   render(<AppNuvem buscar={srv.buscar} irPara={vi.fn()} />)
-  await screen.findByRole('button', { name: /Um ditado/ })
+  // A primeira renderização do arquivo, com a máquina ocupada (os outros testes
+  // do repositório rodam junto), passa do 1 s padrão do findBy.
+  await screen.findByRole('button', { name: /Um ditado/ }, { timeout: 5000 })
   fireEvent.click(screen.getByRole('button', { name: 'Configurações' }))
-  await screen.findByRole('heading', { level: 2, name: 'Aprendido' })
+  await screen.findByRole('heading', { level: 2, name: 'Aprendido' }, { timeout: 5000 })
   return srv
 }
 
@@ -46,7 +48,7 @@ describe('a seção Aprendido', () => {
   it('fica entre os Aparelhos e as Sessões abertas', async () => {
     await abrirConfiguracoes()
     const titulos = within(document.querySelector<HTMLElement>('.config')!).getAllByRole('heading', { level: 2 })
-    expect(titulos.map((h) => h.textContent)).toEqual(['Conta', 'Aparelhos', 'Aprendido', 'Sessões abertas', 'Privacidade'])
+    expect(titulos.map((h) => h.textContent)).toEqual(['Conta', 'Ditar pelo celular', 'Aparelhos', 'Aprendido', 'Sessões abertas', 'Privacidade'])
   })
 
   it('sem nada aprendido, diz com discrição e não tem botão', async () => {
@@ -398,6 +400,6 @@ describe('a Privacidade do celular', () => {
     await abrirConfiguracoes()
     const priv = screen.getByRole('region', { name: 'Privacidade' })
     expect(priv.textContent).toContain('Vão para a nuvem: o texto dos ditados, com a data, o PC de origem e os detalhes da transcrição, e as trocas aprendidas.')
-    expect(priv.textContent).toContain('Nunca vão: o áudio, o que está nas outras janelas, a chave do Polish e as configurações dos PCs.')
+    expect(priv.textContent).toContain('Do PC nunca vão: o áudio, o que está nas outras janelas, a chave do Polish e as configurações dos PCs; a chave do PC continua no PC.')
   })
 })

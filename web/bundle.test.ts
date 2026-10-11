@@ -140,6 +140,16 @@ describe('o bundle local (bin\\painel)', () => {
     'Ditado-Fala-Ms',
     'audio/webm',
     'Transcrevendo',
+    // C6b (ADR-021): o aceite, as chaves e as preferências do ditado pelo celular
+    // são só do app: o painel do PC não tem a folha, nem as rotas da conta, nem
+    // a chave que o servidor guarda cifrada (a do PC fica no PC).
+    '/api/v1/dictation',
+    '/api/v1/ai-keys',
+    'Ditar pelo celular',
+    'transferência internacional',
+    'Chave terminada em',
+    'Revogue também esta chave',
+    'Organizar o texto com o Polish',
   ])('não tem %s', (texto) => {
     expect(local.js).not.toContain(texto)
   })
@@ -185,6 +195,40 @@ describe('o bundle da nuvem (dist-nuvem)', () => {
     ]) {
       expect(nuvem.js, texto).toContain(texto)
     }
+  })
+
+  // C6b (ADR-021): o aceite antes do microfone, as chaves do provedor (guardadas
+  // cifradas no servidor) e as preferências do ditado. As rotas da conta, o
+  // texto do aviso (o que sai, para quem, o dado de terceiro, o áudio que não
+  // fica gravado) e a Privacidade com "a chave do PC continua no PC".
+  it('tem o aceite, as chaves e as preferências do ditado pelo celular', () => {
+    for (const texto of [
+      '/api/v1/dictation',
+      '/api/v1/dictation/settings',
+      '/api/v1/dictation/consent',
+      '/api/v1/ai-keys',
+      'Ditar pelo celular manda a sua voz a um provedor que não diz processar no Brasil.',
+      'Não é gravada no seu aparelho nem no servidor.',
+      'quem administra o servidor consegue decifrá-la',
+      'A voz e os termos podem ter dados de outras pessoas',
+      'Se você dita dado de cliente',
+      'Chave terminada em',
+      'Revogue também esta chave no provedor. Uma cópia cifrada dela fica nos backups por cerca de 30 dias.',
+      'Mandar os termos aprendidos como dica',
+      'Organizar o texto com o Polish',
+      'a chave do PC continua no PC',
+      'A voz não é gravada: fica na memória e é descartada ao fim.',
+    ]) {
+      expect(nuvem.js, texto).toContain(texto)
+    }
+  })
+
+  // O build da nuvem não conhece o Windows: o aviso e a Privacidade do app dizem
+  // que a chave do PC continua no PC sem citar onde ela mora.
+  it('a chave do PC é citada sem o Gerenciador de Credenciais', () => {
+    expect(nuvem.js).toContain('a chave do PC continua no PC')
+    expect(nuvem.js).not.toContain('Gerenciador de Credenciais')
+    expect(nuvem.js).not.toContain('Credential Manager')
   })
 
   // O áudio vive só numa variável da página: nada em IndexedDB, Cache ou
