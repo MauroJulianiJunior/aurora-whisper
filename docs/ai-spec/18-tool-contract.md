@@ -38,7 +38,107 @@ Capabilities:
 - timestamps;
 - nbest;
 - languages;
-- acceleration.
+- acceleration;
+- vocabulary (o provider usa `ASROptions.Vocabulary`);
+- formatos (o áudio comprimido que o provider aceita; vazio é "só PCM").
+
+### AudioBuffer: PCM ou áudio comprimido
+ADR-021 (10-out-2026), decisão C. O `AudioBuffer` ganhou o campo opcional `Comprimido`, e a
+`ASRCapabilities` ganhou `Formatos`. Nada mais do contrato mudou, e o Agent compila e testa sem
+mudança.
+
+```go
+// internal/asr
+type AudioBuffer struct {
+    PCM          []int16    // mono, 16 bits
+    SampleRateHz int
+    Comprimido   Comprimido // opcional: o valor zero é "este buffer é PCM"
+    Release      func()
+}
+type Comprimido struct {
+    Bytes []byte // o áudio codificado, como chegou
+    Tipo  string // o tipo de mídia, sem parâmetros: "audio/webm"
+}
+type ASRCapabilities struct {
+    // ... os campos de antes ...
+    Formatos []string // tipos de áudio comprimido aceitos; vazio: só PCM
+}
+func (b AudioBuffer) Validar() error                  // ErrAudioInvalido
+func (c ASRCapabilities) AceitaFormato(tipo string) bool
+func NormalizarTipo(tipo string) string               // "Audio/WebM; codecs=opus" -> "audio/webm"
+```
+
+- **Cada buffer leva PCM OU o comprimido, nunca os dois.** `Validar` recusa PCM junto de
+  comprimido e um comprimido sem bytes ou sem tipo (`ErrAudioInvalido`, mensagem fixa: nunca leva os
+  bytes). Um buffer sem nada continua válido aqui; quem decide o que fazer com ele é o provider.
+- **Ninguém decodifica o comprimido.** Os bytes vão como estão a quem os aceita. O `Comprimido.Bytes`
+  é compartilhado entre as cópias do `AudioBuffer`, como o `PCM`, e nenhum provider o altera, o grava
+  em disco ou o loga. O `Release` continua sendo do dono do buffer, nunca do provider.
+- **O provider local não declara nenhum formato e recusa o comprimido** com
+  `asr.ErrComprimidoNaoSuportado`, antes de subir o servidor. O Agent não muda.
+- **O provider da nuvem só aceita comprimido** e recusa o PCM com `asr.ErrPCMNaoSuportado`: não
+  codifica nada. Um tipo fora do `Formatos` dele também é `ErrComprimidoNaoSuportado`.
+- O `Engine` não mudou: um buffer comprimido atravessa as policies como o PCM (o local o recusa e o
+  cloud, que declara o formato, o aceita).
+
+### Os provedores da nuvem (`internal/asr/nuvem`)
+ADR-021, decisão D. OpenAI e Groq, por trás do mesmo `ASRProvider`, com a chave de quem dita
+(BYOK). As duas APIs têm a mesma forma (`POST .../audio/transcriptions`, multipart) e moram num
+pacote só, que depende apenas de `internal/asr`. Sem troca automática de provedor: se o escolhido
+falha, a chamada falha.
+
+```go
+// internal/asr/nuvem
+type Provider struct { // implementa asr.ASRProvider; ID() é "openai" ou "groq"
+    Cliente  *Cliente // nil: as APIs oficiais
+    Provedor string   // OpenAI | Groq
+    Modelo   string   // vazio: ModeloPadrao(Provedor)
+    Idioma   string   // vazio: "pt"
+    Chave    func(ctx context.Context) (string, error) // lida a CADA chamada
+}
+func (c *Cliente) Transcrever(ctx, Chamada{Provedor, Modelo, Idioma, Dica}, chave string, asr.Comprimido) (asr.ASRResult, error)
+func (c *Cliente) ListarModelos(ctx, provedor, chave string) ([]string, error) // só os de transcrição
+```
+
+- **O que vai no pedido.** `Authorization: Bearer <chave>` e um multipart com `model`, o idioma
+  (`language`; no `gpt-transcribe` o campo é `languages`), o `prompt` (a dica, que é
+  `ASROptions.Vocabulary`; sem dica o campo nem vai), `temperature` `0`, `response_format`
+  (`verbose_json` nos modelos whisper, que devolvem segmentos; `json` nos `gpt-*-transcribe`) e, por
+  último, o arquivo (`ditado.<ext>`, com o tipo sem parâmetros). `opts.Language` `pt-BR` vira o
+  código `pt`; sem idioma, `pt`. A tabela do que cada modelo aceita é mínima (`perfilDoModelo`) e se
+  confere numa chamada de teste.
+- **Modelos padrão** (constantes trocáveis, escolhas menores 1 e 2): OpenAI `gpt-transcribe`
+  (alternativa `gpt-4o-mini-transcribe`); Groq `whisper-large-v3-turbo`. A pessoa escolhe outro da
+  lista do provedor: `ListarModelos` lê `GET /models` e fica só com os ids que trazem `transcribe`
+  ou `whisper`, sem os de diarização e sem os só de inglês.
+- **Formatos aceitos:** webm, mp3 (`audio/mpeg`), m4a (`audio/mp4`) e wav nos dois; ogg e flac só na
+  Groq. Até 25 MB (`TetoArquivo`), conferido antes de enviar.
+- **O corpo tem tamanho conhecido.** O cabeçalho das partes, os bytes recebidos e o fecho vão juntos
+  por um `io.MultiReader`, com o `Content-Length` calculado: **nunca `chunked`**, e sem segunda cópia
+  do áudio. O pedido não se reenvia sozinho (nem por redirecionamento nem por conexão velha), então o
+  transporte nunca cobra um ditado duas vezes.
+- **Falhas.** Todo erro do provedor é um `*Erro{Motivo, Provedor, Mensagem}` com mensagem fixa em
+  português, de uma lista fechada: `sem_chave`, `chave_recusada` (401, ou chave com caractere que não
+  cabe num cabeçalho), `sem_permissao` (403), `arquivo_grande` (413, ou acima do teto), `limite`
+  (429), `indisponivel` (5xx), `tempo_esgotado`, `sem_rede` e `resposta_inesperada` (qualquer outro
+  status, inclusive 3xx, e um corpo que não se lê). **O corpo de erro do provedor nunca é lido nem
+  repassado** (a OpenAI devolve um pedaço da chave no 401), o erro de origem não é embrulhado (carrega
+  a URL; a única causa embrulhada é `context.DeadlineExceeded`), **redirecionamento não é seguido**
+  e só HTTP/1.1 (o HTTP/2 do `net/http` escreve cabeçalho e corpo no log sob `GODEBUG=http2debug`).
+  Cancelar o `ctx` volta `context.Canceled` puro. O prazo é `TimeoutPadrao` (20 s) ou o do `ctx`, o
+  mais curto.
+- **Sem fala.** Segmentos com `no_speech_prob` acima de 0,6 **e** `avg_logprob` abaixo de -1,0
+  (`LimiteSemFala`, `LimiteLogprob`; estritos, e só valem com os dois campos presentes) saem do
+  texto, que é refeito dos segmentos que ficaram. Sem segmento descartado, vale o texto do provedor.
+  Texto vazio no fim é `ErrSemFala` (e não um `*Erro`): o provedor atendeu, e pode ter cobrado.
+  **Esse filtro roda depois da cobrança:** evita o ditado vazio, não o custo. Os modelos
+  `gpt-*-transcribe` não devolvem segmentos; neles vale só a medição do app.
+- **`Capabilities`.** `Confidence` é `false` (o provedor não dá confiança do texto; o
+  `no_speech_prob` serve só ao filtro), `Vocabulary` é `true`, `Timestamps` vale nos modelos
+  whisper, e `Formatos` traz a lista acima.
+- **Invariantes (testados):** a chave só vai no cabeçalho; áudio, chave e corpo de erro não aparecem
+  em erro nem em log (o pacote nem importa `log`, `slog` nem `os`); nenhum arquivo é criado; a suíte
+  inteira roda contra `httptest`, com uma trava que reprova qualquer pedido para fora da máquina.
 
 ## ContextProvider
 ```go
@@ -465,4 +565,6 @@ type UpdateProvider interface {
 - o sync (ADR-019, F7b) só registra contagens e códigos de listas fechadas: nunca texto, id de ditado,
   token, URL ou e-mail; o cliente do sync tem prazo (30 s) e não segue redirecionamento;
 - mutation_id obrigatório;
-- cloud user vem da sessão.
+- cloud user vem da sessão;
+- o provider de ASR da nuvem (ADR-021) não persiste nem loga o áudio, não decodifica nem codifica,
+  não segue redirecionamento, não repassa corpo de erro e não guarda a chave: lê-a a cada chamada.
