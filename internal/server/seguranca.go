@@ -78,6 +78,21 @@ func (c *Cloud) negarOrigemCruzada(w http.ResponseWriter, r *http.Request) {
 	writeError(w, http.StatusForbidden, codeForbidden, "pedido de outra origem")
 }
 
+// somenteDaMesmaOrigem recusa (403, o mesmo da proteção contra CSRF) o pedido
+// cujo Sec-Fetch-Site vem e não é exatamente same-origin: cross-site,
+// same-site, none ou qualquer outro valor. É para o GET que tem efeito
+// colateral (o http.CrossOriginProtection só olha os que mudam estado). Sem o
+// cabeçalho, passa: o navegador de hoje sempre o manda, e quem não o manda não
+// é uma navegação de outro site. Mais de um valor, ou vazio, também recusa.
+func (c *Cloud) somenteDaMesmaOrigem(w http.ResponseWriter, r *http.Request) bool {
+	v, veio := r.Header["Sec-Fetch-Site"]
+	if !veio || (len(v) == 1 && v[0] == "same-origin") {
+		return true
+	}
+	c.negarOrigemCruzada(w, r)
+	return false
+}
+
 // recuperar responde 500 a um pânico num handler e registra só a rota: o
 // pânico padrão do http.Server escreveria o endereço de quem pediu e o valor
 // do pânico no log.

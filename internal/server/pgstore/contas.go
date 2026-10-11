@@ -100,14 +100,19 @@ var apagarDaConta = []struct{ op, sql string }{
 	{"apagar o aprendido", `DELETE FROM learned_pairs WHERE user_id = $1`},
 	{"apagar o dicionário", `DELETE FROM dictionary_entries WHERE user_id = $1`},
 	{"apagar as preferências", `DELETE FROM user_settings WHERE user_id = $1`},
-	// As chaves da IA do celular (ADR-021, C3a; a 0017), só cifradas.
-	{"apagar as chaves da IA", `DELETE FROM ai_provider_keys WHERE user_id = $1`},
-	// As preferências e os aceites do ditado no celular (ADR-021, C3b; a 0018
-	// e a 0019): com as chaves, as três tabelas do ditado no celular. Os
-	// aceites saem inteiros, os que terminaram também: o apagar leva tudo o
-	// que é da conta.
+	// As três tabelas do ditado no celular (ADR-021; a 0017, a 0018 e a 0019):
+	// as preferências, os aceites e as chaves da IA, só cifradas. Os aceites
+	// saem inteiros, os que terminaram também: o apagar leva tudo o que é da
+	// conta.
+	//
+	// A ORDEM importa: o aceite ANTES das chaves. O revogar (RevogarAceite)
+	// trava a linha do aceite e depois apaga as chaves; se o apagar apagasse as
+	// chaves primeiro e esperasse o aceite depois, os dois se esperariam (um
+	// deadlock, SQLSTATE 40P01, que o Postgres desfaz abortando o apagar). Com
+	// os dois na mesma ordem, quem chega depois espera o outro terminar.
 	{"apagar as preferências do ditado", `DELETE FROM dictation_settings WHERE user_id = $1`},
 	{"apagar os aceites do ditado", `DELETE FROM dictation_consents WHERE user_id = $1`},
+	{"apagar as chaves da IA", `DELETE FROM ai_provider_keys WHERE user_id = $1`},
 	{"apagar os pedidos de pareamento", `DELETE FROM pairing_requests WHERE approved_by = $1`},
 	// Os tokens vão junto (device_tokens: ON DELETE CASCADE).
 	{"apagar os aparelhos", `DELETE FROM devices WHERE user_id = $1`},

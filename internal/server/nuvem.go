@@ -139,7 +139,9 @@ type CloudConfig struct {
 	// dictation_consents, o aceite em aberto da versão atual do aviso que
 	// inclui o provedor). Sem o Ditado também, ninguém tem aceite, e o PUT da
 	// chave recusa com SEM_ACEITE (falha fechada). Só os testes o trocam, por
-	// um dublê que dá e tira o aceite.
+	// um dublê que dá e tira o aceite. Com o dublê, a gravação da chave NÃO
+	// confere o aceite de novo sob a trava da conta (ele não está no banco): só
+	// o epoch. Com o aceite de verdade, confere os dois (chaves_ia.go).
 	Aceite AceiteDoDitado
 }
 
@@ -166,9 +168,13 @@ type Cloud struct {
 
 	// As chaves da IA (ADR-021, C3a; chaves_ia.go). cofre nil: as rotas não
 	// são montadas.
-	cofre     *cofre.Cofre
-	aceite    AceiteDoDitado
-	limChaves *cloudauth.Limite
+	cofre  *cofre.Cofre
+	aceite AceiteDoDitado
+	// aceiteNaGravacao: a gravação da chave confere o aceite de verdade de novo,
+	// dentro da transação que trava a conta (CondicaoDaChave.ExigeAceite). Falso
+	// só com o dublê do aceite dos testes (CloudConfig.Aceite).
+	aceiteNaGravacao bool
+	limChaves        *cloudauth.Limite
 
 	// saude é a última rodada do Reter, para a rota da saúde do job (F11c;
 	// saude.go).
@@ -214,6 +220,10 @@ func NewCloud(cfg CloudConfig) (*Cloud, error) {
 	if cfg.Cofre != nil && (cfg.ChavesDeIA == nil || cfg.Modelos == nil || cfg.Ditado == nil) {
 		return nil, errors.New("server: com a chave de cifra, a nuvem precisa do ChavesDeIA, do Modelos e do Ditado")
 	}
+	// O aceite de verdade (o do Ditado) é o que a gravação da chave confere de
+	// novo, sob a trava da conta; o dublê dos testes (cfg.Aceite) não está no
+	// banco, então a gravação não o confere.
+	aceiteNaGravacao := cfg.Aceite == nil && cfg.Ditado != nil
 	if cfg.Aceite == nil {
 		cfg.Aceite = semAceite{}
 		if cfg.Ditado != nil {
@@ -266,9 +276,10 @@ func NewCloud(cfg CloudConfig) (*Cloud, error) {
 		limPareamento:      cloudauth.NovoLimite(lim.PareamentoPorIP, cfg.Now),
 		limPareamentoTotal: cloudauth.NovoLimite(lim.PareamentoTotal, cfg.Now),
 
-		cofre:     cfg.Cofre,
-		aceite:    cfg.Aceite,
-		limChaves: cloudauth.NovoLimite(lim.ChavesPorConta, cfg.Now),
+		cofre:            cfg.Cofre,
+		aceite:           cfg.Aceite,
+		aceiteNaGravacao: aceiteNaGravacao,
+		limChaves:        cloudauth.NovoLimite(lim.ChavesPorConta, cfg.Now),
 	}
 	c.csrf = http.NewCrossOriginProtection()
 	c.csrf.SetDenyHandler(http.HandlerFunc(c.negarOrigemCruzada))

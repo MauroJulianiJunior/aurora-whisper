@@ -60,6 +60,18 @@ func Run(t *testing.T, b Backend) {
 		{"Ditado_SemOArquivoAsRotasDao404", testDitadoSemOArquivo},
 		{"Ditado_OStoreGuardaLeELista", testDitadoStore},
 		{"Ditado_GravacoesAoMesmoTempoNaoDeixamDoisAceitesEmAberto", testDitadoConcorrencia},
+
+		// As correções da C3a e da C3b (C3-correções; corridas.go): a chave não
+		// sobrevive a um apagar nem a um revogar que terminam durante a chamada ao
+		// provedor, o GET dos modelos só atende a própria origem, e o limite é da conta.
+		{"Correcoes_ApagarDuranteOProvedorNaoGravaAChave", testApagarDuranteOProvedor},
+		{"Correcoes_ApagarEAceitarDeNovoDuranteOProvedorNaoGravaAChave", testApagarEAceitarDuranteOProvedor},
+		{"Correcoes_RevogarDuranteOProvedorNaoGravaAChave", testRevogarDuranteOProvedor},
+		{"Correcoes_AceiteTrocadoDuranteOProvedorNaoGravaAChave", testAceiteTrocadoDuranteOProvedor},
+		{"Correcoes_GravacaoConferidaNoStore", testGravacaoConferida},
+		{"Correcoes_GravarEApagarOuRevogarAoMesmoTempoNaoDeixamChave", testGravacaoEmCorrida},
+		{"Correcoes_ModelosSoDaMesmaOrigem", testModelosSoDaMesmaOrigem},
+		{"Correcoes_DuasSessoesDaMesmaContaDividemOLimite", testLimiteDuasSessoesDaMesmaConta},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) { c.fn(t, novoMundo(t, b)) })

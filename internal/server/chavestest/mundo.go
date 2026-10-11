@@ -118,16 +118,39 @@ type provedorFalso struct {
 	// falha, se não for nil, é o erro de cada chamada, montado com a chave
 	// que chegou (o caso do provedor que devolve a chave no erro).
 	falha func(chave string) error
+	// durante, se não for nil, roda DENTRO de cada chamada, antes da resposta:
+	// é o que a pessoa faz em outro aparelho enquanto o provedor demora (apagar
+	// os dados, desligar o ditado). Roda fora do mutex do dublê.
+	durante func()
 }
 
 func (p *provedorFalso) ListarModelos(_ context.Context, provedor, chave string) ([]string, error) {
 	p.mu.Lock()
-	defer p.mu.Unlock()
 	p.chamadas = append(p.chamadas, chamada{provedor, chave})
-	if p.falha != nil {
-		return nil, p.falha(chave)
+	falha, durante := p.falha, p.durante
+	modelos := append([]string(nil), p.modelos...)
+	p.mu.Unlock()
+	if durante != nil {
+		durante()
 	}
-	return append([]string(nil), p.modelos...), nil
+	if falha != nil {
+		return nil, falha(chave)
+	}
+	return modelos, nil
+}
+
+// enquantoResponde põe f para rodar dentro de cada chamada ao provedor, e o
+// tira ao fim do caso.
+func (p *provedorFalso) enquantoResponde(t *testing.T, f func()) {
+	t.Helper()
+	p.mu.Lock()
+	p.durante = f
+	p.mu.Unlock()
+	t.Cleanup(func() {
+		p.mu.Lock()
+		p.durante = nil
+		p.mu.Unlock()
+	})
 }
 
 func (p *provedorFalso) quantas() int {
@@ -206,19 +229,9 @@ func novoMundo(t *testing.T, b Backend) *mundo {
 		}
 		return u.ID
 	}
-	novaSessao := func(userID, nome string) {
-		tok := cloudauth.NovoSegredo()
-		m.creds[nome] = credencial{valor: tok}
-		if _, err := b.Accounts.CriarSessao(ctx, cloudstore.NovaSessao{
-			UserID: userID, TokenHMAC: cloudauth.HMAC(segredoDeSessao, tok), Rotulo: "Android · Chrome",
-			Agora: agora0, ExpiraEm: agora0.Add(server.SessaoSemUso),
-		}); err != nil {
-			t.Fatalf("criar a sessão %s: %v", nome, err)
-		}
-	}
 	m.userA, m.userB = novoUsuario("a"), novoUsuario("b")
-	novaSessao(m.userA, celA)
-	novaSessao(m.userB, celB)
+	m.novaSessao(m.userA, celA)
+	m.novaSessao(m.userB, celB)
 	tok := cloudauth.NovoSegredo()
 	m.creds[pcA] = credencial{valor: tok, bearer: true}
 	b.NewDevice(t, m.userA, cloudauth.HMAC(pepperDeToken, tok))
@@ -229,6 +242,21 @@ func novoMundo(t *testing.T, b Backend) *mundo {
 	m.contas = contas
 	m.montar(ChaveDeCifraA)
 	return m
+}
+
+// novaSessao abre uma sessão do navegador para a conta e a guarda com o nome:
+// duas sessões da mesma conta são dois aparelhos (dois celulares, ou o celular e
+// o PC) com o mesmo dono.
+func (m *mundo) novaSessao(userID, nome string) {
+	m.t.Helper()
+	tok := cloudauth.NovoSegredo()
+	m.creds[nome] = credencial{valor: tok}
+	if _, err := m.b.Accounts.CriarSessao(context.Background(), cloudstore.NovaSessao{
+		UserID: userID, TokenHMAC: cloudauth.HMAC(segredoDeSessao, tok), Rotulo: "Android · Chrome",
+		Agora: agora0, ExpiraEm: agora0.Add(server.SessaoSemUso),
+	}); err != nil {
+		m.t.Fatalf("criar a sessão %s: %v", nome, err)
+	}
 }
 
 // montar (re)monta a nuvem sobre o mesmo Backend com a chave de cifra dada
@@ -266,6 +294,13 @@ func (m *mundo) montar(chaveDeCifra string) {
 // cru (para o JSON quebrado ir como está).
 func (m *mundo) pedir(quem, method, path, corpo string) *httptest.ResponseRecorder {
 	m.t.Helper()
+	return m.pedirCom(quem, method, path, corpo, nil)
+}
+
+// pedirCom é o pedir com um último ajuste no pedido, depois de a credencial ir
+// (por exemplo, trocar ou tirar o Sec-Fetch-Site que a sessão do navegador leva).
+func (m *mundo) pedirCom(quem, method, path, corpo string, ajustar func(*http.Request)) *httptest.ResponseRecorder {
+	m.t.Helper()
 	var r *http.Request
 	if corpo == "" {
 		r = httptest.NewRequest(method, path, nil)
@@ -281,6 +316,9 @@ func (m *mundo) pedir(quem, method, path, corpo string) *httptest.ResponseRecord
 			r.AddCookie(&http.Cookie{Name: "__Host-sessao", Value: c.valor})
 			r.Header.Set("Sec-Fetch-Site", "same-origin")
 		}
+	}
+	if ajustar != nil {
+		ajustar(r)
 	}
 	rec := httptest.NewRecorder()
 	m.h.ServeHTTP(rec, r)

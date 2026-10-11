@@ -18,6 +18,9 @@ Base: `https://exemplo.com/api/v1` (o domínio real vem de `PUBLIC_BASE_URL`)
 - `Cache-Control: no-store` em toda resposta de `/api/v1`. Nenhum cabeçalho de CORS.
 - Proteção contra CSRF por `http.CrossOriginProtection` em todo pedido que não é `GET` nem `HEAD`
   (só `Sec-Fetch-Site` `same-origin` ou `none`). Nenhum `GET` muda estado, fora o callback do Google.
+  **Um `GET` tem efeito colateral** (ADR-021, C3-correções): `GET /ai-keys/{provedor}/models` chama o
+  provedor com a chave da conta e gasta uma ficha do limite. Como a proteção acima não o alcança, a
+  própria rota recusa o que o navegador diz não ser da própria origem (ver "As chaves da IA").
 - Com `Authorization: Bearer`, o cookie é ignorado; Bearer inválido é `401`, sem cair no cookie.
 - Texto ditado nunca vai na URL: a busca é por `POST` (abaixo).
 - Log do servidor: método, padrão da rota, status, duração e contagens. Nunca a URL crua, a query, o
@@ -445,16 +448,27 @@ contrato executável, contra o Store em memória e o Postgres.
   não são montadas e caem no `404` de rota não montada (`NOT_FOUND`, "rota não encontrada"), como as
   do aceite e das preferências (`/dictation`, abaixo) e as do ditado que vêm depois.
 - **Só com a sessão do navegador:** o token de um PC recebe `403` (`FORBIDDEN`); sem credencial, `401`.
-  O `PUT` e o `DELETE` passam pela proteção contra CSRF, como o resto.
+  O `PUT` e o `DELETE` passam pela proteção contra CSRF, como o resto. O `GET` dos modelos, que a
+  proteção não alcança, tem a regra própria de origem (abaixo).
 - **`{provedor}`** é exatamente `openai`, `groq` ou `anthropic`, em minúsculas. Outro valor é `404`
   (`NOT_FOUND`, "provedor desconhecido"), sem eco do valor, antes de qualquer outra conferência.
+- **O limite é da conta, e não da sessão:** o balde de 10 por minuto (o `PUT` e o `GET` dos modelos
+  juntos) é por `user_id`. Duas sessões da mesma conta (dois aparelhos) gastam as mesmas fichas; o 11º
+  pedido somando as duas é `429`.
+- **No servidor de teste do PC** (`aurora-whisper-server teste`, só com a build tag `logindeteste`), estas
+  rotas e as de `/dictation` existem (não são `404`): o cofre nasce com a chave de cifra aleatória do
+  processo, como o `SESSION_SECRET`, e o provedor é de mentira (sem rede; ver `10`). No build normal
+  nada disso existe, e as rotas só sobem com `AI_KEYS_SECRET_FILE`.
 - **A chave nunca vai a log, a erro, a resposta nem a URL.** O log de acesso tem só o padrão da rota, o
   status, os milissegundos, os bytes e, num erro, um motivo da lista fechada (`sem_aceite`, `sem_chave`,
-  `limite`, `provedor`, e `aviso` no `AVISO_DESATUALIZADO`); o `GET` dos modelos acrescenta a contagem
-  `modelos`, e o `DELETE /dictation/consent`, `chaves_apagadas`.
+  `limite`, `provedor`, `aviso` no `AVISO_DESATUALIZADO`, `conta_mudou` no `409` do `PUT` cuja conta
+  apagou os dados no meio e `origem_cruzada` no `GET` dos modelos de outra origem); o `GET` dos modelos
+  acrescenta a contagem `modelos`, e o `DELETE /dictation/consent`, `chaves_apagadas`.
 
 ### PUT `/ai-keys/{provedor}`
 Corpo `{ "chave": "..." }`, e nada mais. Nesta ordem:
+0. **O epoch da conta** (`sync_epoch`) é lido primeiro, antes de qualquer conferência ou chamada ao
+   provedor (a gravação, no passo 6, o confere de novo).
 1. **O aceite**, antes de ler o corpo: sem um aceite vigente do ditado no celular que inclua aquele
    provedor (decisão H), `403` `SEM_ACEITE`, sem chamar o provedor. **O aceite é o de verdade, o da
    `dictation_consents`** (C3b, `POST /dictation/consent`, abaixo): o aceite em aberto da versão atual
@@ -475,7 +489,18 @@ Corpo `{ "chave": "..." }`, e nada mais. Nesta ordem:
    seguir redirecionamento, sem repassar o corpo de erro; a Groq pela API compatível com a da OpenAI,
    `https://api.groq.com/openai/v1/models`). A falha vira um código da lista abaixo, e nada é gravado (a
    chave de antes, se havia, continua).
-6. **A cifra e a gravação** por cima da anterior.
+6. **A cifra e a gravação** por cima da anterior, **numa transação que trava a conta** (a linha do
+   usuário e o contador de sync, `05`), e só depois de conferir DE NOVO, já sob a trava, o epoch lido no
+   passo 0 e o aceite vigente do provedor. O provedor leva até 10 s para responder, e nesse tempo a
+   pessoa pode apagar os dados ou desligar o ditado em outro aparelho: a chave **nunca sobrevive** a um
+   "Apagar meus dados" nem a um revogar, nem aos que terminam durante a chamada ao provedor. Um deles
+   que esteja no meio faz a gravação esperar, ou termina antes e é visto por ela. Se a conferência
+   recusa, nada é gravado (a chave de antes, se havia, é a que o apagar ou o revogar deixou):
+   - o **epoch mudou** (a conta apagou os dados, ou o banco foi restaurado, depois do passo 0): **`409`
+     `CONFLICT`**, "os dados da conta mudaram enquanto a chave era conferida: nada foi guardado" (motivo
+     `conta_mudou` no log). A pessoa vê o estado de agora ao tentar de novo (e, sem aceite, o `403`);
+   - o **aceite deixou de valer** (revogado, de uma versão velha do aviso, ou trocado por um que não
+     cobre o provedor): **`403` `SEM_ACEITE`**, a mesma resposta do passo 1.
 
 `200` com `{ "provedor": "openai", "configurada": true, "final": "WXYZ" }`. `final` tem no máximo 4
 caracteres e nunca mais que um quarto da chave (uma chave de 8 caracteres sai com 2).
@@ -488,7 +513,17 @@ pode). `204`. As cópias cifradas nos backups ficam: a tela manda revogar a chav
 A lista de modelos que a chave **guardada** alcança, perguntada ao provedor: `200` com
 `{ "provedor": "openai", "modelos": ["...", "..."] }` (a ordem do provedor, do mais novo para o mais
 antigo; `modelos` nunca é `null`). Pede o aceite do provedor (a chave vai a ele: `403` `SEM_ACEITE`) e
-conta no limite por conta. Sem chave guardada, `409` `SEM_CHAVE` ("nenhuma chave guardada para este
+conta no limite por conta.
+
+**Só da própria origem.** É um `GET` com efeito colateral (chama o provedor com a chave guardada e gasta
+uma ficha do limite), e o `http.CrossOriginProtection` só barra os métodos que mudam estado, enquanto o
+cookie da sessão é `SameSite=Lax` (o navegador o manda numa navegação de topo vinda de outro site). Então
+a rota recusa com **`403` `FORBIDDEN`** ("pedido de outra origem", motivo `origem_cruzada` no log) o
+pedido (o `GET` e o `HEAD`, que o mux casa com o `GET`) cujo **`Sec-Fetch-Site` vem e não é exatamente
+`same-origin`**: `cross-site`, `same-site`, `none`, vazio, mais de um valor ou qualquer outro. **Sem o
+cabeçalho, passa**, para os clientes que não o mandam (o navegador de hoje sempre manda). A recusa vem
+antes do aceite, da chave, do limite e do provedor: não gasta ficha nem chama ninguém. O `fetch` do app,
+que é da própria origem, não é afetado. Sem chave guardada, `409` `SEM_CHAVE` ("nenhuma chave guardada para este
 provedor"); com a chave cifrada por outra chave de cifra (o arquivo trocou, ou o backup voltou sem ele),
 ou que não decifra com esta conta e este provedor, `409` `SEM_CHAVE` ("a chave guardada não vale mais
 neste servidor: cole a chave de novo"). Nos dois, o provedor não é chamado.
@@ -506,6 +541,12 @@ fixa os da rota de ditar e usa a mesma tradução da falha do provedor (`server.
 | `PROVEDOR_LIMITE` | 502 | o provedor recusou por limite de uso ou falta de crédito (`429`) |
 | `PROVEDOR_FORA` | 502 | qualquer outra falha do provedor: `5xx`, prazo, rede, redirecionamento, resposta inesperada |
 | `AVISO_DESATUALIZADO` | 409 | **C3b:** o aceite veio com uma versão do aviso que não é a atual (o app tem o texto velho) |
+
+Fora desta lista, dois códigos do contrato geral aparecem nestas rotas (**C3-correções**): `CONFLICT`
+(`409`) no `PUT` da chave cuja conta apagou os dados enquanto o provedor respondia, e `FORBIDDEN` (`403`)
+no `GET` dos modelos de outra origem. O `409` quer dizer "releia o estado" (`GET /dictation`) e tente de
+novo; o `403` nunca acontece com o `fetch` do app, que é da própria origem. A mensagem do servidor não
+vai à tela.
 
 A lista inteira do ditado no celular (a da ADR-021, "A rota") ainda ganha, na C5b, `UM_POR_VEZ`,
 `OCUPADO`, `FORMATO`, `SEM_FALA` e `APAGADO`, e o status dos que a ADR deixa para ela.

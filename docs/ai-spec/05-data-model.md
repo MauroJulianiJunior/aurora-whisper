@@ -410,6 +410,24 @@ e nenhuma guarda áudio (o `schema_test.go` confere).
   ficam nos backups (cerca de 30 dias) e no banco da restauração (7 dias): a tela manda revogar a chave
   antiga no provedor (ADR-021, "As chaves").
 
+  **A gravação da chave é conferida sob a trava da conta (C3-correções, 11-out-2026).** O `PUT` do app
+  lê o `sync_epoch` da conta antes de chamar o provedor (até 10 s), e a gravação
+  (`GravarChaveDeIAConferindo`, nos dois Stores) acontece numa transação que trava, nesta ordem, **a
+  linha do usuário** (`FOR NO KEY UPDATE`, a mesma trava do aceite e do revogar) e **o contador de sync**
+  (`FOR NO KEY UPDATE`, a mesma do primeiro comando do "apagar meus dados"), e só então confere de novo o
+  epoch (`ErrEpochChanged`) e o aceite em aberto, da versão atual do aviso, que cobre o provedor
+  (`ErrSemAceite`; `Aceite.Cobre`). Sob o `READ COMMITTED`, quem espera uma trava vê, ao acordar, o que a
+  transação que a segurava confirmou. Assim a chave **nunca sobrevive** a um "apagar meus dados" nem a um
+  revogar, nem aos que terminam durante a chamada ao provedor: um deles que esteja no meio faz a gravação
+  esperar (e então a recusa), ou termina depois dela e apaga a chave que ela gravou. Gravar a chave não
+  passa pelo contador do histórico (não gasta `last_seq`, não gera evento). O `GravarChaveDeIA` sem
+  condição continua existindo só para montar os testes; o servidor usa o conferido.
+
+  **A ordem do "apagar meus dados"** apaga os aceites **antes** das chaves (`pgstore.apagarDaConta`): o
+  revogar trava o aceite e depois apaga as chaves, e se o apagar fizesse o contrário os dois se
+  esperariam (deadlock, `40P01`, que o Postgres desfaz abortando o apagar). Um teste do `pgstore`
+  (`TestPostgres_RevogarEApagarNaoSeTravam`) segura o revogar entre as duas coisas e lança o apagar.
+
 - **As preferências do ditado no celular** (`dictation_settings`, a 0018; **C3b, 11-out-2026**): uma
   linha por conta (PK `user_id`), gravada inteira a cada `PUT`. Moram só na nuvem e **nunca descem aos
   PCs** (as preferências do PC continuam no PC; não é a `UserSettings`). Sem a linha, a conta tem os

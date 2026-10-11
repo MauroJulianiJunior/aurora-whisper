@@ -56,7 +56,10 @@
 - **O servidor de teste (F4, 05-out-2026).** `aurora-whisper-server teste`, que só existe no binário com
   a build tag `logindeteste`, lê só `PAINEL_DIR` e, opcional, `HTTP_ADDR` (padrão `127.0.0.1:8080`,
   só loopback): guarda tudo na memória, não tem o Google nem o Postgres, e gera as duas chaves dentro
-  do processo, a cada subida, sem nunca imprimi-las. O atalho é `scripts/nuvem-local-teste.ps1`; o
+  do processo, a cada subida, sem nunca imprimi-las. **ADR-021 (C3-correções):** gera também a chave
+  de cifra das chaves da IA (a terceira, aleatória, só do processo) e usa um provedor de modelos de
+  mentira, sem rede, para as rotas `/api/v1/dictation` e `/api/v1/ai-keys` existirem no `pnpm dev`
+  (ver "A chave de cifra das chaves da IA", abaixo). O atalho é `scripts/nuvem-local-teste.ps1`; o
   roteiro, `docs/teste-manual-nuvem-f4.md`.
 - **O `serve` (F3, 05-out-2026).** `aurora-whisper-server serve` lê as variáveis acima. Uma que falta
   ou está errada encerra com saída 2 e uma linha `serve: <VARIÁVEL>: ...` que diz o que está errado,
@@ -120,8 +123,19 @@
   cifra ao mesmo tempo ficam fora. Ela **nunca entra no banco nem no backup**, e não tem cópia fora da
   VPS (escolha menor 11): perdê-la faz cada pessoa colar a chave de novo. Na VPS, quem a cria é o
   `deploy/scripts/criar-chave-de-cifra.sh` (`deploy/README.md`), com a saída suprimida; o compose a
-  monta em `/run/secrets/ai-keys-secret` a partir da C5c. O servidor de teste do PC (`teste`) não a
-  tem: lá, as rotas do ditado no celular são `404`.
+  monta em `/run/secrets/ai-keys-secret` a partir da C5c.
+  **O servidor de teste do PC** (`teste`, só com a build tag `logindeteste`) não lê `AI_KEYS_SECRET`
+  nem o `_FILE`: cria um cofre **por processo**, com uma chave de cifra aleatória (32 bytes, gerada a
+  cada subida como o `SESSION_SECRET` dele, nunca impressa, nunca em arquivo), e o provedor de modelos é
+  de mentira (`modelosDeTeste`, em `cmd/server/teste.go`): devolve uma lista fixa por provedor e não faz
+  chamada de rede. Uma chave que começa com `recusada`, `sem-credito` ou `fora-do-ar` faz o provedor de
+  mentira recusar a chave, ficar sem crédito ou cair (`PROVEDOR_RECUSOU_CHAVE`, `PROVEDOR_LIMITE`,
+  `PROVEDOR_FORA`), para a tela mostrar cada erro sem rede. As chaves e o aceite moram na memória do
+  processo e somem com ele. Assim as rotas do ditado no celular respondem no `pnpm dev` em vez de `404`.
+  **Nada disso existe no build normal:** o cofre aleatório e o provedor de mentira estão num arquivo que
+  só compila com a tag, o `serve` só sobe as rotas com `AI_KEYS_SECRET_FILE` e fala com os provedores de
+  verdade (`server.ModelosPelaRede`), e `cmd/server/teste_off_test.go` (que roda sem a tag) lê o código
+  e falha se um arquivo do build normal declarar um deles.
 - **O `healthcheck` (F11c).** `aurora-whisper-server healthcheck` faz `GET` no `/api/v1/health/live`
   em `127.0.0.1` (ou no loopback de `HTTP_ADDR`), na porta de `HTTP_ADDR`, com prazo de 3 s, sem proxy e
   sem seguir redirecionamento, e sai com 0 ou 1 (nunca 2, que o Docker reserva): a imagem não tem shell
