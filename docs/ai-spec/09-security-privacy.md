@@ -3,8 +3,8 @@
 ## Dados
 | Dado | Classificação | Persistência | Retenção |
 |---|---|---|---|
-| Texto | Confidencial | SQLite; no Postgres **só depois que quem usa conecta a nuvem**, legível no servidor na v1 (ADR-019) | 6m, pela data do ditado; o backup da nuvem o guarda até a cópia girar |
-| Áudio | Sensível efêmero | RAM | tentativa |
+| Texto | Confidencial | SQLite; no Postgres **só depois que quem usa conecta a nuvem**, legível no servidor na v1 (ADR-019). O texto do ditado do celular nasce na nuvem, depois do aceite dela (ADR-021) | 6m, pela data do ditado; o backup da nuvem o guarda até a cópia girar |
+| Áudio (do PC) | Sensível efêmero | RAM | tentativa. Nunca sai do PC |
 | Contexto UIA | Sensível efêmero | RAM | resolução |
 | Dictionary/corrections | Confidencial | SQLite/Postgres; **hoje o `dicionario.json` local, em texto, na pasta de dados** (ADR-017; ADR-018: `%LOCALAPPDATA%\AuroraWhisper`, ou ao lado do executável no modo portátil), onde o painel grava o que aprende | até exclusão |
 | Email/google_sub/nome (`display_name`, o `name` do Google; o `avatar_url` existe na tabela e nunca é preenchido) | Pessoal | Postgres | vida da conta: o "apagar meus dados" **não** apaga o cadastro (dossiê de LGPD, `docs/lgpd-dossie.md`, decisão 2) |
@@ -14,6 +14,11 @@
 | Provider keys | Secreto | server-side | operação |
 | Chave de API do provedor de IA de quem usa | Secreto | Gerenciador de Credenciais do Windows (Agent) | até quem usa apagar |
 | Texto ditado enviado ao provedor de IA escolhido (só no Polish, com a chave de quem usa) | Confidencial; sai da máquina | nenhuma no Agent; o provedor pode reter | até 30 dias no provedor (ADR-016) |
+| Voz do ditado no celular (ADR-021) | Sensível efêmero; **sai do aparelho** | só em memória: no app (uma variável, até o envio dar certo ou a pessoa descartar) e na API (uma variável do handler, durante o pedido). Nunca em disco, swap, log, erro ou resposta | descartada ao fim. No provedor escolhido, o que a documentação dele diz (ver "Ditar no celular") |
+| Chave de API da pessoa para ditar no celular (ADR-021) | Secreto | Postgres, **cifrada** (AES-256-GCM, subchave por HKDF); a chave de cifra é um arquivo do servidor (`AI_KEYS_SECRET_FILE`), fora do banco e do backup | até a pessoa trocar, remover, desligar o ditado ou apagar os dados. A cópia antiga, cifrada, fica nos backups (cerca de 30 dias) e no banco anterior da restauração (7 dias) |
+| Aceite e preferências do ditado no celular (ADR-021) | Pessoal | Postgres (`dictation_consents` e `dictation_settings`); nunca descem aos PCs | a vida da conta; o "Apagar meus dados" os apaga |
+| Termos do aprendido enviados como dica (ADR-021) | Confidencial; sai da máquina | nenhuma (a dica é montada a cada ditado); só com o interruptor ligado | a chamada ao provedor; no provedor, como a voz |
+| Desfecho pago e não gravado (ADR-021) | Confidencial | memória da API, por `(user_id, id)`: o texto que seria gravado, o modo, o provedor e o modelo | 10 min, o reinício ou a mudança do epoch da conta; nunca em log |
 
 ## Threat model
 | ID | Ameaça | Mitigação |
@@ -23,8 +28,8 @@
 | THR-003 | device token theft | Credential Manager + revoke |
 | THR-004 | IDOR | user da sessão |
 | THR-005 | CSRF | SameSite + CSRF. **ADR-019:** `http.CrossOriginProtection` (só `Sec-Fetch-Site` `same-origin` ou `none`) em todo pedido que não é `GET`/`HEAD`, porque o `SameSite=Lax` não protege de um serviço "same-site" no mesmo domínio; nenhum `GET` muda estado, fora o callback do Google (protegido pelo `state` de uso único e pelo cookie `__Host-pre`); nenhum CORS |
-| THR-006 | provider secret no client | gateway. Exceção (ADR-016): a chave de quem usa (BYOK) fica no Agent, no Gerenciador de Credenciais; o risco dela é o THR-016 |
-| THR-007 | áudio/contexto em logs | policy + tests |
+| THR-006 | provider secret no client | gateway. Exceção (ADR-016): a chave de quem usa (BYOK) fica no Agent, no Gerenciador de Credenciais; o risco dela é o THR-016. **ADR-021:** a chave que a pessoa cola no app do celular não fica no cliente: vai ao servidor, que a guarda cifrada e só devolve o fim dela; o risco é o THR-027 |
+| THR-007 | áudio/contexto em logs | policy + tests. **ADR-021:** vale também para a API e para o ditado do celular: o áudio, a chave da pessoa, o texto ditado, a dica, o `Ditado-Id` e o corpo de erro do provedor nunca vão a log, a mensagem de erro, a resposta nem ao `/tmp`. O log de acesso fica como é (método, padrão da rota, status, ms e bytes), e a linha `ditado:` traz só contagens e códigos (duração, fala, bytes, provedor, modelo, desfecho, desfecho do Polish, termos na dica, ms do provedor). Canário de áudio e de chave cobre log, erro, resposta e `/tmp` (AC-068, TEST-017) |
 | THR-008 | prompt injection via contexto | tratar contexto como dado |
 | THR-009 | Polish muda sentido, ou obedece à ordem que foi ditada | raw/final + opt-in + o ditado vai ao modelo como dado (JSON) + oito guardas locais que devolvem o texto do Smart: a saída só pode ser a entrada com sinais e com algumas palavras a menos, nunca com palavra trocada ou acrescentada, número ou sigla alterado, nem palavra que virou toda maiúscula (ADR-016) |
 | THR-010 | malicious update | TLS + hash/signature |
@@ -38,11 +43,17 @@
 | THR-018 | alias aprendido errado: uma variante de palavra comum passa a trocar texto certo em todo ditado futuro, em qualquer aplicativo (o Smart aplica alias sem olhar contexto) | só com o clique de quem usa (AC-022): nunca sozinho no PC onde a pessoa aprende; desde a F8 (D2), os outros PCs aplicam o par sem clique, pelo sync, com as mesmas checagens (abaixo); o aviso diz o efeito e quantos ditados da própria pessoa já têm a palavra; só troca curta de termo (até 4 palavras e 30 letras), nunca acento ou maiúscula sozinhos, número ou palavra de ligação; o Agent refaz as checagens contra o bruto do ditado; Desfazer a um clique. Risco residual aceito: o dano existe até o Desfazer (ADR-017). **Com o sync (ADR-019):** a restrição e o domínio viajam com o par, e o PC que recebe refaz as checagens; o que não vale ali fica "não aplicado neste PC". **F8 (07-out-2026; ADR-019, "Decisões da F8"):** o clique é no PC de origem (D2): o par chega sozinho aos outros PCs, sem clique lá, e um par ruim se espalha. O PC que recebe se defende: as integridades do Aprender; o "agiria" em cada domínio onde o par vai agir, com a restrição dele; a palavra comum (`learning.GrafiaArriscada`); nunca alargar (a troca nunca vale em mais lugares do que na origem: o par restrito vai para `alias_restrito` ou fica de fora); o domínio tem de existir ali; a palavra só é criada sem domínio, com prioridade 50 e só pela troca; o aplicador nunca sobrescreve uma mudança daqui que não subiu; o que a pessoa pôs à mão nunca sai por um desfazer remoto. O Desfazer, num PC ou no celular, vale em todos (D4: o desfazer vence). Risco residual: o dano existe em todos os PCs até o Desfazer |
 | THR-019 | phishing no pareamento: alguém manda o link de aprovação, e quem está logado aprova um PC alheio | retorno a `127.0.0.1` com PKCE (RFC 8252, §7.3), sem consulta repetida: o código sai para o PC de quem aprovou e só vale com o verificador do Agent que começou; aprovar é `POST`; a página mostra o nome do PC e o código de conferência e avisa para só aprovar se a pessoa clicou agora (ADR-019). **F6:** o desafio fica na busca da troca (um verificador errado não queima o `code`); o `state` errado não consome o pedido do PC, e o certo o consome antes da rede; o PC monta o endereço que abre, e a página da nuvem só navega para `http://127.0.0.1:<porta>/nuvem/retorno` |
 | THR-020 | qualquer conta Google entrar na nuvem (OAuth na internet, código aberto) | lista `CONTAS_PERMITIDAS`; `sub` fixado no primeiro login; mesmo e-mail com outro `sub` recusado; conta fora da lista não cria nada; login de teste só por build tag, nunca por configuração (ADR-019) |
-| THR-021 | texto ditado guardado no celular, ou casca velha servida pelo service worker | o service worker só guarda a casca (`/assets` e a navegação, rede primeiro), nunca `/api`, `/auth` ou `/device`; cache com versão; `no-store` na API; o painel local nunca registra service worker (ADR-019). **F5:** a casca é gravada só no install, sem `put` depois (nada que chega da rede entra no cache), e sem navigation preload (que pediria duas vezes a volta de uso único do Google); o Agent responde `404` em `/sw.js` |
+| THR-021 | texto ditado (e, com a ADR-021, áudio) guardado no celular, ou casca velha servida pelo service worker | o service worker só guarda a casca (`/assets` e a navegação, rede primeiro), nunca `/api`, `/auth` ou `/device`; cache com versão; `no-store` na API; o painel local nunca registra service worker (ADR-019). **F5:** a casca é gravada só no install, sem `put` depois (nada que chega da rede entra no cache), e sem navigation preload (que pediria duas vezes a volta de uso único do Google); o Agent responde `404` em `/sw.js`. **ADR-021:** o áudio do ditado também não é guardado: nada em `IndexedDB`, Cache ou `localStorage` (o `bundle.test` recusa), e o gravador só existe no build da nuvem. Não verificado: o `Blob` do `MediaRecorder` pode ser paginado em disco pelo Chrome (ver "Riscos aceitos", abaixo) |
 | THR-022 | texto ditado no log de acesso de um proxy | a busca vai no corpo de um `POST`, nunca na URL; o log do servidor tem só o padrão da rota (ADR-019). Residual: o `code` e o `state` do callback do Google passam na URL (uso único, minutos) |
 | THR-023 | texto legível no servidor e no backup | Postgres sem porta publicada; HTTPS terminando no servidor, sem CDN de terceiro; backup cifrado com chave só do dono; retenção também no backup (o giro). Cifra ponta a ponta: depois (ADR-019, resposta 4) |
 | THR-024 | dado apagado ressuscitar a partir de um PC desligado, de um backup restaurado ou depois do "apagar meus dados" | lápides (que vivem a janela mais 24 h), `gone`, `sync_epoch` e o recomeço do epoch novo; retenção pela data do ditado, decidida linha a linha; o "apagar meus dados" revoga os aparelhos (ADR-019). Sem `410` por marca d'água (F9, D2): o `gone` impede o ressuscitar, e o PC parado só perde a lápide de um ditado com mais de 6 meses, que ele apaga pela retenção dele (F10, com o OK de quem usa) ou guarda (sem o OK) |
 | THR-025 | token do PC roubado | só serve ao sync, ao `/me` e ao próprio aparelho, nunca ao CRUD, às sessões ou ao "apagar meus dados"; HMAC no servidor; revogar pela lista de aparelhos (ADR-019). **F6:** vence com 180 dias sem uso; o token não aprova pedido, não lista nem revoga outro aparelho (`403`); um alvo no Gerenciador por modo, para o `bin\` (conta de teste) e o instalado nunca dividirem a credencial |
+| THR-026 | a voz do ditado do celular (ADR-021) sai do aparelho: passa pela memória da API, vai a um provedor escolhido pela pessoa, que não diz processar no Brasil, e pode ser retida lá; quem toma a VPS a ouve em trânsito | o aceite específico antes do microfone (THR-030); só o provedor que a pessoa escolheu, sem troca automática; a voz só em memória, descartada ao fim, nunca em disco, swap, log ou resposta (`read_only`, `memswap_limit` igual ao `mem_limit`, `ulimits: core: 0`, canário); HTTP/1.1, sem seguir redirecionamento, sem repassar o corpo de erro. Residual aceito: a retenção no provedor (o que a documentação dele diz; o servidor não confere se a retenção zero está ligada), quem tem a raiz da VPS, o proxy da entrada (que não é nosso e segura pedaços do corpo na memória dele) e o `Blob` do `MediaRecorder` no Chrome |
+| THR-027 | vazamento da chave de API que a pessoa guarda na nuvem (ADR-021) | AES-256-GCM com subchave por HKDF e AAD preso ao usuário, ao provedor e ao id da chave de cifra; a chave de cifra num arquivo `*_FILE`, nunca no banco nem no backup; o app só vê `configurada` e o `final`; nunca em resposta, log, erro, URL ou JSON malformado (frase fixa no erro de decodificação); decifrada só durante a chamada. **Não protege** de quem tem a raiz da VPS (lê o arquivo e o banco). As cópias antigas, cifradas, ficam nos backups e no banco da restauração; a tela manda **revogar a chave antiga no provedor** |
+| THR-028 | a dica leva ao provedor os termos do aprendido, que podem ser nomes de clientes ou de terceiros, e pode induzir um termo que ninguém disse (ADR-021) | desligada por padrão até a C8 medir; o interruptor é da pessoa; só os termos distintos, sem pares presos a um domínio, até 140 runas; a folha do aceite diz que os termos podem levar nomes de terceiros; a OpenAI avisa que as palavras-chave são só dicas |
+| THR-029 | sessão roubada, ou um defeito do app, gasta o dinheiro da pessoa no provedor (ADR-021) | limites por conta, em memória: 1 de cada vez, 10 por minuto, 200 por dia, 3 ao mesmo tempo no total; 10 por minuto nas rotas da chave; sem fala não se envia (o app mede a fala); o teto de gasto é da pessoa, com uma chave só para o celular e limite de gasto no provedor. Um ditado de 120 s custa centavos (ADR-021, "Riscos") |
+| THR-030 | voz, dica ou texto saírem sem o aceite de quem dita, ou depois de revogado (ADR-021) | sem aceite vigente que inclua o provedor: o microfone não abre, a chave não é pedida e o servidor recusa (`403`, `SEM_ACEITE`); o aceite é gravado no servidor, por conta, com a data, a versão do aviso e os provedores; a rota confere de novo antes do Polish e antes de gravar; "Apagar meus dados" é conferido dentro do `Store.Create` (epoch), sem janela. Residual: uma janela de milissegundos entre a conferência do aceite e a gravação |
+| THR-031 | o microfone fica mudo (tela apagada, ligação, app fora da frente) e o provedor inventa frases num fim mudo (ADR-021) | Wake Lock; o app para quando a página sai da frente ou a faixa do microfone fica muda ou acaba (`mute` e `ended`), envia o que gravou se tiver fala e avisa; sem fala bastante nada é enviado; o filtro de `no_speech_prob` do servidor, quando o modelo devolve o campo. No passo 1 não existe ditado com a tela apagada |
 
 ## Hook policy
 - nunca registrar sequências de teclas;
@@ -93,7 +104,9 @@ de API do provedor de IA"; a fonte da verdade é `internal/agent/chaves`, `inter
 É a chave que **quem usa** cola no painel (OpenAI ou Anthropic), para o modo Polish (etapa 2;
 ADR-016). Não é
 chave do projeto: a de "Provider keys" acima é do operador da cloud e fica no servidor (THR-006). O
-projeto vai ser aberto, e cada instalação usa a própria chave.
+projeto vai ser aberto, e cada instalação usa a própria chave. **Esta seção é da chave do PC, que nunca
+sai do PC** (ADR-021). A chave que a pessoa cola no app do celular para ditar é outra: fica cifrada no
+servidor, e está em "Ditar no celular: o que sai do aparelho", mais abaixo.
 
 - **Onde mora:** no Gerenciador de Credenciais do Windows, credencial genérica
   (`CRED_TYPE_GENERIC`), alvo `AuroraWhisper/<provedor>`. O Windows a cifra com a chave do usuário
@@ -138,6 +151,16 @@ que quem usa escolheu, com a chave dele. O contrato da chamada está em `06-api-
 nuvem de quem usa: ver "Nuvem: o que sai da máquina", abaixo. Nada disto muda o que o Polish manda
 ao provedor.
 
+**ADR-021 (10-out-2026): o Polish também roda no celular, e lá quem chama o provedor é o servidor.** O
+que vai ao provedor é o mesmo (o texto do Smart, com 4 palavras ou mais; o prompt fixo; o nome do
+modelo; a chave, no cabeçalho), com as mesmas travas e o mesmo prazo (`prazoPolish`, de 3,5 s a 8 s).
+Muda o resto: a chave vem do cofre cifrado do servidor (e não do Gerenciador de Credenciais), o texto
+que vai é o do **Smart da conta** (sem o `dicionario.json` do PC, nem os pares presos a um domínio), o
+Polish do celular **começa desligado** e só liga com o aceite do provedor do Polish (`SEM_ACEITE`
+antes de chamar). O campo protegido não se aplica: o celular não escreve em outro aplicativo (a
+escrita em outro app e o campo de senha são do passo 2, e são parada própria). O que o provedor do
+Polish diz sobre retenção abaixo vale para os dois. Ver "Ditar no celular: o que sai do aparelho".
+
 - **O que sai:** o texto final do Smart (não o bruto do ASR), só com 4 palavras ou mais; o prompt
   fixo (`polish-ptbr@1.0.2`); o nome do modelo; e a chave, no cabeçalho.
 - **O que nunca sai:** áudio; contexto de janela (nome do app, domínio, título, texto de perto);
@@ -160,12 +183,14 @@ ao provedor.
   Polish.
 - **Retenção no provedor** (fontes oficiais, pesquisa de 29-set-2026; nenhuma chamada feita):
   - OpenAI: não treina com dados da API sem opt-in; os logs de abuso ficam até 30 dias e podem
-    conter prompts e respostas; mandamos `store: false`.
+    conter prompts e respostas; mandamos `store: false`. (A página de dados da API foi relida em
+    10-out-2026 para o ditado do celular e diz o mesmo: `docs/lgpd-dossie.md`, Anexo B. A da
+    Anthropic não foi relida nessa data.)
   - Anthropic: não treina sem permissão expressa. As duas fontes oficiais divergem sobre a
     retenção; **assume-se até 30 dias**.
   - Zero Data Retention é por organização e não vale para uma chave pessoal.
-- **Texto da tela** (`08-ui-ux-spec.md`, Configurações, Privacidade; na tela desde a S5, com um
-  teste que confere a frase palavra por palavra): "No modo Polish, o texto
+- **Texto da tela do PC** (`08-ui-ux-spec.md`, Configurações, Privacidade; na tela desde a S5, com um
+  teste que confere a frase palavra por palavra; o texto do app da nuvem é outro, abaixo): "No modo Polish, o texto
   ditado (nunca o áudio nem o que está nas outras janelas) vai ao provedor de IA escolhido, com a
   sua chave; OpenAI e Anthropic podem guardá-lo por até 30 dias e dizem não usá-lo para treinar
   modelos."
@@ -304,9 +329,12 @@ ADR-019, "Decisões da F3"). O que vale, e onde cada coisa é provada (a suíte
 - **O que sai:** de cada ditado, texto bruto e final, data, status, lixeira, modo, aparelho de origem
   e os metadados do ASR que o histórico mostra; o aprendido (par curto, termo, restrição, nome do
   domínio); nome, plataforma e versão do PC.
-- **O que nunca sai:** áudio; contexto de janela (app em foco, título, texto de perto; o
-  `target_app` não existe na nuvem); a chave do Polish; os logs; o mapa de domínios para
-  executáveis; as preferências.
+- **O que nunca sai:** o áudio **do PC**; contexto de janela (app em foco, título, texto de perto; o
+  `target_app` não existe na nuvem); a chave do Polish **do PC**; os logs; o mapa de domínios para
+  executáveis; as preferências **do PC**.
+- **O que o celular manda é outro caso (ADR-021):** a voz de cada ditado, a chave que a pessoa cola no
+  app, o aceite e as preferências do ditado. Isso não sai do PC nem passa por esta lista: está em
+  "Ditar no celular: o que sai do aparelho", abaixo, e só existe depois do aceite específico dela.
 - **Na primeira conexão:** o Agent mostra quantos ditados vão subir (os dos últimos 6 meses, sem a
   lixeira) e faz uma cópia do banco antes de enviar. **F7c (06-out-2026):** só com o clique em
   **Enviar o histórico** (D1); o que veio de outro PC nunca sobe deste (D2); a cópia é
@@ -334,10 +362,172 @@ ADR-019, "Decisões da F3"). O que vale, e onde cada coisa é provada (a suíte
   pré-condição do deploy (abaixo; o dossiê é `docs/lgpd-dossie.md`).
 - **Revogar ou desconectar** não apaga nada no PC: o Agent continua funcionando localmente.
 
+## Ditar no celular: o que sai do aparelho (ADR-021)
+Acrescentado em 10-out-2026 (D0 da ADR-021). **É o desenho aprovado, e ainda não está implementado**: o
+código vem nas subfatias C1 a C7 da ADR, e cada afirmação abaixo só vale como atendida depois do teste
+que a ADR lista (os ACs são o AC-065 a AC-079). **Nenhum áudio real sai do aparelho antes do OK do
+Mauro na política e no dossiê reescritos** (`docs/politica-de-privacidade.md`, que é o modelo, e
+`docs/lgpd-dossie.md`). O contrato da rota está em `06-api-contract.md`.
+
+É a **primeira vez que a voz sai da máquina de quem dita**. Para o **PC**, a regra "o áudio não sai do
+PC" continua verdadeira e é a de sempre. O celular é um caminho à parte, opcional, que só começa depois
+do aceite específico da pessoa (decisão H da ADR-021).
+
+**O caminho.** O app grava a voz em webm/opus, na memória, e a envia à rota nova
+`POST /api/v1/dictations`, com a sessão do navegador. O servidor confere o aceite, as preferências, a
+chave e os limites **antes de ler o corpo**, depois lê a voz para a memória, a manda ao provedor que a
+pessoa escolheu (OpenAI ou Groq), com a chave dela, e descarta. O texto passa pelo `Colapsar` e pelo Smart
+da conta e, se a pessoa ligou, pelo Polish (OpenAI ou Anthropic, com a chave dela). O ditado é gravado
+pelo ponto único de gravação (`source_platform` `web`, `device_id` nulo) e desce aos PCs pelo sync.
+
+**O que sai, e para quem:**
+
+| Para | O quê | Quando |
+|---|---|---|
+| A nuvem (a VPS) | a voz de cada ditado, **só em memória, durante o pedido, descartada ao fim**; o texto, que vira ditado no histórico como os do PC; a chave da pessoa, cifrada; o aceite e as preferências | a chave, depois do aceite; a voz, a cada ditado |
+| O provedor de transcrição (OpenAI ou Groq, escolhido pela pessoa, com a chave dela) | a voz; com a dica ligada, os termos do aprendido (que podem ser nomes de clientes ou de terceiros) | a cada ditado, com o aceite |
+| O provedor do Polish (OpenAI ou Anthropic) | o texto do Smart, com 4 palavras ou mais | só com o Polish ligado e aceito |
+| Os provedores, ao guardar ou trocar a chave | a própria chave, para o teste (a lista de modelos) | depois do aceite |
+
+**O que nunca vai:** a chave **do PC** (ela continua no PC); o áudio do PC; o contexto de outras janelas
+(o app do celular nem o enxerga); o dicionário completo; o mapa de domínios.
+
+**Quem é quem (proposta, como no dossiê).** Quem hospeda a nuvem é o controlador (art. 5º, VI da
+Lei 13.709/2018); quem dita é o titular (art. 5º, V), e a voz e os termos podem ser de **outros
+titulares** (clientes, pessoas perto do microfone). Os provedores são operadores (art. 5º, VII). Com
+BYOK, o contrato com o provedor é o da conta da pessoa. **A voz não é usada para identificar a pessoa**:
+nenhum código a compara com uma amostra nem a guarda. Se fosse, ela poderia ser dado biométrico
+sensível (art. 5º, II, "dado genético ou biométrico, quando vinculado a uma pessoa natural"), e o
+tratamento pediria o art. 11.
+
+### A voz é efêmera, e o que isso promete
+- **No app:** os bytes ficam só numa variável, até o envio dar certo ou a pessoa descartar, e as
+  referências são soltas no fim. Nada em `IndexedDB`, Cache ou `localStorage`. **O que não se garante:** o
+  `MediaRecorder` entrega um `Blob`, e o Chrome pode paginar `Blob`s em disco acima de um limite de
+  memória. Isso não foi verificado para o tamanho de um ditado (cerca de 0,5 MB para 120 s).
+- **Na API:** não há multipart nem arquivo temporário (o corpo é cru). O corpo é lido com
+  `http.MaxBytesReader`, o tipo vem dos primeiros bytes (o cabeçalho EBML do webm), nunca do
+  `Content-Type`, e os bytes ficam numa variável do handler que sai de escopo no fim, com sucesso ou erro.
+  Eles nunca entram em estrutura de vida longa (cache, pool, erro, pânico).
+- **Sem disco, swap nem core dump:** o contêiner da API é `read_only`; ganha `memswap_limit` igual ao
+  `mem_limit` e `ulimits: core: 0` (casos no `deploy/compose_test.go`). **O `memswap_limit` só vale se
+  o kernel da VPS contar a swap no cgroup**, e a C7 confere isso **antes do primeiro áudio** (o
+  `docker info` sem "No swap limit support" e o `memory.swap.max` do contêiner em `0`, lido no host).
+  Se não der `0`, para e pergunta.
+- **O proxy da entrada não é nosso:** ele pode segurar pedaços do corpo na memória dele, fora do
+  `memswap_limit`, e um middleware de buffering levaria ao disco um corpo acima de 1 MiB. O nosso router
+  não tem middleware, e o corpo fica perto de 0,5 MB. A C7 lê a configuração real (o `readTimeout`, o
+  `writeTimeout` e os middlewares do entrypoint) antes do primeiro áudio; **o proxy nunca é editado**.
+- **"Descartado ao fim", e não "apagado da memória":** o Go não zera a memória. A política diz
+  "descartado".
+- **No log:** ver "Logging proibido", abaixo. Nunca vão ao log o áudio, o texto, a chave, o id nem o
+  corpo de erro do provedor (a OpenAI devolve um pedaço da chave no `401`).
+
+### A chave da pessoa na nuvem
+Contrato: as rotas das chaves, no `06-api-contract.md`. Desenho: ADR-021, decisão G e "As chaves".
+
+- **A cifra:** AES-256-GCM (biblioteca padrão), com uma subchave derivada do arquivo por HKDF
+  (`aurora-whisper/ai-keys/v1`); o arquivo nunca é usado cru. O nonce é aleatório a cada gravação. Cada
+  linha guarda um id curto da chave de cifra (8 bytes de um HMAC dela, com outro rótulo), e o AAD prende o
+  texto cifrado ao usuário, ao provedor e a esse id. Trocar o arquivo leva toda linha com o id antigo a
+  `SEM_CHAVE`: a pessoa cola de novo. Manter duas chaves de cifra fica fora.
+- **A chave de cifra** é do servidor: um arquivo `AI_KEYS_SECRET_FILE` (64 caracteres em hexadecimal,
+  como os outros segredos), nunca no banco nem no backup. Sem o arquivo, as rotas não são montadas. Um
+  arquivo malformado impede a subida, sem mostrar o conteúdo.
+- **O que o app recebe:** `configurada` e o `final` (as regras de `chaves.Final`: no máximo 4
+  caracteres e nunca mais que um quarto da chave). A chave nunca volta inteira, nem a quem a colou. A
+  rota da chave **não** usa a mensagem do `decodeJSON`: qualquer erro de decodificação responde com uma
+  frase fixa.
+- **A validação** vem **depois do aceite**: as regras de `chaves.Validar` e um teste no provedor (a lista
+  de modelos).
+- **O que a cifra protege:** um dump ou backup do banco que vaze, uma leitura indevida do banco e o log
+  do Postgres. **O que não protege:** quem tem a raiz da VPS lê o arquivo da chave de cifra e o banco e
+  decifra tudo. O dossiê (seção 6) diz isso, e a saída num incidente é **revogar a chave no provedor**.
+- **O que fica para trás:** ao "Trocar" ou "Remover", a chave antiga, cifrada, fica nos backups (cerca
+  de 30 dias) e no banco `aurora_antes_AAAAMMDD` de uma restauração (7 dias). Se a chave de cifra vazar
+  depois, essas cópias se decifram. Por isso a tela manda **revogar a chave antiga no provedor**.
+- **A recomendação na tela:** uma chave só para o celular, com limite de gasto no provedor.
+
+### O aceite
+- **Quando:** no primeiro toque no microfone, antes de pedir a chave. Uma folha só, em destaque,
+  específica e separada das outras finalidades (art. 8º, §4º; art. 11, I, se a voz levar dado sensível;
+  art. 33, VIII, para a transferência internacional). O texto proposto está em
+  `docs/politica-de-privacidade.md`, "Texto proposto para o app".
+- **Onde fica:** gravado no servidor, por conta, com a data, a versão do aviso e os provedores aceitos.
+  Vale para qualquer aparelho da pessoa e para o app nativo do passo 2. Provar o consentimento é do
+  controlador (art. 8º, §2º).
+- **Quem confere:** o `PUT` da chave, o `PUT` das preferências e a rota de ditar (duas vezes, antes de
+  chamar o provedor e antes do Polish e de gravar).
+- **Pede de novo:** trocar de provedor, ligar o Polish com outro provedor, mudar o texto do aviso. Mudar
+  só o modelo não pede.
+- **Revoga:** "Desligar o ditado no celular" revoga o aceite e apaga as chaves (art. 8º, §5º).
+
+### O que o provedor diz (páginas lidas em 10-out-2026)
+Resumo; as fontes, o que cada página diz e o que **não** diz estão em `docs/lgpd-dossie.md`, Anexo B.
+O servidor **não tem como conferir** a conta da pessoa no provedor (se a retenção zero está ligada, se a
+residência de dados está fixada).
+
+| | OpenAI | Groq |
+|---|---|---|
+| Treino | a página de dados da API diz que, desde 1º-mar-2023, os dados enviados à API não são usados para treinar nem melhorar os modelos, salvo opt-in | a página de dados e a política de privacidade lidas não falam em treino com os dados dos clientes (a política remete esses dados ao contrato de serviço e ao DPA); o DPA limita o tratamento a prestar o serviço, em nome do cliente e conforme as instruções dele, e também não fala em treino |
+| Retenção | por padrão, registros de monitoramento de abuso por **até 30 dias**, que podem conter prompts e respostas. A tabela da mesma página mostra "nenhuma" retenção de abuso para `/v1/audio/transcriptions`, que é elegível à retenção zero (ZDR), mas o texto geral fala em até 30 dias. **A política assume até 30 dias**. ZDR e monitoramento modificado dependem de aprovação da OpenAI | por padrão não retém os dados de pedidos de inferência; pode registrar entrada e saída por **até 30 dias**, só para investigar falha de confiabilidade ou abuso, a menos que a conta ligue a retenção zero (ZDR) em Data Controls, que a página diz estar ao alcance de todos os clientes |
+| Onde processa | a residência de dados é uma opção de **projeto**: os EUA (processamento e armazenamento regionais) ou a Europa (exige aprovação de controles de retenção); a página manda falar com o comercial para saber da elegibilidade. A transcrição de áudio está na lista dos dois. **Sem a residência fixada, a página lida não diz o país.** O Brasil não aparece na página | os dados que ela retém ficam em buckets do Google Cloud **nos EUA**. **A página não diz onde a transcrição roda.** O DPA diz que a Groq pode transferir e tratar dados nos EUA e em outros países onde ela ou seus subprocessadores operam |
+
+**A política não afirma o que a página não afirma.** Ela escreve o que a documentação diz: para a
+OpenAI, "nos EUA ou na Europa, se o projeto da sua chave tiver a residência de dados fixada; sem isso, a
+documentação não diz em que país"; para a Groq, "o que ela guarda fica nos EUA; a documentação não diz
+onde a transcrição roda; o contrato prevê tratamento nos EUA e em outros países". E trata o envio como
+transferência internacional porque nenhum dos dois diz processar no Brasil.
+
+### A dica do aprendido
+Desligada por padrão até a C8 medir. Ligada, os termos distintos do aprendido da conta (sem os pares
+presos a um domínio, do mais recente ao mais antigo, até 140 runas) vão ao provedor de transcrição como
+`prompt`, a cada ditado, **qualquer que seja o conteúdo**. Eles podem ser nomes de clientes ou de
+terceiros. O ganho de 61,2% para 79,6% da Entity Accuracy foi medido no initial prompt do whisper.cpp
+local, **e não nos modelos da OpenAI nem no whisper da Groq**; a dica pode induzir o termo, e a própria
+OpenAI avisa disso para as palavras-chave. No PC o termo aprendido continua fora do prompt (ADR-017,
+ADR-020).
+
+### Tela apagada e segundo plano
+No Chrome do Android, com a tela apagada ou o app fora da frente, o microfone para ou fica mudo. **No
+passo 1 não existe ditado em segundo plano nem com a tela apagada.** O app pede o Wake Lock, para quando
+a página sai da frente ou a faixa do microfone fica muda ou acaba, envia o que gravou se tiver fala e
+avisa. A política diz isso (THR-031).
+
+### Limites e custo
+Em memória; zeram ao reiniciar (como os do login): 1 ditado de cada vez por conta, 10 por minuto, 200 por
+dia, 3 ao mesmo tempo no total, e 10 por minuto nas rotas da chave. A defesa principal contra gasto é da
+pessoa (uma chave só para o celular, com limite de gasto no provedor). O custo é da pessoa, na conta
+dela no provedor; o projeto não paga nada.
+
+### Riscos aceitos
+(Os da ADR-021, "Riscos aceitos", que tocam privacidade.)
+1. Quem tem a raiz da VPS ouve o áudio em trânsito e decifra as chaves.
+2. O país do processamento não está comprovado (Groq, sempre; OpenAI, sem a residência fixada).
+3. O servidor não confere se a retenção zero está ligada na conta da pessoa.
+4. O reenvio ainda paga de novo em três casos (o prazo de 20 s; o reinício; o desfecho pago que passou
+   dos 10 min), a centavos por ditado.
+5. No aparelho, "nunca em disco" não é garantido: o `Blob` pode ser paginado pelo Chrome.
+6. "Descartado ao fim", e não "apagado".
+7. A dica pode induzir termos, e o ganho na nuvem não foi medido.
+8. Uma sessão roubada gasta o dinheiro da pessoa, até os limites por conta.
+9. A revogação no meio do Polish deixa uma janela de milissegundos; o "Apagar meus dados" não (o epoch
+   é conferido dentro do `Create`).
+10. As chaves antigas ficam cifradas nos backups e no banco da restauração depois de "Trocar" ou
+    "Remover".
+11. O proxy da entrada segura pedaços do corpo na memória dele, fora do nosso `memswap_limit`.
+
+### Texto da tela
+O texto de Privacidade do app da nuvem e a folha do aceite estão propostos em
+`docs/politica-de-privacidade.md`, "Texto proposto para o app", **ainda não aplicados**; entram no app
+(C6b) com os testes que conferem as frases. O texto novo diz "a chave do PC continua no PC" e **não**
+traz a frase "Gerenciador de Credenciais", que o `bundle.test` recusa no build da nuvem.
+
 ## Áudio
 - RAM only;
 - sem temp;
-- backend stream (**depois**, ADR-019: na etapa 5 o áudio não sai do PC);
+- backend stream (**depois**, ADR-019: na etapa 5 o áudio **do PC** não sai do PC; o áudio do **celular**
+  vai à rota `/dictations` só em memória, ADR-021: ver "Ditar no celular: o que sai do aparelho");
 - sem body logging;
 - liberar em success/error.
 
@@ -355,6 +545,12 @@ ADR-019, "Decisões da F3"). O que vale, e onde cada coisa é provada (a suíte
 - transcript completo por default;
 - o texto enviado ao provedor do Polish e o que ele devolve, os `warnings` do modelo e o corpo de
   erro do provedor;
+- o ditado do celular, na API (ADR-021): o áudio; o texto (o do provedor, o do Smart e o do Polish); a
+  dica; a chave da pessoa, inteira ou em pedaço; o `Ditado-Id`; o corpo do pedido (inclusive um JSON
+  malformado que leve a chave); o corpo de erro do provedor (a OpenAI devolve um pedaço da chave no
+  `401`). O que vale: o log de acesso, com o método, o padrão da rota, o status, os ms e os bytes, e uma
+  linha `ditado:` só com contagens e códigos (duração, fala, bytes, provedor, modelo, desfecho, desfecho
+  do Polish, termos na dica, ms do provedor);
 - o aprendizado pelo painel (ADR-017): o evento só registra **contagens** (por exemplo, sugestões
   devolvidas, aprendidas e desfeitas, e as ocorrências de desfazer uma troca do próprio sistema, que
   só são contadas); nunca o texto, nem o "de" e o "para" da variante, nem o termo dono de uma
@@ -468,6 +664,14 @@ protegido"; ADR-011, nota de 29-set-2026).
   - As cópias `antes-do-dono`, `antes-da-nuvem` e `antes-dos-6-meses` ficam fora da retenção: o Agent
     **nunca** as apaga sozinho, e elas saem só pelo botão **Apagar as cópias** (F10e), com a pergunta
     antes. A cópia de um envio do histórico que ainda não terminou não pode ser apagada.
+- **Ditar no celular (ADR-021):** a **voz** não tem retenção: é descartada ao fim do pedido (no app, ao
+  fim do envio ou ao descartar). O texto do ditado do celular tem os mesmos prazos dos outros (6 meses
+  pela data do ditado; lixeira de 30 dias). A **chave da pessoa** fica até ela trocar, remover, desligar o
+  ditado ou apagar os dados; a cópia cifrada dela fica nos backups (cerca de 30 dias) e no banco anterior
+  de uma restauração (7 dias). O **aceite e as preferências** ficam pela vida da conta, e o "Apagar meus
+  dados" apaga as três tabelas (`ai_provider_keys`, `dictation_settings`, `dictation_consents`). O
+  **desfecho pago e não gravado** fica 10 min em memória. No **provedor**, vale o que a documentação dele
+  diz (a tabela de "Ditar no celular").
 - Exceção (ADR-017): a variante que o painel aprende é um trecho de até 4 palavras do que o ASR
   escreveu, gravado no `dicionario.json`. O dicionário persiste até exclusão, então a variante **não
   expira** com os 6 meses (nem com a lixeira) do ditado de onde veio; sai quando a pessoa a desfaz. A
@@ -598,6 +802,29 @@ cifrada fora do Brasil). O dossiê levanta duas lacunas que este documento não 
 dados" não apaga o cadastro (e-mail, identificador do Google e nome) e a nuvem não tem exportação.
 Numa instância nova, sem essa revisão o deploy com dado real não roda.
 
+**Ditar no celular (ADR-021, D0, 10-out-2026).** A voz, a dica e o Polish do celular são uma finalidade
+nova e um destinatário novo: a política e o dossiê foram reescritos (na política, o resumo e as seções
+3 a 13, mais a folha do aceite e os textos propostos para o app; no dossiê, as seções 1 a 7, e os
+Anexos B, com o que cada provedor diz e **não** diz, e C, com os artigos conferidos no texto da lei).
+Pontos que a revisão cobre:
+- a voz sai do aparelho, passa pela memória da VPS e vai a um provedor que a pessoa escolhe, em
+  linguagem simples e **antes** do primeiro áudio (a folha do aceite; art. 8º, §4º e art. 9º);
+- a **transferência internacional** da voz, que é legível (não cifrada pelo Aurora) e vai a um
+  provedor que trata dados nos EUA e, conforme a conta, na Europa (art. 5º, XV; art. 33). A hipótese
+  proposta é o inciso VIII (consentimento específico e em destaque, com informação prévia do caráter
+  internacional); a escolha é do responsável;
+- o item 4 do dossiê (dado de terceiros) **estendido à voz e à dica**: quem dita dado de cliente pode
+  ser operador dele (art. 39), e mandar a voz ou os termos a um provedor no exterior pode ir além do
+  que o cliente autorizou. **Na instância de referência, o Mauro confirmou em 10-out-2026 que dita dado
+  de cliente pelo celular às vezes**;
+- quem tem a raiz da VPS ouve a voz em trânsito e decifra as chaves da pessoa;
+- as chaves antigas, cifradas, nos backups e no banco da restauração.
+
+**Pré-condição do primeiro áudio real:** o OK do Mauro na política e no dossiê reescritos. Recomenda-se
+fechar antes as pendências L1 a L5 do dossiê (a região do bucket, a hipótese do art. 33 do backup, o
+contato de privacidade, exportar e o cadastro): somar uma segunda transferência internacional, agora de
+dado legível, antes de dar base escrita à primeira, piora a situação.
+
 ## Operações destrutivas
 [SECURITY][BLOCKER] Exigem aprovação:
 - purge manual massivo;
@@ -614,4 +841,10 @@ Numa instância nova, sem essa revisão o deploy com dado real não roda.
 - ligar os 6 meses no PC pela primeira vez (apaga ditados reais; ADR-019, F10): o OK é o clique de
   quem usa, depois da contagem; nenhum agente o dá, nem roda o Ligar, nem abre o `historico.db` do
   `bin\`;
-- apagar as cópias do banco ao lado dele (F10e): só pelo botão de quem usa, com a pergunta antes.
+- apagar as cópias do banco ao lado dele (F10e): só pelo botão de quem usa, com a pergunta antes;
+- mandar o **primeiro áudio real** do celular a um provedor (ADR-021): só depois do OK do Mauro na
+  política e no dossiê reescritos; a calibração da C6c e a medição da C8 também têm OK próprio;
+- gerar ou **trocar a chave de cifra** das chaves da nuvem (ADR-021): gerar é com ele, na VPS, com a
+  saída suprimida; trocar leva toda chave guardada a `SEM_CHAVE`;
+- colar a chave de API da pessoa: só no app, nunca no chat; qualquer **arquivo de áudio** (por exemplo,
+  para comparar com e sem a dica) é persistência de áudio e parada própria.

@@ -13,6 +13,12 @@ alternativa descartada "promover o termo novo ao prompt do ASR"); `03-acceptance
 (seção "Termos"); `08-ui-ux-spec.md` (a seção "Dicionário" em Configurações); e
 `13-implementation-plan.md` (TASK-019, fatias T0 a T4). **Não muda o núcleo** (ADR-007) e **cumpre
 o AC-022** (nada entra no dicionário sem a pessoa pedir: aqui ela mesma digita).
+**Nota de 10-out-2026 (ADR-021, ditar no celular):** a decisão 3 e a regra `DisputaOPrompt` (o termo
+`adicionado` e o `AliasOnly` do painel) valem para o **PC** e não mudam. No ditado do celular a dica
+é montada de outro jeito: o celular não tem as dicas "adicionadas" (elas ficam no `dicionario.json` de
+cada PC e não sobem), então o servidor monta a dica só com os termos distintos do aprendido da conta, sem
+os pares presos a um domínio, no mesmo orçamento de 140 runas (`dictionary.Vocabulario`). O interruptor
+é da pessoa e **começa desligado**. Ver a ADR-021, decisão E.
 
 ## O problema
 
