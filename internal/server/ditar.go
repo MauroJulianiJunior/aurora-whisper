@@ -124,6 +124,11 @@ func (c *Cloud) handleDitar(w http.ResponseWriter, r *http.Request) {
 	}
 	k := chaveDoDitado{usuario: p.UserID, id: id}
 	rc := http.NewResponseController(w)
+	// A guarda do andamento de que este pedido for dono: um pânico antes de ele
+	// encerrar o andamento ou entregá-lo ao trabalho solto devolve a vaga e o
+	// andamento (o pânico segue para o recuperar, que responde 500).
+	guarda := guardaDoDono{g: c.ditados}
+	defer guarda.soltar()
 
 	// avisoDoPrimeiro é o aviso do Polish do ditado que este pedido esperou: o
 	// reenvio o recebe junto com o ditado gravado.
@@ -167,10 +172,11 @@ func (c *Cloud) handleDitar(w http.ResponseWriter, r *http.Request) {
 			return
 		case o.regravar != nil:
 			// O provedor já cobrou este ditado, e a gravação falhou: só grava.
+			guarda.pegar(k, o.dono, o.regravar)
 			anotarMotivo(ctx, "regravar")
 			c.ditar(w, r, rc, trabalhoDoDitado{
 				k: k, a: o.dono, epoch: sit.Epoch, prefs: prefs, pago: o.regravar, fimDoCorpo: time.Now(),
-			})
+			}, &guarda)
 			return
 		}
 
@@ -221,6 +227,7 @@ func (c *Cloud) handleDitar(w http.ResponseWriter, r *http.Request) {
 			writeError(w, recusa.status, recusa.code, recusa.frase)
 			return
 		}
+		guarda.pegar(k, dono, nil)
 
 		// 7. A situação de novo, agora como dono do id: enquanto este pedido o
 		// for, ninguém mais grava o id, mas o primeiro com o mesmo id pode ter
@@ -229,6 +236,7 @@ func (c *Cloud) handleDitar(w http.ResponseWriter, r *http.Request) {
 		// pelo mesmo ditado. O epoch lido aqui é o que a gravação confere.
 		sit, err = c.cfg.Store.Situacao(ctx, p.UserID, id)
 		if err != nil || sit.Estado != cloudstore.IdNada {
+			guarda.largar()
 			c.ditados.desistir(k, dono)
 			switch {
 			case err != nil:
@@ -253,6 +261,7 @@ func (c *Cloud) handleDitar(w http.ResponseWriter, r *http.Request) {
 			if errors.As(err, &grande) {
 				d.status, d.code, d.frase, motivo = http.StatusRequestEntityTooLarge, codeTooLarge, fraseCorpoGrande, "corpo_grande"
 			}
+			guarda.largar()
 			c.ditados.concluir(k, dono, d, false, nil)
 			anotarMotivo(ctx, motivo)
 			responderDesfecho(w, d)
@@ -260,6 +269,7 @@ func (c *Cloud) handleDitar(w http.ResponseWriter, r *http.Request) {
 		}
 		if !pareceWebm(audio) {
 			d := desfecho{status: http.StatusUnsupportedMediaType, code: codeFormato, frase: fraseFormato, reprocessar: true}
+			guarda.largar()
 			c.ditados.concluir(k, dono, d, false, nil)
 			anotarMotivo(ctx, "formato")
 			responderDesfecho(w, d)
@@ -270,7 +280,7 @@ func (c *Cloud) handleDitar(w http.ResponseWriter, r *http.Request) {
 		c.ditar(w, r, rc, trabalhoDoDitado{
 			k: k, a: dono, epoch: sit.Epoch, prefs: prefs, audio: audio,
 			duracaoMs: duracao.Milliseconds(), falaMs: fala.Milliseconds(), fimDoCorpo: time.Now(),
-		})
+		}, &guarda)
 		return
 	}
 	anotarMotivo(ctx, "ocupado")
@@ -282,13 +292,15 @@ func (c *Cloud) handleDitar(w http.ResponseWriter, r *http.Request) {
 // responder. O trabalho segue se o celular cair (o pedido acaba), e grava o
 // ditado mesmo assim. O prazo de escrita da resposta é estendido a partir do fim
 // do corpo: o writeTimeout do servidor conta do fim dos cabeçalhos, e não
-// cobriria o corpo, o provedor, o Polish e a gravação.
-func (c *Cloud) ditar(w http.ResponseWriter, r *http.Request, rc *http.ResponseController, t trabalhoDoDitado) {
+// cobriria o corpo, o provedor, o Polish e a gravação. O andamento passa da
+// guarda do pedido ao trabalho, que o encerra.
+func (c *Cloud) ditar(w http.ResponseWriter, r *http.Request, rc *http.ResponseController, t trabalhoDoDitado, guarda *guardaDoDono) {
 	_ = rc.SetWriteDeadline(t.fimDoCorpo.Add(c.prazos.Resposta))
 	t.ctxDoPedido = r.Context()
 	saida := make(chan resultadoDoDitado, 1)
 	c.ditados.comecarTrabalho()
 	go c.rodarDitado(t, saida)
+	guarda.largar()
 	// O áudio é do trabalho agora: este pedido não o segura mais.
 	t.audio = nil
 	select {

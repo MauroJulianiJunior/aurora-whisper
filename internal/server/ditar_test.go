@@ -368,6 +368,85 @@ func TestRegistro_DesistirDevolveAVagaEAsFichas(t *testing.T) {
 	}
 }
 
+// A guarda do dono (o defer do handler): o pânico entre pegar a vaga e soltar o
+// trabalho encerra o andamento como o corpo que não chegou (a vaga volta, a
+// ficha não, quem espera olha de novo); o pânico de quem ia só regravar o pago
+// devolve o pago à memória com o prazo que ele tinha; e o andamento entregue ao
+// trabalho (largar) não é tocado.
+func TestRegistro_GuardaDoDono(t *testing.T) {
+	entrarEmPanico := func(guarda *guardaDoDono) {
+		defer func() {
+			if recover() == nil {
+				t.Fatal("o pânico de mentira não aconteceu")
+			}
+		}()
+		defer guarda.soltar()
+		panic("defeito de mentira")
+	}
+	g, clk := novoRegistroDeTeste(limitesDoDitado{porConta: 1, porMinuto: 10, porDia: 200, total: 3})
+	k := chaveDoDitado{"a", "1"}
+	dono, _, _ := g.entrar(k)
+	_, esperar, _ := g.entrar(k)
+	guarda := guardaDoDono{g: g}
+	guarda.pegar(k, dono, nil)
+	entrarEmPanico(&guarda)
+	<-esperar.pronto
+	if !esperar.desfecho.reprocessar || g.vagas != 0 || g.vagasPorConta["a"] != 0 || len(g.andamentos) != 0 {
+		t.Fatalf("o pânico do dono: %+v, %d vagas, %d andamentos", esperar.desfecho, g.vagas, len(g.andamentos))
+	}
+	if g.porMinuto["a"].fichas != 9 {
+		t.Fatalf("a ficha gasta voltou: %v", g.porMinuto["a"].fichas)
+	}
+	guarda.soltar() // de novo, sem andamento: nada
+	if d, _, r := g.entrar(chaveDoDitado{"a", "2"}); d == nil || r != nil {
+		t.Fatalf("a conta não pega a vaga depois do pânico: %+v", r)
+	}
+
+	// Quem ia só regravar o pago.
+	g, clk = novoRegistroDeTeste(limitesDoDitado{porConta: 1, porMinuto: 10, porDia: 200, total: 3})
+	novo := cloudstore.NewDictation{SourcePlatform: "web", RawText: "texto", FinalText: "texto", Mode: "smart", ASRProvider: "openai"}
+	d, _, _ := g.entrar(k)
+	g.concluir(k, d, desfecho{status: 500, code: codeInternal}, false, &pagoNaoGravado{epoch: "e", novo: novo, aviso: "prazo"})
+	clk.Advance(4 * time.Minute)
+	o := g.olhar(k, "e")
+	_, esperar, _ = g.entrar(k)
+	if o.regravar == nil || esperar != o.dono {
+		t.Fatalf("o regravar: %+v", o)
+	}
+	guarda = guardaDoDono{g: g}
+	guarda.pegar(k, o.dono, o.regravar)
+	entrarEmPanico(&guarda)
+	<-esperar.pronto
+	if !esperar.desfecho.reprocessar || len(g.andamentos) != 0 {
+		t.Fatalf("o pânico de quem regravava: %+v, %d andamentos", esperar.desfecho, len(g.andamentos))
+	}
+	if de := g.olhar(k, "e"); de.regravar == nil || de.regravar.novo.FinalText != "texto" || de.regravar.aviso != "prazo" {
+		t.Fatalf("o pago não voltou à memória: %+v", de)
+	} else {
+		guarda.pegar(k, de.dono, de.regravar)
+		entrarEmPanico(&guarda)
+	}
+	clk.Advance(6 * time.Minute)
+	g.mu.Lock()
+	n := len(g.pagos)
+	g.mu.Unlock()
+	if n != 0 {
+		t.Fatal("o pago que voltou à memória ganhou prazo novo: passou dos 10 minutos do primeiro")
+	}
+
+	// O andamento entregue ao trabalho: a guarda o larga, e o trabalho o encerra.
+	g, _ = novoRegistroDeTeste(limitesDoDitado{porConta: 1, porMinuto: 10, porDia: 200, total: 3})
+	dono, _, _ = g.entrar(k)
+	guarda = guardaDoDono{g: g}
+	guarda.pegar(k, dono, nil)
+	guarda.largar()
+	guarda.soltar()
+	if g.vagas != 1 || len(g.andamentos) != 1 {
+		t.Fatalf("a guarda mexeu no andamento entregue ao trabalho: %d vagas, %d andamentos", g.vagas, len(g.andamentos))
+	}
+	g.concluir(k, dono, desfecho{}, false, nil)
+}
+
 // O desligamento: espera os trabalhos soltos, e nenhum ditado novo pega vaga
 // nem começa um reenvio do pago.
 func TestRegistro_Desligamento(t *testing.T) {

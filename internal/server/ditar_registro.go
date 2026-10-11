@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"math"
+	"net/http"
 	"sync"
 	"time"
 
@@ -309,6 +310,40 @@ func (g *registroDoDitado) desistir(k chaveDoDitado, a *andamento) {
 	g.concluirTravado(k, a, desfecho{reprocessar: true}, false, nil)
 }
 
+// guardaDoDono acompanha o andamento de que um pedido é dono (pegou a vaga, ou
+// vai só regravar o desfecho pago) até o pedido encerrá-lo (concluir, desistir)
+// ou entregá-lo ao trabalho solto, que o encerra. É o defer do handler: um
+// pânico nesse trecho (o recuperar responde 500 e o processo segue) deixaria a
+// vaga e o andamento presos até o reinício, e quem espera o mesmo id, parado.
+type guardaDoDono struct {
+	g *registroDoDitado
+	k chaveDoDitado
+	a *andamento
+	// pago é o desfecho pago que o pedido ia regravar: volta à memória.
+	pago *pagoNaoGravado
+}
+
+// pegar: o pedido é dono do andamento a de k.
+func (d *guardaDoDono) pegar(k chaveDoDitado, a *andamento, pago *pagoNaoGravado) {
+	d.k, d.a, d.pago = k, a, pago
+}
+
+// largar: o andamento foi encerrado, ou é do trabalho solto agora.
+func (d *guardaDoDono) largar() { d.a, d.pago = nil, nil }
+
+// soltar encerra o andamento que ficou aberto como o corpo que não chegou: a
+// vaga volta (a ficha gasta, não), quem espera o mesmo id olha de novo e tenta
+// com o próprio corpo, e o pago a regravar volta à memória com o prazo que
+// tinha. Sem andamento aberto, não faz nada.
+func (d *guardaDoDono) soltar() {
+	if d.a == nil {
+		return
+	}
+	a, pago := d.a, d.pago
+	d.largar()
+	d.g.concluir(d.k, a, desfecho{status: http.StatusInternalServerError, code: codeInternal, frase: "falha interna", reprocessar: true}, false, pago)
+}
+
 // concluirTravado é o concluir com mu já segura.
 func (g *registroDoDitado) concluirTravado(k chaveDoDitado, a *andamento, d desfecho, semFala bool, pago *pagoNaoGravado) {
 	now := g.now()
@@ -319,7 +354,11 @@ func (g *registroDoDitado) concluirTravado(k chaveDoDitado, a *andamento, d desf
 	}
 	if pago != nil {
 		p := *pago
-		p.expira = now.Add(memoriaDoDitado)
+		if p.expira.IsZero() {
+			// O pago novo fica 10 minutos; o que volta à memória (a guarda do
+			// dono, que ia regravá-lo) mantém o prazo que tinha.
+			p.expira = now.Add(memoriaDoDitado)
+		}
 		g.pagos[k] = p
 		g.vencerSozinho(k, now, p.expira)
 	}

@@ -1258,6 +1258,13 @@ uma conta nunca espera nem recebe a resposta da outra):
   escrita** (o `writeTimeout` dele conta do fim dos cabeçalhos dele), sem ler o corpo nem chamar o
   provedor, e recebe o mesmo ditado (`200`) ou a mesma recusa. Se o primeiro parou antes do provedor (o
   corpo dele não chegou, ou não era webm), quem esperava tenta com o próprio corpo.
+- **Um pânico no dono do id**, antes de ele soltar o trabalho (entre pegar a vaga e o trabalho solto, ou
+  entre achar o pago e regravá-lo), é `500` `INTERNAL` (o valor do pânico não vai a log nem à
+  resposta) e encerra o andamento como o corpo que não chegou: a vaga volta (a ficha gasta, não), quem
+  esperava o mesmo id tenta com o próprio corpo, e o pago que ia ser regravado volta à memória **com o
+  prazo que já tinha** (os 10 minutos contam do primeiro). Sem isso, a vaga e o andamento ficariam
+  presos até o reinício. O pânico dentro do trabalho solto continua `500`, com o desfecho `panico` na
+  linha `ditado`.
 - **O que fica na memória:** o andamento e o "sem fala" guardam só o desfecho (o status, o código, o
   aviso); o desfecho pago e não gravado guarda o que seria gravado (os textos, o modo, o provedor, o
   modelo), porque é isso que o reenvio grava. Some em 10 minutos, no reinício, quando o epoch da conta
