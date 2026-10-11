@@ -267,7 +267,10 @@ export class Gravador {
     const mic = this.mic
     const t = this.cfg.plataforma.agora()
     const duracaoMs = Math.min(Math.max(0, t - this.inicio), tetoMs)
-    const falaMs = this.medidor.falaMs(t)
+    // A fala vai "até a duração" (06, Ditado-Fala-Ms): o servidor recusa a que passa dela
+    // (400). A duração trava no teto e a fala medida segue o relógio; se o temporizador do
+    // teto atrasar, a fala passaria da duração, e o ditado não entraria nunca.
+    const falaMs = Math.min(this.medidor.falaMs(t), duracaoMs)
     const nota = motivo ? notaDaParada[motivo] : undefined
     this.pararDeLer()
     if (falaMs < falaMinimaMs) {

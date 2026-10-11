@@ -309,6 +309,24 @@ describe('o teto de 120 s', () => {
     expect(m.g.estado().fase).toBe('pronto')
     expect(m.chegadas[0]).toEqual({ ditado, nota: 'Parei no limite de 2 minutos.' })
   })
+
+  // O servidor recusa com 400 a fala maior que a duração (06, "POST /dictations"). A duração
+  // trava no teto, e a fala medida segue o relógio: se o temporizador do teto atrasa (a página
+  // pesada), a fala passaria da duração. O app nunca manda isso: seria um 400 que se repete a
+  // cada "Tentar de novo".
+  it('com o temporizador do teto atrasado, a fala enviada nunca passa da duração', async () => {
+    const p = plataformaFalsa()
+    const atrasado = { ...p.plataforma, depois: (ms: number, cb: () => void) => (ms === tetoMs ? () => {} : p.plataforma.depois(ms, cb)) }
+    const enviar = vi.fn<Enviar>(async () => ({ ditado }))
+    const g = new Gravador({ plataforma: atrasado, enviar })
+    await g.iniciar()
+    p.rodar(tetoMs + 3000, 0.2)
+    await g.parar()
+    const pedido = enviar.mock.calls[0]![0]
+    expect(pedido.duracaoMs).toBe(tetoMs)
+    expect(pedido.falaMs).toBeGreaterThan(0)
+    expect(pedido.falaMs).toBeLessThanOrEqual(pedido.duracaoMs)
+  })
 })
 
 describe('a página sai da frente, a faixa fica muda ou acaba', () => {
@@ -405,13 +423,17 @@ describe('a falha do envio, código a código', () => {
     ['sem rede', new ForaDoAr(), 'rede', true],
     ['401', new SemSessao(), 'sessao', true],
     ['SEM_ACEITE', api(403, 'SEM_ACEITE'), 'sem-aceite', true],
-    ['SEM_CHAVE', api(403, 'SEM_CHAVE'), 'sem-chave', true],
+    ['SEM_CHAVE', api(409, 'SEM_CHAVE'), 'sem-chave', true],
     ['UM_POR_VEZ', api(429, 'UM_POR_VEZ', 5), 'espere', true],
     ['LIMITE', api(429, 'LIMITE', 5), 'espere', true],
     ['OCUPADO', api(503, 'OCUPADO', 5), 'espere', true],
-    ['PROVEDOR_RECUSOU_CHAVE', api(502, 'PROVEDOR_RECUSOU_CHAVE'), 'provedor-chave', true],
+    ['PROVEDOR_RECUSOU_CHAVE', api(422, 'PROVEDOR_RECUSOU_CHAVE'), 'provedor-chave', true],
     ['PROVEDOR_LIMITE', api(502, 'PROVEDOR_LIMITE'), 'provedor-fora', true],
     ['PROVEDOR_FORA', api(502, 'PROVEDOR_FORA'), 'provedor-fora', true],
+    // A gravação que falhou depois de o provedor cobrar: o reenvio com o mesmo id só grava.
+    ['INTERNAL (o ditado pago e não gravado)', api(500, 'INTERNAL'), 'outro', true],
+    // O corpo que não chegou inteiro (ou um cabeçalho fora da forma): o áudio fica para tentar de novo.
+    ['BAD_REQUEST', api(400, 'BAD_REQUEST'), 'outro', true],
     ['500 sem código', api(500), 'outro', true],
     ['PAYLOAD_TOO_LARGE', api(413, 'PAYLOAD_TOO_LARGE'), 'longo', false],
     ['FORMATO', api(415, 'FORMATO'), 'formato', false],
