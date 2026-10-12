@@ -1712,6 +1712,10 @@ Cada uma vai implementada com o padrão abaixo até ele dizer o contrário.
    é um prazo fixo de 10 s. **[C5b, 11-out-2026: a rota escolheu os que faltavam (o Smart 5 s mais 5 s,
    a lista de modelos 3 s, o teto do trabalho solto de 44 s, a espera do mesmo id em 80 s, o
    `Retry-After` de 5 s, o corpo contado da vaga); estão em "Prazos". A confirmar com o Mauro na C7.]**
+   **[C7, 12-out-2026: no primeiro ditado real, o Polish (OpenAI, `gpt-6-luna`) não respondeu nos
+   3,5 s do `polish.Prazo`, e o ditado ficou com o texto do Smart. O Mauro escolheu a alternativa: o
+   Polish do celular passa a ter 10 s fixos; o PC continua com o `polish.Prazo`. O pior caminho depois
+   do corpo (20 + 5 + 10 + 5 s) cabe nos 45 s da resposta.]**
 6. **O corpo:** 1 MiB, com o opus a 32 kbit/s (a alternativa é 24 kbit/s).
 7. **A fala mínima:** 300 ms, sem contar os últimos 200 ms. Os limiares do silêncio do provedor: 0,6 e
    -1,0.

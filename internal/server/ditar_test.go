@@ -589,16 +589,16 @@ func TestModelosConhecidos(t *testing.T) {
 func TestPrazosDoDitado(t *testing.T) {
 	p := PrazosDoDitado{}.comPadroes()
 	if p != PrazosDoDitadoPadrao || p.Corpo != 30*time.Second || p.Transcricao != 20*time.Second ||
-		p.Gravacao != 5*time.Second || p.Resposta != 45*time.Second || p.Polish != 0 {
+		p.Gravacao != 5*time.Second || p.Resposta != 45*time.Second || p.Polish != 10*time.Second {
 		t.Fatalf("os padrões: %+v", p)
 	}
 	if q := (PrazosDoDitado{Corpo: time.Second}).comPadroes(); q.Corpo != time.Second || q.Transcricao != 20*time.Second {
 		t.Fatalf("o que vier vale: %+v", q)
 	}
-	// O caminho da ADR (a transcrição, o Polish mais longo, de 8 s, e a
-	// gravação: 30 + 20 + 8 + 5 contando o corpo) cabe no prazo da resposta, com
+	// O pior caminho depois do corpo (a transcrição, o Smart, o Polish de 10 s
+	// do celular e a gravação: 20 + 5 + 10 + 5) cabe no prazo da resposta, com
 	// a folga de escrevê-la; o que passar disso é cortado pelo teto do trabalho.
-	if soma := p.Transcricao + 8*time.Second + p.Gravacao + folgaDaResposta; soma >= p.Resposta {
+	if soma := p.Transcricao + p.Smart + p.Polish + p.Gravacao + folgaDaResposta; soma >= p.Resposta {
 		t.Fatalf("o trabalho do ditado (%v) não cabe no prazo da resposta (%v)", soma, p.Resposta)
 	}
 }

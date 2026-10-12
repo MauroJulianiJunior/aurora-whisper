@@ -49,8 +49,11 @@ type PrazosDoDitado struct {
 	// ADR não fixa um prazo para o Smart (ele leva milissegundos com o Smart
 	// pronto); este é a guarda da leitura do aprendido e da primeira montagem.
 	Smart time.Duration
-	// Polish: a chamada do Polish. Zero é o polish.Prazo do texto (de 3,5 s a
-	// 8 s, como no PC).
+	// Polish: a chamada do Polish (10 s). No PC o prazo é o polish.Prazo do
+	// texto (de 3,5 s a 8 s), curto porque o texto tem de entrar no campo. No
+	// celular a pessoa já está olhando a tela, esperando: no primeiro ditado
+	// real (12-out-2026) o modelo do Polish não respondeu em 3,5 s, e o Mauro
+	// escolheu 10 s só no celular (ADR-021, escolha menor 5, a alternativa).
 	Polish time.Duration
 	// Modelos: perguntar ao provedor do Polish a lista de modelos, quando o
 	// modelo da conta ainda não é conhecido (3 s).
@@ -70,14 +73,16 @@ const folgaDaResposta = time.Second
 // PrazosDoDitadoPadrao são os prazos da ADR-021.
 var PrazosDoDitadoPadrao = PrazosDoDitado{
 	Corpo: 30 * time.Second, Transcricao: 20 * time.Second, Smart: 5 * time.Second,
-	Modelos: 3 * time.Second, Gravacao: 5 * time.Second, Resposta: 45 * time.Second,
+	Polish: 10 * time.Second, Modelos: 3 * time.Second, Gravacao: 5 * time.Second,
+	Resposta: 45 * time.Second,
 }
 
 func (p PrazosDoDitado) comPadroes() PrazosDoDitado {
 	d := PrazosDoDitadoPadrao
 	for _, c := range []struct{ v, d *time.Duration }{
 		{&p.Corpo, &d.Corpo}, {&p.Transcricao, &d.Transcricao}, {&p.Smart, &d.Smart},
-		{&p.Modelos, &d.Modelos}, {&p.Gravacao, &d.Gravacao}, {&p.Resposta, &d.Resposta},
+		{&p.Polish, &d.Polish}, {&p.Modelos, &d.Modelos}, {&p.Gravacao, &d.Gravacao},
+		{&p.Resposta, &d.Resposta},
 	} {
 		if *c.v <= 0 {
 			*c.v = *c.d
@@ -395,11 +400,7 @@ func (c *Cloud) polir(base context.Context, t trabalhoDoDitado, conta *smartcont
 		Contar: func(entrada, saida int) { rel.tokensEntrada, rel.tokensSaida = entrada, saida },
 	}.Abrir()
 	rel.esforco = rotulo
-	prazo := c.prazos.Polish
-	if prazo <= 0 {
-		prazo = polish.Prazo(resolvido.Texto)
-	}
-	ctxP, cancel := context.WithTimeout(base, prazo)
+	ctxP, cancel := context.WithTimeout(base, c.prazos.Polish)
 	comeco := time.Now()
 	out := conta.Reescrever(ctxP, pr, resolvido)
 	cancel()

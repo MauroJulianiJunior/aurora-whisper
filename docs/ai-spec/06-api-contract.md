@@ -1214,7 +1214,8 @@ depois de `/dictations/`, também são `404`.
       tem de ser um que o provedor listou (`GET /ai-keys/{provedor}/models`, o `PUT` da chave, ou uma
       pergunta à lista feita aqui, com prazo de 3 s): senão o Polish nem é chamado
       (`modelo_inexistente`). O adaptador é o do PC (`internal/polish`, a mesma política de esforço,
-      uma por processo), com o prazo `polish.Prazo` do texto (de 3,5 s a 8 s). O Polish que falha, ou que
+      uma por processo), com o prazo de 10 s (no PC é o `polish.Prazo` do texto, de 3,5 s a 8 s; no
+      celular a pessoa já espera olhando a tela, escolha do Mauro em 12-out-2026). O Polish que falha, ou que
       as guardas recusam, deixa o texto do Smart, com `mode` `smart` e o `aviso`.
     - **A gravação** (5 s): o aceite conferido de novo, e o `Store.Create` (o ponto único de gravação,
       `Actor` sem aparelho) com o epoch lido quando o pedido pegou a vaga (a releitura do passo 8),
@@ -1286,7 +1287,7 @@ uma conta nunca espera nem recebe a resposta da outra):
 | A transcrição | 20 s |
 | O Smart | 5 s para ler o aprendido, e 5 s para montar (a primeira montagem de 500 pares leva cerca de 1 s) e resolver |
 | A lista de modelos do Polish | 3 s, só quando o modelo ainda não é conhecido |
-| O Polish | `polish.Prazo` do texto do Smart: de 3,5 s a 8 s |
+| O Polish | 10 s (no PC, o `polish.Prazo` do texto: de 3,5 s a 8 s) |
 | A gravação | 5 s (o aceite e o `Create`) |
 | A resposta | 45 s depois do fim do corpo (`SetWriteDeadline` no handler); o trabalho solto tem o teto de 44 s, e o que passar dele depois de o provedor cobrar vira o desfecho pago e não gravado |
 | Quem espera o mesmo id | o próprio prazo de escrita estendido em 80 s (o corpo, a resposta e 5 s de folga) |
