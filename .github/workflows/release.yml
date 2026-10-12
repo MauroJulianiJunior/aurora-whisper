@@ -40,7 +40,11 @@ env:
   # do modelo com o nome do usuário, e um perfil com acento é risco. Enquanto
   # valer 'false', o primeiro passo do job falha, e nenhuma tag v* gera Setup.
   # Quando a F2 entrar, mude para 'true' (e confira o roteiro manual).
-  F2_PRONTA: 'false'
+  # Aberto em 12-out-2026, com o OK do Mauro para liberar o app: a F2 está no
+  # código (local.Config.Dir, configDoServidor, abrirLogDoServidor e
+  # pastas.AnonimizarLinhas), e a conferência do whisper-server.log instalado
+  # faz parte do teste do Setup numa conta nova (docs/teste-manual-instalador.md).
+  F2_PRONTA: 'true'
   # --- O zip do whisper.cpp (servidor de voz e DLLs) -------------------------
   # Tag de build b5130 (as tags semver não têm este arquivo). O SHA-256 é o do
   # zip que foi medido e que está em docs/adr/ADR-018-instalador.md.
@@ -48,15 +52,13 @@ env:
   WHISPER_ZIP_URL: https://github.com/ggml-org/whisper.cpp/releases/download/b5130/whisper-bin-x64.zip
   WHISPER_ZIP_SHA256: f9ec6c52a2e949b62ab51fa21d0d497958f9e41c3010c157c4e42932d5316f3c
   # --- O modelo de voz (ggml-small-q4_0.bin) ---------------------------------
-  # TODO(Mauro): o release fixo do projeto que guarda o modelo AINDA NÃO EXISTE.
-  # Subir o modelo é publicar um arquivo: decisão do Mauro (ADR-018, "Modelo
-  # embutido e de onde ele vem"). O nome abaixo é a sugestão da ADR; crie o
-  # release com este nome (ou troque aqui) e suba nele:
+  # O release fixo do projeto que guarda o modelo existe desde 12-out-2026
+  # (publicado com o OK do Mauro; ADR-018, "Modelo embutido e de onde ele
+  # vem"), marcado como pré-lançamento para não virar "a versão" do app, com:
   #   - ggml-small-q4_0.bin  (145.458.015 bytes, SHA-256 abaixo)
-  #   - ggml-small-q4_0.bin.sha256 e uma nota de procedência
-  #   - (espelho, opcional) whisper-bin-x64.zip, caso o upstream suma: o job
-  #     tenta o espelho se o endereço acima falhar.
-  # Até lá este job FALHA no passo do modelo, de propósito.
+  #   - ggml-small-q4_0.bin.sha256 e a nota de procedência
+  # Sem o espelho do whisper-bin-x64.zip, por enquanto: se o upstream sumir, o
+  # job falha no passo do zip, e o espelho se sobe neste mesmo release.
   MODELO_RELEASE: modelo-small-q4_0-v1
   MODELO_ARQUIVO: ggml-small-q4_0.bin
   # Os mesmos valores de internal/asr/model.SmallQ4_0 (um teste confere).
