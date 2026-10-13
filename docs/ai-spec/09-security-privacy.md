@@ -276,8 +276,9 @@ Como fica na etapa 5 (ADR-019; contrato em `06`, fluxos em `07`):
   digitada (o `auth_url` da nuvem é ignorado), pelo `painel.AbrirNoNavegador` (portão). O retorno
   (`/nuvem/retorno`, só com o `Host`) confere o `state` em tempo constante; o errado não consome nada;
   o certo consome antes da rede; o prazo é o da nuvem, nunca mais de 10 minutos. O cliente HTTP da
-  nuvem não segue redirecionamento (o token nunca vai a outro endereço), tem prazo de 10 s e lê até
-  64 KiB. O token vai para o Gerenciador pelo `chaves.NovoGerenciador` (portão), no alvo do modo:
+  nuvem não segue redirecionamento (o token nunca vai a outro endereço), tem prazo de 10 s, lê até
+  64 KiB e fala só HTTP/1.1, como o do sync e o da chave de IA (13-out-2026: o HTTP/2 do `net/http`
+  escreveria o `Authorization` no `agent.log` sob `GODEBUG=http2debug`). O token vai para o Gerenciador pelo `chaves.NovoGerenciador` (portão), no alvo do modo:
   `AuroraWhisper/nuvem` no instalado, `AuroraWhisper/nuvem-portatil` no `bin\` (D7: sem isso, conectar
   o `bin\` com a conta de teste trocaria o token do PC real), com o comentário "Aurora Whisper: token
   deste PC na nuvem" (o das chaves de API diz "chave de API"). A conta, o e-mail, a URL e o aparelho

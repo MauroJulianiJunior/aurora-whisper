@@ -995,7 +995,8 @@ depois de `N` (cada uma com `seq` igual ao `last_seq` dela) e as **lápides**
   já tinha enquanto o PC estava desconectado. Cada um roda a rodada de novo no máximo uma vez; o
   segundo seguido é defeito da nuvem (espera longa).
 - **O cliente:** `Authorization: Bearer <token>`, prazo de 30 s, nenhum redirecionamento seguido (uma
-  `3xx` é falha: o token nunca vai a outro endereço), a resposta lida até 16 MiB (a pior página do
+  `3xx` é falha: o token nunca vai a outro endereço), só HTTP/1.1 (o HTTP/2 do `net/http` escreveria
+  o token e o texto do push no `agent.log` sob `GODEBUG=http2debug`), a resposta lida até 16 MiB (a pior página do
   pull, com o texto escapado no JSON, passa de 13 MiB; passou do teto é falha de rede). `401`
   desconecta o PC; `429` espera o `Retry-After` (até 10 min, com jitter); a rede, o prazo e um `5xx`
   esperam de 2 s a 5 min, com jitter; `400`, `403`, `404` e um JSON que não se lê esperam o teto.

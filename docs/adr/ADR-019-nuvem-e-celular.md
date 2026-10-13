@@ -2077,7 +2077,10 @@ e como desfazer.
   da F7b). O `401` apaga o token e desconecta ("Este PC foi desconectado na nuvem."); a rede fora não
   ("A nuvem não respondeu agora. O PC continua conectado.").
 - **O cliente HTTP da nuvem** não segue redirecionamento (uma `3xx` é falha: o token nunca vai a outro
-  endereço), tem prazo de 10 s e lê até 64 KiB.
+  endereço), tem prazo de 10 s e lê até 64 KiB. **Só HTTP/1.1** (13-out-2026, auditoria de rede do
+  PC): o mesmo transporte da chave de IA (`ia.NovoTransporteHTTP1`), porque o HTTP/2 do `net/http`
+  escreve o `Authorization` e o começo de cada corpo no log padrão (o `agent.log`) quando `GODEBUG`
+  traz `http2debug` (`TestHTTP2Debug_TokenDoAparelhoNaoVaiParaOLog`).
 - **O log:** o do servidor é só o padrão da rota; o do Agent diz o que aconteceu com motivos de lista
   fechada, nunca o `code`, o `state`, o pedido, o verificador, a conferência, o token, a URL ou o
   e-mail.
@@ -2384,7 +2387,9 @@ não era a real, e perdia edição sem aviso.
   lixeira** e fora de `fora_da_janela`, e `server_version` nulo em todos; os marcadores que já existiam
   ficam, e também viram criar. Depois do `410` e do epoch novo, a rodada roda de novo, no máximo uma
   vez para cada um; o segundo seguido volta como erro (defeito da nuvem: espera longa).
-- **O cliente.** `Authorization: Bearer`, prazo de 30 s, nenhum redirecionamento seguido, o pedido até
+- **O cliente.** `Authorization: Bearer`, prazo de 30 s, nenhum redirecionamento seguido, só HTTP/1.1
+  (13-out-2026: o mesmo motivo do cliente do pareamento, `TestHTTP2Debug_TokenNaoVaiParaOLog`, que
+  procura também o texto do push), o pedido até
   1 MiB e a resposta até 16 MiB (8 MiB até a revisão; passou é falha de rede); os erros tipados do
   `18` (`401`, `410`, `429` com o `Retry-After` até 10 min, transitório e contrato), com um código de
   lista fechada, sem a URL,

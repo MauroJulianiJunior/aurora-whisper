@@ -524,7 +524,8 @@ type Aprendido struct {
   se lê, resultados que não batem com o lote: espera longa; a bandeja diz "resposta inesperada"),
   estes dois como `*Falha` com um código de lista fechada. Nenhum erro leva a URL, o token ou o corpo.
 - **O `Cliente` de produção:** o Bearer do token do aparelho (lido do Gerenciador de Credenciais pelo
-  `nuvem.Servico`, atrás do portão), prazo de 30 s por pedido, nenhum redirecionamento seguido, o
+  `nuvem.Servico`, atrás do portão), prazo de 30 s por pedido, nenhum redirecionamento seguido, só
+  HTTP/1.1 (`NovoHTTP`, com o `ia.NovoTransporteHTTP1`; 13-out-2026), o
   corpo do pedido até 1 MiB e o da resposta até 16 MiB (a pior página do pull, com o texto escapado
   no JSON, passa de 13 MiB; revisão de 06-out-2026).
 - **Quem usa:** o `Motor` (uma rodada: o push em lotes de até 500 mutações e 512 KiB de payload, e o
