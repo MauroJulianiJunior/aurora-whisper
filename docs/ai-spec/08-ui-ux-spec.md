@@ -444,6 +444,11 @@ configurações**). Os textos do plano da F6 trocaram os de cima, que eram propo
   PC": com o Polish ligado, o texto vai ao provedor de IA, e a frase não pode prometer menos do que
   sai), o campo **Endereço da nuvem** (modelo `https://…`, vazio na primeira vez e, depois, com a URL
   da instalação) e **Conectar à nuvem** (Enter no campo também; desligado com o campo vazio).
+  Embaixo do campo e do botão, a ajuda (ligada ao campo por `aria-describedby`): "O nome deste PC vai
+  para a nuvem que você conectar, para a lista de aparelhos." (revisão de 13-out-2026, antes de liberar
+  o app: o Conectar manda o nome do computador, que costuma ter o nome da pessoa, à nuvem digitada,
+  antes mesmo do login; a pessoa fica sabendo antes do clique). Conectado, a frase é a de sempre,
+  "Na nuvem, este PC aparece como {nome}."
 - **Conectando:** "Aprove no navegador e confira o código **K7QM**." (o código em IBM Plex Mono,
   espaçado), com **Abrir de novo** (um link para a página de aprovação, numa aba nova; só um endereço
   `https://` ou `http://localhost` vira link) e **Cancelar**. O foco vai para o **Abrir de novo**.
@@ -702,6 +707,11 @@ com ponteiro de toque, os botões (as abas inclusive) e a busca têm 44 px.
   enquanto vai; quem volta do Google pelo Voltar, com a página vinda do cache, acha o botão valendo
   de novo). **[Decisão 3 do plano da F4: a ilustração da Aurora no lugar do símbolo que este
   documento citava; a confirmar pelo Mauro.]** Sem o logo do Google: o app não carrega nada de fora.
+- A linha da nuvem particular (revisão de 13-out-2026, antes de liberar o app): embaixo do botão do
+  Google, no estilo discreto da ajuda, "Nuvem particular: só entra quem foi convidado." A nuvem é de
+  quem a sobe, e quem chega pelo link do repositório fica sabendo antes do clique, e não só depois da
+  recusa. Só na primeira entrada, com o Google à vista: não aparece em "Sua sessão terminou." (quem
+  tinha sessão já foi convidado) nem no servidor de teste sem o Google. Fica na tela se o login falha.
 - Erro, num `role="alert"`: "Não deu para entrar. Tente de novo." (rede, servidor ou recusa); no
   limite de tentativas (`429`), "Muitas tentativas. Espere um minuto e tente de novo."
 - Recusada (conta fora da lista): a página fixa do servidor, no mesmo visual, "Esta conta não tem

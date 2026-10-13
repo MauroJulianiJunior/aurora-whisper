@@ -30,6 +30,7 @@ func Run(t *testing.T, b Backend) {
 		{"Login_StateReusadoVencidoEPre", testStateEPre},
 		{"Login_ErrosDoGoogleEDoIDToken", testErrosDoGoogle},
 		{"Login_Volta", testVolta},
+		{"Login_CorpoMalFormadoTemFraseFixa", testCorpoMalFormado},
 		{"Login_ContaDesativada", testContaDesativada},
 		{"Sessao_NovaACadaLogin", testSessaoNovaACadaLogin},
 		{"Sessao_SairListarEDerrubar", testSairListarDerrubar},
@@ -344,6 +345,53 @@ func testVolta(t *testing.T, b Backend) {
 	// Sem corpo nenhum, vale (a volta é opcional).
 	if res := m.navegador(uaAndroid).pedir(http.MethodPost, "/auth/start", nil); res.Code != http.StatusOK {
 		t.Errorf("sem corpo: %d, quero 200", res.Code)
+	}
+}
+
+// testCorpoMalFormado: o 400 de um corpo que não decodifica, no POST /auth/start
+// (público, sem sessão), é SEMPRE a frase fixa. A mensagem do decodificador do
+// Go traz o nome de um tipo interno (authStartRequest.volta) ou um caractere do
+// próprio pedido; o corpo é de quem pede, e a resposta não o ecoa, nem o log.
+func testCorpoMalFormado(t *testing.T, b Backend) {
+	m := novoMundo(t, b, opcoes{})
+	const marca = "MARCA-DO-CORPO-9F3A"
+	for _, c := range []struct{ nome, corpo string }{
+		{"JSON quebrado", `{`},
+		{"texto que não é JSON, com a marca", marca},
+		{"cortado no meio de um texto, com a marca", `{"volta":"/` + marca},
+		{"tipo errado no campo", `{"volta": 5}`},
+		{"objeto onde devia ser texto, com a marca", `{"volta": {"` + marca + `": 1}}`},
+		{"corpo grande demais", `{"volta":"/` + strings.Repeat("a", 2000) + `"}`},
+	} {
+		res := m.navegador(uaAndroid).pedir(http.MethodPost, "/auth/start", c.corpo)
+		if res.Code != http.StatusBadRequest {
+			t.Errorf("%s: %d, quero 400", c.nome, res.Code)
+			continue
+		}
+		var out struct {
+			Error struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(res.Body.Bytes(), &out); err != nil {
+			t.Errorf("%s: a resposta não é o bloco de erro: %v", c.nome, err)
+			continue
+		}
+		if out.Error.Code != "BAD_REQUEST" || out.Error.Message != server.FraseDoCorpoInvalido {
+			t.Errorf("%s: %q %q, quero BAD_REQUEST com a frase fixa %q", c.nome, out.Error.Code, out.Error.Message, server.FraseDoCorpoInvalido)
+		}
+		for _, nao := range []string{marca, "authStartRequest", "json:", "invalid character", "unexpected end", "request body too large"} {
+			if strings.Contains(res.Body.String(), nao) {
+				t.Errorf("%s: a resposta traz %q: %s", c.nome, nao, res.Body.String())
+			}
+		}
+		if res.cookies["__Host-pre"] != nil {
+			t.Errorf("%s: o 400 pôs o cookie do login pendente", c.nome)
+		}
+	}
+	if strings.Contains(m.logs.String(), marca) {
+		t.Error("o log traz um pedaço do corpo do pedido")
 	}
 }
 

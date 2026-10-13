@@ -28,7 +28,9 @@ externos (Google, OpenAI, Anthropic, Backblaze).
 
 ## Versões
 
-Ainda não há versão publicada: as correções entram na `main`.
+A 0.1.x é uma **prévia**. As correções saem em uma versão nova (a 0.1.1, por exemplo), na página de
+[Releases](https://github.com/MauroJulianiJunior/aurora-whisper/releases), e entram na `main`. Use sempre a
+versão mais nova.
 
 O modelo de ameaças e as regras de privacidade estão em
 [`docs/ai-spec/09-security-privacy.md`](docs/ai-spec/09-security-privacy.md).

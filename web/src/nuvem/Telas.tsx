@@ -117,6 +117,11 @@ export function Entrar({ expirada, aprovar = false, teste, entrarComGoogle, entr
             </p>
           </>
         )}
+        {/* A nuvem é de quem a sobe, e só entra quem esse alguém convidou: quem
+            chega pelo link do repositório sabe antes do clique, e não depois da
+            recusa. Só na primeira entrada: quem tem a sessão acabada já foi
+            convidado. Some enquanto os botões não vieram (nada pula de lugar). */}
+        {comGoogle && !expirada && <p className="ajuda">Nuvem particular: só entra quem foi convidado.</p>}
         {erro && (
           <p className="nota" role="alert" key={erro.vez}>
             {erro.texto}

@@ -1,13 +1,13 @@
 # O deploy da nuvem, passo a passo (F11)
 
 **O que é e por que:** este roteiro põe a nuvem do Aurora Whisper no ar em
-**`https://aurora-whisper.mjj.net.br`**, na **sua VPS**, atrás do Traefik que já atende os outros sites
+**`https://aurora.exemplo.com.br`**, na **sua VPS**, atrás do Traefik que já atende os outros sites
 dela. Cada passo diz o porquê e traz o comando completo, pronto para colar. Você roda tudo; eu não rodo
 nada no servidor nem no Docker.
 
-Esse endereço é o da **instância do mantenedor**, fechada às contas de `CONTAS_PERMITIDAS`: não é um
-serviço aberto. Para subir a sua nuvem, troque `aurora-whisper.mjj.net.br` pelo seu domínio em todos os
-comandos daqui (o `gerar-segredos.sh` o pergunta e o grava no `config.env`).
+`aurora.exemplo.com.br` é um endereço de **exemplo**: troque-o pelo seu domínio em todos os comandos daqui
+(o `gerar-segredos.sh` o pergunta e o grava no `config.env`). O projeto não tem servidor central: a nuvem
+é sempre a de quem a sobe.
 
 ADR-019, "Decisões da F11" (a D1 que você confirmou em 09-out-2026: a VPS, o Traefik dela, o
 domínio e o datacenter no Brasil). Tempo estimado: 1 h 30 a 2 h, fora a espera do B2.
@@ -50,11 +50,11 @@ ssh vps
 **Por que:** o login com o Google de verdade (o PKCE, o aviso de "app não verificado", a recusa de uma
 conta fora da lista) já foi provado no PC com o `scripts\nuvem-local.ps1`. O client Web que você criou
 tem os dois endereços de volta: `http://localhost:8080/auth/google/callback` e
-`https://aurora-whisper.mjj.net.br/auth/google/callback`.
+`https://aurora.exemplo.com.br/auth/google/callback`.
 
 **Confira só uma coisa:** o JSON do client. O `nuvem-local.ps1` o guardou em
 `%USERPROFILE%\.aurora-whisper-dev\google-client-dev.json` (fora do repositório). Abra-o no Bloco de
-Notas (só você o vê; não cole no chat) e procure `https://aurora-whisper.mjj.net.br/auth/google/callback`.
+Notas (só você o vê; não cole no chat) e procure `https://aurora.exemplo.com.br/auth/google/callback`.
 Se estiver lá, é o mesmo arquivo que vai para a VPS no passo 5. Se não estiver (o JSON foi baixado antes
 de você pôr o endereço de produção), baixe-o de novo no Google Cloud (**APIs e serviços** >
 **Credenciais** > o client > **Baixar JSON**) e use o caminho do novo no passo 5 (ele cai em
@@ -151,11 +151,11 @@ ssh vps true
 Depois, com o JSON do passo 1 (se você baixou um novo, troque o caminho pelo dele):
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File C:\Desenvolvimento\aurora-whisper\scripts\enviar-para-servidor.ps1 -Dominio aurora-whisper.mjj.net.br -ArquivoGoogle $env:USERPROFILE\.aurora-whisper-dev\google-client-dev.json
+powershell -ExecutionPolicy Bypass -File C:\Desenvolvimento\aurora-whisper\scripts\enviar-para-servidor.ps1 -Dominio aurora.exemplo.com.br -ArquivoGoogle $env:USERPROFILE\.aurora-whisper-dev\google-client-dev.json
 ```
 
 **Deve aparecer:** "OK: as duas imagens sao as que passaram no deploy-teste.ps1", "OK: o JSON do
-Google, com o redirect https://aurora-whisper.mjj.net.br/auth/google/callback", o progresso do `docker
+Google, com o redirect https://aurora.exemplo.com.br/auth/google/callback", o progresso do `docker
 load` ("Loaded image: aurora-whisper-server:producao" e a do backup), e "OK: tudo na VPS.". Leva
 alguns minutos (são umas centenas de MB pela internet).
 
@@ -177,7 +177,7 @@ Ele pergunta, uma coisa de cada vez:
 
 | Pergunta | O que responder |
 |---|---|
-| O endereço da nuvem | `aurora-whisper.mjj.net.br` |
+| O endereço da nuvem | `aurora.exemplo.com.br` |
 | O e-mail que pode entrar | o da sua conta Google |
 | O nome do bucket do B2 | o do passo 2 |
 | A keyID (não aparece na tela) | o keyID da chave `aurora-whisper-backup` |
@@ -235,7 +235,7 @@ Ele para duas vezes e pergunta:
 sincronizado (NTP)", "OK: PROXY_CONFIAVEL=…", "OK: o compose conferido", "OK: o Postgres de pe e
 saudavel", os `OK:` dos cinco ajustes e dos papéis, "OK: as migrations em dia", "OK: a API saudavel:
 arrumacao, retencao e so entao servindo, com o proxy confiavel ligado", "OK: a saude do job de retencao
-(healthcheck -retencao)", "OK: o agendador do backup de pe", "OK: https://aurora-whisper.mjj.net.br
+(healthcheck -retencao)", "OK: o agendador do backup de pe", "OK: https://aurora.exemplo.com.br
 responde pelo Traefik, com o certificado valido" e "OK: a nuvem esta no ar".
 
 A espera mais longa é a do certificado, na primeira vez (o Traefik pede ao Let's Encrypt): até 3
@@ -256,12 +256,12 @@ Só lê.
 No PowerShell do PC (troque `<IP-DA-VPS>` pelo IP do seu servidor):
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File C:\Desenvolvimento\aurora-whisper\scripts\conferir-nuvem.ps1 -Dominio aurora-whisper.mjj.net.br -IPEsperado <IP-DA-VPS>
+powershell -ExecutionPolicy Bypass -File C:\Desenvolvimento\aurora-whisper\scripts\conferir-nuvem.ps1 -Dominio aurora.exemplo.com.br -IPEsperado <IP-DA-VPS>
 ```
 
-**Deve aparecer:** "OK: o DNS: aurora-whisper.mjj.net.br -> <IP-DA-VPS>", "OK: o certificado vale
+**Deve aparecer:** "OK: o DNS: aurora.exemplo.com.br -> <IP-DA-VPS>", "OK: o certificado vale
 para…, emitido por … Let's Encrypt…", e os `OK:` do http, do health, do painel e da saúde do job, e
-no fim "OK: a nuvem em https://aurora-whisper.mjj.net.br responde certo de fora".
+no fim "OK: a nuvem em https://aurora.exemplo.com.br responde certo de fora".
 
 **O log de acesso do Traefik, desligado só para a nuvem** (na VPS, só leitura). Antes, onde o Traefik
 grava o log de acesso (só os argumentos dele, sem o ambiente):
@@ -295,7 +295,7 @@ der `0` também, abra um dos outros sites no navegador e rode de novo: tem de pa
 primeiro passar de zero, **pare** e me conte: o rótulo do log de acesso não valeu no Traefik da VPS.
 
 **Entrar uma vez (cria a sua conta, sem nenhum ditado):** no navegador do PC, abra
-`https://aurora-whisper.mjj.net.br` e clique em **Entrar com o Google**, com a conta do e-mail do passo
+`https://aurora.exemplo.com.br` e clique em **Entrar com o Google**, com a conta do e-mail do passo
 6. **Deve aparecer:** o app, com o histórico vazio. O backup do passo 9 precisa dessa conta (o teste de
 restauração confere que há pelo menos uma).
 
@@ -551,7 +551,7 @@ docker logs --tail 30 aurora-whisper-api
   (a chave de cifra) vem **antes** do passo 7: sem o arquivo novo, o `subir.sh` para no começo.
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File C:\Desenvolvimento\aurora-whisper\scripts\enviar-para-servidor.ps1 -Dominio aurora-whisper.mjj.net.br
+powershell -ExecutionPolicy Bypass -File C:\Desenvolvimento\aurora-whisper\scripts\enviar-para-servidor.ps1 -Dominio aurora.exemplo.com.br
 ```
 
   Se o `-ArquivoGoogle` for junto por engano, o `subir.sh` vê que é o mesmo JSON de `segredos/` e apaga

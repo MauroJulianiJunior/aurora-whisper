@@ -154,10 +154,10 @@ docker exec aurora-whisper-backup backup.sh
    seu servidor):
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File C:\Desenvolvimento\aurora-whisper\scripts\conferir-nuvem.ps1 -Dominio aurora-whisper.mjj.net.br -IPEsperado <IP-DA-VPS>
+powershell -ExecutionPolicy Bypass -File C:\Desenvolvimento\aurora-whisper\scripts\conferir-nuvem.ps1 -Dominio aurora.exemplo.com.br -IPEsperado <IP-DA-VPS>
 ```
 
-2. No navegador, entre de novo pelo Google (`https://aurora-whisper.mjj.net.br`).
+2. No navegador, entre de novo pelo Google (`https://aurora.exemplo.com.br`).
 3. Em cada PC, conecte de novo: no painel do Agent, **Conectar à nuvem**, como no passo 8 do
    `docs/teste-final-f11.md`. **Deve aparecer:** "Conectado como …", e o PC recomeça lendo a nuvem.
 4. No celular, entre de novo no app.

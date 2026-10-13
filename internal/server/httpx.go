@@ -64,6 +64,15 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 // handler.
 const maxJSONBodyBytes = 1 << 20
 
+// FraseDoCorpoInvalido é a resposta 400 a QUALQUER erro de decodificação do
+// corpo em decodeJSON/decodeJSONLimit (JSON quebrado, tipo errado, corpo
+// grande demais). É sempre a mesma: a mensagem do decodificador traz o nome
+// de um tipo interno do Go (authStartRequest.volta) ou um caractere do próprio
+// pedido, e o corpo é de quem pede (o POST /auth/start é público). O mesmo
+// critério do decodeEstrito do pareamento e das chaves de IA. Exportada para
+// o teste conferir que é ela, e só ela.
+const FraseDoCorpoInvalido = "corpo da requisição inválido"
+
 // decodeJSON decodifica o corpo da requisição em T. Em caso de erro,
 // já escreve a resposta 400 no formato do contrato e devolve ok=false —
 // o chamador só precisa checar ok e retornar.
@@ -89,7 +98,7 @@ func decodeJSONLimit[T any](w http.ResponseWriter, r *http.Request, limit int64)
 			// precisa do valor depois).
 			return v, true
 		}
-		writeError(w, http.StatusBadRequest, codeBadRequest, "corpo da requisição inválido: "+err.Error())
+		writeError(w, http.StatusBadRequest, codeBadRequest, FraseDoCorpoInvalido)
 		var zero T
 		return zero, false
 	}

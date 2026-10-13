@@ -109,7 +109,7 @@ func TestRoteiros_AContagemDoLogDeAcesso(t *testing.T) {
 		acessoOutro = `203.0.113.8 - - [09/Oct/2026:12:00:01 +0000] "GET / HTTP/2.0" 200 512 "-" "Mozilla/5.0" 1235 "outro-site@docker" "http://172.19.0.3:3000" 12ms`
 		semRouter   = `203.0.113.9 - - [09/Oct/2026:12:00:02 +0000] "GET / HTTP/2.0" 404 19 "-" "curl/8.9" 1236 "-" "-" 0ms`
 		erroDoACME  = `2026-10-09T12:00:03Z ERR Unable to obtain ACME certificate for domains error="desafio falhou" ` +
-			`providerName=letsencrypt.acme routerName=aurora-whisper-api@docker rule=Host(` + "`aurora-whisper.mjj.net.br`" + `)`
+			`providerName=letsencrypt.acme routerName=aurora-whisper-api@docker rule=Host(` + "`aurora.exemplo.com.br`" + `)`
 		erroAspas = `2026-10-09T12:00:04Z ERR erro routerName="aurora-whisper-api@docker"`
 	)
 	for _, c := range []struct {
@@ -209,7 +209,7 @@ func TestRoteiros_ImagemNovaETrocaDoGoogle(t *testing.T) {
 	texto := ler(t, roteiroDeploy)
 	imagem := trecho(t, roteiroDeploy, texto, "**Uma imagem nova, depois:**", "**Trocar o client do Google depois**")
 	exigirContem(t, "a imagem nova", imagem,
-		`scripts\enviar-para-servidor.ps1 -Dominio aurora-whisper.mjj.net.br`+"\n")
+		`scripts\enviar-para-servidor.ps1 -Dominio aurora.exemplo.com.br`+"\n")
 	exigirNaoContem(t, "a imagem nova", imagem, "-ArquivoGoogle $")
 	troca := trecho(t, roteiroDeploy, texto, "**Trocar o client do Google depois**", "## O que me contar")
 	recebido := strings.TrimPrefix(regexpRecebido.FindStringSubmatch(ler(t, subirSh))[1], "$BASE/")

@@ -8,7 +8,7 @@ você adiou em 09-out-2026 (enviar o histórico, aprender e desfazer pelo celula
 
 ADR-019, "Decisões da F11" (o teste final). Tempo estimado: 45 minutos a 1 hora.
 
-**O endereço é `https://aurora-whisper.mjj.net.br`** em todo o roteiro.
+**O endereço de exemplo é `https://aurora.exemplo.com.br`** em todo o roteiro: troque-o pelo da sua nuvem.
 
 ## Antes de começar (são cinco avisos)
 
@@ -33,7 +33,7 @@ apelido do seu acesso ssh, como no `docs/deploy-f11.md`) para os passos que dize
 **Por que:** é o app que você vai usar no dia a dia, e só com o https de verdade ele instala de fato (no
 teste da F5, pelo cabo, o Chrome podia criar só um atalho).
 
-1. No Chrome do celular, abra `https://aurora-whisper.mjj.net.br`.
+1. No Chrome do celular, abra `https://aurora.exemplo.com.br`.
 2. **Entrar com o Google**, com a conta do e-mail que você deu ao `gerar-segredos.sh`. Se o Google mostrar
    o aviso de "app não verificado", siga por **Avançado** (é o seu próprio app, em modo de teste).
 3. **⋮** > **Instalar app** (ou **Adicionar à tela inicial** > **Instalar**).
@@ -118,7 +118,7 @@ nuvem, ele recusa outra ("Este PC já está ligado a outra conta.").
 
 ## 8. Conectar à nuvem de produção
 
-1. No campo do endereço, digite `https://aurora-whisper.mjj.net.br` e clique em **Conectar à nuvem**.
+1. No campo do endereço, digite `https://aurora.exemplo.com.br` e clique em **Conectar à nuvem**.
 2. Na aba que abre: se pedir, **Entrar com o Google** (a mesma conta). Confira que o código é o mesmo do
    painel e clique em **Aprovar**. **Deve aparecer:** "**PC conectado**". Feche a aba.
 
