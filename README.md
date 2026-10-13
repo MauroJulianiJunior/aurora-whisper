@@ -6,14 +6,58 @@ máquina, com o [whisper.cpp](https://github.com/ggml-org/whisper.cpp), e insere
 que tem o foco do teclado. O ícone fica na bandeja, e um painel local mostra o histórico dos
 ditados e as configurações.
 
-**Estado.** O Agent funciona de ponta a ponta sem nuvem: captura, transcrição na sua máquina,
-dicionário, inserção, bandeja, overlay e painel. A nuvem é opcional e serve para ver e editar o
-histórico no celular e nos outros PCs; o projeto não tem servidor central, e cada pessoa sobe a sua,
-num servidor seu (o código está em `cmd/server`, o deploy em `deploy/` e o roteiro em
+## Comece aqui
+
+Para usar o Aurora Whisper sem montar nada do código. Você precisa só do Windows 10 ou 11 (64 bits).
+
+1. **Baixe e instale.** Na página de
+   [Releases](https://github.com/MauroJulianiJunior/aurora-whisper/releases/latest), abra a versão
+   mais nova e, em **Assets**, baixe o `AuroraWhisper-Setup-0.1.0.exe` (cerca de 140 MB: já leva o
+   modelo de voz). Dê dois cliques nele. É uma **versão prévia (0.x), sem assinatura digital**, então
+   o Windows mostra "O Windows protegeu o computador" (SmartScreen): clique em **Mais informações** e
+   depois em **Executar assim mesmo**. A instalação **não pede administrador** (só se faltar um
+   componente da Microsoft, e então o Windows pede permissão uma vez). Ao terminar, o Aurora Whisper
+   abre na bandeja, perto do relógio.
+2. **Dite.** Clique num campo de texto qualquer (um e-mail, o Word, o navegador), **segure
+   `Ctrl+Win`**, espere o bipe e a pílula "Gravando" (o microfone só liga aí), fale e **solte**: o
+   texto entra onde está o cursor. Funciona **sem internet e sem conta**, e a transcrição acontece no
+   seu PC. Se nada acontecer, confira em Configurações do Windows > Privacidade e segurança >
+   Microfone se o acesso está ligado. Para ver o histórico e mudar as configurações, abra o menu do
+   ícone da bandeja e clique em **Abrir Aurora Whisper**.
+3. **Polish (opcional).** Organiza a pontuação e os parágrafos do que você ditou, com uma IA. Vem
+   **desligado** e só funciona com a **sua própria chave de API**, da OpenAI ou da Anthropic: o projeto
+   não fornece chave nenhuma, e o uso é **cobrado na sua conta** do provedor. Para ligar:
+   - crie a chave no site do provedor, em [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
+     (OpenAI) ou em [platform.claude.com/settings/keys](https://platform.claude.com/settings/keys)
+     (Anthropic). Crie **uma chave só para o Aurora Whisper** e defina um **limite de gasto** no painel
+     do provedor;
+   - no painel do Aurora Whisper, em **Configurações**, escolha o provedor na seção **IA**, cole a
+     chave, clique em **Salvar chave** e depois em **Testar conexão**; na seção **Texto**, marque
+     **Polish**.
+
+   A chave fica no Gerenciador de Credenciais do Windows e o painel não a mostra de volta. Com o
+   Polish ligado, o **texto** ditado (nunca a voz) vai ao provedor que você escolheu.
+4. **Nuvem e celular (opcional).** Servem para ver o histórico no celular e nos outros PCs, e para
+   ditar pelo celular. Exigem um servidor: o projeto **não tem servidor central**, e quem quiser sobe a
+   própria nuvem, num servidor seu, pelo roteiro `docs/deploy-f11.md`. Se você não precisa disso,
+   ignore: o app não se conecta a nuvem nenhuma enquanto você não conectar.
+5. **Privacidade.** Por padrão nada sai do seu PC: a voz só existe na memória enquanto é transcrita, e
+   só o Polish (com a sua chave) e a nuvem (que você mesmo conecta) mandam texto para fora, se você
+   ligar. Os detalhes estão na seção [Privacidade](#privacidade).
+6. **Ajuda.** Dúvida ou defeito: abra uma
+   [issue](https://github.com/MauroJulianiJunior/aurora-whisper/issues), em português, sem colar
+   ditado real, chave de API nem senha. **Falha de segurança não vai em issue**: veja o
+   [`SECURITY.md`](SECURITY.md) para o relato privado.
+
+## Estado
+
+A 0.1.0 é uma **prévia**: sem assinatura digital e sem atualização automática (para atualizar, baixe o
+Setup novo e instale por cima). O Agent funciona de ponta a ponta sem nuvem: captura, transcrição na
+sua máquina, dicionário, inserção, bandeja, overlay e painel. A nuvem é opcional e serve para ver e
+editar o histórico no celular e nos outros PCs; o projeto não tem servidor central, e cada pessoa sobe
+a sua, num servidor seu (o código está em `cmd/server`, o deploy em `deploy/` e o roteiro em
 `docs/deploy-f11.md`; o desenho, na ADR-019). **Ditar pelo celular** existe desde 11-out-2026
-(ADR-021): no app da nuvem, com o provedor e a chave de quem dita. Ainda não há Setup publicado: falta abrir o portão do
-workflow de release e publicar o release do modelo (veja "Montar o Setup"). Quem quer usar hoje
-monta do código.
+(ADR-021): no app da nuvem, com o provedor e a chave de quem dita.
 
 ## Requisitos
 
@@ -27,9 +71,9 @@ monta do código.
 
 ## Instalar
 
-> **Ainda não há versão publicada.** O Setup abaixo é gerado pelo repositório (veja "Montar o
-> Setup"), mas nenhum foi liberado: falta abrir o portão do workflow de release e publicar o release
-> do modelo. Quem quer usar hoje monta do código, na seção seguinte.
+> A versão **0.1.0** é uma prévia e está na página de Releases; o resumo para quem só quer usar está
+> em "Comece aqui". O Setup é gerado pelo repositório (veja "Montar o Setup"). Quem prefere montar do
+> código segue a seção seguinte.
 
 1. **Baixe** o `AuroraWhisper-Setup-<versão>.exe` na página de
    [Releases](https://github.com/MauroJulianiJunior/aurora-whisper/releases). O arquivo `.sha256` ao
@@ -151,7 +195,7 @@ Segure `Ctrl+Win`, fale, solte. O roteiro de teste manual da bandeja e do painel
 
 - **Áudio do PC.** Só existe na memória, durante a transcrição. Nunca é gravado em disco nem enviado
   a ninguém; o servidor de transcrição roda na sua máquina, em loopback. Isso vale para o PC, conectado
-  ou não a uma nuvem. **O celular é outro caso, ainda em desenho** (veja "Ditar no celular", abaixo).
+  ou não a uma nuvem. **O celular é outro caso** (veja "Ditar no celular", abaixo).
 - **Contexto de outras aplicações** (janela, campo em foco, texto próximo) é efêmero: vive na
   memória enquanto o texto é resolvido, não vai para o log nem é sincronizado. Campos de senha
   são bloqueados.
@@ -243,11 +287,12 @@ powershell -File scripts\montar-instalador.ps1 -Versao 0.1.0
 O roteiro para testar o Setup de verdade, numa conta de teste do Windows, está em
 `docs/teste-manual-instalador.md`.
 
-A cada tag `v*` o workflow `.github/workflows/release.yml` faz isso e cria um release **rascunho**;
-publicar é sempre à mão. Por ora o workflow **falha de propósito** no primeiro passo (o portão
-`F2_PRONTA` está fechado: a F2 da ADR já está feita, e o portão só abre quando o mantenedor
-conferir o servidor de voz de verdade) e, depois dele, no passo do modelo (o release que o guarda
-ainda não existe). As decisões estão em `docs/adr/ADR-018-instalador.md`.
+A cada tag `v*` o workflow `.github/workflows/release.yml` faz isso e cria um release **rascunho**
+(marcado como pré-lançamento nas versões 0.x); publicar é sempre à mão. O workflow baixa o zip do
+whisper.cpp e o modelo, cada um com tamanho e SHA-256 fixos (o modelo vem de um release fixo do
+próprio projeto, `modelo-small-q4_0-v1`), e um arquivo que não bate derruba o job. O portão
+`F2_PRONTA`, que segurava a primeira publicação, está aberto desde 12-out-2026. As decisões estão em
+`docs/adr/ADR-018-instalador.md`.
 
 ### Layout
 
