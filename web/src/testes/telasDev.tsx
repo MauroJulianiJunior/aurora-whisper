@@ -25,6 +25,11 @@
 //   historico-de-novo  a pergunta com a cópia de um OK anterior ao lado do banco
 //                      (o OK não copia de novo, e o que nasceu depois dela não está nela);
 //   historico-velho    o Agent de antes da F10: a frase do Reinicie o Agent.
+//   primeiro-uso       o primeiro uso: o histórico vazio, que diz que o ditado funciona
+//                      sem chave e que a chave só serve ao Polish (abra com ?config=0);
+//   chaves             a seção IA com a OpenAI escolhida e nenhuma chave guardada: a
+//                      linha de onde criar a chave embaixo do campo;
+//   chaves-anthropic   o mesmo, com a Anthropic.
 //   No historico, o clique em Apagar os mais antigos pergunta na linha, e o Apagar
 //   liga a regra no Agent de mentira (a prévia some; a Privacidade ganha a linha).
 // A tela de Configurações abre sozinha; ?config=0 deixa no Histórico.
@@ -90,8 +95,13 @@ const aprendidas = cenario === 'estados' ? [...vale, ...estados] : cenario === '
 const nuvem =
   cenario === 'pergunta' ? conectado(800, 3) : cenario === 'so-trocas' ? conectado(0, 3) : cenario === 'conectado' ? conectado(0, 0) : cenario === 'freio' ? conectado(0, 0, 12) : undefined
 
-const srv = servidorFalso([ditado({ id: 'd1', created_at: new Date(2026, 9, 7, 14).toISOString(), final_text: 'Manda o relatório amanhã cedo.' })], {
+// O primeiro uso é o histórico vazio; a IA com um provedor escolhido e sem chave mostra a linha de onde criá-la.
+const ditados = cenario === 'primeiro-uso' ? [] : [ditado({ id: 'd1', created_at: new Date(2026, 9, 7, 14).toISOString(), final_text: 'Manda o relatório amanhã cedo.' })]
+const provedorDaIA = cenario === 'chaves' ? 'openai' : cenario === 'chaves-anthropic' ? 'anthropic' : ''
+
+const srv = servidorFalso(ditados, {
   aprendidas,
+  ...(provedorDaIA ? { config: { ai_provider: provedorDaIA } } : {}),
   ...(nuvem ? { nuvem } : {}),
   ...(retencao ? { retencao: { ...retencaoBase, ...retencao } } : {}),
   // A cópia do envio à nuvem que não terminou: o botão das cópias não a apaga.

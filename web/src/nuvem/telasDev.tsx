@@ -27,7 +27,10 @@
 //   ditar-desligado  as Configurações, com "Ditar pelo celular" desligado;
 //   ditar-ligado     as Configurações, ligado, com a chave da OpenAI guardada;
 //   ditar-polish     as Configurações, com o Polish na Anthropic e a chave dela
-//                    por colar.
+//                    por colar;
+//   ditar-sem-chave  as Configurações, ligado e sem nenhuma chave, com o Polish na
+//                    Anthropic: os dois campos, cada um com a linha de onde criar a
+//                    chave do provedor dele.
 //
 // Claro e escuro seguem o sistema do navegador (no DevTools: Rendering,
 // "prefers-color-scheme"); 320 e 375 px, no modo de dispositivo.
@@ -75,7 +78,13 @@ const ditadoDoCenario: OpcoesDaNuvem['ditado'] =
             aceite: aceiteDeHoje('openai', 'anthropic'),
             chaves: { openai: 'sk-teste-de-mentira-WXYZ' },
           }
-        : undefined
+        : cenario === 'ditar-sem-chave'
+          ? {
+              preferencias: { polish: true, polish_provedor: 'anthropic', polish_modelo: 'claude-haiku-4-5' },
+              aceite: aceiteDeHoje('openai', 'anthropic'),
+              chaves: {},
+            }
+          : undefined
 
 const srv = servidorFalsoNuvem(
   [

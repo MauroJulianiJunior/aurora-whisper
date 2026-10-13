@@ -577,7 +577,7 @@ describe('Texto', () => {
     expect(modo('Polish').disabled).toBe(false)
     expect(descricao(modo('Polish'))).not.toContain('Chega na próxima versão')
     expect(descricao(modo('Polish'))).not.toContain('guarde a chave')
-    expect(screen.getByText('Só o modo Polish usa a IA.')).toBeTruthy()
+    expect(screen.getByText('Só o modo Polish usa a IA, e ele é opcional: o ditado funciona sem chave.')).toBeTruthy()
     expect(screen.queryByText(/Por enquanto, nada usa a IA/)).toBeNull()
   })
 

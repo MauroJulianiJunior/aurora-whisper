@@ -144,6 +144,16 @@ Filtros:
 - provider;
 - trash.
 
+**O primeiro uso: o histórico vazio (13-out-2026; `web/src/ambienteLocal.tsx`).** Embaixo da Aurora e de
+"Nenhum ditado ainda.", o painel do PC diz, em duas frases: "Segure Ctrl+Win, fale e solte, em qualquer
+aplicativo. Funciona sem chave: ela só serve ao Polish, que é opcional." É o aviso de primeiro uso da
+orientação das chaves (abaixo, em Configurações > Texto): o ditado não precisa de chave nenhuma, e a chave
+da IA só liga o Polish. Some sozinho com o primeiro ditado; a lixeira vazia e a busca sem resultado não o
+repetem. Sem faixa, sem botão e sem "não mostrar de novo": nada é guardado. O atalho escrito é o de fábrica,
+que por enquanto não se troca (Configurações > Ditado); no dia em que se puder trocar, esta frase tem de
+passar a ler a tecla do Agent, em vez de escrevê-la. O
+app do celular tem a sua própria frase de vazio (abaixo) e não leva esta.
+
 **A lista se atualiza sozinha no PC (ADR-021, S; `web/src/mudancas.ts` e `Painel.tsx`).** O ditado feito
 no celular e as edições feitas lá chegam ao painel do PC aberto em segundos, sem a pessoa tocar em nada.
 - **Como.** Com a aba à vista, o painel lê a cada 3 s o contador de mudanças do Agent
@@ -282,6 +292,26 @@ lista "Aprendido no painel".
     trocado; o rascunho de outro provedor, que ela passou a ver enquanto o teste ia e voltava,
     também não. Sem sugestão do Agent, ou com a sugestão fora da lista da conta, nada é marcado
     nem preenchido.
+  - **A orientação das chaves (13-out-2026; `web/src/OndeCriarAChave.tsx`).** A pessoa que baixa o
+    Setup precisa saber, sem tutorial, que não precisa de chave para ditar e, se quiser o Polish,
+    onde criá-la. O menor texto que resolve, em três lugares:
+    - **A introdução da seção IA** diz "Só o modo Polish usa a IA, e ele é opcional: o ditado
+      funciona sem chave." (com o Agent de antes do Polish, a frase de sempre: "Por enquanto, nada usa a
+      IA…").
+    - **Embaixo do campo de chave** (que aparece ao escolher o provedor), uma linha só, entre o campo e
+      "Ao salvar, a chave vai direto para o Gerenciador de Credenciais…": "Crie a chave em
+      `platform.openai.com/api-keys`. Ela é sua e o uso é cobrado na sua conta da OpenAI: use uma só
+      para o Aurora Whisper, com limite de gasto." (Anthropic: `platform.claude.com/settings/keys` e "da
+      Anthropic".) O endereço é o link, escrito por extenso para quem lê ver para onde vai; abre em outra
+      aba (`target="_blank"`, `rel="noopener noreferrer"`), e o leitor de tela ouve "(abre em outra
+      aba)". A linha fica com a chave já guardada também (serve para trocar a chave). O campo a lê como
+      descrição (`aria-describedby`: o estado, esta linha e a do Gerenciador de Credenciais, nessa ordem).
+    - **O primeiro uso** (o histórico vazio), em "Histórico", acima.
+    O link da página de chaves é o que a documentação oficial de cada provedor indica, conferido em
+    13-out-2026 (a OpenAI só abre no navegador com a conta aberta; o Console da Anthropic mudou de
+    `console.anthropic.com` para `platform.claude.com`, e o endereço antigo redireciona); os endereços
+    ficam presos em `web/src/paginasDeChave.ts` e nos testes. Sem logo de provedor, sem passo a passo, sem
+    caixa de aviso: uma linha de ajuda, no estilo discreto das outras.
 - dictionary;
 - context;
 - cloud context resolve. **Depois (ADR-019):** o contexto não vai para a nuvem na etapa 5.
@@ -512,12 +542,15 @@ pergunta conta as trocas aprendidas (o `previa_trocas` do `06`, o M).
   nunca vão." (o `08` do plano dizia "e o que você aprendeu"; "as trocas que você aprendeu" é o que a D1
   limita: só o botão Aprender). A do app do celular: "Configurações do celular", abaixo (ADR-021, D0).
 - **Para ver as telas** sem Agent nem nuvem: `pnpm -C web dev` e `/telas-dev.html?cenario=estados` (o
-  painel do PC; também `so-estados`, `pergunta`, `so-trocas`, `conectado` e `freio`) ou
+  painel do PC; também `so-estados`, `pergunta`, `so-trocas`, `conectado` e `freio` e, para a orientação
+  das chaves, `primeiro-uso` (o histórico vazio; abra com `&config=0`), `chaves` e `chaves-anthropic` (a
+  seção IA com o provedor escolhido e sem chave)) ou
   `/telas-dev-nuvem.html?cenario=lista` (o app da nuvem; também `vazio`, `teto`, `erro` e `longa` e,
   para o ditado do celular, `gravando`, `enviando`, `erro-rede`, `sessao` e `chegou`: um microfone de
   mentira fala sozinho, num relógio parado; e, para o aceite e as Configurações do ditado, `aceite` (o
-  toque no microfone de uma conta sem aceite, com a folha), `ditar-desligado`, `ditar-ligado` e
-  `ditar-polish`). A calibração do microfone, `/calibracao-dev.html` ("A calibração do microfone no
+  toque no microfone de uma conta sem aceite, com a folha), `ditar-desligado`, `ditar-ligado`,
+  `ditar-polish` e `ditar-sem-chave` (ligado, com o Polish na Anthropic e nenhuma chave: os dois campos,
+  cada um com o link de onde criar a chave)). A calibração do microfone, `/calibracao-dev.html` ("A calibração do microfone no
   Android", abaixo). São só do `pnpm dev`: nenhum build as inclui. A nuvem de mentira dessas telas e
   dos testes do app (`web/src/testes/servidorFalsoNuvem.ts`) fala o contrato do `06` para o ditado no
   celular (`/dictation`, `/dictation/settings`, `/dictation/consent` e `/ai-keys`) e para a rota de
@@ -975,7 +1008,15 @@ segundo plano."
 - **A chave** (uma por provedor, a do provedor da voz aqui e, com o Polish, a do dele):
   - Sem chave: "Chave da OpenAI", "Nenhuma chave guardada.", um campo de senha ("Cole a chave aqui", sem
     preenchimento automático) e **Guardar chave** (só vale com algo colado; o Enter também guarda), e
-    a ajuda "Use uma chave só para o celular, com limite de gasto no provedor.".
+    a linha de **onde criar a chave** (13-out-2026; o mesmo componente do PC, `OndeCriarAChave`): "Crie a
+    chave em `platform.openai.com/api-keys`. Ela é sua e o uso é cobrado na sua conta da OpenAI: use
+    uma só para o celular, com limite de gasto.", com o link do provedor daquele campo: OpenAI
+    (`platform.openai.com/api-keys`), Groq (`console.groq.com/keys`) ou Anthropic
+    (`platform.claude.com/settings/keys`), em outra aba, sem passar a origem. O campo da voz e o do Polish
+    (quando é de outro provedor) têm cada um a sua. A linha também aparece ao **Trocar** a chave, e na
+    chave que o servidor já não decifra. O texto da folha do aceite não muda (a versão do aviso fica
+    como está): a frase da folha continua "Use uma chave só para o celular, com limite de gasto no
+    provedor."; esta linha é a do campo, e diz a mesma recomendação e mais onde criar a chave.
   - **A chave vai só no corpo do `PUT /api/v1/ai-keys/{provedor}`, nunca na URL, e não volta:** o servidor
     a testa no provedor, a cifra e devolve só `configurada` e o final. O campo esvazia ao guardar.
   - **A chave que o servidor guardava e já não decifra** (`colar_de_novo`: a chave de cifra trocou, ou

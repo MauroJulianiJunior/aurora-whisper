@@ -306,13 +306,13 @@ describe('a chave', () => {
     return campo
   }
 
-  it('sem chave: um campo de senha, a ajuda de usar uma chave só para o celular, e o Guardar só vale com algo colado', async () => {
+  it('sem chave: um campo de senha, a linha de onde criar a chave, e o Guardar só vale com algo colado', async () => {
     const { srv } = await abrir(pronto({ chaves: {} }))
     const campo = await within(secao()).findByLabelText<HTMLInputElement>('Chave da OpenAI', undefined, espera)
     expect(campo.type).toBe('password')
     expect(campo.autocomplete).toBe('off')
     expect(within(secao()).getByText('Nenhuma chave guardada.')).toBeTruthy()
-    expect(within(secao()).getByText('Use uma chave só para o celular, com limite de gasto no provedor.')).toBeTruthy()
+    expect(within(secao()).getByRole('link', { name: /platform\.openai\.com\/api-keys/ })).toBeTruthy()
     const botao = within(secao()).getByRole('button', { name: 'Guardar chave' })
     expect(botao.getAttribute('aria-disabled')).toBe('true')
     fireEvent.click(botao)
@@ -551,6 +551,83 @@ describe('a chave', () => {
     await screen.findByText('Sem conexão.', undefined, espera)
     expect(campo.value).toBe('sk-teste-sem-rede-1234')
     expect(srv.daConta.chaves.openai).toBeUndefined()
+  })
+})
+
+// A linha de "onde consigo a chave" embaixo de cada campo de chave (a da voz e a
+// do Polish): o link oficial do provedor daquele campo, que a chave é da pessoa
+// e cobrada na conta dela, e a chave só para isto, com limite de gasto.
+describe('onde criar a chave', () => {
+  const frase = (endereco: string, nome: string) =>
+    `Crie a chave em ${endereco} (abre em outra aba). Ela é sua e o uso é cobrado na sua conta da ${nome}: use uma só para o celular, com limite de gasto.`
+
+  // A linha que o campo diz como descrição (aria-describedby), e o link dela.
+  const linhaDo = (campo: HTMLElement) => {
+    const ids = (campo.getAttribute('aria-describedby') ?? '').split(' ')
+    return ids.map((id) => document.getElementById(id)).find((el) => el?.querySelector('a'))!
+  }
+  const linkDe = (linha: HTMLElement) => linha.querySelector('a')!
+
+  it('OpenAI: o link da página de chaves, em outra aba e sem passar a origem, e a frase inteira', async () => {
+    await abrir(pronto({ chaves: {} }))
+    const campo = await within(secao()).findByLabelText<HTMLInputElement>('Chave da OpenAI', undefined, espera)
+    const linha = linhaDo(campo)
+    expect(linha.textContent).toBe(frase('platform.openai.com/api-keys', 'OpenAI'))
+    const link = linkDe(linha)
+    expect(link.getAttribute('href')).toBe('https://platform.openai.com/api-keys')
+    expect(link.getAttribute('target')).toBe('_blank')
+    expect(link.rel.split(' ').sort()).toEqual(['noopener', 'noreferrer'])
+    // O leitor de tela ouve que o link abre em outra aba; quem enxerga lê só o endereço.
+    expect(link.querySelector('.so-leitor')!.textContent).toBe(' (abre em outra aba)')
+    expect(within(secao()).getByRole('link', { name: /^platform\.openai\.com\/api-keys\s?\(abre em outra aba\)$/ })).toBe(link)
+  })
+
+  it('Groq: o link do console dela', async () => {
+    await abrir(pronto({ aceite: aceiteDe('groq'), preferencias: { provedor: 'groq' }, chaves: {} }))
+    const campo = await within(secao()).findByLabelText<HTMLInputElement>('Chave da Groq', undefined, espera)
+    const linha = linhaDo(campo)
+    expect(linha.textContent).toBe(frase('console.groq.com/keys', 'Groq'))
+    const link = linkDe(linha)
+    expect(link.getAttribute('href')).toBe('https://console.groq.com/keys')
+    expect(link.getAttribute('target')).toBe('_blank')
+    expect(link.rel.split(' ').sort()).toEqual(['noopener', 'noreferrer'])
+  })
+
+  it('Polish na Anthropic: a chave dela tem o link dela, e a da OpenAI (já guardada) não repete a linha', async () => {
+    await abrir(pronto({ preferencias: { polish: true, polish_provedor: 'anthropic', polish_modelo: 'claude-haiku-4-5' } }))
+    const campo = await within(secao()).findByLabelText<HTMLInputElement>('Chave da Anthropic', undefined, espera)
+    const linha = linhaDo(campo)
+    expect(linha.textContent).toBe(frase('platform.claude.com/settings/keys', 'Anthropic'))
+    const link = linkDe(linha)
+    expect(link.getAttribute('href')).toBe('https://platform.claude.com/settings/keys')
+    expect(link.getAttribute('target')).toBe('_blank')
+    expect(link.rel.split(' ').sort()).toEqual(['noopener', 'noreferrer'])
+    // A chave da OpenAI está guardada ("Chave terminada em"), então o campo dela não aparece e a linha não se repete.
+    expect(Array.from(secao().querySelectorAll('a'), (a) => a.getAttribute('href'))).toEqual(['https://platform.claude.com/settings/keys'])
+  })
+
+  it('com a chave guardada não há a linha; Trocar a traz de volta, junto do lembrete de revogar', async () => {
+    await ligadaComChave()
+    expect(secao().querySelector('a')).toBeNull()
+    fireEvent.click(within(secao()).getByRole('button', { name: 'Trocar a chave da OpenAI' }))
+    const campo = await within(secao()).findByLabelText<HTMLInputElement>('Chave da OpenAI', undefined, espera)
+    expect(linhaDo(campo).textContent).toBe(frase('platform.openai.com/api-keys', 'OpenAI'))
+    expect(secao().textContent).toContain('Revogue também esta chave no provedor.')
+  })
+
+  it('a chave que o servidor já não decifra pede a chave de novo, com a linha de onde criar', async () => {
+    await abrir(pronto({ chaves: {}, colarDeNovo: ['openai'] }))
+    const campo = await within(secao()).findByLabelText<HTMLInputElement>('Chave da OpenAI', undefined, espera)
+    expect(within(secao()).getByText('A chave guardada não vale mais neste servidor. Cole a chave de novo.')).toBeTruthy()
+    expect(linkDe(linhaDo(campo)).getAttribute('href')).toBe('https://platform.openai.com/api-keys')
+  })
+
+  it('a chave colada não vai para o link nem para a página: só o endereço fixo do provedor', async () => {
+    await abrir(pronto({ chaves: {} }))
+    const campo = await within(secao()).findByLabelText<HTMLInputElement>('Chave da OpenAI', undefined, espera)
+    fireEvent.input(campo, { target: { value: 'sk-teste-colada-no-campo-9Z9Z' } })
+    expect(Array.from(secao().querySelectorAll('a'), (a) => a.href)).toEqual(['https://platform.openai.com/api-keys'])
+    expect(secao().textContent).not.toContain('sk-teste-colada')
   })
 })
 

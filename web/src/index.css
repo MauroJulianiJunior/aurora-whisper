@@ -879,6 +879,21 @@ a.botao {
   font-size: 13px;
 }
 
+/* O link da ajuda (onde criar a chave do provedor): no texto forte e
+   sublinhado, como um link tem de parecer, sem o azul e o roxo do navegador,
+   que somem no escuro. O endereço é longo e não quebra em palavras. */
+.ajuda a {
+  color: var(--texto);
+  text-decoration: underline;
+  text-decoration-color: var(--contorno);
+  text-underline-offset: 2px;
+  overflow-wrap: anywhere;
+}
+
+.ajuda a:hover {
+  text-decoration-color: currentColor;
+}
+
 /* O que só vale no próximo início, e por que o Polish não pode ser
    escolhido: informação que muda o que a pessoa espera, no texto forte. */
 .pendente {

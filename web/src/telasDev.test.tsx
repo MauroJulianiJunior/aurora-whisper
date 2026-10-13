@@ -69,3 +69,27 @@ describe('os cenários do Histórico em /telas-dev.html', () => {
     expect(bloco()).toBeNull()
   })
 })
+
+// A orientação das chaves (lançamento): o primeiro uso e a seção IA sem chave,
+// para ver e renderizar sem Agent.
+describe('os cenários das chaves em /telas-dev.html', () => {
+  it('primeiro-uso: o histórico vazio diz que o ditado funciona sem chave, e a chave só serve ao Polish', async () => {
+    window.history.replaceState(null, '', '/telas-dev.html?cenario=primeiro-uso&config=0')
+    vi.resetModules()
+    await import('./testes/telasDev')
+    await screen.findByText('Nenhum ditado ainda.', { selector: '.estado p.estado-titulo' }, { timeout: 4000 })
+    expect(screen.getByText(/Funciona sem chave: ela só serve ao Polish, que é opcional\./)).toBeTruthy()
+  })
+
+  it.each([
+    ['chaves', 'OpenAI', 'https://platform.openai.com/api-keys'],
+    ['chaves-anthropic', 'Anthropic', 'https://platform.claude.com/settings/keys'],
+  ])('%s: a seção IA, sem chave guardada, com o link de onde criá-la', async (cenario, nome, url) => {
+    await montar(cenario)
+    const campo = await screen.findByLabelText(`Chave de API da ${nome}`)
+    await screen.findByText('Nenhuma chave guardada.')
+    const link = within(document.getElementById('cfg-chave-onde')!).getByRole('link')
+    expect(link.getAttribute('href')).toBe(url)
+    expect(campo.getAttribute('aria-describedby')).toContain('cfg-chave-onde')
+  })
+})
