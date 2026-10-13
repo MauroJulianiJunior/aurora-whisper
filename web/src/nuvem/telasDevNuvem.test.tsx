@@ -40,6 +40,13 @@ describe('os cenários do ditado pelo celular em /telas-dev-nuvem.html', () => {
     expect(screen.queryByRole('button', { name: 'Parar e enviar' })).toBeNull()
   })
 
+  it('entrar: sem sessão, a tela Entrar com a linha da nuvem particular embaixo do botão do Google', async () => {
+    await montar('entrar')
+    await screen.findByRole('button', { name: 'Entrar com o Google' }, espera)
+    expect(screen.getByText('Nuvem particular: só entra quem foi convidado.')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Configurações' })).toBeNull()
+  })
+
   it('ditar-desligado: as Configurações, com "Desligado." e o Ligar', async () => {
     await montar('ditar-desligado')
     await within(await screen.findByRole('region', { name: 'Ditar pelo celular' }, espera)).findByText('Desligado.', undefined, espera)

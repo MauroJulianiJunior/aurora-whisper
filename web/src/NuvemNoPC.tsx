@@ -287,6 +287,7 @@ export function NuvemNoPC({ cliente, visivel, aoPerderLigacao, avisar, aoMudarEs
                 autoCapitalize="none"
                 spellCheck={false}
                 placeholder="https://…"
+                aria-describedby="cfg-nuvem-nome"
                 value={url}
                 onChange={(e) => {
                   mexeu.current = true
@@ -298,6 +299,12 @@ export function NuvemNoPC({ cliente, visivel, aoPerderLigacao, avisar, aoMudarEs
                 {indo === 'conectar' ? 'Conectando…' : 'Conectar à nuvem'}
               </button>
             </div>
+            {/* O que o Conectar manda, antes do clique: o nome do computador (que
+                costuma ter o nome da pessoa) vai à nuvem digitada, para a lista de
+                aparelhos de lá, antes mesmo do login. */}
+            <p className="ajuda" id="cfg-nuvem-nome">
+              O nome deste PC vai para a nuvem que você conectar, para a lista de aparelhos.
+            </p>
           </div>
           {estado.url &&
             (confirmando ? (

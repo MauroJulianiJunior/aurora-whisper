@@ -204,6 +204,10 @@ jobs:
         shell: powershell
         env:
           GH_TOKEN: ${{ github.token }}   # gh release create --draft
+        # Lembrete para quem publica (o Mauro): o release nasce RASCUNHO, e o texto
+        # de $notas, abaixo, é o que vai a público. Antes de publicar, rode o roteiro
+        # de teste do instalador (conta nova, máquina sem Visual C++) e confira a
+        # ADR-018.
         run: |
           $ErrorActionPreference = 'Stop'
           $setup = "dist\AuroraWhisper-Setup-$($env:VERSAO).exe"
@@ -211,12 +215,13 @@ jobs:
           $notas = @"
           Aurora Whisper $($env:VERSAO) - **previa, sem assinatura digital**.
 
+          - O ditado funciona no PC, sem conta e sem internet.
+          - O Polish (o texto arrumado por IA) e opcional e usa a chave da propria pessoa (OpenAI ou Anthropic), cobrada na conta dela.
+          - A nuvem e opcional e exige um servidor proprio: o projeto nao tem servidor central.
+
           SHA-256 do Setup: ``$hash``
 
           O Windows vai mostrar o aviso do SmartScreen ("O Windows protegeu o computador"): escolha **Mais informacoes** e depois **Executar assim mesmo**. O Setup nao pede administrador, a menos que falte o runtime do Visual C++ (ele baixa o oficial da Microsoft e o Windows pede permissao uma vez). Os dados ficam em ``%LOCALAPPDATA%\AuroraWhisper``.
-
-          ---
-          Este release e um RASCUNHO, criado pelo workflow, e **nao foi publicado**. Antes de publicar (decisao do Mauro): o roteiro de teste do instalador (conta nova, maquina sem Visual C++) e a ADR-018.
           "@
           # Sem BOM: o gh leva o arquivo como esta.
           [IO.File]::WriteAllText("$PWD\dist\notas.md", $notas, (New-Object System.Text.UTF8Encoding $false))

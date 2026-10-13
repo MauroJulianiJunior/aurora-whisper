@@ -7,7 +7,8 @@
 //   pnpm -C web dev      e abrir      /telas-dev-nuvem.html?cenario=lista
 //
 // cenario: lista (padrão), vazio, teto (passou do teto do servidor), erro (a
-// lista não carrega) ou longa (variante e domínio compridos).
+// lista não carrega), longa (variante e domínio compridos) ou entrar (sem
+// sessão: a tela Entrar, com a linha da nuvem particular).
 // A tela de Configurações abre sozinha; ?config=0 deixa no Histórico.
 //
 // O ditado do celular (ADR-021, C6a), no Histórico, com um microfone de mentira
@@ -93,6 +94,8 @@ const srv = servidorFalsoNuvem(
     itemNuvem({ id: 'd3', created_at: hora(6, 17), final_text: 'Lembrar de pagar o DAS até o dia vinte.' }),
   ],
   {
+    // O cenário "entrar" abre sem sessão: a tela Entrar.
+    logado: cenario !== 'entrar',
     sessoes: [{ id: 's1', rotulo: 'Android · Chrome', criada_em: hora(1, 9), ultimo_uso_em: hora(7, 17), atual: true }],
     aparelhos: [{ id: 'a1', nome: 'DELL-G15', plataforma: 'windows', versao: '0.1.0', conectado_em: hora(1, 9), ultimo_uso_em: hora(7, 16) }],
     aprendidos: cenario === 'vazio' || cenario === 'erro' ? [] : cenario === 'longa' ? longas : trocas,
@@ -149,7 +152,7 @@ if (ditar) {
   // O primeiro toque no microfone de uma conta sem aceite: a folha, e o
   // microfone fechado.
   quandoHouver('Ditar', (mic) => mic.click())
-} else if (busca.get('config') !== '0') {
+} else if (busca.get('config') !== '0' && cenario !== 'entrar') {
   // Abre as Configurações sozinha: o botão da barra é o único com esse nome.
   quandoHouver('Configurações', (b) => b.click())
 }

@@ -657,6 +657,51 @@ func TestWorkflow_CriaSoRascunhoENuncaPublica(t *testing.T) {
 	}
 }
 
+// As notas do release vão a público quando o Mauro publica o rascunho. Nada
+// interno entra nelas (o aviso "este release e um rascunho... decisao do
+// Mauro" ficou como comentário do workflow), e entra o que quem baixa precisa
+// saber: o ditado é local, o Polish é opcional e usa a chave da própria pessoa,
+// a nuvem é opcional e exige servidor próprio. ASCII, como o resto do texto: o
+// PowerShell 5.1 do runner não garante UTF-8 ao ler o script.
+func TestWorkflow_NotasDoReleaseSaoParaOPublico(t *testing.T) {
+	wf := lerTexto(t, caminhoDoWorkflow)
+	m := regexp.MustCompile(`(?s)\$notas = @"\n(.*?)\n\s*"@`).FindStringSubmatch(wf)
+	if m == nil {
+		t.Fatal("não achei o texto das notas ($notas = @\"...\"@) no workflow")
+	}
+	notas := m[1]
+	minusculas := strings.ToLower(notas)
+	for _, interno := range []string{"rascunho", "nao foi publicado", "decisao do mauro", "antes de publicar", "adr-", "workflow"} {
+		if strings.Contains(minusculas, interno) {
+			t.Errorf("as notas, que vão a público, trazem %q (texto interno de quem publica)", interno)
+		}
+	}
+	for _, quer := range []string{
+		"previa, sem assinatura digital",
+		"O ditado funciona no PC, sem conta e sem internet.",
+		"O Polish",
+		"e opcional e usa a chave da propria pessoa (OpenAI ou Anthropic), cobrada na conta dela.",
+		"A nuvem e opcional e exige um servidor proprio",
+		"o projeto nao tem servidor central.",
+		"SHA-256 do Setup: ``$hash``",
+		"SmartScreen",
+	} {
+		if !strings.Contains(notas, quer) {
+			t.Errorf("as notas do release não dizem %q", quer)
+		}
+	}
+	for i, r := range notas {
+		if r > 127 {
+			t.Errorf("as notas têm um caractere fora do ASCII (%q, byte %d)", r, i)
+			break
+		}
+	}
+	// O lembrete de quem publica existe, mas fora das notas: um comentário do workflow.
+	if !strings.Contains(wf, "# Lembrete para quem publica") {
+		t.Error("o lembrete de quem publica (o roteiro do instalador antes de publicar) sumiu do workflow")
+	}
+}
+
 // Os valores fixos do workflow são os do código e os da ADR.
 func TestWorkflow_HashesFixosSaoOsDoCodigoEDaADR(t *testing.T) {
 	wf := lerTexto(t, caminhoDoWorkflow)

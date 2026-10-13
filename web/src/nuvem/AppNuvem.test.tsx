@@ -95,6 +95,25 @@ describe('abertura', () => {
     expect(screen.queryByRole('button', { name: /conta de teste/ })).toBeNull()
   })
 
+  it('Entrar avisa, antes do clique, que a nuvem é particular: uma linha discreta, depois do botão', async () => {
+    montar({ logado: false })
+    const botao = await screen.findByRole('button', { name: 'Entrar com o Google' })
+    const frase = screen.getByText('Nuvem particular: só entra quem foi convidado.')
+    // O estilo discreto das outras ajudas, e abaixo do botão (não é um título nem um alerta).
+    expect(frase.classList.contains('ajuda')).toBe(true)
+    expect(frase.closest('[role="alert"]')).toBeNull()
+    expect(botao.compareDocumentPosition(frase) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('a linha da nuvem particular fica quando o login falha: o alerta é só o erro', async () => {
+    const { srv } = montar({ logado: false })
+    srv.interceptar((p) => (p.caminho === '/auth/start' ? new Response('{}', { status: 429 }) : undefined))
+    fireEvent.click(await screen.findByRole('button', { name: 'Entrar com o Google' }))
+    expect((await screen.findByRole('alert')).textContent).toBe('Muitas tentativas. Espere um minuto e tente de novo.')
+    expect(screen.getByText('Nuvem particular: só entra quem foi convidado.')).toBeTruthy()
+  })
+
   it('num servidor de verdade, fora de localhost: o Google junto com o título, sem perguntar pelo login de teste', async () => {
     const { srv } = montar({ logado: false }, base(), 'aurora.exemplo.com.br')
     await titulo('Aurora Whisper')
@@ -174,6 +193,8 @@ describe('entrar', () => {
     expect(screen.queryByRole('button', { name: 'Entrar com o Google' })).toBeNull()
     expect(teste.getAttribute('aria-describedby')).toBe('entrar-teste-ajuda')
     expect(screen.getByText('Só neste PC, sem Google.')).toBeTruthy()
+    // Sem o Google, não há convite a pedir: a linha da nuvem particular não vale.
+    expect(screen.queryByText('Nuvem particular: só entra quem foi convidado.')).toBeNull()
     fireEvent.click(teste)
     await linha(/Manda o relatório amanhã/)
     expect(srv.pedidos.find((p) => p.metodo === 'POST' && p.caminho === '/auth/teste')?.corpo).toEqual({ email: 'voce@teste.local' })
@@ -198,6 +219,8 @@ describe('no meio do uso', () => {
     const h1 = await titulo('Sua sessão terminou.')
     await waitFor(() => expect(document.activeElement).toBe(h1))
     expect(screen.getByText('Entre de novo para ver seu histórico.')).toBeTruthy()
+    // Quem tinha sessão já foi convidado: a linha da nuvem particular é da primeira entrada.
+    expect(screen.queryByText('Nuvem particular: só entra quem foi convidado.')).toBeNull()
     // Nada do que estava na tela fica.
     expect(screen.queryByText(/Manda o relatório/)).toBeNull()
     expect(await screen.findByRole('button', { name: 'Entrar com o Google' })).toBeTruthy()

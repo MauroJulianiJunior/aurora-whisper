@@ -69,8 +69,8 @@ publicada, limite de memória); as migrations pelo comando `migrate`, à parte d
 terceiro na frente; com as portas 80 e 443 livres, um Caddy dedicado; com um proxy já rodando,
 **encostar nele é ponto de parada**. Quem roda cada passo no servidor é o dono, pelo roteiro da F11.
 
-**F11, a D1 (confirmada pelo dono em 09-out-2026):** a nuvem mora numa VPS (datacenter no Brasil), em
-`https://aurora-whisper.mjj.net.br`, atrás do Traefik v3 que já atende os outros serviços do servidor,
+**F11, a D1 (confirmada pelo dono em 09-out-2026):** a nuvem mora numa VPS (datacenter no Brasil), num
+domínio próprio (nos roteiros, o exemplo `https://aurora.exemplo.com.br`), atrás do Traefik v3 que já atende os outros serviços do servidor,
 **só pelos rótulos do próprio contêiner** (a rede `web`, o entrypoint `websecure`, o
 resolvedor `letsencrypt`, o log de acesso desligado no nosso router): nada do Traefik é editado nem
 reiniciado. O roteiro é o `docs/deploy-f11.md`, na ordem:

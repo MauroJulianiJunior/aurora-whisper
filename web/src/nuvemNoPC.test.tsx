@@ -59,6 +59,25 @@ describe('a seção Nuvem do PC', () => {
     expect(pedidosA(srv, '/api/nuvem/conectar')).toHaveLength(0)
   })
 
+  it('antes de conectar, diz que o nome deste PC vai para a nuvem; a linha descreve o campo e não pede nada', async () => {
+    const srv = await abrir()
+    const frase = 'O nome deste PC vai para a nuvem que você conectar, para a lista de aparelhos.'
+    const linha = within(secao()).getByText(frase)
+    // Uma ajuda discreta, embaixo do campo e do botão, e não um alerta nem uma pergunta.
+    expect(linha.classList.contains('ajuda')).toBe(true)
+    expect(linha.getAttribute('role')).toBeNull()
+    expect(campo().getAttribute('aria-describedby')).toBe(linha.id)
+    expect(botao('Conectar à nuvem').compareDocumentPosition(linha) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // Dizer o nome não manda nada a ninguém: só o clique no Conectar.
+    expect(pedidosA(srv, '/api/nuvem/conectar')).toHaveLength(0)
+    cleanup()
+
+    // Conectado, a frase é a de sempre ("aparece como …"): a de antes de conectar já cumpriu o papel.
+    await abrir({ nuvem: conectado })
+    await within(secao()).findByText('Na nuvem, este PC aparece como DELL-G15.')
+    expect(within(secao()).queryByText(frase)).toBeNull()
+  })
+
   it('Conectar manda o endereço, mostra o código e leva o foco ao Abrir de novo', async () => {
     const srv = await abrir()
     fireEvent.change(campo(), { target: { value: ' http://localhost:8080 ' } })

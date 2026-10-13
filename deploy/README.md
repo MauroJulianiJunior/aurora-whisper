@@ -7,13 +7,13 @@ leem o texto e rodam o bash com programas de mentira.
 
 A F11 anda em duas partes. A **Parte 1** não depende de onde a nuvem mora. A **Parte 2** (o compose, a
 borda que atende o https, o roteiro do deploy) segue a D1, confirmada pelo Mauro em 09-out-2026: a nuvem
-mora numa **VPS Linux com datacenter no Brasil**, em `https://aurora-whisper.mjj.net.br`, atrás de um
-**Traefik v3 que já roda lá** e atende os outros serviços do servidor. Nada do Traefik nem dos outros
-serviços é editado ou reiniciado: a nuvem entra só com os rótulos do próprio contêiner.
+mora numa **VPS Linux com datacenter no Brasil**, num domínio próprio (nos roteiros, o exemplo
+`https://aurora.exemplo.com.br`), atrás de um **Traefik v3 que já roda lá** e atende os outros serviços
+do servidor. Nada do Traefik nem dos outros serviços é editado ou reiniciado: a nuvem entra só com os
+rótulos do próprio contêiner.
 
-Esse endereço é o da **instância do mantenedor**, fechada às contas de `CONTAS_PERMITIDAS`: não é um
-serviço aberto. Quem sobe a própria nuvem usa o seu domínio, que o `gerar-segredos.sh` pergunta e grava
-no `config.env`, e o troca nos comandos dos roteiros.
+`aurora.exemplo.com.br` é só um exemplo. O projeto não tem servidor central: quem sobe a nuvem usa o seu
+domínio, que o `gerar-segredos.sh` pergunta e grava no `config.env`, e o troca nos comandos dos roteiros.
 
 **O roteiro do deploy é o `docs/deploy-f11.md`** (um passo por vez, com o porquê e o comando); o do
 B2, o `docs/backup-b2-f11.md`; o teste final, o `docs/teste-final-f11.md`; o da restauração, num desastre,
