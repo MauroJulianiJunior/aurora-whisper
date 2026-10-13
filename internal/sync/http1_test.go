@@ -82,9 +82,58 @@ func confiarNaNuvem(t *testing.T, h *http.Client, srv *httptest.Server) {
 	default:
 		t.Fatalf("o transporte do sync é %T; quero um *http.Transport", h.Transport)
 	}
+	manterOHTTP2DeProducao(tr)
 	pool := x509.NewCertPool()
 	pool.AddCert(srv.Certificate())
 	tr.TLSClientConfig = &tls.Config{RootCAs: pool}
+}
+
+// manterOHTTP2DeProducao liga o ForceAttemptHTTP2 num transporte em que o
+// net/http tentaria o HTTP/2 sozinho, e nada faz nos outros. Tem de ser chamada
+// ANTES de o teste mexer no transporte.
+//
+// Sem isto, o teste podia ficar cego: num transporte sem Protocols, sem
+// TLSNextProto e sem ForceAttemptHTTP2, o net/http tenta o HTTP/2 só se não
+// houver um TLSClientConfig nem um discador próprios (Transport.protocols, "be
+// conservative"). O RootCAs do teste é um TLSClientConfig próprio: ele
+// desligaria o HTTP/2 que a produção, sem ele, falaria com a nuvem de verdade, e
+// a nuvem de teste veria HTTP/1.1. Com Protocols explícito, como o de produção,
+// nada muda (TestHTTP2_OTesteVeOHTTP2DeUmTransporteSemProtocols).
+func manterOHTTP2DeProducao(tr *http.Transport) {
+	if tr.Protocols == nil && tr.TLSNextProto == nil && !tr.ForceAttemptHTTP2 &&
+		tr.TLSClientConfig == nil && tr.DialContext == nil && tr.DialTLSContext == nil {
+		tr.ForceAttemptHTTP2 = true
+	}
+}
+
+// TestHTTP2_OTesteVeOHTTP2DeUmTransporteSemProtocols prova que confiarNaNuvem
+// não esconde o HTTP/2: um cliente cujo transporte não tem Protocols (e que,
+// em produção, sem TLS nem discador próprios, falaria HTTP/2) chega em HTTP/2 à
+// nuvem de teste depois de confiarNaNuvem. Sem isto, o
+// TestCliente_NaoFalaHTTP2 e o TestHTTP2Debug_TokenNaoVaiParaOLog passavam
+// para esse transporte, e só o TestNovoHTTP_TransporteSoHTTP1 o pegava.
+func TestHTTP2_OTesteVeOHTTP2DeUmTransporteSemProtocols(t *testing.T) {
+	var protos protocolosDoSync
+	srv := nuvemComHTTP2(t, &protos)
+
+	h := &http.Client{Transport: &http.Transport{Proxy: http.ProxyFromEnvironment, TLSHandshakeTimeout: 10 * time.Second}}
+	confiarNaNuvem(t, h, srv)
+	if _, err := NovoCliente(srv.URL, tokenDeMentira, h).Pull(context.Background(), 0, 10); err != nil {
+		t.Fatalf("Pull: %v", err)
+	}
+	if v := protos.tira(); len(v) != 1 || v[0] != 2 {
+		t.Errorf("o transporte sem Protocols chegou em HTTP/%v; quero HTTP/2, como em produção: o teste está cego", v)
+	}
+
+	// E o de produção, explícito, continua só HTTP/1.1.
+	h = NovoHTTP()
+	confiarNaNuvem(t, h, srv)
+	if _, err := NovoCliente(srv.URL, tokenDeMentira, h).Pull(context.Background(), 0, 10); err != nil {
+		t.Fatalf("Pull: %v", err)
+	}
+	if v := protos.tira(); len(v) != 1 || v[0] != 1 {
+		t.Errorf("o transporte de produção chegou em HTTP/%v; quero HTTP/1", v)
+	}
 }
 
 func pushComTexto() []Mutation {

@@ -83,6 +83,7 @@ func clienteDeProducaoPara(t *testing.T, n *nuvemFalsa) *http.Client {
 	default:
 		t.Fatalf("o transporte da nuvem é %T; quero um *http.Transport", c.Transport)
 	}
+	manterOHTTP2DeProducao(tr)
 	pool := x509.NewCertPool()
 	pool.AddCert(n.srv.Certificate())
 	tr.TLSClientConfig = &tls.Config{RootCAs: pool}
@@ -92,6 +93,62 @@ func clienteDeProducaoPara(t *testing.T, n *nuvemFalsa) *http.Client {
 		return d.DialContext(ctx, network, addr)
 	}
 	return c
+}
+
+// manterOHTTP2DeProducao liga o ForceAttemptHTTP2 num transporte em que o
+// net/http tentaria o HTTP/2 sozinho, e nada faz nos outros. Tem de ser chamada
+// ANTES de o teste mexer no transporte.
+//
+// Sem isto, o teste podia ficar cego: num transporte sem Protocols, sem
+// TLSNextProto e sem ForceAttemptHTTP2, o net/http tenta o HTTP/2 só se não
+// houver um TLSClientConfig nem um discador próprios (Transport.protocols, "be
+// conservative"). O RootCAs e o discador do teste são próprios: eles
+// desligariam o HTTP/2 que a produção, sem eles, falaria com a nuvem de verdade,
+// e a nuvem de teste veria HTTP/1.1. Com Protocols explícito, como o de
+// produção, nada muda (TestHTTP2_OTesteVeOHTTP2DeUmTransporteSemProtocols).
+func manterOHTTP2DeProducao(tr *http.Transport) {
+	if tr.Protocols == nil && tr.TLSNextProto == nil && !tr.ForceAttemptHTTP2 &&
+		tr.TLSClientConfig == nil && tr.DialContext == nil && tr.DialTLSContext == nil {
+		tr.ForceAttemptHTTP2 = true
+	}
+}
+
+// TestHTTP2_OTesteVeOHTTP2DeUmTransporteSemProtocols prova que
+// clienteDeProducaoPara não esconde o HTTP/2: um cliente cujo transporte não
+// tem Protocols (e que, em produção, sem TLS nem discador próprios, falaria
+// HTTP/2) chega em HTTP/2 à nuvem de teste depois de passar pelo mesmo ajuste.
+// Sem isto, o TestNovoCliente_NaoFalaHTTP2 e o
+// TestHTTP2Debug_TokenDoAparelhoNaoVaiParaOLog passavam para esse transporte, e
+// só o TestNovoCliente_TransporteSoHTTP1 o pegava.
+func TestHTTP2_OTesteVeOHTTP2DeUmTransporteSemProtocols(t *testing.T) {
+	var protos protocolosDaNuvem
+	n := novaNuvemHTTP2(t, &protos)
+
+	deProducao, ok := nuvem.NovoCliente().Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("o transporte da nuvem é %T; quero um *http.Transport", nuvem.NovoCliente().Transport)
+	}
+	for _, caso := range []struct {
+		nome   string
+		tr     *http.Transport
+		versao int
+	}{
+		{"sem Protocols", &http.Transport{Proxy: http.ProxyFromEnvironment, TLSHandshakeTimeout: 10 * time.Second}, 2},
+		{"o de produção", deProducao, 1},
+	} {
+		manterOHTTP2DeProducao(caso.tr)
+		pool := x509.NewCertPool()
+		pool.AddCert(n.srv.Certificate())
+		caso.tr.TLSClientConfig = &tls.Config{RootCAs: pool}
+		resp, err := (&http.Client{Transport: caso.tr}).Get(n.srv.URL + "/api/v1/me")
+		if err != nil {
+			t.Fatalf("%s: %v", caso.nome, err)
+		}
+		resp.Body.Close()
+		if v := protos.tira(); len(v) != 1 || v[0] != caso.versao {
+			t.Errorf("%s: chegou em HTTP/%v; quero HTTP/%d, como em produção", caso.nome, v, caso.versao)
+		}
+	}
 }
 
 // usarOTokenDoAparelho faz o caminho do token por inteiro, em https: conectar,
