@@ -276,8 +276,9 @@ Como fica na etapa 5 (ADR-019; contrato em `06`, fluxos em `07`):
   digitada (o `auth_url` da nuvem é ignorado), pelo `painel.AbrirNoNavegador` (portão). O retorno
   (`/nuvem/retorno`, só com o `Host`) confere o `state` em tempo constante; o errado não consome nada;
   o certo consome antes da rede; o prazo é o da nuvem, nunca mais de 10 minutos. O cliente HTTP da
-  nuvem não segue redirecionamento (o token nunca vai a outro endereço), tem prazo de 10 s e lê até
-  64 KiB. O token vai para o Gerenciador pelo `chaves.NovoGerenciador` (portão), no alvo do modo:
+  nuvem não segue redirecionamento (o token nunca vai a outro endereço), tem prazo de 10 s, lê até
+  64 KiB e fala só HTTP/1.1, como o do sync e o da chave de IA (13-out-2026: o HTTP/2 do `net/http`
+  escreveria o `Authorization` no `agent.log` sob `GODEBUG=http2debug`). O token vai para o Gerenciador pelo `chaves.NovoGerenciador` (portão), no alvo do modo:
   `AuroraWhisper/nuvem` no instalado, `AuroraWhisper/nuvem-portatil` no `bin\` (D7: sem isso, conectar
   o `bin\` com a conta de teste trocaria o token do PC real), com o comentário "Aurora Whisper: token
   deste PC na nuvem" (o das chaves de API diz "chave de API"). A conta, o e-mail, a URL e o aparelho
@@ -651,6 +652,18 @@ sobe a versão do aviso (servidor e app). A versão é um inteiro só nos dois l
 ADR-021, risco 20), e o `avisoDoDitado.test.ts` guarda uma impressão do texto que a folha mostra: se o
 texto mudar sem a versão, o teste quebra. Ajustar o texto para bater com a política exige atualizar a
 impressão e, se alguém real já aceitou, subir a versão.
+
+## Servidor de voz local (`whisper-server`)
+- Escuta só em `127.0.0.1`, numa porta livre escolhida a cada subida. **Cada subida tem um caminho
+  secreto** (`--request-path /<32 hex>`, 128 bits do `crypto/rand`; 13-out-2026, auditoria de rede do
+  PC): o servidor aceita qualquer `Host` e `Origin` e responde `Access-Control-Allow-Origin: *`, e
+  sem o caminho uma página da web que achasse a porta chegaria ao `/load` (derruba o servidor e diz
+  se um arquivo existe). No b5130 a opção prefixa todas as rotas (`/`, `/inference`, `/load`,
+  `/health`); fica de fora só a pasta estática (`--public`), que o servidor só monta se
+  `examples\server\public` existir na pasta do programa, e o Setup não a cria. O caminho não vai a
+  log nem a mensagem de erro (`internal/asr/local`, `endereco`).
+- **O argv nunca leva `-pr`, `-debug` nem `--convert`** (trava em teste): com `-pr`, o texto ditado
+  iria para o `whisper-server.log`; `--convert` grava o áudio num arquivo temporário.
 
 ## Áudio
 - RAM only;

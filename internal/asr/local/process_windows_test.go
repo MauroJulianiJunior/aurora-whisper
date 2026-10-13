@@ -5,9 +5,11 @@ package local
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -137,9 +139,9 @@ func TestWindowsServerProcess_Start_ProcessoMorreAntesDePronto_TentaEDesiste(t *
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	baseURL, err := p.Start(ctx)
+	end, err := p.Start(ctx)
 	if err == nil {
-		t.Fatalf("Start = (%q, nil), want erro — ping nunca serve HTTP", baseURL)
+		t.Fatalf("Start = (%q, nil), want erro — ping nunca serve HTTP", end.base)
 	}
 	if !strings.Contains(err.Error(), "não foi possível iniciar") {
 		t.Errorf("err = %v, want mensagem de esgotamento de tentativas", err)
@@ -205,7 +207,7 @@ func TestWaitReady_RetornaAoFicarPronto(t *testing.T) {
 	defer srv.Close()
 
 	done := make(chan struct{}) // nunca fecha: o processo "continua vivo"
-	err := waitReady(context.Background(), srv.URL, 5*time.Second, done)
+	err := waitReady(context.Background(), endereco{base: srv.URL}, 5*time.Second, done)
 	if err != nil {
 		t.Fatalf("waitReady: %v", err)
 	}
@@ -221,7 +223,7 @@ func TestWaitReady_RespeitaCtx(t *testing.T) {
 
 	done := make(chan struct{})
 	inicio := time.Now()
-	err := waitReady(ctx, "http://127.0.0.1:1", time.Minute, done)
+	err := waitReady(ctx, endereco{base: "http://127.0.0.1:1"}, time.Minute, done)
 	decorrido := time.Since(inicio)
 
 	if !errors.Is(err, context.DeadlineExceeded) {
@@ -229,5 +231,48 @@ func TestWaitReady_RespeitaCtx(t *testing.T) {
 	}
 	if decorrido > 2*time.Second {
 		t.Errorf("waitReady levou %s para respeitar ctx.Done() — esperava retorno quase imediato após 200ms", decorrido)
+	}
+}
+
+// TestWaitReady_SondaPeloCaminhoSecreto: a sonda de prontidão também vai pelo
+// caminho da subida. O servidor de teste só responde nele; fora dele, corta a
+// conexão sem resposta, e waitReady não pode dar o servidor por pronto.
+func TestWaitReady_SondaPeloCaminhoSecreto(t *testing.T) {
+	var mu sync.Mutex
+	var chegaram []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		chegaram = append(chegaram, r.URL.Path)
+		mu.Unlock()
+		if r.URL.Path != caminhoDeTeste+"/" {
+			if conn, _, err := w.(http.Hijacker).Hijack(); err == nil {
+				conn.Close()
+			}
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	if err := waitReady(context.Background(), endereco{base: srv.URL, caminho: caminhoDeTeste}, 5*time.Second, make(chan struct{})); err != nil {
+		t.Fatalf("waitReady: %v", err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(chegaram) != 1 || chegaram[0] != caminhoDeTeste+"/" {
+		t.Errorf("a sonda chegou em %q, quero só %s/", chegaram, caminhoDeTeste)
+	}
+}
+
+// TestWaitReady_ErroNaoLevaOCaminho: o tempo esgotado diz a base (ajuda a ler
+// o log), e não o caminho.
+func TestWaitReady_ErroNaoLevaOCaminho(t *testing.T) {
+	err := waitReady(context.Background(), endereco{base: "http://127.0.0.1:1", caminho: caminhoDeTeste}, 300*time.Millisecond, make(chan struct{}))
+	if err == nil {
+		t.Fatal("waitReady = nil, quero tempo esgotado")
+	}
+	semPedacoDoCaminho(t, "o erro de waitReady", fmt.Sprintf("%v %+v %#v", err, err, err), caminhoDeTeste)
+	if !strings.Contains(err.Error(), "127.0.0.1:1") {
+		t.Errorf("err = %v: quero a base no erro", err)
 	}
 }

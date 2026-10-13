@@ -3,10 +3,12 @@ package local
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"sync"
 	"time"
 
@@ -23,9 +25,11 @@ type Provider struct {
 	novoProcesso func(Config) serverProcess
 	httpClient   *http.Client
 
-	mu      sync.Mutex // serializa: um servidor, uma requisição por vez
-	proc    serverProcess
-	baseURL string
+	mu   sync.Mutex // serializa: um servidor, uma requisição por vez
+	proc serverProcess
+	// end é onde o servidor de pé atende, com o caminho secreto da subida
+	// dele (process.go). Zero sem servidor.
+	end endereco
 }
 
 // New cria o provider. Nada é iniciado aqui — o servidor sobe em Warmup,
@@ -78,7 +82,7 @@ func (p *Provider) garantirDePe(ctx context.Context) error {
 	if p.proc != nil {
 		_ = p.proc.Stop() // morto ou travado: não deixa resto para trás
 		p.proc = nil
-		p.baseURL = ""
+		p.end = endereco{}
 	}
 
 	var ultimo error
@@ -91,13 +95,13 @@ func (p *Provider) garantirDePe(ctx context.Context) error {
 			}
 		}
 		proc := p.novoProcesso(p.cfg)
-		base, err := proc.Start(ctx)
+		end, err := proc.Start(ctx)
 		if err != nil {
 			ultimo = err
 			_ = proc.Stop()
 			continue
 		}
-		p.proc, p.baseURL = proc, base
+		p.proc, p.end = proc, end
 		return nil
 	}
 	return fmt.Errorf("%w: %d tentativas falharam: %v", ErrServerDead, maxReinicios, ultimo)
@@ -198,15 +202,18 @@ func (p *Provider) pedir(ctx context.Context, wav []byte, vocabulario string, ca
 		return "", fmt.Errorf("asr/local: fechando requisição: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.baseURL+"/inference", &corpo)
+	// A URL leva o caminho secreto do servidor (process.go). Nenhum erro
+	// daqui a carrega: o do net/http sai sem o *url.Error (semURL), e o corpo
+	// de uma resposta de erro sai sem o caminho (semCaminho).
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.end.url("/inference"), &corpo)
 	if err != nil {
-		return "", fmt.Errorf("asr/local: criando requisição: %w", err)
+		return "", fmt.Errorf("asr/local: criando requisição: %w", semURL(err))
 	}
 	req.Header.Set("Content-Type", w.FormDataContentType())
 
 	resp, err := p.httpClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("asr/local: falando com o servidor: %w", err)
+		return "", fmt.Errorf("asr/local: falando com o servidor em %s (POST /inference): %w", p.end.base, semURL(err))
 	}
 	defer resp.Body.Close()
 
@@ -219,17 +226,32 @@ func (p *Provider) pedir(ctx context.Context, wav []byte, vocabulario string, ca
 		return "", fmt.Errorf("asr/local: lendo resposta: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("asr/local: servidor respondeu %s: %s", resp.Status, primeirosBytes(dados))
+		// Sem o caminho ANTES de cortar: cortado no meio, um pedaço dele
+		// escaparia da troca.
+		return "", fmt.Errorf("asr/local: servidor respondeu %s: %s", resp.Status, primeirosBytes(p.end.semCaminho(string(dados))))
 	}
 	return parseResposta(dados)
 }
 
-func primeirosBytes(b []byte) string {
+func primeirosBytes(s string) string {
 	const max = 200
-	if len(b) > max {
-		return string(b[:max]) + "..."
+	if len(s) > max {
+		return s[:max] + "..."
 	}
-	return string(b)
+	return s
+}
+
+// semURL tira o *url.Error que o net/http põe em volta dos erros dele: ele
+// traz a URL inteira, e a URL leva o caminho secreto do servidor. Fica a
+// causa (a conexão recusada ou cortada, o prazo, o cancelamento), que é o que
+// interessa a quem lê o log, e errors.Is continua achando context.Canceled e
+// context.DeadlineExceeded nela.
+func semURL(err error) error {
+	var ue *url.Error
+	if errors.As(err, &ue) {
+		return ue.Err
+	}
+	return err
 }
 
 // Close encerra o servidor residente. O Agent chama no encerramento; sem
@@ -241,6 +263,6 @@ func (p *Provider) Close() error {
 		return nil
 	}
 	err := p.proc.Stop()
-	p.proc, p.baseURL = nil, ""
+	p.proc, p.end = nil, endereco{}
 	return err
 }

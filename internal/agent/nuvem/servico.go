@@ -18,6 +18,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/agent/chaves"
+	"github.com/MauroJulianiJunior/aurora-whisper/internal/ia"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/storage"
 )
 
@@ -181,11 +182,19 @@ type Config struct {
 	Log *slog.Logger
 }
 
-// NovoCliente é o cliente HTTP da nuvem: prazo de PrazoDaRede e sem seguir
+// NovoCliente é o cliente HTTP da nuvem: prazo de PrazoDaRede, sem seguir
 // redirecionamento (uma resposta 3xx é falha, e o token nunca vai para outro
-// endereço).
+// endereço) e só HTTP/1.1.
+//
+// Só HTTP/1.1, com o mesmo transporte que protege a chave de IA
+// (ia.NovoTransporteHTTP1: o proxy e os prazos do transporte padrão): o HTTP/2
+// do net/http escreve cada cabeçalho (o Bearer do token do aparelho) e o começo
+// de cada corpo (a resposta da troca, que traz o token) no log padrão quando a
+// variável de ambiente GODEBUG traz http2debug, e o Agent manda o log padrão
+// para o agent.log (TestHTTP2Debug_TokenDoAparelhoNaoVaiParaOLog).
 func NovoCliente() *http.Client {
 	return &http.Client{
+		Transport:     ia.NovoTransporteHTTP1(),
 		Timeout:       PrazoDaRede,
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}

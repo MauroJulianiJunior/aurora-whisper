@@ -14,7 +14,9 @@ type otherServerProcess struct{}
 
 func newPlatformProcess(cfg Config) serverProcess { return otherServerProcess{} }
 
-func (otherServerProcess) Start(ctx context.Context) (string, error) { return "", ErrNotSupported }
+func (otherServerProcess) Start(ctx context.Context) (endereco, error) {
+	return endereco{}, ErrNotSupported
+}
 
 func (otherServerProcess) Alive() bool { return false }
 

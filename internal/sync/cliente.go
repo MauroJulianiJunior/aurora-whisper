@@ -13,12 +13,14 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/MauroJulianiJunior/aurora-whisper/internal/ia"
 )
 
 // O cliente HTTPS do sync (ADR-019, F7b): o push e o pull com o token do
 // aparelho (o Bearer, lido do Gerenciador de Credenciais pelo nuvem.Servico,
-// atrás do portão sysinput), com prazo, sem seguir redirecionamento e com o
-// corpo limitado nos dois sentidos.
+// atrás do portão sysinput), com prazo, sem seguir redirecionamento, só em
+// HTTP/1.1 (NovoHTTP) e com o corpo limitado nos dois sentidos.
 //
 // Nenhum erro daqui leva a URL, o token, o corpo ou o erro cru do net/http
 // (que traz a URL): só um código de uma lista fechada.
@@ -123,11 +125,20 @@ func CodigoDoErro(err error) string {
 	}
 }
 
-// NovoHTTP é o http.Client do sync: prazo de PrazoDoPedido e nenhum
+// NovoHTTP é o http.Client do sync: prazo de PrazoDoPedido, nenhum
 // redirecionamento seguido (uma 3xx é falha: o token nunca vai a outro
-// endereço).
+// endereço) e só HTTP/1.1.
+//
+// Só HTTP/1.1, com o mesmo transporte que protege a chave de IA
+// (ia.NovoTransporteHTTP1: o proxy e os prazos do transporte padrão): o HTTP/2
+// do net/http escreve cada cabeçalho (o Bearer do token) e o começo de cada
+// corpo (o texto dos ditados no push) no log padrão quando a variável de
+// ambiente GODEBUG traz http2debug, e o Agent manda o log padrão para o
+// agent.log (TestHTTP2Debug_TokenNaoVaiParaOLog). Um transporte novo por
+// cliente; o Agent monta um só (NovoLaco).
 func NovoHTTP() *http.Client {
 	return &http.Client{
+		Transport:     ia.NovoTransporteHTTP1(),
 		Timeout:       PrazoDoPedido,
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}

@@ -102,3 +102,26 @@ O benchmark ganhou o caso que faltava: `cmd/asrlongo` monta áudios de 30, 60 e 
 dataset (concatenando amostras com pausas) e mede, com o servidor real, o `-ac 750` antigo, a
 janela inteira, a janela por duração (servidor só com áudio longo e intercalado com fala curta) e
 os ajustes do decodificador. Ele ainda não rodou: depende da máquina livre (o Mauro dá a aula nela).
+
+## Nota de 2026-10-13: o caminho secreto e os argumentos que nunca entram
+
+A auditoria de rede do PC achou que o loopback não basta: o whisper-server aceita qualquer `Host` e
+`Origin`, responde `Access-Control-Allow-Origin: *` e tem a rota `/load`. Uma página da web que
+achasse a porta derrubaria o servidor (testado no b5130: `/load` com um arquivo que existe faz o
+processo sair) e descobriria se um arquivo existe no disco.
+
+Desde então, cada subida leva `--request-path /<32 hex>`, de 128 bits do `crypto/rand`, por último
+no argv (`serverArgs`, `novaSubida`), e o Agent fala com o servidor só por esse caminho: a sonda de
+prontidão e cada `/inference`. No `examples/server/server.cpp` da tag b5130 a opção existe com esse
+nome e prefixa todas as rotas registradas (`GET /`, `POST` e `OPTIONS /inference`, `POST /load`,
+`GET /health`). Fica de fora só a pasta estática (`--public`, padrão `examples/server/public`,
+relativa à pasta de trabalho), que o servidor só monta se ela existir; na pasta do programa ela não
+existe. O caminho não vai a log nem a mensagem de erro (o erro do `net/http` sai sem a URL, e o eco
+do 404 do servidor sai com o caminho trocado por um rótulo). O servidor não o imprime: a linha
+"listening at" traz só host e porta, e o texto de uso, que o traria, só sai num argumento inválido,
+com o processo saindo em seguida.
+
+O argv nunca leva `-pr`/`--print-realtime` (o texto de cada ditado iria para o
+`whisper-server.log`), `-debug`/`--debug-mode` nem `--convert` (grava o áudio num arquivo temporário
+e chama o ffmpeg): `TestServerArgs_NuncaLevaFlagQueExpoeODitado` trava isso. O ditado não muda: os
+mesmos argumentos de antes, mais o caminho.

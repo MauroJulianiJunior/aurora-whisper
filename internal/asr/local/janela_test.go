@@ -102,7 +102,7 @@ func TestCamposDeDecodificacao(t *testing.T) {
 // por requisição, o servidor sobe SEM -ac, e quem esquecer o campo cai na
 // janela inteira, a segura.
 func TestServerArgs_JanelaPorRequisicaoNaoVaiNaLinhaDeComando(t *testing.T) {
-	linha := strings.Join(serverArgs(Config{ModelPath: "m.bin", Janela: JanelaRecomendada}, "127.0.0.1", 1), " ")
+	linha := strings.Join(serverArgs(Config{ModelPath: "m.bin", Janela: JanelaRecomendada}, "127.0.0.1", 1, caminhoDeTeste), " ")
 	if strings.Contains(linha, "-ac") || strings.Contains(linha, "768") {
 		t.Errorf("argv = %q: a janela por requisição foi parar na linha de comando", linha)
 	}

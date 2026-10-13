@@ -2,6 +2,8 @@ package local
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"io"
 	"os"
@@ -28,12 +30,12 @@ var ErrServerDead = errors.New("asr/local: servidor de ASR não está de pé")
 // sem subir binário nenhum e sem depender de Windows.
 type serverProcess interface {
 	// Start sobe o servidor e espera até ele aceitar requisição, ou até
-	// ctx terminar. Devolve o endereço base (ex.: "http://127.0.0.1:53124")
-	// para quem for falar HTTP com ele.
+	// ctx terminar. Devolve o endereço (a base, ex.: "http://127.0.0.1:53124",
+	// e o caminho secreto desta subida) para quem for falar HTTP com ele.
 	//
 	// O endereço é SEMPRE loopback. Um servidor de ASR escutando em
 	// 0.0.0.0 exporia transcrição do que a pessoa fala para a rede local.
-	Start(ctx context.Context) (baseURL string, err error)
+	Start(ctx context.Context) (endereco, error)
 
 	// Alive reporta se o processo ainda está de pé. Barato o bastante para
 	// ser chamado antes de cada transcrição.
@@ -143,13 +145,90 @@ func (c Config) readyTimeout() time.Duration {
 	return c.ReadyTimeout
 }
 
-// serverArgs monta o argv do whisper-server. Puro, para que a regra de
-// loopback e o repasse dos flags de desempenho sejam verificáveis sem subir
-// processo nenhum.
+// # O caminho secreto de cada subida
 //
-// host e port entram por parâmetro, e não por Config, porque quem escolhe a
-// porta é a implementação de plataforma (pede uma livre ao SO).
-func serverArgs(cfg Config, host string, port int) []string {
+// O servidor escuta só em 127.0.0.1, mas o loopback não basta: o whisper-server
+// aceita qualquer Host e qualquer Origin, responde com
+// Access-Control-Allow-Origin: *, e tem a rota /load, que troca o modelo por um
+// arquivo do disco. Uma página da web aberta no navegador de quem usa, que
+// achasse a porta, derrubaria o servidor e descobriria se um arquivo existe
+// (auditoria de rede do PC, 13-out-2026).
+//
+// O b5130 tem a opção --request-path, que prefixa TODAS as rotas que ele
+// registra: GET /, POST e OPTIONS /inference, POST /load e GET /health
+// (examples/server/server.cpp da tag). Cada subida ganha um caminho novo, de
+// 128 bits do crypto/rand, e o Agent só fala com o servidor por ele; sem o
+// caminho, a página recebe 404 e não alcança rota nenhuma. O que sobra fora
+// dele é a pasta estática (--public, set_base_dir), que o servidor só monta se
+// a pasta existir: o padrão é examples/server/public, relativo à pasta de
+// trabalho (a do programa, Config.Dir), e o Setup não a cria.
+//
+// O caminho é segredo: nunca vai a log nem a mensagem de erro (ver endereco e
+// Provider.pedir). O servidor também não o escreve: a linha "listening at"
+// traz só o host e a porta. O único lugar em que ele o imprime é o texto de
+// uso, que sai num argumento desconhecido ou inválido, e com o processo saindo
+// logo em seguida (exit): o caminho de um servidor que já morreu não abre nada.
+// Mesmo assim ele vai por último no argv (serverArgs), para que um argumento
+// desconhecido antes dele imprima o uso com o caminho ainda vazio.
+
+// bytesDoCaminho é o tamanho do caminho secreto: 128 bits.
+const bytesDoCaminho = 16
+
+// novoCaminhoSecreto devolve "/" seguido de 32 dígitos hexadecimais, de
+// 128 bits do crypto/rand. Um novo a cada chamada: é o de UMA subida.
+func novoCaminhoSecreto() string {
+	var b [bytesDoCaminho]byte
+	// Desde o Go 1.24, rand.Read nunca devolve erro: se o sistema não der
+	// aleatoriedade, o processo morre antes. Mesma forma de novoSegredo, em
+	// internal/agent/nuvem.
+	_, _ = rand.Read(b[:])
+	return "/" + hex.EncodeToString(b[:])
+}
+
+// endereco é onde um servidor que subiu atende: a base (esquema, host e porta)
+// e o caminho secreto que prefixa cada rota dele.
+//
+// Só url junta os dois. String (e com ela %v, %s e %+v) e GoString (%#v)
+// mostram só a base: quem escrever o endereço num erro ou num log não leva o
+// caminho junto.
+type endereco struct {
+	base    string // "http://127.0.0.1:53124": pode ir a erro e a log
+	caminho string // "/<32 hex>": NUNCA vai a erro nem a log
+}
+
+// url é o endereço da rota (ex.: "/inference") neste servidor, com o caminho.
+func (e endereco) url(rota string) string { return e.base + e.caminho + rota }
+
+func (e endereco) String() string { return e.base }
+
+func (e endereco) GoString() string { return "local.endereco{" + e.base + "}" }
+
+// semCaminho troca o caminho secreto em s por um rótulo. Serve ao corpo de uma
+// resposta de erro, que o whisper-server pode ecoar: num erro que não seja 400
+// nem 500, o tratador de erro dele responde "File Not Found (<caminho da
+// requisição>)".
+func (e endereco) semCaminho(s string) string {
+	if e.caminho == "" {
+		return s
+	}
+	return strings.ReplaceAll(s, e.caminho, "/<caminho>")
+}
+
+// serverArgs monta o argv do whisper-server. Puro, para que a regra de
+// loopback, o caminho secreto e o repasse dos flags de desempenho sejam
+// verificáveis sem subir processo nenhum.
+//
+// host, port e caminho entram por parâmetro, e não por Config, porque são de
+// cada subida: quem escolhe a porta é a implementação de plataforma (pede uma
+// livre ao SO), e o caminho é novo a cada uma (novaSubida).
+//
+// O que NUNCA entra aqui: -pr (--print-realtime), -debug (--debug-mode) e
+// --convert. Com -pr, o texto de cada ditado iria para o whisper-server.log;
+// -debug despeja dados do áudio (o log_mel) para diagnóstico; --convert grava
+// o áudio recebido num arquivo temporário e chama o ffmpeg pelo shell, com a
+// saída dele no log (áudio em disco, contra o AC-028). Um teste trava isso
+// (TestServerArgs_NuncaLevaFlagQueExpoeODitado).
+func serverArgs(cfg Config, host string, port int, caminho string) []string {
 	args := []string{
 		"--host", host,
 		"--port", itoa(port),
@@ -167,7 +246,8 @@ func serverArgs(cfg Config, host string, port int) []string {
 	if cfg.SemFlashAttention {
 		args = append(args, "-nfa")
 	}
-	return args
+	// Por último, de propósito: ver "O caminho secreto de cada subida".
+	return append(args, "--request-path", caminho)
 }
 
 // caminhoDoModelo é o que vai depois do -m: o modelo pelo caminho relativo à
@@ -205,14 +285,26 @@ type comandoDoServidor struct {
 	Dir     string // pasta de trabalho; vazia, o servidor herda a do Agent
 }
 
-// montarComando monta o comando do servidor para a porta pedida. host e port
-// entram por parâmetro pelo mesmo motivo de serverArgs.
-func montarComando(cfg Config, host string, port int) comandoDoServidor {
+// montarComando monta o comando do servidor para a porta e o caminho secreto
+// pedidos. host, port e caminho entram por parâmetro pelo mesmo motivo de
+// serverArgs.
+func montarComando(cfg Config, host string, port int, caminho string) comandoDoServidor {
 	return comandoDoServidor{
 		Caminho: cfg.ServerPath,
-		Args:    serverArgs(cfg, host, port),
+		Args:    serverArgs(cfg, host, port, caminho),
 		Dir:     cfg.Dir,
 	}
+}
+
+// novaSubida é o que uma subida do servidor precisa: o comando, com um caminho
+// secreto novo, e o endereço em que o servidor vai atender, com o MESMO
+// caminho. É a única fonte do caminho: a implementação de plataforma a chama a
+// cada processo que sobe (inclusive a cada porta tentada), e o caminho do
+// comando e o do endereço nunca se desencontram.
+func novaSubida(cfg Config, host string, port int) (comandoDoServidor, endereco) {
+	caminho := novoCaminhoSecreto()
+	return montarComando(cfg, host, port, caminho),
+		endereco{base: "http://" + host + ":" + itoa(port), caminho: caminho}
 }
 
 // execCmd é o *exec.Cmd do comando, com a pasta de trabalho e a saída ligadas,
