@@ -21,19 +21,20 @@ import (
 // sem binário, sem modelo e sem Windows.
 type procFalso struct {
 	baseURL   string
-	falhasAte int32 // quantas chamadas a Start ainda falham
+	caminho   string // o caminho secreto da subida; vazio nos testes que não tratam dele
+	falhasAte int32  // quantas chamadas a Start ainda falham
 	starts    int32
 	stops     int32
 	vivo      atomic.Bool
 }
 
-func (f *procFalso) Start(ctx context.Context) (string, error) {
+func (f *procFalso) Start(ctx context.Context) (endereco, error) {
 	n := atomic.AddInt32(&f.starts, 1)
 	if n <= atomic.LoadInt32(&f.falhasAte) {
-		return "", fmt.Errorf("falha simulada de subida %d", n)
+		return endereco{}, fmt.Errorf("falha simulada de subida %d", n)
 	}
 	f.vivo.Store(true)
-	return f.baseURL, nil
+	return endereco{base: f.baseURL, caminho: f.caminho}, nil
 }
 
 func (f *procFalso) Alive() bool { return f.vivo.Load() }
@@ -289,7 +290,7 @@ func TestEncodeWAV_SampleRateInvalido(t *testing.T) {
 
 func TestServerArgs_RepassaDesempenhoEFicaEmLoopback(t *testing.T) {
 	cfg := Config{ModelPath: "models/quant/small-q4_0.bin", Language: "pt", Threads: 12, AudioCtx: 750}
-	linha := strings.Join(serverArgs(cfg, "127.0.0.1", 53124), " ")
+	linha := strings.Join(serverArgs(cfg, "127.0.0.1", 53124, caminhoDeTeste), " ")
 
 	for _, esperado := range []string{"--host 127.0.0.1", "--port 53124", "-m models/quant/small-q4_0.bin", "-l pt", "-t 12", "-ac 750"} {
 		if !strings.Contains(linha, esperado) {
@@ -304,7 +305,7 @@ func TestServerArgs_RepassaDesempenhoEFicaEmLoopback(t *testing.T) {
 // TestServerArgs_OmiteDesempenhoQuandoZero: passar "-t 0" faria o servidor
 // rodar com zero threads, não com o default dele.
 func TestServerArgs_OmiteDesempenhoQuandoZero(t *testing.T) {
-	linha := strings.Join(serverArgs(Config{ModelPath: "m.bin"}, "127.0.0.1", 1), " ")
+	linha := strings.Join(serverArgs(Config{ModelPath: "m.bin"}, "127.0.0.1", 1, caminhoDeTeste), " ")
 	for _, proibido := range []string{"-t ", "-ac ", "-l "} {
 		if strings.Contains(linha, proibido) {
 			t.Errorf("argv = %q, não devia trazer %q com valor zero/vazio", linha, proibido)

@@ -652,6 +652,18 @@ ADR-021, risco 20), e o `avisoDoDitado.test.ts` guarda uma impressão do texto q
 texto mudar sem a versão, o teste quebra. Ajustar o texto para bater com a política exige atualizar a
 impressão e, se alguém real já aceitou, subir a versão.
 
+## Servidor de voz local (`whisper-server`)
+- Escuta só em `127.0.0.1`, numa porta livre escolhida a cada subida. **Cada subida tem um caminho
+  secreto** (`--request-path /<32 hex>`, 128 bits do `crypto/rand`; 13-out-2026, auditoria de rede do
+  PC): o servidor aceita qualquer `Host` e `Origin` e responde `Access-Control-Allow-Origin: *`, e
+  sem o caminho uma página da web que achasse a porta chegaria ao `/load` (derruba o servidor e diz
+  se um arquivo existe). No b5130 a opção prefixa todas as rotas (`/`, `/inference`, `/load`,
+  `/health`); fica de fora só a pasta estática (`--public`), que o servidor só monta se
+  `examples\server\public` existir na pasta do programa, e o Setup não a cria. O caminho não vai a
+  log nem a mensagem de erro (`internal/asr/local`, `endereco`).
+- **O argv nunca leva `-pr`, `-debug` nem `--convert`** (trava em teste): com `-pr`, o texto ditado
+  iria para o `whisper-server.log`; `--convert` grava o áudio num arquivo temporário.
+
 ## Áudio
 - RAM only;
 - sem temp;

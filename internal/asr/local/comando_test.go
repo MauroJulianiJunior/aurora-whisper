@@ -112,7 +112,7 @@ func TestServerArgs_ModeloRelativoNaoLevaOPerfil(t *testing.T) {
 		ModelPath:  filepath.Join(prog, "ggml-small-q4_0.bin"),
 		Language:   "pt", Threads: 8, AudioCtx: 750,
 	}
-	args := serverArgs(cfg, "127.0.0.1", 53124)
+	args := serverArgs(cfg, "127.0.0.1", 53124, caminhoDeTeste)
 
 	i := indice(args, "-m")
 	if i < 0 || i+1 >= len(args) {
@@ -145,7 +145,7 @@ func TestMontarComando_PastaDeTrabalhoEDoPrograma(t *testing.T) {
 		ModelPath:  filepath.Join(prog, "ggml-small-q4_0.bin"),
 		Language:   "pt",
 	}
-	c := montarComando(cfg, "127.0.0.1", 41000)
+	c := montarComando(cfg, "127.0.0.1", 41000, caminhoDeTeste)
 
 	if c.Caminho != cfg.ServerPath {
 		t.Errorf("Caminho = %q, quero o servidor %q", c.Caminho, cfg.ServerPath)
@@ -153,7 +153,7 @@ func TestMontarComando_PastaDeTrabalhoEDoPrograma(t *testing.T) {
 	if c.Dir != prog {
 		t.Errorf("Dir = %q, quero a pasta do programa %q", c.Dir, prog)
 	}
-	if got, quer := strings.Join(c.Args, " "), "--host 127.0.0.1 --port 41000 -m ggml-small-q4_0.bin -l pt"; got != quer {
+	if got, quer := strings.Join(c.Args, " "), "--host 127.0.0.1 --port 41000 -m ggml-small-q4_0.bin -l pt --request-path "+caminhoDeTeste; got != quer {
 		t.Errorf("Args = %q, quero %q", got, quer)
 	}
 }
@@ -164,7 +164,7 @@ func TestMontarComando_PastaDeTrabalhoEDoPrograma(t *testing.T) {
 func TestMontarComando_SemDirMantemOComportamentoDeAntes(t *testing.T) {
 	prog := pastaDoPrograma(t)
 	modelo := filepath.Join(prog, "ggml-small-q4_0.bin")
-	c := montarComando(Config{ServerPath: "whisper-server.exe", ModelPath: modelo}, "127.0.0.1", 1)
+	c := montarComando(Config{ServerPath: "whisper-server.exe", ModelPath: modelo}, "127.0.0.1", 1, caminhoDeTeste)
 
 	if c.Dir != "" {
 		t.Errorf("Dir = %q, quero vazio: o servidor herda a pasta do Agent", c.Dir)
@@ -184,7 +184,7 @@ func TestExecCmd_LigaAPastaEASaida(t *testing.T) {
 		ModelPath:  filepath.Join(prog, "ggml-small-q4_0.bin"),
 	}
 	var saida bytes.Buffer
-	cmd := montarComando(cfg, "127.0.0.1", 41000).execCmd(&saida)
+	cmd := montarComando(cfg, "127.0.0.1", 41000, caminhoDeTeste).execCmd(&saida)
 
 	if cmd.Dir != prog {
 		t.Errorf("cmd.Dir = %q, quero a pasta do programa %q", cmd.Dir, prog)
@@ -204,7 +204,7 @@ func TestExecCmd_LigaAPastaEASaida(t *testing.T) {
 }
 
 func TestExecCmd_SaidaNilVaiParaOStderrDoAgent(t *testing.T) {
-	cmd := montarComando(Config{ServerPath: filepath.Join(pastaDoPrograma(t), "whisper-server.exe")}, "127.0.0.1", 1).execCmd(nil)
+	cmd := montarComando(Config{ServerPath: filepath.Join(pastaDoPrograma(t), "whisper-server.exe")}, "127.0.0.1", 1, caminhoDeTeste).execCmd(nil)
 	if cmd.Stdout != os.Stderr || cmd.Stderr != os.Stderr {
 		t.Error("sem saída pedida, o servidor tem de escrever no stderr do Agent, como antes")
 	}
@@ -213,11 +213,11 @@ func TestExecCmd_SaidaNilVaiParaOStderrDoAgent(t *testing.T) {
 // TestServerArgs_SemFlashAttention: o -nfa só vai quando pedido, e sozinho
 // (sem valor). A flash attention é o padrão do b5130 (server.cpp:106).
 func TestServerArgs_SemFlashAttention(t *testing.T) {
-	com := serverArgs(Config{ServerPath: "s", ModelPath: "m"}, "127.0.0.1", 1)
+	com := serverArgs(Config{ServerPath: "s", ModelPath: "m"}, "127.0.0.1", 1, caminhoDeTeste)
 	if indice(com, "-nfa") >= 0 {
 		t.Errorf("sem pedir, o argv levou -nfa: %q", com)
 	}
-	sem := serverArgs(Config{ServerPath: "s", ModelPath: "m", SemFlashAttention: true}, "127.0.0.1", 1)
+	sem := serverArgs(Config{ServerPath: "s", ModelPath: "m", SemFlashAttention: true}, "127.0.0.1", 1, caminhoDeTeste)
 	i := indice(sem, "-nfa")
 	if i < 0 {
 		t.Fatalf("SemFlashAttention e o argv não levou -nfa: %q", sem)

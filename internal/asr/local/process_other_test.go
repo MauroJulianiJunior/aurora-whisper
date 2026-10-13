@@ -14,12 +14,12 @@ import (
 func TestNewPlatformProcess_ForaDoWindows(t *testing.T) {
 	proc := newPlatformProcess(Config{ServerPath: "x", ModelPath: "y"})
 
-	baseURL, err := proc.Start(context.Background())
+	end, err := proc.Start(context.Background())
 	if !errors.Is(err, ErrNotSupported) {
 		t.Fatalf("Start: err = %v, want que embrulhe ErrNotSupported", err)
 	}
-	if baseURL != "" {
-		t.Errorf("Start: baseURL = %q, want vazio quando Start falha", baseURL)
+	if end != (endereco{}) {
+		t.Errorf("Start: endereço = %q, want vazio quando Start falha", end.base)
 	}
 	if proc.Alive() {
 		t.Error("Alive() = true, want false — nada foi iniciado")

@@ -68,39 +68,41 @@ type windowsServerProcess struct {
 	pc  *processoContido
 }
 
-func (p *windowsServerProcess) Start(ctx context.Context) (string, error) {
+func (p *windowsServerProcess) Start(ctx context.Context) (endereco, error) {
 	if p.pc != nil {
-		return "", fmt.Errorf("asr/local: Start chamado mais de uma vez no mesmo processo")
+		return endereco{}, fmt.Errorf("asr/local: Start chamado mais de uma vez no mesmo processo")
 	}
 
 	var ultimo error
 	for tentativa := 0; tentativa < maxPortAttempts; tentativa++ {
 		if err := ctx.Err(); err != nil {
-			return "", err
+			return endereco{}, err
 		}
 
 		port, err := pickFreePort()
 		if err != nil {
-			return "", err
+			return endereco{}, err
 		}
 
-		pc, err := iniciarProcessoContidoCom(montarComando(p.cfg, loopbackHost, port), p.cfg.SaidaDoServidor)
+		// Um caminho secreto novo para cada processo que sobe (process.go,
+		// "O caminho secreto de cada subida").
+		comando, end := novaSubida(p.cfg, loopbackHost, port)
+		pc, err := iniciarProcessoContidoCom(comando, p.cfg.SaidaDoServidor)
 		if err != nil {
 			ultimo = err
 			continue
 		}
 
-		baseURL := fmt.Sprintf("http://%s:%d", loopbackHost, port)
-		if err := waitReady(ctx, baseURL, p.cfg.readyTimeout(), pc.done); err != nil {
+		if err := waitReady(ctx, end, p.cfg.readyTimeout(), pc.done); err != nil {
 			pc.matar()
 			ultimo = err
 			continue
 		}
 
 		p.pc = pc
-		return baseURL, nil
+		return end, nil
 	}
-	return "", fmt.Errorf("asr/local: não foi possível iniciar whisper-server após %d tentativa(s): %w", maxPortAttempts, ultimo)
+	return endereco{}, fmt.Errorf("asr/local: não foi possível iniciar whisper-server após %d tentativa(s): %w", maxPortAttempts, ultimo)
 }
 
 func (p *windowsServerProcess) Alive() bool {
@@ -378,12 +380,16 @@ func pickFreePort() (int, error) {
 	return ln.Addr().(*net.TCPAddr).Port, nil
 }
 
-// waitReady sonda baseURL até ele responder (qualquer status HTTP conta
-// como "processo vivo e servindo"), até timeout se esgotar, até ctx
-// terminar, ou até done fechar (processo morreu antes de ficar pronto).
-// Mesmo padrão de cmd/whisperwarm/server.go:waitReady, adaptado para
-// também respeitar ctx — o contrato de serverProcess.Start exige isso.
-func waitReady(ctx context.Context, baseURL string, timeout time.Duration, done <-chan struct{}) error {
+// waitReady sonda a raiz do servidor em end (a base com o caminho secreto)
+// até ele responder (qualquer status HTTP conta como "processo vivo e
+// servindo"), até timeout se esgotar, até ctx terminar, ou até done fechar
+// (processo morreu antes de ficar pronto). Mesmo padrão de
+// cmd/whisperwarm/server.go:waitReady, adaptado para também respeitar ctx — o
+// contrato de serverProcess.Start exige isso.
+//
+// O erro da sonda é descartado (ele traria a URL, com o caminho), e o de
+// tempo esgotado leva só a base.
+func waitReady(ctx context.Context, end endereco, timeout time.Duration, done <-chan struct{}) error {
 	client := &http.Client{Timeout: readyProbeTimeout}
 	deadline := time.NewTimer(timeout)
 	defer deadline.Stop()
@@ -391,7 +397,7 @@ func waitReady(ctx context.Context, baseURL string, timeout time.Duration, done 
 	defer ticker.Stop()
 
 	for {
-		resp, err := client.Get(baseURL + "/")
+		resp, err := client.Get(end.url("/"))
 		if err == nil {
 			_ = resp.Body.Close()
 			return nil
@@ -403,7 +409,7 @@ func waitReady(ctx context.Context, baseURL string, timeout time.Duration, done 
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-deadline.C:
-			return fmt.Errorf("asr/local: tempo esgotado esperando processo ficar pronto (%s, timeout %s)", baseURL, timeout)
+			return fmt.Errorf("asr/local: tempo esgotado esperando processo ficar pronto (%s, timeout %s)", end.base, timeout)
 		case <-ticker.C:
 		}
 	}

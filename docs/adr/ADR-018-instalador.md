@@ -1140,6 +1140,15 @@ Nenhum Agent, Setup ou `whisper-server.exe` foi executado; nenhum teste toca em 
 `%LOCALAPPDATA%` real, no registro ou na área de transferência (o único processo filho dos testes
 novos é o `cmd /c cd` e o próprio binário de teste como servidor de mentira).
 
+## Nota de 13-out-2026: um argumento a mais no servidor de voz
+
+A montagem da F2 (`montarComando`) ganhou um argumento, por último: `--request-path /<32 hex>`, um
+caminho secreto novo a cada subida, pelo qual o Agent fala com o servidor (auditoria de rede do PC;
+o porquê e o que o b5130 faz com ele estão na ADR-012, nota de 2026-10-13). A pasta de trabalho e o
+`-m` relativo não mudam. O caminho não vai ao `whisper-server.log`: o servidor não o imprime ao
+subir, e o argv nunca leva `-pr`, `-debug` nem `--convert` (trava em teste). A conferência manual do
+I5 continua a mesma; o `whisper-server.log` de um ditado também não pode trazer o texto ditado.
+
 ## Revisão
 
 Depois do primeiro Setup instalado numa conta limpa: o tamanho real do Setup; quanto levou a
