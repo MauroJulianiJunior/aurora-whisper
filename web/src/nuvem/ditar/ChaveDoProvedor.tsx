@@ -11,10 +11,12 @@
 
 import { type KeyboardEvent, useEffect, useRef, useState } from 'react'
 import { ErroDaApi, ForaDoAr, SemSessao } from '../../api'
+import { OndeCriarAChave } from '../../OndeCriarAChave'
 import type { ClienteNuvem } from '../cliente'
 import { type Provedor, nomeDoProvedor } from './aviso'
 import { fraseDaChave } from './erros'
 import type { ChaveGuardada } from './estado'
+import { paginasDeChaveDoApp } from './paginasDeChave'
 
 interface Props {
   cliente: ClienteNuvem
@@ -241,9 +243,7 @@ export function ChaveDoProvedor({ cliente, provedor, chave, aoMudar, aoSemAceite
               </button>
             )}
           </div>
-          <p className="ajuda" id={`${id}-ajuda`}>
-            Use uma chave só para o celular, com limite de gasto no provedor.
-          </p>
+          <OndeCriarAChave pagina={paginasDeChaveDoApp[provedor]} paraQue="o celular" id={`${id}-ajuda`} />
         </>
       ) : (
         <div className="acoes">

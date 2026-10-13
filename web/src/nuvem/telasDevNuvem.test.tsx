@@ -60,4 +60,12 @@ describe('os cenários do ditado pelo celular em /telas-dev-nuvem.html', () => {
     expect(within(secao()).getByLabelText('Chave da Anthropic')).toBeTruthy()
     expect(within(secao()).getByLabelText<HTMLSelectElement>('Provedor do Polish').value).toBe('anthropic')
   })
+
+  it('ditar-sem-chave: os dois campos por colar, cada um com o link de onde criar a chave do provedor dele', async () => {
+    await montar('ditar-sem-chave')
+    await within(await screen.findByRole('region', { name: 'Ditar pelo celular' }, espera)).findByText('Chave da Anthropic', undefined, espera)
+    expect(within(secao()).getByLabelText('Chave da OpenAI')).toBeTruthy()
+    expect(within(secao()).getByLabelText('Chave da Anthropic')).toBeTruthy()
+    expect(Array.from(secao().querySelectorAll('a'), (a) => a.getAttribute('href'))).toEqual(['https://platform.openai.com/api-keys', 'https://platform.claude.com/settings/keys'])
+  })
 })

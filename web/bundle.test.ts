@@ -115,6 +115,20 @@ describe('o bundle local (bin\\painel)', () => {
     expect(local.js).toContain('Os 6 meses estão ligados')
   })
 
+  // A orientação das chaves (lançamento, garantia 1): o campo da chave da IA diz onde
+  // criá-la, só com os dois provedores do PC, e o histórico vazio diz que o ditado
+  // funciona sem chave. A Groq é só do ditado do celular.
+  it('diz onde criar a chave da OpenAI e da Anthropic, e que o ditado funciona sem chave', () => {
+    expect(local.js).toContain('https://platform.openai.com/api-keys')
+    expect(local.js).toContain('https://platform.claude.com/settings/keys')
+    expect(local.js).toContain('Crie a chave em')
+    // "Só para isto" é dito por quem chama: no PC, "o Aurora Whisper" (o minificador parte a frase em volta dele).
+    expect(local.js).toContain(': use uma só para ')
+    expect(local.js).toMatch(/[`"']o Aurora Whisper[`"']/)
+    expect(local.js).toContain('Segure Ctrl+Win, fale e solte, em qualquer aplicativo. Funciona sem chave: ela só serve ao Polish, que é opcional.')
+    expect(local.js).toContain('Só o modo Polish usa a IA, e ele é opcional: o ditado funciona sem chave.')
+  })
+
   it.each([
     '/auth/',
     '/api/v1',
@@ -155,6 +169,12 @@ describe('o bundle local (bin\\painel)', () => {
     'Chave terminada em',
     'Revogue também esta chave',
     'Organizar o texto com o Polish',
+    // A Groq transcreve a voz do celular; o Polish do PC é a OpenAI ou a Anthropic.
+    // O link da chave dela é só do app.
+    'console.groq.com',
+    'Groq',
+    // A chave do app é "só para o celular" (REQ-053); a do PC, "só para o Aurora Whisper".
+    'o celular',
   ])('não tem %s', (texto) => {
     expect(local.js).not.toContain(texto)
   })
@@ -228,6 +248,27 @@ describe('o bundle da nuvem (dist-nuvem)', () => {
     }
   })
 
+  // A orientação das chaves (lançamento, garantia 1): embaixo de cada campo de chave
+  // do app, o link oficial do provedor daquele campo, com a OpenAI, a Groq e a
+  // Anthropic. O resto da frase é a mesma do PC.
+  it('diz onde criar a chave de cada provedor: OpenAI, Groq e Anthropic', () => {
+    for (const texto of [
+      'https://platform.openai.com/api-keys',
+      'https://console.groq.com/keys',
+      'https://platform.claude.com/settings/keys',
+      'Crie a chave em',
+      'o uso é cobrado na sua conta da',
+      ': use uma só para ',
+      'com limite de gasto.',
+    ]) {
+      expect(nuvem.js, texto).toContain(texto)
+    }
+    // No app, a chave fica cifrada no servidor: a recomendação é uma chave só para o celular
+    // (REQ-053), nunca a do PC. A do PC ("o Aurora Whisper") é a palavra do outro build.
+    expect(nuvem.js).toMatch(/[`"']o celular[`"']/)
+    expect(nuvem.js).not.toMatch(/[`"']o Aurora Whisper[`"']/)
+  })
+
   // O build da nuvem não conhece o Windows: o aviso e a Privacidade do app dizem
   // que a chave do PC continua no PC sem citar onde ela mora.
   it('a chave do PC é citada sem o Gerenciador de Credenciais', () => {
@@ -278,6 +319,11 @@ describe('o bundle da nuvem (dist-nuvem)', () => {
     'Apagar os mais antigos',
     'Apagar as cópias',
     'Os 6 meses estão ligados',
+    // O primeiro uso do PC (a tecla do ditado do PC, sem chave) e a introdução da IA
+    // das Configurações do PC não são do app do celular.
+    'Segure Ctrl+Win',
+    'Funciona sem chave: ela só serve ao Polish',
+    'Só o modo Polish usa a IA',
     'Bearer',
     'Authorization',
     'Gerenciador de Credenciais',

@@ -20,6 +20,8 @@ import {
 import { AprendidoNoPainel } from './AprendidoNoPainel'
 import { HistoricoNoPC } from './HistoricoNoPC'
 import { NuvemNoPC } from './NuvemNoPC'
+import { OndeCriarAChave } from './OndeCriarAChave'
+import { paginasDeChave } from './paginasDeChave'
 import { Termos } from './Termos'
 
 interface Props {
@@ -584,7 +586,7 @@ export function Configuracoes({ cliente, visivel, aoPerderLigacao, avisar, apren
         </h2>
         <p className="secao-intro">
           {salvo.polish_disponivel
-            ? 'Só o modo Polish usa a IA.'
+            ? 'Só o modo Polish usa a IA, e ele é opcional: o ditado funciona sem chave.'
             : 'Por enquanto, nada usa a IA: ela serve ao modo Polish, que chega na próxima versão. Dá para deixar tudo pronto.'}
         </p>
         {/* Por que o último Polish não agiu — só o motivo, nunca o texto. É
@@ -643,7 +645,7 @@ export function Configuracoes({ cliente, visivel, aoPerderLigacao, avisar, apren
                   autoComplete="off"
                   spellCheck={false}
                   placeholder={configurada ? 'Cole uma chave nova' : 'Cole a chave aqui'}
-                  aria-describedby="cfg-chave-estado cfg-chave-ajuda"
+                  aria-describedby="cfg-chave-estado cfg-chave-onde cfg-chave-ajuda"
                   onInput={(e) => setDigitada(e.currentTarget.value.trim() !== '')}
                   onKeyDown={teclaNaChave}
                 />
@@ -651,6 +653,7 @@ export function Configuracoes({ cliente, visivel, aoPerderLigacao, avisar, apren
                   {mexendoNaChave === 'guardando' ? 'Salvando…' : 'Salvar chave'}
                 </button>
               </div>
+              <OndeCriarAChave pagina={paginasDeChave[provedor]} paraQue="o Aurora Whisper" id="cfg-chave-onde" />
               <p className="ajuda" id="cfg-chave-ajuda">
                 Ao salvar, a chave vai direto para o Gerenciador de Credenciais do Windows e não volta para esta página.
               </p>

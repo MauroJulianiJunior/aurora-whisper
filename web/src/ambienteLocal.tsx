@@ -17,7 +17,10 @@ export function ambienteLocal(cliente: Cliente): Ambiente {
     Configuracoes: (props) => <Configuracoes cliente={cliente} {...props} />,
     Faixa: FaixaLocal,
     textos: {
-      vazio: 'Segure a tecla de ditado e fale em qualquer aplicativo. O que você ditar aparece aqui.',
+      // O primeiro uso: o ditado funciona sem chave nenhuma, e a chave (a da IA,
+      // nas Configurações) só serve ao Polish, que é opcional. A tecla é a de
+      // fábrica, que por enquanto não se troca (Configurações > Ditado).
+      vazio: 'Segure Ctrl+Win, fale e solte, em qualquer aplicativo. Funciona sem chave: ela só serve ao Polish, que é opcional.',
       outroLugar: 'em outra aba',
       semResposta: 'o Agent não respondeu',
     },
