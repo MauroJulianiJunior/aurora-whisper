@@ -19,7 +19,7 @@ Para usar o Aurora Whisper sem montar nada do código. Você precisa só do Wind
    componente da Microsoft, e então o Windows pede permissão uma vez). Ao terminar, o Aurora Whisper
    abre na bandeja, perto do relógio.
 2. **Dite.** Clique num campo de texto qualquer (um e-mail, o Word, o navegador), **segure
-   `Ctrl+Win`**, espere o bipe e a pílula "Gravando" (o microfone só liga aí), fale e **solte**: o
+   `Ctrl+Win`**, espere o bipe e a pílula com a onda, embaixo, no meio da tela (o microfone só liga aí), fale e **solte**: o
    texto entra onde está o cursor. Funciona **sem internet e sem conta**, e a transcrição acontece no
    seu PC. Se nada acontecer, confira em Configurações do Windows > Privacidade e segurança >
    Microfone se o acesso está ligado. Para ver o histórico e mudar as configurações, abra o menu do
