@@ -28,7 +28,7 @@ externos (Google, OpenAI, Anthropic, Backblaze).
 
 ## Versões
 
-A 0.1.x é uma **prévia**. As correções saem em uma versão nova (a 0.1.1, por exemplo), na página de
+A 0.1.x é uma **prévia**. As correções saem em uma versão nova (a 0.1.2, por exemplo), na página de
 [Releases](https://github.com/MauroJulianiJunior/aurora-whisper/releases), e entram na `main`. Use sempre a
 versão mais nova.
 

@@ -451,15 +451,16 @@ registro ou mexe em pasta real):
 - F4: `installer/aurora-whisper.iss` (o caminho muda do `deploy/windows/` do plano). **Escrita e
   compilada**: o Mauro compilou o Setup `0.1.0-rc.1` com o Inno Setup 6.7.3 nesta máquina, sem erro
   (135 MB), e o ISCC 6.7.3 também aceitou o `.ico` com a camada de 256 px em PNG (prova com um script
-  mínimo, em 01-out-2026). **O Setup nunca foi executado**;
+  mínimo, em 01-out-2026). **Executado**: o Mauro instalou a 0.1.0 numa conta nova do Windows e, em
+  16-out-2026, a 0.1.1 numa máquina que nunca teve o Aurora Whisper, e ditou nas duas;
 - F5: CI de release (`.github/workflows/release.yml`: tag, Setup, release rascunho) e teste de
-  instalação no runner descartável. O workflow está **escrito e não rodou**, e tem um portão
-  fechado (`F2_PRONTA: 'false'`) que o faz falhar de propósito até o Mauro o abrir (a F2 já está
-  pronta; abrir é decisão dele, depois de conferir o servidor de verdade); o teste de instalação
+  instalação no runner descartável. O workflow **rodou**: o portão `F2_PRONTA` foi aberto em
+  12-out-2026, e ele montou os rascunhos da 0.1.0 e da 0.1.1. A **0.1.1 foi publicada** como prévia
+  em 16-out-2026, com o OK do Mauro (ADR-018, "Nota de 16-out-2026"). O teste de instalação no runner
   **não foi feito**;
 - F6: `docs/teste-manual-instalador.md` e a seção Instalação do README. A seção "Instalar" do README
-  está feita; o roteiro manual está **escrito** (para uma conta de teste do Windows) e **ninguém o
-  executou**.
+  está feita; o roteiro manual está **escrito** (para uma conta de teste do Windows); dele, só os
+  testes curtos da F4 (instalar e ditar) foram feitos, e o roteiro inteiro **não foi relatado**.
 
 Fora desta leva: atualização por clique e winget. O AC-038 sai de DIFERIDO quando F3 a F6 estiverem
 prontas e o roteiro manual for feito (`fase-1-cobertura.md`).

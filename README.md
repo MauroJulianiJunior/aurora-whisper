@@ -10,10 +10,10 @@ ditados e as configurações.
 
 Para usar o Aurora Whisper sem montar nada do código. Você precisa só do Windows 10 ou 11 (64 bits).
 
-1. **Baixe e instale.** Na página de
-   [Releases](https://github.com/MauroJulianiJunior/aurora-whisper/releases/latest), abra a versão
-   mais nova e, em **Assets**, baixe o `AuroraWhisper-Setup-0.1.0.exe` (cerca de 140 MB: já leva o
-   modelo de voz). Dê dois cliques nele. É uma **versão prévia (0.x), sem assinatura digital**, então
+1. **Baixe e instale.** Na página da
+   [versão 0.1.1](https://github.com/MauroJulianiJunior/aurora-whisper/releases/tag/v0.1.1), em
+   **Assets**, baixe o `AuroraWhisper-Setup-0.1.1.exe` (cerca de 140 MB: já leva o modelo de voz).
+   Dê dois cliques nele. É uma **versão prévia (0.x), sem assinatura digital**, então
    o Windows mostra "O Windows protegeu o computador" (SmartScreen): clique em **Mais informações** e
    depois em **Executar assim mesmo**. A instalação **não pede administrador** (só se faltar um
    componente da Microsoft, e então o Windows pede permissão uma vez). Ao terminar, o Aurora Whisper
@@ -51,7 +51,7 @@ Para usar o Aurora Whisper sem montar nada do código. Você precisa só do Wind
 
 ## Estado
 
-A 0.1.0 é uma **prévia**: sem assinatura digital e sem atualização automática (para atualizar, baixe o
+A 0.1.1 é uma **prévia**: sem assinatura digital e sem atualização automática (para atualizar, baixe o
 Setup novo e instale por cima). O Agent funciona de ponta a ponta sem nuvem: captura, transcrição na
 sua máquina, dicionário, inserção, bandeja, overlay e painel. A nuvem é opcional e serve para ver e
 editar o histórico no celular e nos outros PCs; o projeto não tem servidor central, e cada pessoa sobe
@@ -71,7 +71,7 @@ a sua, num servidor seu (o código está em `cmd/server`, o deploy em `deploy/` 
 
 ## Instalar
 
-> A versão **0.1.0** é uma prévia e está na página de Releases; o resumo para quem só quer usar está
+> A versão **0.1.1** é uma prévia e está na página de Releases; o resumo para quem só quer usar está
 > em "Comece aqui". O Setup é gerado pelo repositório (veja "Montar o Setup"). Quem prefere montar do
 > código segue a seção seguinte.
 

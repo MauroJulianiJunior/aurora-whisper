@@ -603,9 +603,9 @@ Nenhum teste roda instalador, grava no registro ou mexe em pastas reais.
 | F2 | o `whisper-server` roda com `cmd.Dir` na pasta do programa e recebe o modelo pelo nome relativo (reduz o risco de caminho com acento; teste puro da montagem dos argumentos), **e a saída dele passa pelo filtro de caminhos** (`pastas.AnonimizarLinhas`). **Pré-requisito da F5:** sem isso o `whisper-server.log` instalado traz o nome do usuário em duas linhas, a do modelo e a da biblioteca do processador | **pronta** (`local.Config.Dir`, `configDoServidor`, `abrirLogDoServidor`; "Decisões tomadas na implementação (F2)" e a correção da revisão); falta ler o log do servidor de verdade, **inteiro** (roteiro manual, I5) |
 | Dicionário vazio | o Agent cria o `dicionario.json` vazio na subida, só se faltar (decisão de 30-set-2026; seção "O dicionário que não existe") | **pronta** (`dictionary.CriarSeFaltar`, `garantirDicionario`) |
 | F3 | build reproduzível: `version` como `var`, `-ldflags` e `-trimpath`, `--outDir` do painel, `asrstage -destino -sem-dicionario`, pasta `licencas\`, o ícone (`cmd/gerarico`) e o script que monta tudo (`scripts/montar-instalador.ps1`). **Falta:** avaliar o item de desenvolvimento do risco 11 | **quase pronta** (ver "Decisões tomadas na implementação (F3 a F5)" e "(o ícone)"); o script **não rodou inteiro** |
-| F4 | `installer/aurora-whisper.iss` (o caminho do plano era `deploy/windows/`): por usuário, atalho no Menu Iniciar, "Abrir agora", fecha o Agent com `taskkill` e espera o mutex, checa o VC++, o desinstalador pergunta sobre os dados (apaga a pasta e as chaves `AuroraWhisper/*` se a pessoa confirmar) e sempre remove o `Run` e a marca em `StartupApproved` se apontarem para o exe desinstalado | **escrita e compilada**: o Mauro compilou o Setup `0.1.0-rc.1` com o Inno Setup 6.7.3 nesta máquina, sem erro (135 MB); o Setup **nunca foi executado** |
-| F5 | CI de release (`.github/workflows/release.yml`: tag, Setup, release rascunho) e o teste rápido de instalação no runner descartável; **depende da F2** | o workflow está **escrito e não rodou**, e tem um **portão fechado** (`F2_PRONTA: 'false'`) que o faz falhar de propósito até alguém o abrir; o teste de instalação no runner **não foi feito**; a F2 **está pronta**, e abrir o portão continua sendo decisão do Mauro, depois de conferir o servidor de verdade |
-| F6 | `docs/teste-manual-instalador.md` e a seção Instalação do README, com o roteiro do Mauro: conta local nova, padrão, com acento no nome (instalar, ditar, abrir o painel, instalar por cima, desinstalar mantendo os dados e reinstalar, desinstalar apagando); máquina sem VC++ (uma VM); SmartScreen e Smart App Control; o tempo da primeira subida com disco frio | a seção **Instalar** do README está feita; o **roteiro manual** está escrito (`docs/teste-manual-instalador.md`, para uma conta de teste do Windows) e **ninguém o executou** |
+| F4 | `installer/aurora-whisper.iss` (o caminho do plano era `deploy/windows/`): por usuário, atalho no Menu Iniciar, "Abrir agora", fecha o Agent com `taskkill` e espera o mutex, checa o VC++, o desinstalador pergunta sobre os dados (apaga a pasta e as chaves `AuroraWhisper/*` se a pessoa confirmar) e sempre remove o `Run` e a marca em `StartupApproved` se apontarem para o exe desinstalado | **executada**: o Mauro instalou a 0.1.0 numa conta nova do Windows e, em 16-out-2026, a 0.1.1 numa máquina que nunca teve o Aurora Whisper, e ditou nas duas (ver "Nota de 16-out-2026") |
+| F5 | CI de release (`.github/workflows/release.yml`: tag, Setup, release rascunho) e o teste rápido de instalação no runner descartável; **depende da F2** | o workflow **rodou**: o portão `F2_PRONTA` foi aberto em 12-out-2026, e ele montou os rascunhos da 0.1.0 e da 0.1.1; a 0.1.1 foi publicada como prévia em 16-out-2026, com o OK do Mauro. O teste de instalação no runner **não foi feito** |
+| F6 | `docs/teste-manual-instalador.md` e a seção Instalação do README, com o roteiro do Mauro: conta local nova, padrão, com acento no nome (instalar, ditar, abrir o painel, instalar por cima, desinstalar mantendo os dados e reinstalar, desinstalar apagando); máquina sem VC++ (uma VM); SmartScreen e Smart App Control; o tempo da primeira subida com disco frio | a seção **Instalar** do README está feita; o **roteiro manual** está escrito (`docs/teste-manual-instalador.md`, para uma conta de teste do Windows); o que se fez dele foram os testes curtos da F4 (instalar e ditar), e o roteiro inteiro **não foi relatado** |
 | Fora desta leva | atualização por clique; winget | |
 
 Uma sessão por fatia é estimativa **(est.)**, não medida.
@@ -1148,6 +1148,19 @@ o porquê e o que o b5130 faz com ele estão na ADR-012, nota de 2026-10-13). A 
 `-m` relativo não mudam. O caminho não vai ao `whisper-server.log`: o servidor não o imprime ao
 subir, e o argv nunca leva `-pr`, `-debug` nem `--convert` (trava em teste). A conferência manual do
 I5 continua a mesma; o `whisper-server.log` de um ditado também não pode trazer o texto ditado.
+
+## Nota de 16-out-2026: a 0.1.1 publicada
+
+A 0.1.1 é a primeira versão pública: prévia (`--prerelease`), sem assinatura, publicada em 16-out-2026
+com o OK do Mauro, a partir do rascunho que o workflow montou da tag `v0.1.1` (`bf58da7`). O Setup tem
+142.165.888 bytes e SHA-256 `7ca46ea4d06f46871181ebf0b56ab091a3dc52693bf87ec5797b85128140de14`; o
+download sem login devolve o mesmo tamanho, e o `.sha256` publicado, o mesmo hash. As notas do release
+dizem que o ditado é local, que o Polish é opcional e usa a chave da própria pessoa, e que a nuvem exige
+um servidor próprio. O rascunho da 0.1.0 nunca foi publicado e continua rascunho.
+
+Antes de publicar, o Mauro instalou a 0.1.0 numa conta nova do Windows e a 0.1.1 numa máquina que
+nunca teve o Aurora Whisper, e ditou nas duas. Da "Revisão" abaixo, sai o tamanho real do Setup; o
+tempo da primeira subida com disco frio, o Smart App Control e os antivírus continuam sem dado.
 
 ## Revisão
 
