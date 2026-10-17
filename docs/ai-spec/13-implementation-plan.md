@@ -189,6 +189,15 @@ no ditado do celular. O comportamento do Agent não mudou: os testes do Polish d
 mudança. Ver a TASK-028.
 
 ## TASK-011b — Benchmark do Polish
+**Diagnóstico com o histórico (16-out-2026).** No log do Agent, a guarda de palavras não recusou
+nenhum ditado com menos de 600 caracteres (0 de 24) e recusou 4 de 11 de 600 a 999 e os 3 de 1.000
+ou mais; o ditado de 44 s do celular (12-out) caiu nela. O log só guarda o motivo (AC-048), então
+não diz o que o modelo mudou. O `polishbench -historico local` lê os ditados longos do modo `smart`
+do histórico do PC (só leitura) e mostra no terminal, palavra por palavra e com a categoria, o que o
+modelo mudou nas respostas recusadas; não grava relatório nem arquivo. Quem roda é o Mauro, com a
+chave dele. O conserto (aceitar por frase, licença específica, outro modelo ou prompt) se decide
+com o resultado.
+
 Decidido na ADR-016. `cmd/polishbench` (pronto, S3), no molde de `cmd/entitybench`, usando o mesmo
 `Polir` e as mesmas guardas do Agent. Dataset novo em `testdata/polish-dataset/frases.json`
 (pronto, 88 frases sintéticas), mais as 46 `reference` do dataset de ASR. Métricas, regra de

@@ -36,6 +36,23 @@
 // Preços: -preco openai:gpt-6-luna=0.10/0.50 (US$ por 1 milhão de tokens, com ponto decimal); os
 // padrões da pesquisa de 29-set-2026 estão no -help.
 //
+// # O diagnóstico com o histórico (-historico)
+//
+// Para descobrir POR QUE a guarda de palavras recusa o Polish nos ditados
+// longos (o log do Agent só guarda o motivo, nunca o texto), o comando lê os
+// ditados do próprio histórico, só para leitura, e mostra no terminal o que o
+// modelo mudou em cada resposta recusada, palavra por palavra, com a categoria
+// (contração, acento, palavra de fala apagada, repetição, troca...):
+//
+//	go run ./cmd/polishbench -gastar -rodadas 3 -modelos openai:gpt-6-luna -historico local
+//
+// "local" é o historico.db do Agent instalado (%LOCALAPPDATA%\AuroraWhisper);
+// um caminho também vale. Entram os ditados do modo smart (a entrada exata do
+// Polish), com -min-caracteres ou mais (500), os -max-ditados mais recentes
+// (15). O texto dos ditados aparece SÓ no terminal: nesse modo o comando não
+// grava relatório nem arquivo nenhum, e o que sai da máquina é o mesmo que o
+// Polish do Agent já manda ao provedor.
+//
 // A rodada demora: as chamadas são sequenciais (a latência é uma das métricas),
 // 387 por modelo com -rodadas 3. Ctrl+C interrompe e grava o relatório
 // do que foi medido, sem decisão.
