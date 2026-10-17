@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"flag"
 	"fmt"
@@ -37,6 +38,12 @@ type deps struct {
 	// caminho vazio escolhe docs/benchmarks/polish-AAAA-MM-DD.md, sem
 	// sobrescrever nada.
 	GravarRelatorio func(caminho string, dia time.Time, dados []byte) (string, error)
+	// AbrirHistorico abre o historico.db só para leitura (modo -historico).
+	// Nil usa abrirHistorico.
+	AbrirHistorico func(caminho string) (*sql.DB, error)
+	// Getenv lê o ambiente (o LOCALAPPDATA do -historico local). Nil usa
+	// os.Getenv.
+	Getenv func(string) string
 }
 
 // Os arquivos do dataset, a partir da raiz do repositório.
@@ -51,6 +58,10 @@ const (
 // contra o dublê, para o comando impresso nunca ficar com uma flag que não
 // existe.
 const comandoSoLuna = "go run ./cmd/polishbench -gastar -rodadas 3 -modelos openai:gpt-6-luna -conexao-nova"
+
+// comandoHistorico é o diagnóstico com os ditados longos do histórico do
+// Agent instalado: o motivo das recusas da guarda de palavras (16-out-2026).
+const comandoHistorico = "go run ./cmd/polishbench -gastar -rodadas 3 -modelos openai:gpt-6-luna -historico local"
 
 func depsReais() deps {
 	return deps{
@@ -127,6 +138,9 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, d deps) i
 	linhaDeBase := fs.String("linha-de-base", "", "candidatos que só servem de referência (mesma sintaxe de -modelos; cada um tem de estar em -modelos): são medidos e a regra os julga, mas eles nunca vencem. A ADR-016 (decisão 9) pede o gpt-5-nano assim")
 	f1Min := fs.Float64("f1-min", 0, "PISO de organização (0 = sem piso, a regra aprovada): F1 de pontuação mínimo, fora das frases já organizadas. Decisão do mantenedor; sem piso, quem só devolve a entrada passa, e o relatório avisa")
 	estruturaMin := fs.Float64("estrutura-min", 0, "PISO de organização (0 = sem piso): acerto mínimo de estrutura nas frases cujo esperado tem lista ou parágrafos (0 a 1)")
+	historico := fs.String("historico", "", "DIAGNÓSTICO: em vez do dataset, os ditados longos do seu histórico (o caminho do historico.db, ou "+historicoLocal+" para o do Agent instalado). Mostra NO TERMINAL o que o modelo mudou nas respostas recusadas pela guarda de palavras; não grava relatório nem arquivo nenhum")
+	minCaracteres := fs.Int("min-caracteres", 500, "com -historico: só os ditados com pelo menos estes caracteres")
+	maxDitados := fs.Int("max-ditados", 15, "com -historico: no máximo estes ditados, os mais recentes (1 a 100)")
 	conexaoNova := fs.Bool("conexao-nova", false, "abre uma conexão nova (TCP+TLS) a cada chamada, sem reaproveitar: é o que o Agent paga quando os ditados são espaçados por mais de 90 s, o pior caso da latência. Padrão: conexão reaproveitada (as chamadas saem seguidas), que subestima esse caso")
 	fs.Usage = func() { uso(stderr, fs) }
 	if err := fs.Parse(args); err != nil {
@@ -191,6 +205,20 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, d deps) i
 	case !(*f1Min >= 0 && *f1Min <= 1) || !(*estruturaMin >= 0 && *estruturaMin <= 1):
 		fmt.Fprintln(stderr, "polishbench: -f1-min e -estrutura-min têm de ficar entre 0 e 1")
 		return 2
+	case *minCaracteres < 1 || *maxDitados < 1 || *maxDitados > 100:
+		fmt.Fprintln(stderr, "polishbench: -min-caracteres tem de ser positivo e -max-ditados tem de ficar entre 1 e 100")
+		return 2
+	}
+
+	if *historico != "" {
+		return rodarHistorico(ctx, rodadaHistorico{
+			Caminho: *historico, MinCaracteres: *minCaracteres, MaxDitados: *maxDitados,
+			Cands: cands, Precos: precos,
+			Cfg: Config{
+				Rodadas: *rodadas, Paralelo: *paralelo, PrazoAgente: *prazoAgente, PrazoMax: *prazoMax,
+				MinPalavras: *minPalavras, MaxEdicao: *maxEdicao, LimiteUSD: *limiteUSD, ConexaoNova: *conexaoNova,
+			},
+		}, stdout, stderr, d)
 	}
 
 	dadosFrases, err := d.LerArquivo(*frases)
@@ -249,91 +277,11 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, d deps) i
 		return 2
 	}
 
-	// As chaves: uma por provedor, lidas com o eco desligado. Ficam só nesta
-	// variável, na memória do processo.
-	chaves := map[string]string{}
-	var segredos []string
-	var pulados []Candidato
-	for _, c := range cands {
-		if _, lida := chaves[c.Provedor]; lida {
-			continue
-		}
-		chave, err := d.Leitor.Ler(perguntaDaChave(c.Provedor))
-		if err != nil {
-			if errors.Is(err, ErrInterrompido) {
-				fmt.Fprintln(stderr, "polishbench: interrompido antes de gastar.")
-				return 1
-			}
-			fmt.Fprintf(stderr, "polishbench: %v\n", err)
-			return 1
-		}
-		chaves[c.Provedor] = chave
-		if chave != "" {
-			segredos = append(segredos, chave)
-		}
+	ex, cod := pedirChavesERodar(ctx, cands, precos, exec, stdout, stderr, d)
+	if cod != 0 {
+		return cod
 	}
-	defer func() {
-		for k := range chaves {
-			chaves[k] = ""
-		}
-	}()
-	var aRodar []Candidato
-	for _, c := range cands {
-		if chaves[c.Provedor] == "" {
-			pulados = append(pulados, c)
-			fmt.Fprintf(stdout, "%s: sem chave, pulado\n", c.Rotulo())
-			continue
-		}
-		aRodar = append(aRodar, c)
-	}
-	if len(aRodar) == 0 {
-		fmt.Fprintln(stderr, "polishbench: nenhuma chave informada; nada a medir.")
-		return 1
-	}
-
-	// A execução.
-	total := &gasto{}
-	var saidas []SaidaCandidato
-	motivoIncompleta := ""
-	for i, c := range aRodar {
-		if ctx.Err() != nil {
-			motivoIncompleta = "interrompida pela pessoa (Ctrl+C)"
-			break
-		}
-		if total.valor() > cfg.LimiteUSD {
-			motivoIncompleta = fmt.Sprintf("o gasto passou do limite de %s; sem rodar %s", usd(cfg.LimiteUSD, 2), restantes(aRodar[i:]))
-			break
-		}
-		fmt.Fprintf(stdout, "rodando %s ...\n", c.Rotulo())
-		base := d.Transporte
-		if base == nil {
-			base = ia.NovoTransporteHTTP1()
-		}
-		if *conexaoNova {
-			base = semReaproveitar{base: base}
-		}
-		obs := novoObservador(base)
-		cli := &ia.Cliente{
-			HTTP:          &http.Client{Transport: obs},
-			BaseOpenAI:    d.BaseOpenAI,
-			BaseAnthropic: d.BaseAnthropic,
-			Timeout:       cfg.PrazoMax,
-		}
-		s := exec.Rodar(ctx, c, precos[c.ChavePreco()], cli, obs, chaves[c.Provedor], total)
-		saidas = append(saidas, s)
-		if s.Aborto != "" {
-			fmt.Fprintf(stdout, "%s: parou (%s) depois de %d chamada(s)\n", c.Rotulo(), s.Aborto, len(s.Resultados))
-		}
-		switch s.Aborto {
-		case AbortoInterrompido:
-			motivoIncompleta = "interrompida pela pessoa (Ctrl+C)"
-		case AbortoLimite:
-			motivoIncompleta = fmt.Sprintf("o gasto passou do limite de %s", usd(cfg.LimiteUSD, 2))
-		}
-		if motivoIncompleta != "" {
-			break
-		}
-	}
+	saidas, pulados, segredos, motivoIncompleta := ex.saidas, ex.pulados, ex.segredos, ex.incompleta
 
 	metricas := make([]Metricas, len(saidas))
 	for i, s := range saidas {
@@ -346,7 +294,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, d deps) i
 		ArqFrases: *frases, ArqManifest: *manifesto,
 		Candidatos: cands, Pulados: pulados, Metricas: metricas, Criterios: crit,
 		Decisao:    escolher(metricas, crit, incompleta),
-		GastoTotal: total.valor(), Incompleta: incompleta, Motivo: motivoIncompleta,
+		GastoTotal: ex.gasto, Incompleta: incompleta, Motivo: motivoIncompleta,
 		Go: runtime.Version(), SO: runtime.GOOS + "/" + runtime.GOARCH,
 		RefPreservacao: referenciaDePreservacao(casos, cfg.MinPalavras),
 		RefEco:         referenciaDoEco(casos, cfg.MinPalavras),
@@ -364,6 +312,108 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, d deps) i
 		return 1
 	}
 	return 0
+}
+
+// execucao é o que pedirChavesERodar devolve.
+type execucao struct {
+	saidas  []SaidaCandidato
+	pulados []Candidato
+	// segredos são as chaves lidas, para mascarar tudo o que sai.
+	segredos []string
+	// incompleta é o motivo de a rodada ter parado no meio (vazio: completa).
+	incompleta string
+	// gasto é o custo da rodada inteira, de todos os candidatos.
+	gasto float64
+}
+
+// pedirChavesERodar pede as chaves (uma por provedor, lidas com o eco
+// desligado; ficam só na memória do processo e são apagadas no fim) e roda
+// cada candidato que tem chave, um depois do outro, parando no Ctrl+C e no
+// limite de gasto. cod diferente de zero: parou antes de gastar.
+func pedirChavesERodar(ctx context.Context, cands []Candidato, precos map[string]Preco, exec *Executor, stdout, stderr io.Writer, d deps) (execucao, int) {
+	var ex execucao
+	cfg := exec.Cfg
+	chaves := map[string]string{}
+	for _, c := range cands {
+		if _, lida := chaves[c.Provedor]; lida {
+			continue
+		}
+		chave, err := d.Leitor.Ler(perguntaDaChave(c.Provedor))
+		if err != nil {
+			if errors.Is(err, ErrInterrompido) {
+				fmt.Fprintln(stderr, "polishbench: interrompido antes de gastar.")
+				return ex, 1
+			}
+			fmt.Fprintf(stderr, "polishbench: %v\n", err)
+			return ex, 1
+		}
+		chaves[c.Provedor] = chave
+		if chave != "" {
+			ex.segredos = append(ex.segredos, chave)
+		}
+	}
+	defer func() {
+		for k := range chaves {
+			chaves[k] = ""
+		}
+	}()
+	var aRodar []Candidato
+	for _, c := range cands {
+		if chaves[c.Provedor] == "" {
+			ex.pulados = append(ex.pulados, c)
+			fmt.Fprintf(stdout, "%s: sem chave, pulado\n", c.Rotulo())
+			continue
+		}
+		aRodar = append(aRodar, c)
+	}
+	if len(aRodar) == 0 {
+		fmt.Fprintln(stderr, "polishbench: nenhuma chave informada; nada a medir.")
+		return ex, 1
+	}
+
+	// A execução.
+	total := &gasto{}
+	for i, c := range aRodar {
+		if ctx.Err() != nil {
+			ex.incompleta = "interrompida pela pessoa (Ctrl+C)"
+			break
+		}
+		if total.valor() > cfg.LimiteUSD {
+			ex.incompleta = fmt.Sprintf("o gasto passou do limite de %s; sem rodar %s", usd(cfg.LimiteUSD, 2), restantes(aRodar[i:]))
+			break
+		}
+		fmt.Fprintf(stdout, "rodando %s ...\n", c.Rotulo())
+		base := d.Transporte
+		if base == nil {
+			base = ia.NovoTransporteHTTP1()
+		}
+		if cfg.ConexaoNova {
+			base = semReaproveitar{base: base}
+		}
+		obs := novoObservador(base)
+		cli := &ia.Cliente{
+			HTTP:          &http.Client{Transport: obs},
+			BaseOpenAI:    d.BaseOpenAI,
+			BaseAnthropic: d.BaseAnthropic,
+			Timeout:       cfg.PrazoMax,
+		}
+		s := exec.Rodar(ctx, c, precos[c.ChavePreco()], cli, obs, chaves[c.Provedor], total)
+		ex.saidas = append(ex.saidas, s)
+		if s.Aborto != "" {
+			fmt.Fprintf(stdout, "%s: parou (%s) depois de %d chamada(s)\n", c.Rotulo(), s.Aborto, len(s.Resultados))
+		}
+		switch s.Aborto {
+		case AbortoInterrompido:
+			ex.incompleta = "interrompida pela pessoa (Ctrl+C)"
+		case AbortoLimite:
+			ex.incompleta = fmt.Sprintf("o gasto passou do limite de %s", usd(cfg.LimiteUSD, 2))
+		}
+		if ex.incompleta != "" {
+			break
+		}
+	}
+	ex.gasto = total.valor()
+	return ex, 0
 }
 
 // flagsDoComando são as flags que o relatório repete, na ordem. Ficam de fora
@@ -516,6 +566,12 @@ ditados espaçados, e a métrica "maiúscula a mais" do prompt 1.0.2: mês e sub
 com maiúscula no meio da frase; só medida, fora da regra de escolha):
 
   `+comandoSoLuna+`
+
+DIAGNÓSTICO com os SEUS ditados longos (por que a guarda de palavras recusou o Polish):
+em vez do dataset, lê o histórico do Agent (só para leitura) e mostra NO TERMINAL, palavra
+por palavra, o que o modelo mudou nas respostas recusadas. Não grava relatório nem arquivo:
+
+  `+comandoHistorico+`
 
 Preços padrão (US$ por 1 milhão de tokens, entrada/saída; pesquisa de 29-set-2026,
 confira na página do provedor; -preco vence):
