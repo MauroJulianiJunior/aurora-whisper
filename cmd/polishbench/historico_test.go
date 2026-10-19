@@ -207,6 +207,23 @@ func TestRun_Historico_SemDitadoLongoNaoPedeChave(t *testing.T) {
 	}
 }
 
+// Sem o arquivo, a mensagem diz onde procurou e lembra do modo portátil (o
+// SQLite sozinho só diria "unable to open database file (14)"), e nenhuma
+// chave é pedida.
+func TestRun_Historico_ArquivoQueNaoExisteExplica(t *testing.T) {
+	a := novoAmbiente(t, nil, nil)
+	sumido := filepath.Join(t.TempDir(), "historico.db")
+	cod := a.rodar("-gastar", "-modelos", "openai:gpt-6-luna", "-historico", sumido)
+	if cod != 1 {
+		t.Fatalf("saiu com %d, quero 1", cod)
+	}
+	contem(t, a.stderr.String(), "não achei o histórico em "+sumido)
+	contem(t, a.stderr.String(), "modo portátil")
+	if len(a.leitor.Prompts()) != 0 {
+		t.Error("pediu a chave sem histórico")
+	}
+}
+
 // Sem -gastar, o modo -historico recusa antes de abrir o banco.
 func TestRun_Historico_SemGastarRecusaAntesDeAbrir(t *testing.T) {
 	a := novoAmbiente(t, nil, nil)

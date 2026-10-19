@@ -140,6 +140,13 @@ func rodarHistorico(ctx context.Context, r rodadaHistorico, stdout, stderr io.Wr
 		fmt.Fprintln(stderr, "polishbench:", err)
 		return 2
 	}
+	// Sem o arquivo, o SQLite só diz "unable to open database file (14)". O
+	// Agent rodado de uma pasta (modo portátil, o PC de desenvolvimento) guarda
+	// o histórico ao lado do executável, e não no LOCALAPPDATA.
+	if _, err := os.Stat(caminho); err != nil {
+		fmt.Fprintf(stderr, "polishbench: não achei o histórico em %s. Se o Agent roda de uma pasta (modo portátil, como no PC de desenvolvimento), o historico.db fica ao lado do executável: passe esse caminho em -historico.\n", caminho)
+		return 1
+	}
 	db, err := abrir(caminho)
 	if err != nil {
 		fmt.Fprintln(stderr, "polishbench:", err)
