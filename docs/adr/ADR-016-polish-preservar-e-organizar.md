@@ -17,6 +17,10 @@ o prazo efetivo, a política de esforço e a linha de log.
 **Quinta emenda em 18-out-2026**, decidida pelo Mauro com o diagnóstico do histórico na mão: a guarda
 7 aceita a **correção de grafia** da palavra que não existe em português; ver "Emenda de 18-out-2026:
 a correção de grafia".
+**Sexta emenda em 19-out-2026**, aprovada pelo Mauro: o **aceite por frase** (a frase que passa fica com
+o Polish, a que não passa volta ao Smart) e a **minúscula da palavra comum** que o Whisper escreveu
+com maiúscula no meio da frase; ver "Emenda de 19-out-2026: o aceite por frase e a maiúscula do
+Whisper".
 **Nota de 10-out-2026 (ADR-021, ditar no celular):** a regra "a chave nunca sai do PC" (decisões 2 e 3
 e "Consequências") passa a valer para a chave **do PC**. Para ditar no celular, a pessoa cola uma chave
 no app, e o **servidor da nuvem** a guarda **cifrada**; o Polish do celular usa este mesmo motor
@@ -24,7 +28,7 @@ no app, e o **servidor da nuvem** a guarda **cifrada**; o Polish do celular usa 
 as guardas, o prazo da decisão 4 e a queda para o Smart). É opt-in e começa desligado. O Polish do PC
 não muda em nada: a chave dele continua só no Gerenciador de Credenciais. Ver a ADR-021, decisões G e
 N.
-Data: 2026-09-29 (emendas: 2026-09-30, 2026-10-01 e 2026-10-18; nota: 2026-10-10)
+Data: 2026-09-29 (emendas: 2026-09-30, 2026-10-01, 2026-10-18 e 2026-10-19; nota: 2026-10-10)
 Contexto: etapa 2 (Polish), depois da tela de Configurações e da chave de API (`internal/ia`,
 `internal/agent/chaves`)
 Emenda: `16-ai-behavior-spec.md` ("Polish", "Fallback", "Human-in-the-loop"); `17-prompt-spec.md`
@@ -1277,6 +1281,105 @@ dependência nova de terceiros: só a biblioteca padrão.
   conferida no disco antes de rodar.
 - `go vet ./...` e `go test ./...` verdes; o teste de pureza do Smart da conta ganhou
   `internal/ortografia` na lista (só biblioteca padrão; compila no Linux).
+
+## Emenda de 19-out-2026: o aceite por frase e a maiúscula do Whisper
+
+### O que os dados mostraram
+
+A segunda e a terceira rodada do `polishbench -historico` (18-out-2026, os mesmos 26 ditados, 3
+rodadas, `gpt-6-luna`), já com a correção de grafia, deram 20 e 19 respostas aceitas de 78 (eram 16).
+O ganho foi pequeno por dois motivos:
+
+- **a resposta recusada por palavras tinha 1 a 3 pontos ruins** (uma palavra apagada, uma
+  acrescentada, uma palavra que existe trocada) e o resto bem organizado: o tudo ou nada jogava fora
+  o texto inteiro por causa de um "você" a menos;
+- **a guarda de siglas e termos recusava quase só falso nome**: de 31 itens que ela não achou, 25
+  eram "nomes", e nenhum era nome. Eram palavras comuns que o Whisper escreveu com maiúscula no meio
+  da frase depois de uma pausa ("a Base de Conhecimento", "a Pesquisa", "Engenharia", "Arroz"), e o
+  modelo, com razão, as pôs em minúscula.
+
+### A decisão
+
+O Mauro aprovou (19-out-2026) as duas mudanças, como estão abaixo.
+
+**1. O aceite por frase** (`internal/resolver/polish_frases.go`). Quando a resposta inteira não
+passa nas guardas de números, siglas e termos, palavras e caixa, cada frase dela é conferida, nas
+mesmas guardas, com o trecho do ditado que ela cobre. A frase que passa fica como o Polish escreveu;
+a que não passa volta ao texto do Smart, sem trocar palavra.
+
+- **A garantia não muda:** o texto montado passa, INTEIRO, pelas mesmas guardas, contra o ditado
+  inteiro. A conta por frase só escolhe o que fica; o que chega ao campo passou nas guardas como
+  texto. (Na mutação, tirar essa conta final não derruba teste: nos casos conhecidos ela dá o mesmo
+  que a soma das frases. Fica porque é ela a garantia, não a soma.)
+- **O corte entre frases só vale com âncora:** a palavra antes e a palavra depois do ponto da
+  resposta são as mesmas do ditado, em sequência. Assim o trecho do ditado de cada frase é exato. A
+  frase sem âncora no começo fica junto da anterior (e, se o modelo apagou a palavra bem no corte, as
+  duas caem juntas).
+- **Nas emendas** entra só o que o Polish já tem licença para fazer: o trecho do Smart que abre o
+  texto, ou vem depois de uma frase do Polish, ganha a inicial maiúscula (a sigla não: "eSocial"
+  fica); o que vem antes de uma frase do Polish fecha com ponto, trocando a vírgula, o ponto e
+  vírgula ou os dois pontos do fim.
+- **Cai inteiro no Smart, como antes:** a resposta com trecho novo (`trecho_novo`); a que tem palavra
+  a mais antes da primeira âncora ou depois da última (um prefixo, "Texto organizado:", ou uma frase
+  no fim, "Dia quinze.", "Obrigado!": é o modelo respondendo, e a frase não é só descartada); a que
+  tem quebra de linha ou lista (misturar um trecho do Smart numa lista quebraria a estrutura; fica
+  para depois); a que tem uma frase só; e a resposta em que **mais da metade das frases** cai (aí o
+  modelo reescreveu).
+- **O que muda para fora:** `ResolveResult` ganha `Frases` e `FrasesRevertidas` (só números), a
+  linha `winruntime: polish` do Agent ganha `frases` e `frases_revertidas`, e a linha `ditado` do
+  servidor ganha `polish_frases` e `polish_frases_revertidas` quando houve aceite por frase. O
+  ditado aceito por frase é `Reescrito`: o histórico registra `polish`. O motivo da recusa, quando
+  nem por frase dá, é o da resposta inteira, como antes.
+
+**2. A maiúscula do Whisper** (`ocorrenciasDoNome`, em `polish_guardas.go`). O "nome" da entrada
+(inicial maiúscula fora do começo da frase) pode reaparecer em **minúscula** quando a palavra existe
+como palavra comum no VERO, **e não** é nome de pessoa (a lista de prenomes e sobrenomes abaixo) nem
+palavra que o VERO conhece com maiúscula ("Maria", "Natal", "Brasil"). Só a caixa muda: a letra e o
+acento continuam exigidos ("Antropic" → "Anthropic" e "Decaração" → "Declaração" continuam
+recusados). **Sigla continua estrita** ("DAS" e "das" são palavras diferentes; "CRIE" → "Crie" cai).
+
+A lista de nomes entrou porque o teste adversarial pegou o furo da regra como ela foi aprovada: o
+VERO tem "joão", "pedro", "paulo" e "silva" como palavras comuns, e "o João pediu" → "o joão pediu"
+passaria. Com a lista, nome de pessoa nunca perde a maiúscula. O mesmo teste mostrou cidade: o VERO
+tem "recife", "fortaleza" e "belém" em minúscula, e entrou a lista dos municípios e estados de uma
+palavra só. Resta o nome raro, fora das listas, que também é palavra comum, e o nome de lugar de
+várias palavras ("Campo Grande"); perdem só a maiúscula, sem trocar letra.
+
+A auditoria do benchmark (`cmd/polishbench/critica.go`) aplica a mesma regra (`minusculaLiberada`),
+com as mesmas consultas ao dicionário: ela não pode ser mais estrita que a política decidida, ou
+contaria como falha crítica o que o Mauro liberou.
+
+### As listas de nomes
+
+`internal/ortografia/nomes/`: `prenomes.txt`, os 8.225 prenomes com frequência de 1.000 ou mais no
+Censo 2010 do IBGE, na base tratada pelo Brasil.IO (`genero-nomes`, CC BY-SA 4.0; ver o LEIAME da
+pasta e o `THIRD_PARTY_NOTICES.md`), em minúscula e sem acento; e `sobrenomes.txt`, os sobrenomes
+mais comuns no Brasil, escritos à mão (o Censo não publica sobrenome); e `lugares.txt`, os 2.784
+municípios e estados de uma palavra só, da API de localidades do IBGE. Embutidas (`go:embed`, cerca
+de 100 kB).
+
+### Como foi verificado
+
+- Testes do aceite por frase passando por `Polir` inteiro: a frase do meio que apagou palavra, o
+  número trocado, o termo do dicionário trocado, a sigla que abre o trecho do Smart, o trecho do Smart
+  que fecha com vírgula, mais da metade caindo, uma frase só, lista, quebra de linha, frase
+  acrescentada, o corte sem âncora; e os testes adversariais de antes (o prefixo e a frase no fim,
+  que o aceite por frase descartava sem cair inteiro, foram o que fez a trava das bordas existir).
+- Testes da maiúscula: "Base de Conhecimento", "Pesquisa", "Arroz", "Engenharia" passam; "João",
+  "Pedro", "Silva", "Rosa", "Maria", "Recife", "China", "Anthropic", o nome corrigido, "DAS" → "das"
+  e "CRIE" → "Crie" caem. Na mutação, tirar a lista de nomes ou a forma com maiúscula do VERO
+  derruba testes. A auditoria, com o mesmo par de casos.
+- Mutação no aceite por frase: a trava das bordas, o limite da metade, a âncora dos dois lados, a
+  sigla na emenda e a quebra de linha derrubam testes. Sobreviveram duas, equivalentes: a conta final
+  (acima) e o atalho de uma frase só (uma frase que passa sozinha é a resposta inteira, que já tinha
+  caído). Uma terceira apontou código morto (a frase sem trecho do ditado, que a âncora dos dois
+  lados já impede), que saiu.
+- `go vet ./...` e `go test ./...` verdes.
+
+### O que falta medir
+
+Rodar o `polishbench -historico` de novo (só o Mauro roda; gasta centavos) para ver quantas das
+respostas passam inteiras, quantas por frase, e quantas frases voltam ao Smart.
 
 ## Limitações conhecidas
 

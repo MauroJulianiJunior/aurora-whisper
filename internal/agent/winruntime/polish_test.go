@@ -180,6 +180,7 @@ func camposDaLinha(linha string) map[string]string {
 var camposDoPolish = []string{
 	"time", "level", "msg", "attempt", "prompt", "prompt_hash", "provedor", "modelo", "esforco",
 	"desfecho", "latencia_ms", "prazo_ms", "entrada_chars", "saida_chars", "tokens_entrada", "tokens_saida",
+	"frases", "frases_revertidas",
 }
 
 // linhasDoPolish devolve as linhas "winruntime: polish" do log.

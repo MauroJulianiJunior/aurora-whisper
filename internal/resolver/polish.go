@@ -233,20 +233,25 @@ func Polir(ctx context.Context, cliente PolishClient, smart ResolveResult, opts 
 	if !guardaFormato(entrada, texto) {
 		return fallbackPolish(res, MotivoFormato, true)
 	}
-	if !guardaNumeros(entrada, texto) {
-		return fallbackPolish(res, MotivoNumeros, true)
-	}
-	if !guardaSiglasTermos(entrada, texto, opts.Termos) {
-		return fallbackPolish(res, MotivoSiglasTermos, true)
-	}
-	if motivo := guardaPalavras(entrada, texto, opts.maxEdicao()); motivo != MotivoNenhum {
-		return fallbackPolish(res, motivo, true)
-	}
-	// A caixa vem por último: o motivo dela só aparece quando NENHUMA das outras
-	// guardas recusou a saída, e assim o benchmark conta, em "caixa", só o que
-	// esta guarda barrou sozinha (o preço dela, inclusive "cnpj" -> "CNPJ").
-	if !guardaCaixa(entrada, texto) {
-		return fallbackPolish(res, MotivoCaixa, true)
+	// Números, siglas e termos, palavras e, por último, a caixa: o motivo da
+	// caixa só aparece quando NENHUMA das outras guardas recusou a saída, e
+	// assim o benchmark conta, em "caixa", só o que esta guarda barrou sozinha
+	// (o preço dela, inclusive "cnpj" -> "CNPJ").
+	if motivo := passaNasGuardas(entrada, texto, opts); motivo != MotivoNenhum {
+		// A resposta inteira não passou. Se não acrescentou conteúdo, cada
+		// frase dela ainda pode valer sozinha (polish_frases.go); o texto
+		// montado passa pelas mesmas guardas, inteiro.
+		if motivo == MotivoTrechoNovo {
+			return fallbackPolish(res, motivo, true)
+		}
+		montado, revertidas, total, ok := polirPorFrase(entrada, texto, opts)
+		if !ok {
+			return fallbackPolish(res, motivo, true)
+		}
+		res.FinalText = montado
+		res.Reescrito = true
+		res.Frases, res.FrasesRevertidas = total, revertidas
+		return res
 	}
 
 	res.FinalText = texto

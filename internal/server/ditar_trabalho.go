@@ -137,6 +137,9 @@ type relatorioDoDitado struct {
 	tokensEntrada   int
 	tokensSaida     int
 	polishMs        int64
+	// frases e frasesRevertidas: o Polish que valeu por frase (ADR-016,
+	// emenda de 19-out-2026). Só números.
+	frases, frasesRevertidas int
 }
 
 // rodarDitado é o trabalho solto. Roda numa goroutine própria, contada no
@@ -406,6 +409,7 @@ func (c *Cloud) polir(base context.Context, t trabalhoDoDitado, conta *smartcont
 	cancel()
 	rel.polishMs = time.Since(comeco).Milliseconds()
 	if out.Reescrito {
+		rel.frases, rel.frasesRevertidas = out.Frases, out.FrasesRevertidas
 		return out.FinalText, true, ""
 	}
 	if out.MotivoFallback == resolver.MotivoCurto {
@@ -572,6 +576,9 @@ func (c *Cloud) logDoDitado(t trabalhoDoDitado, rel relatorioDoDitado, total tim
 	if provP != "" {
 		attrs = append(attrs, "polish_provedor", provP, "polish_modelo", c.conhecidos.paraOLog(provP, t.prefs.Polish.Modelo),
 			"esforco", rel.esforco, "tokens_entrada", rel.tokensEntrada, "tokens_saida", rel.tokensSaida, "polish_ms", rel.polishMs)
+		if rel.frases > 0 {
+			attrs = append(attrs, "polish_frases", rel.frases, "polish_frases_revertidas", rel.frasesRevertidas)
+		}
 	}
 	attrs = append(attrs, "ms", total.Milliseconds())
 	c.log.Info("ditado", attrs...)

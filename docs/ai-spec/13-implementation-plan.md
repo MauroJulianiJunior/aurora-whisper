@@ -205,6 +205,12 @@ decidiu: a guarda de palavras aceita a correção de grafia só da palavra que n
 `polishbench -historico` de novo para medir o ganho, e ensinar a regra à auditoria do benchmark
 quando o dataset ganhar frases com erro de transcrição.
 
+**Aceite por frase e maiúscula do Whisper (19-out-2026).** Com a correção de grafia, o ganho foi
+pequeno (16 → 19-20 de 78): a resposta recusada tinha 1 a 3 pontos ruins, e a guarda de nomes
+recusava palavra comum que o Whisper pôs em maiúscula. O Mauro aprovou o aceite por frase e a
+minúscula da palavra comum (com a lista de nomes de pessoa); ver a emenda de 19-out-2026 da
+ADR-016. Falta: medir com o `polishbench -historico`; levar o aceite por frase às listas.
+
 Decidido na ADR-016. `cmd/polishbench` (pronto, S3), no molde de `cmd/entitybench`, usando o mesmo
 `Polir` e as mesmas guardas do Agent. Dataset novo em `testdata/polish-dataset/frases.json`
 (pronto, 88 frases sintéticas), mais as 46 `reference` do dataset de ASR. Métricas, regra de

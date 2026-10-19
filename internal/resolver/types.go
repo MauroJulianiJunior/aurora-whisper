@@ -183,6 +183,12 @@ type ResolveResult struct {
 	// não valeu. Vazio quando Reescrito é true, ou quando o Polish nem foi
 	// pedido (sem opt-in). Só o motivo, nunca texto.
 	MotivoFallback MotivoFallback
+	// Frases e FrasesRevertidas dizem, quando o Polish valeu POR FRASE (a
+	// resposta inteira não passou, mas parte das frases sim; ADR-016, emenda
+	// de 19-out-2026), quantas frases a resposta tinha e quantas voltaram ao
+	// texto do Smart. Zero quando a resposta valeu inteira ou não valeu. Só
+	// números: podem ir ao log.
+	Frases, FrasesRevertidas int
 }
 
 // Resolver é o contrato único implementado por LiteralResolver,

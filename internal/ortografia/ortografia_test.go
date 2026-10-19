@@ -98,3 +98,35 @@ func TestCondicao(t *testing.T) {
 		t.Error("'.' tem de casar com tudo")
 	}
 }
+
+func TestNomes(t *testing.T) {
+	pessoa := map[string]bool{
+		"João": true, "joao": true, "Maria": true, "Pedro": true, "Silva": true, "Gonçalves": true,
+		"Rosa": true, "Recife": true, "Belém": true, "Base": false, "Pesquisa": false, "Engenharia": false, "Arroz": false,
+	}
+	for w, quero := range pessoa {
+		if got := EhNomeDePessoa(w); got != quero {
+			t.Errorf("EhNomeDePessoa(%q) = %v, quero %v", w, got, quero)
+		}
+	}
+	for w, quero := range map[string]bool{"Maria": true, "Natal": true, "Ana": true, "Base": false, "Pesquisa": false} {
+		if got := ConheceComoNome(w); got != quero {
+			t.Errorf("ConheceComoNome(%q) = %v, quero %v", w, got, quero)
+		}
+	}
+	for w, quero := range map[string]bool{"Base": true, "pesquisa": true, "Débora": false, "Ana": false, "e-mail": true} {
+		if got := ExisteComum(w); got != quero {
+			t.Errorf("ExisteComum(%q) = %v, quero %v", w, got, quero)
+		}
+	}
+}
+
+// As duas listas de nomes estão embutidas e não vazias.
+func TestListasDeNomes(t *testing.T) {
+	for _, arq := range []string{"nomes/prenomes.txt", "nomes/sobrenomes.txt", "nomes/lugares.txt"} {
+		dados, err := arquivosDeNomes.ReadFile(arq)
+		if err != nil || len(dados) == 0 {
+			t.Errorf("%s: %d bytes, erro %v", arq, len(dados), err)
+		}
+	}
+}

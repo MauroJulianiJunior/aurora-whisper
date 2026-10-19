@@ -1305,7 +1305,7 @@ solto, só com contagens e códigos: `desfecho` (`criado`, `ja_existia`, `regrav
 do `internal/asr/nuvem`), `termos_na_dica`, as contagens do Smart (`pares`, `pares_aplicados`,
 `pares_com_dominio`, `smart_falhou`, `lacos`, `palavras_removidas`, `substituicoes`), `polish`
 (`desligado`, `aceito`, `regravado` ou o motivo) e, com o Polish ligado, `polish_provedor`,
-`polish_modelo` (como o `modelo`), `esforco`, `tokens_entrada`, `tokens_saida` e `polish_ms`, e `ms`.
+`polish_modelo` (como o `modelo`), `esforco`, `tokens_entrada`, `tokens_saida` e `polish_ms` (e, quando o Polish valeu por frase, `polish_frases` e `polish_frases_revertidas`: só números; ADR-016, emenda de 19-out-2026), e `ms`.
 **Nunca** o áudio, o texto, a chave, o id, o corpo de erro do provedor (a OpenAI devolve um pedaço da
 chave no `401`) nem o valor de um pânico.
 

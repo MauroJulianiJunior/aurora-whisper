@@ -172,6 +172,26 @@ func TestRun_Historico_MostraASiglaQueSumiu(t *testing.T) {
 	contem(t, out, "o que a guarda de siglas e termos não achou na saída: sigla 1")
 }
 
+// A resposta salva por frase aparece como "aceito por frase", com quantas
+// frases voltaram ao Smart e o que o modelo mudou.
+func TestRun_Historico_MostraOAceitePorFrase(t *testing.T) {
+	texto := "o cliente mandou o extrato ontem e você confere hoje se bater a gente fecha o mês amanhã cedo"
+	caminho := historicoDeTeste(t, []linhaDeTeste{
+		{"12345678-abcd", "windows", texto, "smart", "2026-10-12T14:32:00Z", false},
+	})
+	organiza := func(p pedidoFalso) respostaFalsa {
+		return respostaFalsa{Final: "O cliente mandou o extrato ontem. E confere hoje. Se bater, a gente fecha o mês amanhã cedo."}
+	}
+	a := novoAmbiente(t, organiza, nil)
+	cod := a.rodar("-gastar", "-modelos", "openai:gpt-6-luna", "-historico", caminho, "-min-caracteres", "50")
+	if cod != 0 {
+		t.Fatalf("saiu com %d\n%s\n%s", cod, a.stdout.String(), a.stderr.String())
+	}
+	out := a.stdout.String()
+	contem(t, out, "rodada 1: aceito por frase (1 de 3 frases voltaram ao Smart)")
+	contem(t, out, "[- você]")
+}
+
 // O comando que o -help imprime roda como está escrito, com "-historico
 // local" apontando para o LOCALAPPDATA (aqui, uma pasta temporária).
 func TestComandoHistorico_RodaComAsFlagsImpressas(t *testing.T) {
