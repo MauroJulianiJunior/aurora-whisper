@@ -15,14 +15,16 @@ func TestDiferencas_Categorias(t *testing.T) {
 	}{
 		{"só pontuação e caixa", "preciso entregar o relatorio ate sexta", "Preciso entregar o relatorio ate sexta.", nil, ""},
 		{"contração", "eu vou mandar pra você amanhã", "Eu vou mandar para você amanhã.", []string{DifContracao}, "[pra → para]"},
-		{"acento", "o relatorio ficou pronto", "O relatório ficou pronto.", []string{DifAcento}, "[relatorio → relatório]"},
+		{"acento", "ele e o dono da empresa", "Ele é o dono da empresa.", []string{DifAcento}, "[e → é]"},
+		{"correção de grafia", "o relatorio ficou pronto", "O relatório ficou pronto.", []string{DifGrafia}, "[relatorio → relatório]"},
 		{"filler apagado", "a gente vai né amanhã cedo", "A gente vai amanhã cedo.", []string{DifFiller}, "[- né]"},
 		{"repetição em bloco", "a gente a gente foi lá", "A gente foi lá.", []string{DifRepeticao}, "[- a gente]"},
 		{"hesitação", "ahn eu acho que sim", "Eu acho que sim.", []string{DifHesitacao}, "[- ahn]"},
-		{"junção com hífen", "manda um e mail pra ele", "Manda um e-mail pra ele.", []string{DifJuncao}, "[e mail → e-mail]"},
+		{"junção com hífen", "manda um e mail pra ele", "Manda um e-mail pra ele.", []string{DifGrafia}, "[e mail → e-mail]"},
+		{"junção de duas que existem", "a logo marca mudou", "A logomarca mudou.", []string{DifJuncao}, "[logo marca → logomarca]"},
 		{"palavra trocada", "o resultado ficou bom demais", "O resultado ficou ótimo demais.", []string{DifTrocada}, "[bom → ótimo]"},
 		{"palavra acrescentada", "ele pagou a conta ontem", "Ele pagou toda a conta ontem.", []string{DifAcrescida}, "[+ toda]"},
-		{"duas mudanças", "eu vou pra lá e o relatorio fica", "Eu vou para lá, e o relatório fica.", []string{DifContracao, DifAcento}, "[pra → para]"},
+		{"duas mudanças", "eu vou pra lá e o relatorio fica", "Eu vou para lá, e o relatório fica.", []string{DifContracao, DifGrafia}, "[pra → para]"},
 	}
 	for _, c := range casos {
 		t.Run(c.nome, func(t *testing.T) {
