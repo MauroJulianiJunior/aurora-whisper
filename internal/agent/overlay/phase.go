@@ -66,6 +66,29 @@ const FaseTextoNoHistorico dictation.OverlayPhase = 1001
 // (FaseDoSucesso). Ponto verde: foi inserido.
 const FaseRepeticaoRemovida dictation.OverlayPhase = 1002
 
+// FaseMicrofoneBloqueado é o ditado que não ouviu nada porque a privacidade
+// do Windows bloqueia o microfone (internal/agent/permissao). Sem ela, a
+// pessoa que instalou o app com a chave desligada via só "Não consegui
+// transcrever. Tente novamente." — e tentar de novo não resolve.
+//
+// Fora do núcleo, como as outras desta lista: o núcleo emite OverlayError
+// (sem fala, falha de captura) e o runtime, que consulta o registro na hora,
+// troca a fase por esta. A mensagem manda para o painel, que tem o botão
+// para abrir a tela certa do Windows e o passo a passo. Ponto vermelho: o
+// ditado não aconteceu.
+const FaseMicrofoneBloqueado dictation.OverlayPhase = 1003
+
+// FaseDoMicrofone escolhe a fase de um erro: OverlayError vira
+// FaseMicrofoneBloqueado quando o microfone está bloqueado pelo Windows.
+// Qualquer outra fase passa intacta — a marca só troca a mensagem de um
+// erro, nunca transforma outra coisa em erro.
+func FaseDoMicrofone(fase dictation.OverlayPhase, microfoneBloqueado bool) dictation.OverlayPhase {
+	if fase == dictation.OverlayError && microfoneBloqueado {
+		return FaseMicrofoneBloqueado
+	}
+	return fase
+}
+
 // FaseDoSucesso escolhe a fase de um sucesso: OverlaySuccess vira
 // FaseRepeticaoRemovida quando a guarda tirou um laço daquela tentativa.
 // Qualquer outra fase passa intacta — a marca só troca a mensagem de um
@@ -131,6 +154,11 @@ func Label(phase dictation.OverlayPhase) string {
 		// O que foi feito e o que fazer: conferir, porque o laço pode ter
 		// tomado o lugar de parte da fala.
 		return "Removi uma repetição. Confira o texto."
+	case FaseMicrofoneBloqueado:
+		// Diz quem bloqueou e onde olhar, em duas linhas como a da janela
+		// elevada (travado em TestComporMensagem_QuebrasDasMensagens). O
+		// passo a passo cabe no painel, não na pílula.
+		return "O Windows bloqueou o microfone. Veja o painel."
 	case dictation.OverlayInsertFailed:
 		// A transcrição deu certo; só a inserção falhou, e o texto NÃO
 		// está na área de transferência. Mandar colar aqui faria a
@@ -171,7 +199,7 @@ func isTerminalPhase(phase dictation.OverlayPhase) bool {
 	case dictation.OverlaySuccess, dictation.OverlayError,
 		dictation.OverlayBlocked, dictation.OverlayClipboard,
 		dictation.OverlayInsertFailed, FaseJanelaElevada, FaseTextoNoHistorico,
-		FaseRepeticaoRemovida:
+		FaseRepeticaoRemovida, FaseMicrofoneBloqueado:
 		return true
 	default:
 		return false

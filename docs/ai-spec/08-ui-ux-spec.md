@@ -53,6 +53,38 @@ frente é elevada (a mesma UIPI). É seguro: o ditado nem começa, e nada é dig
 continua definida para o caso de o atalho chegar ao Agent com a janela de administrador marcada
 (ADR-011, nota do B14).
 
+### Microfone bloqueado pelo Windows (AC-080)
+- "O Windows bloqueou o microfone. Veja o painel."
+
+Quem instala o app com o microfone bloqueado em Configurações > Privacidade e segurança > Microfone não
+vê nada: o microfone nunca entrega áudio, e o ditado acaba em "Não consegui transcrever. Tente
+novamente.", que não ajuda. Quando o ditado falha por erro (sem fala, falha de captura) e o Agent lê no
+registro que o Windows bloqueia o microfone (`internal/agent/permissao`), a pílula diz isto no lugar da
+mensagem de erro, em duas linhas ("O Windows bloqueou o" / "microfone. Veja o painel."), com o ponto
+vermelho do erro e o mesmo tempo na tela. Só o erro é trocado; um sucesso nunca. O passo a passo não cabe
+na pílula: fica no painel, abaixo.
+
+#### O aviso do painel (AC-080)
+Só no painel do PC (a nuvem não lê o registro de ninguém), no topo, com o estilo da faixa que já existe
+(`faixa` e `aviso-acao`), e só quando o Agent diz que o Windows bloqueia o microfone. O painel consulta
+`GET /api/microfone` ao abrir e de novo quando a aba volta a ter foco ou fica visível, e o aviso some
+sozinho quando a pessoa liga a chave e volta: a pílula de baixo diz "Microfone liberado. Pode ditar." Se a
+consulta falha, o aviso fica como estava.
+
+O título é "**O Windows está bloqueando o microfone.**", e o resto diz o que fazer, por motivo:
+- conta ou aparelho: "Sem ele, o ditado não ouve nada. Clique no botão, ligue a chave **Acesso ao
+  microfone** e volte para esta aba." (é a chave do topo daquela tela do Windows);
+- programas: "... ligue a chave **Permitir que aplicativos da área de trabalho acessem o microfone** e
+  volte para esta aba.";
+- este app: "... procure o Aurora Whisper na lista, ligue a chave dele e volte para esta aba.";
+- empresa: "Quem administra este computador bloqueou o microfone. Só essa pessoa consegue liberar." **Sem
+  botão**: nada que a pessoa clique resolve.
+
+O botão é "Abrir as configurações do microfone" e abre a tela certa do Windows
+(`POST /api/microfone/configuracoes`). Se a abertura falhar, a pílula de baixo dá o caminho à mão: "Não
+consegui abrir as configurações. Abra o menu Iniciar > Configurações > Privacidade e segurança >
+Microfone."
+
 ### Texto que chegou depois do prazo (01-out-2026)
 - "O texto demorou e ficou no histórico."
 
@@ -86,7 +118,7 @@ Identidade da paleta do projeto (cores, contorno e ponto de estado: ver ADR-014,
 de 29-set-2026").
 
 - Gravação e processamento: cápsula de 128x20 px, só a onda.
-- Mensagens (Success, Error, Blocked, janela de administrador, falha de inserção, área de
+- Mensagens (Success, Error, Blocked, janela de administrador, microfone bloqueado, falha de inserção, área de
   transferência, texto no histórico, repetição removida): IBM Plex Mono Medium, 13 px, off-white,
   com o ponto de estado antes do texto — verde em sucesso e na repetição removida, vermelho em erro
   e bloqueio, cinza na área de transferência e no texto que ficou no histórico. A pílula tem o

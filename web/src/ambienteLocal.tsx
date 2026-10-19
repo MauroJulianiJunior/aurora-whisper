@@ -7,11 +7,15 @@ import type { Ambiente } from './ambiente'
 import { efeitoDeAprender, perguntaDeSugestao, resultadoDeAprender, resultadoDeDesfazer } from './aprendizado'
 import type { Cliente } from './clienteLocal'
 import { Configuracoes } from './Configuracoes'
+import { AvisoDoMicrofone } from './AvisoDoMicrofone'
 import { FaixaLocal } from './FaixaLocal'
 
 export function ambienteLocal(cliente: Cliente): Ambiente {
   return {
     cliente,
+    // Criado uma vez, como a tela de Configurações: o estado do aviso (o último
+    // que o Agent disse) fica entre um render e outro do Painel.
+    AvisoDoMicrofone: (props) => <AvisoDoMicrofone cliente={cliente} {...props} />,
     // Um componente por ambiente, criado uma vez: o estado da tela (o que a
     // pessoa mudou e não salvou) fica entre um render e outro.
     Configuracoes: (props) => <Configuracoes cliente={cliente} {...props} />,

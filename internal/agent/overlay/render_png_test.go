@@ -97,6 +97,7 @@ func TestPilulaEmPNG(t *testing.T) {
 		{"janela-elevada", FrameState{Phase: FaseJanelaElevada}},
 		{"texto-no-historico", FrameState{Phase: FaseTextoNoHistorico}},
 		{"repeticao-removida", FrameState{Phase: FaseRepeticaoRemovida}},
+		{"microfone-bloqueado", FrameState{Phase: FaseMicrofoneBloqueado}},
 	}
 	fundos := []fundoPNG{
 		{"claro", 245, 225},

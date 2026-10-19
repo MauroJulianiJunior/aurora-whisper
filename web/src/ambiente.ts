@@ -104,8 +104,20 @@ export interface PropsDoDitar {
   avisar(texto: ReactNode): void
 }
 
+// PropsDoAvisoDoMicrofone é o que o Painel passa ao aviso de microfone
+// bloqueado pelo Windows: só o avisar, a pílula de baixo da tela.
+export interface PropsDoAvisoDoMicrofone {
+  avisar(texto: ReactNode): void
+}
+
 export interface Ambiente {
   cliente: ClienteDoHistorico
+  // AvisoDoMicrofone é o aviso do topo quando o Windows bloqueia o microfone, com
+  // o botão que abre a tela certa. Só o PC o tem (o Agent lê o registro do
+  // Windows); é o componente, e não só a consulta, para o texto e as rotas não
+  // entrarem no build da nuvem (bundle.test.ts). Sem ele, o Painel não mostra
+  // nada.
+  AvisoDoMicrofone?: ComponentType<PropsDoAvisoDoMicrofone>
   // Configuracoes é a tela de Configurações do modo. O mesmo componente a
   // vida toda do ambiente: o estado dele (o que a pessoa mudou e não salvou)
   // fica entre um render e outro.

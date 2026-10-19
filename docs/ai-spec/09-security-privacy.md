@@ -75,6 +75,15 @@
   Origin como o resto de `/api`, responde `Cache-Control: no-store` e nunca traz texto, id, versão, URL,
   e-mail nem token. Ler o contador é o aviso de "painel aberto" que acelera a busca do Agent (10 s, em vez
   de 60 s). Detalhe em `06-api-contract.md`.
+- `GET /api/microfone` e `POST /api/microfone/configuracoes` (AC-080) avisam que a privacidade do
+  Windows bloqueia o microfone e abrem a tela certa. O Agent **só lê** o registro
+  (`internal/agent/permissao`: a política `AppPrivacy` e o `ConsentStore` do microfone, em HKLM e HKCU) e
+  **nunca grava nele**: a chave de privacidade é decisão de quem usa o computador, e o app não a liga
+  sozinho. A resposta é um booleano e uma palavra de uma lista fixa (`empresa`, `aparelho`, `conta`,
+  `programas`, `este_app`); o log leva só essa palavra, sem caminho, título nem texto. Erro de leitura
+  não afirma bloqueio. O POST abre uma janela do Windows, então é `POST` (nunca `GET`), passa pela mesma
+  cadeia do token, do Host e do Origin, e a abertura fica atrás do portão do `sysinput`, que recusa sob
+  `go test`.
 
 ### Painel local: como o token chega à aba
 Acrescentado em 29-set-2026 (revisão adversarial de `6f546e0`). O contrato das rotas está em

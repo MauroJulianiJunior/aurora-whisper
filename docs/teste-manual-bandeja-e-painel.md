@@ -1203,6 +1203,63 @@ inteiras dos dois comandos.
 
 ---
 
+## Parte 7 — O Windows bloqueando o microfone (AC-080)
+
+O Agent lê o registro e avisa quando a privacidade do Windows bloqueia o microfone: a pílula, uma
+linha no log e um aviso no painel com um botão que abre a tela certa. Os testes automatizados cobrem a
+decisão, as rotas e o aviso com dublês; **desligar a chave de verdade só se faz aqui**, e é você quem
+roda: o teste muda uma configuração do seu Windows (e você a desfaz no fim).
+
+**Antes:** Agent novo rodando, com o painel aberto numa aba (pela bandeja, em **Abrir Aurora Whisper**).
+Abra **Configurações > Privacidade e segurança > Microfone** numa segunda janela.
+
+### MB1 — Desligar "Acesso ao microfone" e ver o aviso
+1. Na tela do Windows, desligue a chave **Acesso ao microfone** (a do topo).
+2. Volte para a aba do painel (clicar nela basta).
+
+**Deve acontecer:** no topo do painel aparece "O Windows está bloqueando o microfone." com "Clique no
+botão, ligue a chave **Acesso ao microfone** e volte para esta aba." e o botão **Abrir as configurações
+do microfone**. Sem F5.
+
+### MB2 — A pílula
+1. Num campo de texto qualquer, segure `Ctrl+Win`, fale e solte.
+
+**Deve acontecer:** a pílula diz "O Windows bloqueou o microfone. Veja o painel." em duas linhas, com o
+ponto vermelho, e some sozinha. Não deve aparecer "Não consegui transcrever".
+
+### MB3 — O botão
+1. No painel, clique em **Abrir as configurações do microfone**.
+
+**Deve acontecer:** abre a tela **Privacidade e segurança > Microfone** do Windows. Nada foi ligado
+sozinho.
+
+### MB4 — O aviso some sozinho
+1. Ligue a chave **Acesso ao microfone** de novo.
+2. Volte para a aba do painel.
+
+**Deve acontecer:** o aviso some, sem F5, e a pílula de baixo diz "Microfone liberado. Pode ditar." O
+ditado volta a funcionar.
+
+### MB5 — Os outros motivos (opcional)
+Repita MB1 a MB4 desligando, uma de cada vez, **Permitir que aplicativos da área de trabalho acessem o
+microfone** (o texto do aviso cita essa chave) e, se o seu Windows listar o Aurora Whisper, a chave dele
+(o texto manda procurar o Aurora Whisper na lista). O motivo "empresa" (política de administrador) não dá
+para provocar sem mexer em política do Windows; ele é coberto só pelos testes, e o aviso dele não tem
+botão.
+
+### MB6 — O log
+```bash
+Select-String -Path C:/Desenvolvimento/aurora-whisper/bin/agent.log -Encoding UTF8 -Pattern "permissao:|microfone_bloqueado"
+```
+**Deve ter:** uma linha `WARN permissao: o Windows bloqueia o microfone ...` com `motivo=conta` (ou
+`aparelho`, `programas`, `este_app`) se você reiniciou o Agent com a chave desligada, e a linha
+`winruntime: overlay` com `motivo=microfone_bloqueado bloqueio=...` do MB2. **Não deve ter** caminho,
+título de janela nem texto ditado.
+
+**Deixe a chave ligada no fim.**
+
+---
+
 ## O que este roteiro NÃO prova
 
 - **Uso de dias seguidos**, com o Agent na bandeja a sessão inteira e vários logons.

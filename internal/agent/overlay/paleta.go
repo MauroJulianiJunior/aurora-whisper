@@ -116,7 +116,8 @@ func sinalPara(phase dictation.OverlayPhase) (Cor, bool) {
 		return corVerde, true
 	case dictation.OverlayClipboard, FaseTextoNoHistorico:
 		return corCinza, true
-	case dictation.OverlayError, dictation.OverlayBlocked, dictation.OverlayInsertFailed, FaseJanelaElevada:
+	case dictation.OverlayError, dictation.OverlayBlocked, dictation.OverlayInsertFailed, FaseJanelaElevada,
+		FaseMicrofoneBloqueado:
 		return corVermelho, true
 	default:
 		return Cor{}, false

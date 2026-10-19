@@ -229,6 +229,7 @@ func TestComporMensagem_QuebrasDasMensagens(t *testing.T) {
 		FaseJanelaElevada:             {"O Windows não deixa ditar", "em janela de administrador."},
 		FaseTextoNoHistorico:          {"O texto demorou e", "ficou no histórico."},
 		FaseRepeticaoRemovida:         {"Removi uma repetição.", "Confira o texto."},
+		FaseMicrofoneBloqueado:        {"O Windows bloqueou o", "microfone. Veja o painel."},
 	} {
 		if got := ComporMensagem(p).Linhas; strings.Join(got, "|") != strings.Join(want, "|") {
 			t.Errorf("%s: %q, want %q", nomeDaFase(p), got, want)
@@ -310,6 +311,7 @@ func TestComporMensagem_MedidasDoDesign(t *testing.T) {
 		FaseJanelaElevada:             {254, 48},
 		FaseTextoNoHistorico:          {190, 48}, // folha de PNGs de 01-out-2026
 		FaseRepeticaoRemovida:         {206, 48}, // idem
+		FaseMicrofoneBloqueado:        {238, 48}, // duas linhas, como a de erro
 	} {
 		if d := ComporMensagem(p).Dim; d.W != want.X || d.H != want.Y || d.Radius != 16 {
 			t.Errorf("%s: pílula %dx%d raio %d, want %dx%d raio 16", nomeDaFase(p), d.W, d.H, d.Radius, want.X, want.Y)

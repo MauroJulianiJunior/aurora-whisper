@@ -113,6 +113,11 @@ describe('o bundle local (bin\\painel)', () => {
     expect(local.js).toContain('Apagar os mais antigos')
     expect(local.js).toContain('Apagar as cópias')
     expect(local.js).toContain('Os 6 meses estão ligados')
+    // O Windows bloqueando o microfone: o aviso do topo e o botão que abre a tela certa
+    // passam pelo Agent (/api/microfone), que lê o registro do PC.
+    expect(local.js).toContain('/api/microfone')
+    expect(local.js).toContain('O Windows está bloqueando o microfone.')
+    expect(local.js).toContain('Abrir as configurações do microfone')
   })
 
   // A orientação das chaves (lançamento, garantia 1): o campo da chave da IA diz onde
@@ -319,6 +324,11 @@ describe('o bundle da nuvem (dist-nuvem)', () => {
     'Apagar os mais antigos',
     'Apagar as cópias',
     'Os 6 meses estão ligados',
+    // O aviso de microfone bloqueado pelo Windows lê o registro do PC pelo Agent: é só do PC.
+    '/api/microfone',
+    'O Windows está bloqueando o microfone.',
+    'Abrir as configurações do microfone',
+    'Microfone liberado',
     // O primeiro uso do PC (a tecla do ditado do PC, sem chave) e a introdução da IA
     // das Configurações do PC não são do app do celular.
     'Segure Ctrl+Win',
