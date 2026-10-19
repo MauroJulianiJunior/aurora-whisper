@@ -1056,7 +1056,7 @@ func TestAlinharApagando(t *testing.T) {
 	semMarcador := func(b []string) []bool { return make([]bool, len(b)+1) }
 	a := []string{"o", "prazo", "muito", "vence", "hoje", "aqui"}
 	b := []string{"o", "prazo", "vence", "hoje"}
-	gap, custo, ok := alinharApagando(a, sem(a), b, semMarcador(b))
+	gap, custo, ok := alinharApagando(a, sem(a), b, semMarcador(b), nil)
 	if !ok || custo != 2 {
 		t.Fatalf("custo=%d ok=%v, want 2/true", custo, ok)
 	}
@@ -1066,21 +1066,21 @@ func TestAlinharApagando(t *testing.T) {
 	}
 
 	// Acrescentar palavra é inviável, trocar também.
-	if _, _, ok := alinharApagando(b, sem(b), a, semMarcador(a)); ok {
+	if _, _, ok := alinharApagando(b, sem(b), a, semMarcador(a), nil); ok {
 		t.Fatal("acrescentar palavras deveria ser inviável")
 	}
-	if _, _, ok := alinharApagando(a, sem(a), []string{"o", "prazo", "vence", "amanhã"}, semMarcador([]string{"o", "prazo", "vence", "amanhã"})); ok {
+	if _, _, ok := alinharApagando(a, sem(a), []string{"o", "prazo", "vence", "amanhã"}, semMarcador([]string{"o", "prazo", "vence", "amanhã"}), nil); ok {
 		t.Fatal("trocar palavra deveria ser inviável")
 	}
 
 	// A palavra estrutural sai de graça; a protegida é inviável.
 	c := []string{"ahn", "o", "prazo", "vence"}
 	marcas := marcarEstruturais(c)
-	if _, custo, ok := alinharApagando(c, marcas, []string{"o", "prazo", "vence"}, semMarcador([]string{"o", "prazo", "vence"})); !ok || custo != 0 {
+	if _, custo, ok := alinharApagando(c, marcas, []string{"o", "prazo", "vence"}, semMarcador([]string{"o", "prazo", "vence"}), nil); !ok || custo != 0 {
 		t.Fatalf("hesitação: custo=%d ok=%v, want 0/true", custo, ok)
 	}
 	d := []string{"o", "não", "vence"}
-	if _, _, ok := alinharApagando(d, sem(d), []string{"o", "vence"}, semMarcador([]string{"o", "vence"})); ok {
+	if _, _, ok := alinharApagando(d, sem(d), []string{"o", "vence"}, semMarcador([]string{"o", "vence"}), nil); ok {
 		t.Fatal("apagar \"não\" deveria ser inviável")
 	}
 
@@ -1089,27 +1089,27 @@ func TestAlinharApagando(t *testing.T) {
 	// palavra, custa 1.
 	f := []string{"o", "pão", "e", "o", "leite"}
 	bf := []string{"o", "pão", "o", "leite"}
-	if gap, custo, ok := alinharApagando(f, sem(f), bf, []bool{false, false, true, false, false}); !ok || custo != 0 || gap[2] != 2 {
+	if gap, custo, ok := alinharApagando(f, sem(f), bf, []bool{false, false, true, false, false}, nil); !ok || custo != 0 || gap[2] != 2 {
 		t.Fatalf("e antes de marcador: gap=%v custo=%d ok=%v, want custo 0 e gap[2]=2", gap, custo, ok)
 	}
-	if _, custo, ok := alinharApagando(f, sem(f), bf, semMarcador(bf)); !ok || custo != 1 {
+	if _, custo, ok := alinharApagando(f, sem(f), bf, semMarcador(bf), nil); !ok || custo != 1 {
 		t.Fatalf("e sem marcador: custo=%d ok=%v, want 1", custo, ok)
 	}
-	if _, custo, ok := alinharApagando(f, sem(f), bf, []bool{false, false, false, true, false}); !ok || custo != 1 {
+	if _, custo, ok := alinharApagando(f, sem(f), bf, []bool{false, false, false, true, false}, nil); !ok || custo != 1 {
 		t.Fatalf("e com o marcador em outra palavra: custo=%d ok=%v, want 1", custo, ok)
 	}
 	// Só o "e": outra palavra comum antes do marcador custa 1.
 	g := []string{"o", "pão", "mas", "o", "leite"}
-	if _, custo, ok := alinharApagando(g, sem(g), bf, []bool{false, false, true, false, false}); !ok || custo != 1 {
+	if _, custo, ok := alinharApagando(g, sem(g), bf, []bool{false, false, true, false, false}, nil); !ok || custo != 1 {
 		t.Fatalf("palavra comum antes de marcador: custo=%d ok=%v, want 1", custo, ok)
 	}
 
 	// Vazio dos dois lados e saída vazia.
-	if _, custo, ok := alinharApagando(nil, nil, nil, semMarcador(nil)); !ok || custo != 0 {
+	if _, custo, ok := alinharApagando(nil, nil, nil, semMarcador(nil), nil); !ok || custo != 0 {
 		t.Fatalf("vazio: custo=%d ok=%v", custo, ok)
 	}
 	e := []string{"o", "prazo"}
-	if _, custo, ok := alinharApagando(e, sem(e), nil, semMarcador(nil)); !ok || custo != 2 {
+	if _, custo, ok := alinharApagando(e, sem(e), nil, semMarcador(nil), nil); !ok || custo != 2 {
 		t.Fatalf("saída vazia apaga tudo: custo=%d ok=%v", custo, ok)
 	}
 }

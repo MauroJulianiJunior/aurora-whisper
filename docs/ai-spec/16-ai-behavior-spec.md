@@ -83,7 +83,13 @@ tudo o que muda palavra, número ou sigla é motivo para cair no Smart.**
    mesma posição (exceto depois de determinante, antes de "de/do/da" e entre números), ordinal de
    lista com marcador de lista na linha, hesitação, gagueira e o "e" da lista trocado pelo
    marcador. Negação, afirmação, quantificação, numeral por extenso e dígito **nunca** podem ser
-   apagados.
+   apagados. **Correção de grafia** (emenda de 18-out-2026 da ADR-016): a palavra da entrada que
+   **não existe** em português (dicionário VERO, `internal/ortografia`) pode virar uma palavra
+   **que existe**, de escrita parecida pela pronúncia (mesma primeira letra; 1 letra de diferença em
+   palavra de 4 a 6 letras, 2 a partir de 7, só o acento até 3), ou duas viram uma com as mesmas
+   letras ("na quela" → "naquela"), ou uma vira duas. Nunca em palavra protegida, número, nome
+   (maiúscula no meio da frase, ou palavra que o dicionário só conhece com maiúscula) nem palavra
+   estrutural. A palavra que existe nunca é trocada ("pagou" → "pegou", "compõe" → "compõem").
 8. Caixa (motivo `caixa`, roda por último): nenhuma palavra de **2 letras ou mais** sai **toda em
    maiúscula** sem estar toda em maiúscula na entrada (comparação sem caixa; por multiconjunto: a
    saída não tem mais ocorrências em caixa alta de uma palavra do que a entrada). A maiúscula do

@@ -26,6 +26,7 @@ var permitidos = map[string]bool{
 	"internal/dictionary":      true,
 	"internal/ids":             true,
 	"internal/learning":        true,
+	"internal/ortografia":      true, // a guarda de palavras do Polish (ADR-016, 18-out-2026); só biblioteca padrão e o VERO embutido
 	"internal/resolver":        true,
 	"internal/smartconta":      true,
 }

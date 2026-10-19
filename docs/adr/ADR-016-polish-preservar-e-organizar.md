@@ -14,6 +14,9 @@ o prazo efetivo, a política de esforço e a linha de log.
 **Quarta emenda em 01-out-2026**, decidida pelo Mauro depois do incidente do ditado longo
 (`docs/defeito-ditado-longo.md`, decisão 5): o prazo da decisão 4 cresce com o texto, de 3,5 s a
 8 s, e o watchdog do núcleo cresce junto; ver "Emenda de 01-out-2026: o prazo cresce com o texto".
+**Quinta emenda em 18-out-2026**, decidida pelo Mauro com o diagnóstico do histórico na mão: a guarda
+7 aceita a **correção de grafia** da palavra que não existe em português; ver "Emenda de 18-out-2026:
+a correção de grafia".
 **Nota de 10-out-2026 (ADR-021, ditar no celular):** a regra "a chave nunca sai do PC" (decisões 2 e 3
 e "Consequências") passa a valer para a chave **do PC**. Para ditar no celular, a pessoa cola uma chave
 no app, e o **servidor da nuvem** a guarda **cifrada**; o Polish do celular usa este mesmo motor
@@ -21,7 +24,7 @@ no app, e o **servidor da nuvem** a guarda **cifrada**; o Polish do celular usa 
 as guardas, o prazo da decisão 4 e a queda para o Smart). É opt-in e começa desligado. O Polish do PC
 não muda em nada: a chave dele continua só no Gerenciador de Credenciais. Ver a ADR-021, decisões G e
 N.
-Data: 2026-09-29 (emendas: 2026-09-30 e 2026-10-01; nota: 2026-10-10)
+Data: 2026-09-29 (emendas: 2026-09-30, 2026-10-01 e 2026-10-18; nota: 2026-10-10)
 Contexto: etapa 2 (Polish), depois da tela de Configurações e da chave de API (`internal/ia`,
 `internal/agent/chaves`)
 Emenda: `16-ai-behavior-spec.md` ("Polish", "Fallback", "Human-in-the-loop"); `17-prompt-spec.md`
@@ -1168,6 +1171,112 @@ deixava o `utf8` sem uso, e foi refeito). No primeiro passe, 25 morreram e 2 sob
 prazo do Polish no texto do Smart (nos testes o Smart não mudava o tamanho) ganhou o teste do texto
 que encolhe e morreu no segundo passe; `n <= 250` trocado por `n < 250` é **equivalente** (aos 250
 caracteres os dois ramos dão acréscimo zero). **Os 26 não equivalentes estão mortos.**
+
+## Emenda de 18-out-2026: a correção de grafia
+
+### O que os dados mostraram
+
+No log do Agent, o Polish passava nos ditados curtos e caía nos longos: abaixo de 600 caracteres, 0
+de 24 recusados; de 600 a 999, 4 de 11 na guarda `palavras`; de 1.000 para cima, 3 de 3. O log só
+guarda o motivo (AC-048), então o `polishbench -historico` (16-out-2026) rodou os ditados do próprio
+histórico, no terminal do Mauro, e mostrou o que o modelo mudou em cada resposta recusada: 26
+ditados, 3 rodadas, `gpt-6-luna`, prompt 1.0.2. De 78 respostas, 16 passaram, 49 caíram em
+`palavras` e 13 em `siglas_termos`.
+
+Nas 49, a mudança mais comum (42 vezes) era **palavra trocada**, e quase sempre era o modelo
+**corrigindo o erro do Whisper**, o mesmo nas 3 rodadas: "vejante" → "vigente", "sasonalidade" →
+"sazonalidade", "promptes" → "prompts", "contáveis" → "contábeis", "na quela" → "naquela",
+"geral" → "gerar", "jogar" → "julgar", "compõe" → "compõem". O resto era o que a guarda tem de
+barrar: palavra apagada ("você", "eu", "isso"; uma vez, **"não haja"**), palavra acrescentada ("a",
+"e", "saber") e gramática reescrita ("sejam capazes" → "seja capaz"). Sem orçamento para trocar
+palavra, a guarda jogava fora justamente a correção que a pessoa queria.
+
+### A decisão
+
+O Mauro escolheu (18-out-2026), entre manter a guarda, liberar toda troca de escrita parecida e
+investigar mais, a opção mais estreita: **liberar a correção de grafia só quando a palavra da
+entrada não existe em português**. A palavra que existe pode ser o que a pessoa disse ("pagou" →
+"pegou", o caso que derrubou o orçamento de 10% em 29-set-2026), e continua sem troca nenhuma, mesmo
+quando o modelo acerta ("compõe" → "compõem", "jogar" → "julgar").
+
+A troca passa (`internal/resolver/polish_grafia.go`) quando:
+
+- a palavra da entrada **não existe** no dicionário (VERO, abaixo), não é protegida (negação,
+  quantificação, numeral), não é número, só tem letras, não é estrutural e não está escrita com
+  maiúscula no meio da frase (nome ou sigla: "eSocial", "Ana");
+- a palavra da saída **existe** como palavra comum: nem nome ("a debora" → "A Débora" reprova; o
+  nome é da pessoa, com ou sem acento), nem outra palavra que não existe;
+- e é **a mesma escrita pela pronúncia**: mesma primeira letra e, com "ge/gi" = "je/ji", "ce/ci" =
+  "se/si", "z" = "s", "ss" = "s", "ç" = "s", "ch" = "x" e sem acento, no máximo 1 letra de diferença
+  em palavra de 4 a 6 letras e 2 a partir de 7; até 3 letras, só o acento ou o som. Ou duas palavras
+  viram uma com as mesmas letras ("e mail" → "e-mail"), com ao menos uma das duas inexistente, ou
+  uma inexistente vira duas ("derepente" → "de repente").
+
+A saída não ganha palavra protegida que a entrada não tinha, salvo o acento que faltava ("nao" →
+"não"). Apagar e acrescentar continuam como antes: sem licença, fora a estrutural.
+
+Três travas vão além do que a opção descrevia, e as três só **fecham** porta (nenhuma libera o que a
+opção não liberava):
+
+- **a palavra da saída tem de existir.** Sem ela, a sigla ditada em minúscula viraria outra sigla
+  ("irpf" → "irpj": as duas não existem e diferem em uma letra). O preço: "promptes" → "prompts" e
+  "scriptes" → "scripts" continuam recusados, porque o VERO não tem "prompts" nem "scripts". Esse
+  caso tem caminho próprio: o alias no dicionário do painel ("promptes" → "prompts"), que o Smart
+  aplica antes do Polish;
+- **a mesma primeira letra.** Barra "esocial" → "social", em que a palavra da saída existe;
+- **a maiúscula no meio da frase**, na entrada e na saída, marca nome ou sigla, e nome não é grafia.
+
+### O dicionário
+
+`internal/ortografia`, com o VERO, o verificador ortográfico do LibreOffice para o pt-BR
+(`internal/ortografia/vero/`, MPL 2.0 ou LGPLv3, à escolha; usamos a MPL 2.0). Os arquivos vão
+**sem alteração**, comprimidos com gzip e embutidos no binário (`go:embed`); um teste confere o
+sha256 do original. São 312 mil raízes e as regras de prefixo e sufixo do Hunspell: expandido, daria
+10,5 milhões de formas e 158 MB, então a consulta desfaz o afixo e procura a raiz. Não há
+dependência nova de terceiros: só a biblioteca padrão.
+
+- **Quando carrega:** na primeira saída que **não** passa sem correção. A saída que é a entrada menos
+  palavras nunca consulta o dicionário, e o Agent que não usa o Polish nunca o carrega. A carga leva
+  ~0,1 s e ocupa ~14 MB de memória, uma vez por processo. O executável do Agent cresce 1,4 MB.
+- **Na falha de carga** (o arquivo embutido corrompido, o que o teste impede), `Existe` diz "sim": a
+  correção não é liberada e a guarda volta a ser a de antes. Errar para o lado do Smart é o combinado.
+- **O motivo da recusa não muda:** a guarda conta primeiro sem correção; só se a saída não passar
+  ela conta de novo com a correção, e, se nem assim passar, o motivo é o da primeira conta.
+- **Vale no PC e no celular:** o Smart da conta (`internal/smartconta`, o servidor) usa o mesmo
+  resolver. O servidor só ganha a regra quando for publicado, o que pede autorização.
+
+### Limites
+
+- **O VERO é generoso.** Ele aceita formas verbais raras que o Whisper produz por engano
+  ("alugues", de alugar; "quela"; "legis"), e nelas a correção continua barrada ("alugues" →
+  "aluguéis", "na quela" → "naquela"). É o lado seguro do erro.
+- **O prompt não muda** (1.0.2): ele continua pedindo para não trocar palavra. O modelo corrige
+  mesmo assim, e a guarda passa a aceitar o que é grafia. Pedir a correção no prompt faria o modelo
+  trocar também as palavras que existem, e essas a guarda recusa.
+- **A auditoria do benchmark (`cmd/polishbench/critica.go`) não conhece a correção:** uma correção
+  aceita pela guarda conta como `acrescimo` "depois da guarda". O dataset de hoje não tem caso que a
+  dispare (as palavras dele que o VERO não tem são siglas e "debora", que a guarda recusa), e os
+  testes do `polishbench` seguem verdes. Quando o dataset ganhar frases com erro de transcrição, a
+  auditoria tem de aprender a regra (com o `esperado` corrigido, revisado pelo Mauro).
+- **Falta medir com o modelo real** quantas das 49 recusas do diagnóstico passam agora: é rodar o
+  mesmo `polishbench -historico` de novo (só o Mauro roda; gasta centavos).
+
+### Como foi verificado
+
+- A consulta conferida contra a expansão completa do VERO, feita por outro caminho (um expansor
+  escrito à parte, fora do repositório): as 10,5 milhões de formas reconhecidas, fora as entradas de
+  várias palavras ("Porto Rico") e um defeito do próprio expansor; 2 falsos positivos em 900 mil
+  palavras inventadas (palavra + "x", "q" + palavra, palavra + "zq").
+- Testes da guarda com os casos do diagnóstico, os que passam e os que têm de cair: "pagou" →
+  "pegou", "compõe" → "compõem", "logo marca" → "logomarca", "irpf" → "irpj", "promptes" →
+  "prompts", "a debora" → "A Débora", "nunka" → "nunca", "esocial" → "social", a palavra com
+  maiúscula no meio da frase, e a correção junto com negação apagada, palavra acrescentada ou
+  palavra comum apagada.
+- Mutação: tirar cada trava (palavra da entrada que existe, palavra da saída que existe, primeira
+  letra, maiúscula na entrada, palavra protegida na saída) derruba ao menos 2 testes; cada troca
+  conferida no disco antes de rodar.
+- `go vet ./...` e `go test ./...` verdes; o teste de pureza do Smart da conta ganhou
+  `internal/ortografia` na lista (só biblioteca padrão; compila no Linux).
 
 ## Limitações conhecidas
 

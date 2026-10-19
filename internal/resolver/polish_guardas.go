@@ -1039,7 +1039,12 @@ func alinhar(a []string, estr []bool, b []string) (custo int, novas []bool, ok b
 // saída ela estava: é o índice j da palavra da saída que vem DEPOIS dela
 // (len(b) quando é a última), e vale -1 para a palavra que ficou.
 // marcadorEm tem len(b)+1 posições; a última é sempre falsa.
-func alinharApagando(a []string, marcas []marcaEstrutural, b []string, marcadorEm []bool) (gap []int, custo int, ok bool) {
+//
+// Com corr, o alinhamento aceita também a correção de grafia (polish_grafia.go):
+// a[i] casa com b[j] quando corr.troca(i, j); a[i] e a[i+1] casam com b[j]
+// quando corr.junta(i, j); a[i] casa com b[j] e b[j+1] quando
+// corr.separa(i, j). Com corr nil, só casa a palavra igual.
+func alinharApagando(a []string, marcas []marcaEstrutural, b []string, marcadorEm []bool, corr *correcoes) (gap []int, custo int, ok bool) {
 	n, m := len(a), len(b)
 	if (n+1)*(m+1) > polishMaxCelulas {
 		return nil, 0, false
@@ -1064,6 +1069,13 @@ func alinharApagando(a []string, marcas []marcaEstrutural, b []string, marcadorE
 		return x + y
 	}
 
+	// casa: a[i] fica como b[j], igual ou com a grafia corrigida.
+	casa := func(i, j int) bool {
+		return a[i] == b[j] || (corr != nil && corr.troca(i, j))
+	}
+	junta := func(i, j int) bool { return corr != nil && i >= 0 && corr.junta(i, j) }
+	separa := func(i, j int) bool { return corr != nil && j >= 0 && corr.separa(i, j) }
+
 	largura := m + 1
 	d := make([]int32, (n+1)*largura)
 	for j := 1; j <= m; j++ {
@@ -1073,8 +1085,18 @@ func alinharApagando(a []string, marcas []marcaEstrutural, b []string, marcadorE
 		d[i*largura] = soma(d[(i-1)*largura], custoApagar(i-1, 0))
 		for j := 1; j <= m; j++ {
 			melhor := soma(d[(i-1)*largura+j], custoApagar(i-1, j))
-			if a[i-1] == b[j-1] && d[(i-1)*largura+j-1] < melhor {
-				melhor = d[(i-1)*largura+j-1]
+			if v := d[(i-1)*largura+j-1]; v < melhor && casa(i-1, j-1) {
+				melhor = v
+			}
+			if i >= 2 {
+				if v := d[(i-2)*largura+j-1]; v < melhor && junta(i-2, j-1) {
+					melhor = v
+				}
+			}
+			if j >= 2 {
+				if v := d[(i-1)*largura+j-2]; v < melhor && separa(i-1, j-2) {
+					melhor = v
+				}
 			}
 			d[i*largura+j] = melhor
 		}
@@ -1089,13 +1111,21 @@ func alinharApagando(a []string, marcas []marcaEstrutural, b []string, marcadorE
 	}
 	i, j := n, m
 	for i > 0 {
-		if j > 0 && a[i-1] == b[j-1] && d[i*largura+j] == d[(i-1)*largura+j-1] {
+		atual := d[i*largura+j]
+		switch {
+		case j > 0 && atual == d[(i-1)*largura+j-1] && casa(i-1, j-1):
 			i--
 			j--
-			continue
+		case i >= 2 && j > 0 && atual == d[(i-2)*largura+j-1] && junta(i-2, j-1):
+			i -= 2
+			j--
+		case j >= 2 && atual == d[(i-1)*largura+j-2] && separa(i-1, j-2):
+			i--
+			j -= 2
+		default:
+			gap[i-1] = j
+			i--
 		}
-		gap[i-1] = j
-		i--
 	}
 	return gap, int(d[n*largura+m]), true
 }
@@ -1235,7 +1265,10 @@ func motivoDaReprovacao(a []string, marcas []marcaEstrutural, b []string, efetiv
 //     nem no fim ("Obrigado!"), nem no meio;
 //   - NENHUMA palavra trocada, nem por sinônimo, nem por outro número, nem por
 //     outro nome. Trocar e acrescentar não têm orçamento: o Polish
-//     legítimo nunca faz uma coisa nem outra;
+//     legítimo nunca faz uma coisa nem outra. A exceção única é a correção
+//     de grafia da palavra que não existe em português (polish_grafia.go,
+//     emenda de 18-out-2026 da ADR-016), tentada só quando a saída não passa
+//     sem ela;
 //   - palavra protegida (negação, quantificação, numeral por extenso) nunca é
 //     apagada;
 //   - palavra estrutural (hesitação, gagueira, pontuação falada, ordinal de
@@ -1266,15 +1299,29 @@ func guardaPalavras(entrada, saida string, maxEdicao float64) MotivoFallback {
 	for j, t := range tb {
 		marcadorEm[j] = t.Marcador
 	}
-	gap, custo, ok := alinharApagando(a, marcas, b, marcadorEm)
-	if !ok {
-		return motivoDaReprovacao(a, marcas, b, efetivas)
+	avaliar := func(corr *correcoes) MotivoFallback {
+		gap, custo, ok := alinharApagando(a, marcas, b, marcadorEm, corr)
+		if !ok {
+			return motivoDaReprovacao(a, marcas, b, efetivas)
+		}
+		if custo > limiteDeEdicao(efetivas, maxEdicao) {
+			return MotivoPalavras
+		}
+		if !licencasDasApagadas(a, marcas, gap, tb, cauda) {
+			return MotivoPalavras
+		}
+		return MotivoNenhum
 	}
-	if custo > limiteDeEdicao(efetivas, maxEdicao) {
-		return MotivoPalavras
+	motivo := avaliar(nil)
+	if motivo == MotivoNenhum {
+		return MotivoNenhum
 	}
-	if !licencasDasApagadas(a, marcas, gap, tb, cauda) {
-		return MotivoPalavras
+	// Só a saída que não passou sem correção consulta o dicionário: a que é a
+	// entrada menos palavras nunca o carrega. Se nem com a correção de grafia
+	// ela passa, o motivo é o da conta sem correção, o mesmo de antes da
+	// emenda de 18-out-2026.
+	if avaliar(novasCorrecoes(a, ta, marcas, b, tb)) == MotivoNenhum {
+		return MotivoNenhum
 	}
-	return MotivoNenhum
+	return motivo
 }
