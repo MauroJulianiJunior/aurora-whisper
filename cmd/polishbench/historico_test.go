@@ -151,6 +151,27 @@ func TestRun_Historico_MostraOQueMudouENaoGrava(t *testing.T) {
 	}
 }
 
+// A resposta recusada pela guarda de siglas e termos mostra a sigla que não
+// reapareceu, e o resumo conta o tipo.
+func TestRun_Historico_MostraASiglaQueSumiu(t *testing.T) {
+	texto := "eu preciso mandar o PGDAS do mês para o cliente até sexta-feira sem falta, combinado com a equipe"
+	caminho := historicoDeTeste(t, []linhaDeTeste{
+		{"12345678-abcd", "windows", texto, "smart", "2026-10-12T14:32:00Z", false},
+	})
+	minuscula := func(p pedidoFalso) respostaFalsa {
+		return respostaFalsa{Final: strings.Replace(p.Ditado, "PGDAS", "pgdas", 1)}
+	}
+	a := novoAmbiente(t, minuscula, nil)
+	cod := a.rodar("-gastar", "-modelos", "openai:gpt-6-luna", "-historico", caminho, "-min-caracteres", "50")
+	if cod != 0 {
+		t.Fatalf("saiu com %d\n%s\n%s", cod, a.stdout.String(), a.stderr.String())
+	}
+	out := a.stdout.String()
+	contem(t, out, "rodada 1: siglas_termos")
+	contem(t, out, `sigla "PGDAS": 1 na entrada, 0 na saída; na saída, "pgdas" 1x`)
+	contem(t, out, "o que a guarda de siglas e termos não achou na saída: sigla 1")
+}
+
 // O comando que o -help imprime roda como está escrito, com "-historico
 // local" apontando para o LOCALAPPDATA (aqui, uma pasta temporária).
 func TestComandoHistorico_RodaComAsFlagsImpressas(t *testing.T) {

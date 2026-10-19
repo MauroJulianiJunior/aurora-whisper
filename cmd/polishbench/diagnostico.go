@@ -27,6 +27,7 @@ const (
 	DifJuncao     = "palavra juntada, separada ou com hífen"
 	DifTrocada    = "palavra trocada"
 	DifAcrescida  = "palavra acrescentada"
+	DifGrafia     = "correção de grafia (a guarda aceita)"
 	contextoDaDif = 3
 )
 
@@ -84,6 +85,9 @@ func diferencas(entrada, saida string) []Diferenca {
 			d.Depois = append(d.Depois, a[k].Bruta)
 		}
 		d.Categoria = categoria(a, ini, saiu, entrou)
+		if len(saiu) > 0 && len(entrou) > 0 && resolver.CorrecaoDeGrafiaAceita(saiu, entrou) {
+			d.Categoria = DifGrafia
+		}
 		out = append(out, d)
 	}
 	return out
@@ -214,10 +218,12 @@ func (d Diferenca) linha() string {
 }
 
 // escreverDiagnostico escreve, para cada ditado, o desfecho de cada rodada e,
-// nas respostas recusadas pela guarda de palavras, as diferenças. No fim, a
-// contagem das categorias e dos desfechos por tamanho.
+// nas respostas recusadas pela guarda de palavras, as diferenças; nas
+// recusadas pela de siglas e termos, a sigla, o nome ou o termo que não
+// reapareceu. No fim, a contagem das categorias e dos desfechos por tamanho.
 func escreverDiagnostico(w io.Writer, ditados []Ditado, casos []Caso, saidas []SaidaCandidato) {
 	contagem := map[string]int{}
+	contagemSiglas := map[string]int{}
 	porFaixa := map[string]map[string]int{}
 	for _, s := range saidas {
 		fmt.Fprintf(w, "\n=== %s ===\n", s.Cand.Rotulo())
@@ -242,11 +248,19 @@ func escreverDiagnostico(w io.Writer, ditados []Ditado, casos []Caso, saidas []S
 				}
 				porFaixa[faixa][desfecho]++
 				fmt.Fprintf(w, "  rodada %d: %s\n", r.Rodada, desfecho)
-				if r.Res.MotivoFallback != resolver.MotivoPalavras && r.Res.MotivoFallback != resolver.MotivoTrechoNovo {
-					continue
-				}
 				saida := textoDaSaida(r.Bruto)
 				if saida == "" {
+					continue
+				}
+				if r.Res.MotivoFallback == resolver.MotivoSiglasTermos {
+					for _, linha := range resolver.ExplicarSiglasTermos(c.Entrada, saida, c.Termos) {
+						tipo, _, _ := strings.Cut(linha, " ")
+						contagemSiglas[tipo]++
+						fmt.Fprintf(w, "    %s\n", linha)
+					}
+					continue
+				}
+				if r.Res.MotivoFallback != resolver.MotivoPalavras && r.Res.MotivoFallback != resolver.MotivoTrechoNovo {
 					continue
 				}
 				for _, dif := range diferencas(c.Entrada, saida) {
@@ -262,6 +276,9 @@ func escreverDiagnostico(w io.Writer, ditados []Ditado, casos []Caso, saidas []S
 		if m := porFaixa[faixa]; m != nil {
 			fmt.Fprintf(w, "  %-13s %s\n", faixa, contagemEmLinha(m))
 		}
+	}
+	if len(contagemSiglas) > 0 {
+		fmt.Fprintf(w, "o que a guarda de siglas e termos não achou na saída: %s\n", contagemEmLinha(contagemSiglas))
 	}
 	if len(contagem) == 0 {
 		fmt.Fprintln(w, "nenhuma resposta recusada pela guarda de palavras.")
