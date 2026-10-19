@@ -30,7 +30,7 @@ type ListadorDeModelos interface {
 	ListarModelos(ctx context.Context, provedor, chave string) ([]string, error)
 }
 
-// Preferencias é o que /api/settings, /api/ia, /api/aprendizado, /api/termos, /api/nuvem e /api/retencao precisam
+// Preferencias é o que /api/settings, /api/ia, /api/aprendizado, /api/termos, /api/nuvem, /api/retencao e /api/microfone precisam
 // além dos repositórios.
 type Preferencias struct {
 	// Padrao é o que GET /api/settings devolve, com version 0, antes do
@@ -86,6 +86,9 @@ type Preferencias struct {
 	// /api/retencao*, os 6 meses no PC e as cópias do banco. Em produção, o
 	// *expurgo.Ciclo. Nil: as rotas respondem 503.
 	Retencao Retencao
+	// Microfone é o aviso de microfone bloqueado pelo Windows e o botão que
+	// abre a tela certa: /api/microfone*. Nil: as rotas respondem 503.
+	Microfone Microfone
 	// Log recebe as falhas do Gerenciador de Credenciais e do registro —
 	// só o erro, nunca a chave — e as CONTAGENS do aprendizado (quantas
 	// sugestões, por que uma edição não sugeriu), nunca o texto. Nil
@@ -191,6 +194,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/retencao/ligar", s.handleLigarRetencao)
 	mux.HandleFunc("POST /api/retencao/desligar", s.handleDesligarRetencao)
 	mux.HandleFunc("POST /api/retencao/copias/apagar", s.handleApagarCopias)
+
+	mux.HandleFunc("GET /api/microfone", s.handleGetMicrofone)
+	mux.HandleFunc("POST /api/microfone/configuracoes", s.handleAbrirConfiguracoesDoMicrofone)
 
 	return mux
 }

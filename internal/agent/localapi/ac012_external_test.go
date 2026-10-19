@@ -151,6 +151,10 @@ func TestAC012_LocalAPIRejectsExternalAccess(t *testing.T) {
 		// O contador do sync (ADR-021, S): a leitura é o aviso de que o painel
 		// está aberto, e só quem tem o token a faz.
 		{http.MethodGet, "/api/nuvem/mudancas", ""},
+		// O microfone bloqueado: a rota que abre uma janela do Windows passa
+		// pela mesma cadeia (microfone_test.go prova que o Abrir nem roda).
+		{http.MethodGet, "/api/microfone", ""},
+		{http.MethodPost, "/api/microfone/configuracoes", ""},
 	} {
 		t.Run(rota.metodo+" "+rota.caminho+" sem token -> 401, host forjado -> 403", func(t *testing.T) {
 			for _, c := range []struct {

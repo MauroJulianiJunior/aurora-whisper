@@ -528,8 +528,9 @@ func run(pp pastas.Pastas) error {
 			// expurgo, dono do mutex do Ligar, do Desligar e do apagar das
 			// cópias. Sem o OK gravado nas Configurações, nada dos 6 meses é
 			// apagado.
-			Retencao: h.retencao,
-			Log:      slog.Default(),
+			Retencao:  h.retencao,
+			Microfone: novoMicrofoneDoAgent(),
+			Log:       slog.Default(),
 		}, hist, dono, aprendizado), laco))
 		abrir, porta, pararPainel, err := subirPainel(api.Handler(), nuvemDoPC.Retorno(), cam.Painel, slog.Default())
 		if err != nil {
