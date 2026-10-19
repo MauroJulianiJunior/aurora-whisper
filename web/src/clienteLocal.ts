@@ -188,6 +188,28 @@ export interface Cliente extends ClienteDoHistorico {
   // aviso ao Agent de que o painel está aberto (ele busca a nuvem a cada 10
   // s); um Agent de antes da S responde 404.
   mudancas(sinal?: AbortSignal): Promise<number>
+  // microfone diz se o Windows bloqueia o microfone do Agent (GET
+  // /api/microfone) e por quê. Lê o registro a cada pedido: o aviso some sozinho
+  // quando a pessoa liga a chave e volta à aba. Um Agent de antes do aviso
+  // responde 404.
+  microfone(sinal?: AbortSignal): Promise<EstadoDoMicrofone>
+  // abrirConfiguracoesDoMicrofone pede ao Agent que abra a tela de privacidade
+  // do microfone do Windows (POST /api/microfone/configuracoes). Quem liga a
+  // chave é a pessoa; o app não a liga sozinho.
+  abrirConfiguracoesDoMicrofone(): Promise<void>
+}
+
+// MotivoDoBloqueio é por que o Windows bloqueia o microfone: a política da
+// empresa, o aparelho, a conta, os programas da área de trabalho ou só este
+// app. Vazio é liberado; "desconhecido" é "o Agent não conseguiu ler", que não
+// é bloqueio. Uma palavra que o painel não conheça (um Agent mais novo) cai no
+// texto do aparelho.
+export type MotivoDoBloqueio = 'empresa' | 'aparelho' | 'conta' | 'programas' | 'este_app' | 'desconhecido' | ''
+
+// EstadoDoMicrofone é o GET /api/microfone: só o booleano e a palavra do motivo.
+export interface EstadoDoMicrofone {
+  bloqueado: boolean
+  motivo: MotivoDoBloqueio
 }
 
 // Um slice nil do Go vira null no JSON: a lista vazia do contrato pode
@@ -365,6 +387,16 @@ export function criarCliente(token: string, buscar: Buscador = buscadorPadrao): 
       // seguinte tenta de novo.
       if (typeof contador !== 'number' || !Number.isFinite(contador)) throw new Error('o Agent não mandou o contador de mudanças')
       return contador
+    },
+    async microfone(sinal) {
+      const r = await pedir(buscar, '/api/microfone', autorizado({ signal: sinal }), false)
+      const { bloqueado, motivo } = (await r.json()) as { bloqueado?: unknown; motivo?: unknown }
+      // Só um bloqueio que o Agent afirma conta: um corpo estranho não acende
+      // aviso nenhum.
+      return { bloqueado: bloqueado === true, motivo: typeof motivo === 'string' ? (motivo as MotivoDoBloqueio) : '' }
+    },
+    async abrirConfiguracoesDoMicrofone() {
+      await pedir(buscar, '/api/microfone/configuracoes', autorizado({ method: 'POST' }), false)
     },
   }
 }

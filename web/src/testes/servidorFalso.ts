@@ -183,6 +183,11 @@ export function servidorFalso(
   // agentSemContador: o Agent de antes da S, que responde 404.
   let contador = 0
   let agentSemContador = false
+  // O microfone bloqueado pelo Windows (internal/agent/localapi/microfone.go):
+  // GET /api/microfone devolve {bloqueado, motivo}, e o POST de configuracoes é
+  // o que abre a tela do Windows (204).
+  let microfone = { bloqueado: false, motivo: '' }
+  let abrirConfiguracoesFalha = false
   function rotaNuvem(p: Pedido): Response {
     if (p.caminho === '/api/nuvem' && p.metodo === 'GET') return json(nuvem)
     if (p.caminho === '/api/nuvem/mudancas' && p.metodo === 'GET') {
@@ -520,6 +525,10 @@ export function servidorFalso(
     if (p.caminho.startsWith('/api/termos')) return rotaTermos(p)
     if (p.caminho === '/api/nuvem' || p.caminho.startsWith('/api/nuvem/')) return rotaNuvem(p)
     if (p.caminho === '/api/retencao' || p.caminho.startsWith('/api/retencao/')) return rotaRetencao(p)
+    if (p.caminho === '/api/microfone' && p.metodo === 'GET') return json(microfone)
+    if (p.caminho === '/api/microfone/configuracoes' && p.metodo === 'POST') {
+      return abrirConfiguracoesFalha ? erro(500, 'INTERNAL', 'Não consegui abrir as configurações do Windows.') : new Response(null, { status: 204 })
+    }
 
     const rota = p.caminho.match(/^\/api\/history(?:\/([^/]+))?(\/restore)?$/)
     if (!rota) return erro(404, 'NOT_FOUND', 'rota')
@@ -637,6 +646,15 @@ export function servidorFalso(
     // agentSemRetencao: o Agent de antes da F10 (as rotas dão 404).
     agentSemRetencao(sim = true) {
       agentVelho = sim
+    },
+    // microfoneAgora muda o que o Agent diz do microfone (o Windows bloqueou, ou
+    // a pessoa ligou a chave): o painel só vê na próxima consulta.
+    microfoneAgora(bloqueado: boolean, motivo = '') {
+      microfone = { bloqueado, motivo }
+    },
+    // abrirConfiguracoesFalha: o POST que abre a tela do Windows dá erro.
+    abrirConfiguracoesFalha(sim = true) {
+      abrirConfiguracoesFalha = sim
     },
     // nuvemAgora é o estado da nuvem como o Agent o tem.
     nuvemAgora(): EstadoNuvem {

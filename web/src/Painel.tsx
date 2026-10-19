@@ -66,7 +66,7 @@ function semChave<T>(r: Record<string, T>, id: string): Record<string, T> {
 }
 
 export function Painel({ ambiente, focarNoTitulo = false }: Props) {
-  const { cliente, textos, Configuracoes, Faixa, ditar: Ditar } = ambiente
+  const { cliente, textos, Configuracoes, Faixa, AvisoDoMicrofone, ditar: Ditar } = ambiente
   const [vista, setVista] = useState<Vista>('historico')
   // configurando: a tela de Configurações está à vista, no lugar da lista.
   // A vista da lista não muda por baixo: voltar leva à mesma lista, com a
@@ -865,6 +865,7 @@ export function Painel({ ambiente, focarNoTitulo = false }: Props) {
             ditadoNaoEnviado={problema === 'sem-sessao' && ditadoPendente}
           />
         )}
+        {AvisoDoMicrofone && <AvisoDoMicrofone avisar={avisar} />}
         <div className="barra">
           <span className="nome">
             <Marca />
