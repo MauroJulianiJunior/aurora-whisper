@@ -744,6 +744,21 @@ ADR-021, "O que a implementação fixou (a fase 2)", têm os nomes, os status e 
   vitest da nuvem (o `findBy` com 1 s). A rodada de fechamento usa `go test ./... -count=1 -p 4
   -timeout 60m`, de preferência com a máquina quieta.
 
+## TASK-029 — Aviso de microfone bloqueado pelo Windows (AC-080)
+Quem instalou o app com o microfone bloqueado pela privacidade do Windows não via nada. Decisão do Mauro:
+o Agent percebe o bloqueio, avisa, e o painel tem um botão que abre a tela certa do Windows. Nenhuma
+dependência nova. Em quatro fatias, cada uma com testes:
+- `internal/agent/permissao`: a leitura só leitura do registro (política `AppPrivacy` e `ConsentStore`
+  do aparelho, da conta, dos programas e deste executável) e a decisão pura (empresa, aparelho, conta,
+  programas, este app);
+- a pílula `FaseMicrofoneBloqueado` (fora do núcleo, como a da janela elevada), a troca no runtime
+  quando o erro acontece com o microfone bloqueado e a linha WARN da subida;
+- `GET /api/microfone` e `POST /api/microfone/configuracoes` na API local, com `painel.AbrirConfiguracoesDoMicrofone`
+  atrás do portão do `sysinput`;
+- o aviso do painel do PC (`web/src/AvisoDoMicrofone.tsx`, entra pelo `Ambiente`; a nuvem não ganha nada).
+
+Falta o teste no PC, que é do Mauro: `docs/teste-manual-bandeja-e-painel.md`, parte 7.
+
 ## Paralelização
 - TASK-002/003/004 podem evoluir em paralelo após contratos.
 - TASK-006 pode rodar com TASK-005.

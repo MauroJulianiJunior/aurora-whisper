@@ -2364,6 +2364,27 @@ não tem os 6 meses. Reinicie o Agent." A retenção não depende da nuvem: vale
 - O **ciclo** não tem rota: roda na subida e de hora em hora, sem OK não apaga nada dos 6 meses, e o
   log só tem contagens.
 
+### Microfone bloqueado pelo Windows (AC-080)
+Fonte da verdade: `internal/agent/localapi/microfone.go` e `internal/agent/permissao`; em divergência
+vale o código. As rotas pedem o token da Local API, como o resto de `/api`, e respondem
+`Cache-Control: no-store`. O Agent só **percebe** o bloqueio (leitura do registro) e leva a pessoa à tela
+certa do Windows; ele nunca liga a permissão sozinho.
+- `GET /api/microfone`: `{ "bloqueado": true, "motivo": "conta" }`. **Um booleano e uma palavra, e mais
+  nada: nenhum caminho, título nem texto.** `motivo` é `empresa` (a política do Windows, de quem administra
+  o computador), `aparelho` ("Acesso ao microfone" do aparelho), `conta` (a mesma chave, para esta conta),
+  `programas` ("Permitir que aplicativos da área de trabalho acessem o microfone"), `este_app` (o Windows
+  nega só a este executável), `""` (liberado) ou `desconhecido` (o Agent não conseguiu ler o registro, o que
+  **não** é bloqueio: `bloqueado` sai `false`). A precedência é essa ordem. Lê o registro a cada pedido: o
+  aviso do painel some sozinho quando a pessoa liga a chave e volta à aba.
+- `POST /api/microfone/configuracoes`: o Agent abre `ms-settings:privacy-microphone` (Configurações >
+  Privacidade e segurança > Microfone) e responde `204`, sem corpo. A abertura passa pelo portão de
+  `internal/agent/sysinput` (`painel.AbrirConfiguracoesDoMicrofone`), como a que abre o navegador. Se o
+  Windows não abrir, `500` `INTERNAL` com "Não consegui abrir as configurações do Windows." (o erro de
+  dentro vai só ao log). Só `POST`: um `GET` na rota é `405` e não abre nada, porque um `GET` sai de uma
+  imagem ou de um link.
+- Sem a interface montada (`Preferencias.Microfone` nil), as duas rotas respondem `503` `UNAVAILABLE`. Um
+  Agent de antes do aviso responde `404`, e o painel não mostra nada.
+
 ### Arquivos do painel
 - Servidos da pasta `painel\` ao lado do executável — é para onde vai o
   `pnpm -C C:/Desenvolvimento/aurora-whisper/web build` (`bin/painel`).

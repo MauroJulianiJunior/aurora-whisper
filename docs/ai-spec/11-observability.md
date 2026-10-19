@@ -66,6 +66,13 @@ Quando a política de esforço desce um degrau (`modelo_incompativel`), sai uma 
   `copias_removidas`, `palavras_da_unidade` (a maior), `palavras_removidas`, `runas_antes`,
   `runas_depois`. Só contagens: a frase repetida não vai ao log. A pílula do sucesso dessa
   tentativa sai com `motivo=repeticao_removida` na linha `winruntime: overlay`.
+- O erro de um ditado com o microfone bloqueado pelo Windows (AC-080) sai na linha `winruntime: overlay`
+  com `fase=error`, `motivo=microfone_bloqueado` e `bloqueio=<palavra>` (`empresa`, `aparelho`, `conta`,
+  `programas` ou `este_app`), e a pílula mostra a mensagem do microfone no lugar de "Não consegui
+  transcrever". Só a palavra: nenhum caminho, título nem texto.
+- `permissao: o Windows bloqueia o microfone; o painel explica como liberar`, WARN, uma vez na subida do
+  Agent, só quando o registro diz que há bloqueio: `motivo=<palavra>`. Liberado, ou "não deu para ler",
+  não escreve nada.
 
 ## Etapa 5: a nuvem (ADR-019, 01-out-2026)
 - **Log do servidor:** método, padrão da rota (`r.Pattern`, nunca a URL crua), status, duração e

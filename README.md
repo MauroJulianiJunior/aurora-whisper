@@ -22,7 +22,8 @@ Para usar o Aurora Whisper sem montar nada do código. Você precisa só do Wind
    `Ctrl+Win`**, espere o bipe e a pílula com a onda, embaixo, no meio da tela (o microfone só liga aí), fale e **solte**: o
    texto entra onde está o cursor. Funciona **sem internet e sem conta**, e a transcrição acontece no
    seu PC. Se nada acontecer, confira em Configurações do Windows > Privacidade e segurança >
-   Microfone se o acesso está ligado. Para ver o histórico e mudar as configurações, abra o menu do
+   Microfone se o acesso está ligado (se o Windows estiver bloqueando o microfone, a pílula diz "O
+   Windows bloqueou o microfone. Veja o painel." e o painel tem um botão que abre essa tela). Para ver o histórico e mudar as configurações, abra o menu do
    ícone da bandeja e clique em **Abrir Aurora Whisper**.
 3. **Polish (opcional).** Organiza a pontuação e os parágrafos do que você ditou, com uma IA. Vem
    **desligado** e só funciona com a **sua própria chave de API**, da OpenAI ou da Anthropic: o projeto
