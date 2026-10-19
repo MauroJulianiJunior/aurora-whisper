@@ -75,6 +75,7 @@ import (
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/agent/overlay"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/agent/painel"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/agent/pastas"
+	"github.com/MauroJulianiJunior/aurora-whisper/internal/agent/permissao"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/agent/sysinput"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/agent/tray"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/agent/uia"
@@ -403,6 +404,13 @@ func run(pp pastas.Pastas) error {
 	defer fecharASR()
 
 	rt := winruntime.New(machine, clock.NewSystem(), hk, sess, ov, focus, asrProvider, slog.Default())
+
+	// A privacidade do Windows pode bloquear o microfone: quem instala assim
+	// não vê nada. O Agent percebe (leitura do registro, nada é gravado),
+	// registra na subida e, quando um ditado falha por isso, a pílula manda
+	// olhar o painel (permissao; overlay.FaseMicrofoneBloqueado).
+	avisarMicrofoneBloqueado(slog.Default(), permissao.Consultar)
+	rt.ComConsultaDoMicrofone(permissao.Consultar)
 
 	// O dicionário pessoal: corrige termo técnico depois do ASR, e
 	// enviesa o próprio ASR antes. Sem ele o ditado funciona igual, só

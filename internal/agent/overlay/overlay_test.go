@@ -156,7 +156,7 @@ func TestRedraw_JanelaAcompanhaAPilula(t *testing.T) {
 		dictation.OverlayRecording, dictation.OverlayProcessing, dictation.OverlaySuccess,
 		dictation.OverlayRecording, dictation.OverlayError, dictation.OverlayInsertFailed,
 		dictation.OverlayClipboard, FaseJanelaElevada, dictation.OverlayBlocked,
-		FaseTextoNoHistorico, FaseRepeticaoRemovida,
+		FaseTextoNoHistorico, FaseRepeticaoRemovida, FaseMicrofoneBloqueado,
 	}
 	for i, p := range fases {
 		redesenhaEm(o, p)

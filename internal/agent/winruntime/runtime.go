@@ -12,6 +12,7 @@ import (
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/agent/hook"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/agent/inserter"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/agent/overlay"
+	"github.com/MauroJulianiJunior/aurora-whisper/internal/agent/permissao"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/asr"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/clock"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/resolver"
@@ -362,6 +363,31 @@ type Runtime struct {
 	// bipar toca o bipe. Nil usa beep(); os testes trocam, porque o bipe
 	// de verdade sai pela caixa de som desta máquina.
 	bipar func() error
+
+	// microfoneBloqueado diz se a privacidade do Windows bloqueia o
+	// microfone, e por quê (internal/agent/permissao). Nil = nunca
+	// bloqueado, que é o que os dublês de teste querem. Só é consultada
+	// quando a pílula ia mostrar um erro (apply), nunca no caminho do
+	// teclado: ler o registro não é O(1).
+	microfoneBloqueado func() permissao.Motivo
+}
+
+// ComConsultaDoMicrofone liga a consulta que diz se o Windows bloqueia o
+// microfone. Quando bloqueia, o erro do ditado (sem fala, falha de captura)
+// mostra overlay.FaseMicrofoneBloqueado no lugar de "Não consegui
+// transcrever". Chamar antes de Run.
+func (rt *Runtime) ComConsultaDoMicrofone(consulta func() permissao.Motivo) {
+	rt.microfoneBloqueado = consulta
+}
+
+// motivoDoMicrofone devolve o motivo do bloqueio, ou Liberado quando não há
+// consulta ligada. Desconhecido (não deu para ler) volta como está: quem
+// chama decide por Bloqueado(), que nunca afirma bloqueio na dúvida.
+func (rt *Runtime) motivoDoMicrofone() permissao.Motivo {
+	if rt.microfoneBloqueado == nil {
+		return permissao.Liberado
+	}
+	return rt.microfoneBloqueado()
 }
 
 // New monta um Runtime pronto para Run. machine, hk, aud, ov e focus já
@@ -592,6 +618,15 @@ func (rt *Runtime) apply(effects []dictation.Effect) {
 			args := []any{"attempt", e.Attempt, "fase", e.Phase.String()}
 			if fase != e.Phase {
 				args = append(args, "motivo", "janela_elevada")
+			}
+			// Um erro com o microfone bloqueado pelo Windows diz isso, e não
+			// "tente novamente" (overlay.FaseDoMicrofone). Só o motivo, uma
+			// palavra, vai para o log.
+			if e.Phase == dictation.OverlayError {
+				if m := rt.motivoDoMicrofone(); m.Bloqueado() {
+					fase = overlay.FaseDoMicrofone(fase, true)
+					args = append(args, "motivo", "microfone_bloqueado", "bloqueio", string(m))
+				}
 			}
 			// Um sucesso em que a guarda tirou um laço de repetição pede para
 			// conferir o texto (repeticao.go).

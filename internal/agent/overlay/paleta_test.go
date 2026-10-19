@@ -229,6 +229,7 @@ func TestSinal_CadaDesfechoTemOSeuPonto(t *testing.T) {
 		FaseJanelaElevada:             corVermelho,
 		FaseTextoNoHistorico:          corCinza,
 		FaseRepeticaoRemovida:         corVerde,
+		FaseMicrofoneBloqueado:        corVermelho,
 	}
 	for _, p := range fasesDoOverlay() {
 		cor, ok := sinalPara(p)
@@ -261,6 +262,7 @@ func TestSinal_VermelhoSoEmFalhaERecusa(t *testing.T) {
 		dictation.OverlayBlocked:      true,
 		dictation.OverlayInsertFailed: true,
 		FaseJanelaElevada:             true,
+		FaseMicrofoneBloqueado:        true,
 	}
 	for _, p := range fasesDoOverlay() {
 		c := canvasDeTeste()
