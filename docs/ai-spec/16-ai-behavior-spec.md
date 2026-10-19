@@ -75,7 +75,10 @@ tudo o que muda palavra, número ou sigla é motivo para cair no Smart.**
    DCTFWeb, PGDAS, eSocial, OK) por **multiconjunto de grafia exata**, cada uma o mesmo número de
    vezes; termos do dicionário presentes no texto por ocorrências (com a inicial maiúscula se
    abrem frase), e a repetição imediata do termo ("a DCTFWeb DCTFWeb", gagueira) conta uma vez,
-   como a da sigla; nome próprio mantém caixa e acento.
+   como a da sigla; nome próprio mantém caixa e acento. Exceção (emenda de 19-out-2026 da ADR-016): a
+   palavra comum que o Whisper escreveu com maiúscula no meio da frase pode ir para a minúscula, se o
+   VERO a tem em minúscula e ela não é nome de pessoa (lista do IBGE e de sobrenomes) nem palavra que
+   o VERO conhece com maiúscula. Sigla continua estrita.
 7. Palavras: a saída tem de ser **a entrada menos algumas palavras, na mesma ordem**
    (subsequência, sem caixa, sem pontuação, sem marcador). Acrescentar ou trocar palavra reprova,
    sem orçamento (`PolishMaxEdicao = 0`, parâmetro que o benchmark pode subir com dados). Apagar
@@ -97,6 +100,13 @@ tudo o que muda palavra, número ou sigla é motivo para cair no Smart.**
    "ok" → "OK", "o cliente pagou" → "O CLIENTE PAGOU" e uma palavra comum isolada em maiúsculas
    reprovam; o preço aceito é "cnpj" → "CNPJ", que também cai no Smart (ADR-016, "Ajustes depois do
    benchmark").
+
+**Aceite por frase** (emenda de 19-out-2026 da ADR-016): quando a resposta inteira cai numa das
+guardas 5 a 8, cada frase dela é conferida com o trecho do ditado que cobre (o corte só vale com a
+mesma palavra dos dois lados do ponto, na entrada e na saída); a que passa fica, a que cai volta ao
+texto do Smart, e o texto montado passa inteiro pelas guardas 5 a 8. Volta inteira ao Smart a
+resposta com `trecho_novo`, com palavra a mais antes da primeira âncora ou depois da última, com
+quebra de linha ou lista, de uma frase só, ou em que mais da metade das frases cai.
 
 Limitações conhecidas das guardas (ADR-016, "Limitações conhecidas"): emoticon `:)` passa, "são
 dois pontos primeiro… segundo…" é ambíguo, e alguns casos legítimos caem no Smart por segurança

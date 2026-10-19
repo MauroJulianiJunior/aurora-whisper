@@ -242,14 +242,28 @@ func escreverDiagnostico(w io.Writer, ditados []Ditado, casos []Caso, saidas []S
 			rs := porCaso[i]
 			sort.Slice(rs, func(x, y int) bool { return rs[x].Rodada < rs[y].Rodada })
 			for _, r := range rs {
-				desfecho := "aceito"
-				if !r.Res.Reescrito {
+				desfecho, detalhe := "aceito", ""
+				switch {
+				case !r.Res.Reescrito:
 					desfecho = string(r.Res.MotivoFallback)
+				case r.Res.Frases > 0:
+					desfecho = "aceito por frase"
+					detalhe = fmt.Sprintf(" (%d de %d frases voltaram ao Smart)", r.Res.FrasesRevertidas, r.Res.Frases)
 				}
 				porFaixa[faixa][desfecho]++
-				fmt.Fprintf(w, "  rodada %d: %s\n", r.Rodada, desfecho)
+				fmt.Fprintf(w, "  rodada %d: %s%s\n", r.Rodada, desfecho, detalhe)
 				saida := textoDaSaida(r.Bruto)
 				if saida == "" {
+					continue
+				}
+				if r.Res.Frases > 0 {
+					// O que o modelo mudou; o que a guarda não aceitou está nas
+					// frases que voltaram ao Smart.
+					for _, dif := range diferencas(c.Entrada, saida) {
+						if dif.Categoria != DifGrafia {
+							fmt.Fprintf(w, "    %s\n      (%s)\n", dif.linha(), dif.Categoria)
+						}
+					}
 					continue
 				}
 				if r.Res.MotivoFallback == resolver.MotivoSiglasTermos {

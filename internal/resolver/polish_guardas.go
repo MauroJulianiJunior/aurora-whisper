@@ -8,6 +8,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/MauroJulianiJunior/aurora-whisper/internal/ortografia"
 )
 
 // MotivoFallback diz POR QUE o Polish não valeu num ditado e o texto do
@@ -586,6 +588,38 @@ func contarNomes(entrada string) map[string]int {
 	return conta
 }
 
+// ocorrenciasDoNome conta, na saída, as vezes que o nome da entrada
+// reaparece: com a mesma grafia e, quando a palavra existe como palavra
+// comum, também em minúscula.
+//
+// A segunda parte é a emenda de 19-out-2026 da ADR-016 (decisão do Mauro):
+// o Whisper põe maiúscula no meio da frase depois de uma pausa ("a Base de
+// Conhecimento", "a Pesquisa"), e "nome" ali é só caixa. Pôr a palavra
+// comum em minúscula não muda letra; o nome que não existe como palavra
+// comum ("Anthropic") continua exigindo a grafia exata, e também o nome de
+// pessoa que o VERO tem como palavra ("joão", "silva", "rosa"): ele vem da
+// lista de prenomes e sobrenomes (ortografia.EhNomeDePessoa) ou da forma com
+// maiúscula do próprio VERO ("Maria", "Natal"). Sigla não entra aqui: "DAS"
+// e "das" são palavras diferentes.
+func ocorrenciasDoNome(out []rune, nome string) int {
+	n := contarRunas(out, []rune(nome), false, false)
+	if podeIrParaMinuscula(nome) {
+		n += contarRunas(out, []rune(strings.ToLower(nome)), false, false)
+	}
+	return n
+}
+
+// podeIrParaMinuscula diz se a palavra com inicial maiúscula no meio da
+// frase pode perder a maiúscula: é palavra comum, e não é nome de pessoa nem
+// nome que o VERO conhece. As consultas baratas vêm antes.
+func podeIrParaMinuscula(nome string) bool {
+	min := strings.ToLower(nome)
+	if min == nome || ortografia.EhNomeDePessoa(nome) {
+		return false
+	}
+	return ortografia.ExisteComum(min) && !ortografia.ConheceComoNome(nome)
+}
+
 func mesmaRuna(a, b rune, ignorarCaixa bool) bool {
 	if a == b {
 		return true
@@ -703,7 +737,7 @@ func guardaSiglasTermos(entrada, saida string, termos []string) bool {
 
 	out := []rune(saida)
 	for nome, n := range contarNomes(entrada) {
-		if contarRunas(out, []rune(nome), false, false) < n {
+		if ocorrenciasDoNome(out, nome) < n {
 			return false
 		}
 	}

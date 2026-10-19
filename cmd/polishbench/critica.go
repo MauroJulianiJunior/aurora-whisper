@@ -7,6 +7,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/MauroJulianiJunior/aurora-whisper/internal/ortografia"
 )
 
 // A AUDITORIA de falha crítica.
@@ -395,7 +397,11 @@ func auditar(c Caso, saida string) Auditoria {
 	contaS := contagem(brutas(ps))
 	nomesDaEntrada := nomesDe(pi)
 	for nome, n := range nomesDaEntrada {
-		if contaS[nome] < n {
+		achados := contaS[nome]
+		if minusculaLiberada(nome) {
+			achados += contaS[strings.ToLower(nome)]
+		}
+		if achados < n {
 			falhas[FalhaSiglaTermo] = true
 		}
 	}
@@ -459,6 +465,18 @@ func auditar(c Caso, saida string) Auditoria {
 		}
 	}
 	return a
+}
+
+// minusculaLiberada diz se o "nome" da entrada pode aparecer em minúscula na
+// saída sem ser falha: a palavra comum que o Whisper escreveu com maiúscula
+// no meio da frase ("Base", "Pesquisa"), que não é nome de pessoa nem nome
+// que o VERO conhece (ADR-016, emenda de 19-out-2026). Escrita aqui, à parte
+// do resolver, com as mesmas consultas ao dicionário: a política é a que o
+// Mauro decidiu, e a auditoria não pode ser mais estrita que ela.
+func minusculaLiberada(nome string) bool {
+	min := strings.ToLower(nome)
+	return min != nome && !ortografia.EhNomeDePessoa(nome) &&
+		ortografia.ExisteComum(min) && !ortografia.ConheceComoNome(nome)
 }
 
 func brutas(ps []palavra) []string {

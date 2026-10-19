@@ -29,7 +29,7 @@ da máquina").
 palavras, que nem vai ao provedor) e qualquer fallback. Exemplo:
 
 ```
-level=INFO msg="winruntime: polish" attempt=12 prompt=polish-ptbr@1.0.2 prompt_hash=b0da9b12 provedor=openai modelo=gpt-6-luna esforco=none desfecho=aceito latencia_ms=1180 prazo_ms=3497 entrada_chars=214 saida_chars=219 tokens_entrada=852 tokens_saida=34
+level=INFO msg="winruntime: polish" attempt=12 prompt=polish-ptbr@1.0.2 prompt_hash=b0da9b12 provedor=openai modelo=gpt-6-luna esforco=none desfecho=aceito latencia_ms=1180 prazo_ms=3497 entrada_chars=214 saida_chars=219 tokens_entrada=852 tokens_saida=34 frases=0 frases_revertidas=0
 ```
 
 | Campo | O que é |
@@ -44,6 +44,7 @@ level=INFO msg="winruntime: polish" attempt=12 prompt=polish-ptbr@1.0.2 prompt_h
 | `entrada_chars` | caracteres do texto do Smart |
 | `saida_chars` | caracteres do texto que segue para a inserção: o do Polish se aceito, senão o do Smart |
 | `tokens_entrada`, `tokens_saida` | o que o provedor informou; 0 quando a chamada não foi feita ou o prazo a cortou |
+| `frases`, `frases_revertidas` | quando o Polish valeu **por frase** (a resposta inteira não passou, parte das frases sim; ADR-016, emenda de 19-out-2026): quantas frases a resposta tinha e quantas voltaram ao texto do Smart. 0 quando valeu inteiro ou não valeu |
 
 Quando a política de esforço desce um degrau (`modelo_incompativel`), sai uma linha a mais, INFO,
 `polish: o modelo recusou o esforço de raciocínio…`, com `provedor`, `modelo`, `recusado` e

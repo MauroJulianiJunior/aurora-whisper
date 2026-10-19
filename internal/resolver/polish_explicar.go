@@ -45,7 +45,7 @@ func ExplicarSiglasTermos(entrada, saida string, termos []string) []string {
 	}
 	sort.Strings(lista)
 	for _, nome := range lista {
-		if m := contarRunas(sai, []rune(nome), false, false); m < nomes[nome] {
+		if m := ocorrenciasDoNome(sai, nome); m < nomes[nome] {
 			linha := fmt.Sprintf("nome %q: %d na entrada, %d na saída", nome, nomes[nome], m)
 			if outras := grafiasNaSaida(saida, nome); len(outras) > 0 {
 				linha += "; na saída, " + strings.Join(outras, ", ")

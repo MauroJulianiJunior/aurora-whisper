@@ -282,5 +282,9 @@ func (rt *Runtime) registrarPolish(p polidoPronto) {
 		"saida_chars", utf8.RuneCountInString(p.res.FinalText),
 		"tokens_entrada", p.tokensEntrada,
 		"tokens_saida", p.tokensSaida,
+		// O Polish que valeu por frase (ADR-016, emenda de 19-out-2026):
+		// quantas frases e quantas voltaram ao Smart. Zero quando valeu inteiro.
+		"frases", p.res.Frases,
+		"frases_revertidas", p.res.FrasesRevertidas,
 	)
 }

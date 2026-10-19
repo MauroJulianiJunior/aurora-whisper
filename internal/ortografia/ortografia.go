@@ -425,6 +425,86 @@ func SoNomeProprio(palavra string) bool {
 	return len(f) == 2 && !d.gerada(f[0]) && d.gerada(f[1])
 }
 
+// ExisteComum diz se a palavra existe escrita em minúscula: é palavra comum
+// ("base", "pesquisa"), mesmo que também seja nome ("Rosa"). Na falha de
+// carga, diz que NÃO: quem pergunta para liberar a minúscula não libera.
+func ExisteComum(palavra string) bool {
+	d, err := obter()
+	if err != nil {
+		return false
+	}
+	min := strings.ToLower(palavra)
+	if min == "" {
+		return false
+	}
+	if d.gerada(min) {
+		return true
+	}
+	if !strings.Contains(min, "-") {
+		return false
+	}
+	for _, p := range strings.Split(min, "-") {
+		if p == "" || !d.gerada(p) {
+			return false
+		}
+	}
+	return true
+}
+
+// ConheceComoNome diz se o VERO tem a palavra com a inicial maiúscula, como
+// nome próprio ("Maria", "Ana", "Natal", "Brasil"), mesmo que ela também
+// exista como palavra comum. Na falha de carga, diz que SIM.
+func ConheceComoNome(palavra string) bool {
+	d, err := obter()
+	if err != nil {
+		return true
+	}
+	f := formas(palavra)
+	return d.gerada(f[len(f)-1])
+}
+
+//go:embed nomes/prenomes.txt nomes/sobrenomes.txt nomes/lugares.txt
+var arquivosDeNomes embed.FS
+
+var (
+	cargaNomes sync.Once
+	nomes      map[string]bool
+)
+
+// EhNomeDePessoa diz se a palavra é um prenome ou sobrenome comum no Brasil,
+// ou o nome de um município ou estado de uma palavra só (nomes/LEIAME.md),
+// sem distinguir caixa nem acento: "João", "joao", "Silva", "Rosa",
+// "Recife". Serve para o que o VERO não diz: ele tem "joão", "silva" e
+// "recife" como palavras comuns, mas quem dita "o João" fala de uma pessoa.
+func EhNomeDePessoa(palavra string) bool {
+	cargaNomes.Do(func() {
+		nomes = map[string]bool{}
+		for _, arq := range []string{"nomes/prenomes.txt", "nomes/sobrenomes.txt", "nomes/lugares.txt"} {
+			dados, err := arquivosDeNomes.ReadFile(arq)
+			if err != nil {
+				continue // a lista que falta não protege, e o teste a confere
+			}
+			for _, n := range strings.Fields(string(dados)) {
+				nomes[n] = true
+			}
+		}
+	})
+	return nomes[semAcento(strings.ToLower(palavra))]
+}
+
+// semAcento tira acento e cedilha, como nas listas de nomes ("joao",
+// "goncalves").
+var tiraAcento = strings.NewReplacer(
+	"á", "a", "à", "a", "â", "a", "ã", "a", "ä", "a",
+	"é", "e", "ê", "e", "è", "e", "ë", "e",
+	"í", "i", "î", "i", "ì", "i", "ï", "i",
+	"ó", "o", "ô", "o", "õ", "o", "ò", "o", "ö", "o",
+	"ú", "u", "û", "u", "ù", "u", "ü", "u",
+	"ç", "c", "ñ", "n",
+)
+
+func semAcento(w string) string { return tiraAcento.Replace(w) }
+
 // Disponivel diz se o dicionário carregou. Existe já é seguro sem ele; isto
 // é para o teste e para o diagnóstico.
 func Disponivel() error {

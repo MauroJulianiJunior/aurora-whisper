@@ -394,3 +394,17 @@ func TestComInicialMaiuscula(t *testing.T) {
 		}
 	}
 }
+
+// A palavra comum que o Whisper escreveu com maiúscula no meio da frase pode
+// sair em minúscula sem ser falha (ADR-016, emenda de 19-out-2026); o nome de
+// pessoa, não.
+func TestAuditar_MaiusculaDoWhisper(t *testing.T) {
+	base := c(CatArmadilha, "consulte a Base de Conhecimento antes", "Consulte a Base de Conhecimento antes.")
+	if got := auditar(base, "Consulte a base de conhecimento antes."); got.Critica() {
+		t.Errorf("a minúscula da palavra comum virou falha: %v", got.Criticas)
+	}
+	joao := c(CatArmadilha, "o João pediu a guia", "O João pediu a guia.")
+	if got := auditar(joao, "O joão pediu a guia."); !got.Tem(FalhaSiglaTermo) {
+		t.Errorf("o nome de pessoa em minúscula passou: %v", got.Criticas)
+	}
+}
