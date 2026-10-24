@@ -1162,6 +1162,17 @@ Antes de publicar, o Mauro instalou a 0.1.0 numa conta nova do Windows e a 0.1.1
 nunca teve o Aurora Whisper, e ditou nas duas. Da "Revisão" abaixo, sai o tamanho real do Setup; o
 tempo da primeira subida com disco frio, o Smart App Control e os antivírus continuam sem dado.
 
+## Nota de 24-out-2026: a 0.1.2 publicada
+
+A 0.1.2 foi publicada como prévia (`--prerelease`) em 24-out-2026, com o OK do Mauro, a partir do
+rascunho que o workflow montou da tag `v0.1.2` (`a1ed0c6`). Traz o aviso de microfone bloqueado pelo
+Windows (AC-080) e o Polish nos ditados longos. O Setup tem 143.617.857 bytes e SHA-256
+`1d958ffe82576c2f5854323ed915728d60e6e8a58b4557c9bc66d4ed2bf9e6b7`; o download sem login devolve o
+mesmo tamanho, e o `.sha256` publicado, o mesmo hash. Antes de publicar, o Mauro instalou o Setup do
+rascunho no Windows e confirmou que funcionou. Quem tem a 0.1.1 instala por cima, e o histórico e as
+configurações ficam. Os antivírus continuam sem dado: quem usa resolve com o próprio antivírus
+(decisão do Mauro, 19-out-2026).
+
 ## Revisão
 
 Depois do primeiro Setup instalado numa conta limpa: o tamanho real do Setup; quanto levou a

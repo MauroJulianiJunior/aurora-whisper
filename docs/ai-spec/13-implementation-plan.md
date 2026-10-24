@@ -478,7 +478,8 @@ registro ou mexe em pasta real):
 - F5: CI de release (`.github/workflows/release.yml`: tag, Setup, release rascunho) e teste de
   instalação no runner descartável. O workflow **rodou**: o portão `F2_PRONTA` foi aberto em
   12-out-2026, e ele montou os rascunhos da 0.1.0 e da 0.1.1. A **0.1.1 foi publicada** como prévia
-  em 16-out-2026, com o OK do Mauro (ADR-018, "Nota de 16-out-2026"). O teste de instalação no runner
+  em 16-out-2026, com o OK do Mauro (ADR-018, "Nota de 16-out-2026"), e a **0.1.2** em 24-out-2026
+  (ADR-018, "Nota de 24-out-2026"). O teste de instalação no runner
   **não foi feito**;
 - F6: `docs/teste-manual-instalador.md` e a seção Instalação do README. A seção "Instalar" do README
   está feita; o roteiro manual está **escrito** (para uma conta de teste do Windows); dele, só os
