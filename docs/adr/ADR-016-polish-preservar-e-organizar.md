@@ -21,6 +21,8 @@ a correção de grafia".
 o Polish, a que não passa volta ao Smart) e a **minúscula da palavra comum** que o Whisper escreveu
 com maiúscula no meio da frase; ver "Emenda de 19-out-2026: o aceite por frase e a maiúscula do
 Whisper".
+**Sétima emenda em 24-out-2026**, pedida pelo Mauro: o aceite por frase chega às **listas** e às
+respostas com quebra de linha (a linha é a unidade); ver "Emenda de 24-out-2026: o aceite por linha".
 **Nota de 10-out-2026 (ADR-021, ditar no celular):** a regra "a chave nunca sai do PC" (decisões 2 e 3
 e "Consequências") passa a valer para a chave **do PC**. Para ditar no celular, a pessoa cola uma chave
 no app, e o **servidor da nuvem** a guarda **cifrada**; o Polish do celular usa este mesmo motor
@@ -1323,7 +1325,7 @@ a que não passa volta ao texto do Smart, sem trocar palavra.
   a mais antes da primeira âncora ou depois da última (um prefixo, "Texto organizado:", ou uma frase
   no fim, "Dia quinze.", "Obrigado!": é o modelo respondendo, e a frase não é só descartada); a que
   tem quebra de linha ou lista (misturar um trecho do Smart numa lista quebraria a estrutura; fica
-  para depois); a que tem uma frase só; e a resposta em que **mais da metade das frases** cai (aí o
+  para depois: resolvido na emenda de 24-out-2026, "o aceite por linha"); a que tem uma frase só; e a resposta em que **mais da metade das frases** cai (aí o
   modelo reescreveu).
 - **O que muda para fora:** `ResolveResult` ganha `Frases` e `FrasesRevertidas` (só números), a
   linha `winruntime: polish` do Agent ganha `frases` e `frases_revertidas`, e a linha `ditado` do
@@ -1380,6 +1382,50 @@ de 100 kB).
 
 Rodar o `polishbench -historico` de novo (só o Mauro roda; gasta centavos) para ver quantas das
 respostas passam inteiras, quantas por frase, e quantas frases voltam ao Smart.
+
+## Emenda de 24-out-2026: o aceite por linha
+
+O Mauro pediu (24-out-2026) que o aceite por frase chegasse às listas, que até aqui caíam inteiras no
+Smart. Feito em `internal/resolver/polish_linhas.go`, chamado por `polirPorFrase` quando a resposta
+tem quebra de linha.
+
+- **A unidade é a linha** da resposta: o item da lista ou o parágrafo. A linha que passa nas guardas
+  fica como o Polish escreveu; a que não passa troca **só as palavras** pelas do Smart. O que fica
+  entre as linhas (a pontuação do fim, a quebra, o marcador `1.` ou `-`) é sempre o do Polish, então
+  a lista continua lista. A linha do Smart ganha a inicial maiúscula quando a do Polish começava com
+  maiúscula (a sigla não). Dentro de uma linha não há corte por frase: o parágrafo que não passa volta
+  inteiro.
+- **O corte entre linhas** vale onde a última palavra da linha e a primeira da seguinte casaram com
+  palavras do ditado. O que o ditado tem entre elas:
+  - as palavras estruturais do fim (o "e" do último item, o ordinal, "item dois", a hesitação, a
+    pontuação falada) são a passagem de um item para o outro e não ficam em linha nenhuma;
+  - as de antes delas ("do mês passado e o recibo", com "passado" apagado pelo modelo) ficam com a
+    linha de cima, que então cai;
+  - sem palavra estrutural no fim ("o extrato e você manda", com "você" apagado), não se sabe de que
+    linha a palavra é, e as duas linhas ficam juntas (e caem juntas).
+- **A garantia não muda:** o texto montado passa, inteiro, pela guarda de formato e pelas guardas de
+  números, siglas e termos, palavras e caixa, contra o ditado inteiro. É nessa conta que as licenças
+  da lista (o "e" e o ordinal que viraram marcador, com ao menos dois marcadores) são conferidas. Ela
+  pega o "segundo" que quer dizer "conforme": entre duas linhas sem marcador, ele parece um ordinal,
+  mas o texto inteiro não tem licença para tirá-lo, e a resposta cai.
+- **Cai inteiro no Smart:** os mesmos casos do aceite por frase (trecho novo, palavra a mais nas
+  bordas, uma linha só, mais da metade das linhas caindo) e a resposta com uma linha **sem nenhuma
+  palavra do ditado** ("Qualquer dúvida, me avise."): é o modelo falando com a pessoa.
+- **Para fora** nada muda de forma: `Frases` e `FrasesRevertidas` contam as linhas quando a resposta
+  tem quebra de linha, e o log e o histórico seguem como no aceite por frase.
+
+**Como foi verificado:** testes por `Polir` inteiro (`TestPolir_PorLinha`): o item que apagou palavra,
+a lista com hífen e o "e" do último item, o número trocado num item, o termo do dicionário trocado, a
+palavra apagada no começo do item (que junta os itens), mais da metade caindo, palavra acrescentada
+num item, linha acrescentada no fim, o "segundo" que não é ordinal, palavra acrescentada antes da
+lista e o ordinal sem marcador. O caso de quebra de linha sem lista, que caía, agora passa por linha.
+Na mutação, a trava da linha sem âncora, a passagem estrutural, a linha sem passagem, o limite da
+metade, a maiúscula, a conta final e a trava das bordas derrubam testes. Sobreviveram, equivalentes:
+o atalho de uma linha só e a guarda de formato na conta final (o que fica entre as linhas é do Polish,
+que já tinha passado nela; fica pela garantia). `go vet ./...` e `go test ./...` verdes.
+
+**O que falta medir:** o `polishbench -historico` (só o Mauro roda) mostra quantas listas passam a
+valer.
 
 ## Limitações conhecidas
 

@@ -23,10 +23,12 @@ import (
 // Fica de fora, e cai inteiro no Smart como antes:
 //   - a resposta com trecho novo (MotivoTrechoNovo): o modelo acrescentou
 //     conteúdo, e isso é sinal de que ele respondeu ou obedeceu ao ditado;
-//   - a resposta com quebra de linha ou lista: misturar um trecho do Smart
-//     dentro de uma lista do Polish quebraria a estrutura;
 //   - a resposta em que mais da metade das frases cai: aí o modelo reescreveu;
 //   - a resposta de uma frase só, que é o tudo ou nada de sempre.
+//
+// A resposta com quebra de linha ou lista é conferida por LINHA (emenda de
+// 24-out-2026): a linha é a unidade, e a que não passa volta ao Smart sem
+// desmanchar a estrutura (ver polirPorLinha).
 
 // sinaisDeFimDeFrase são os sinais que fecham uma frase.
 const sinaisDeFimDeFrase = ".?!…"
@@ -193,8 +195,11 @@ func passaNasGuardas(entrada, saida string, opts PolirOpcoes) MotivoFallback {
 // voltaram ao Smart e quantas a resposta tem; ok=false quando não dá, e aí
 // fica o Smart inteiro, como antes.
 func polirPorFrase(entrada, saida string, opts PolirOpcoes) (texto string, revertidas, total int, ok bool) {
-	if strings.ContainsAny(entrada, "\n\r") || strings.ContainsAny(saida, "\n\r") {
+	if strings.ContainsAny(entrada, "\n\r") || strings.Contains(saida, "\r") {
 		return "", 0, 0, false
+	}
+	if strings.Contains(saida, "\n") {
+		return polirPorLinha(entrada, saida, opts)
 	}
 	ta, _ := tokenizar(entrada)
 	tb, _ := tokenizar(saida)

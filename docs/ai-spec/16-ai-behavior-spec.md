@@ -105,8 +105,14 @@ tudo o que muda palavra, número ou sigla é motivo para cair no Smart.**
 guardas 5 a 8, cada frase dela é conferida com o trecho do ditado que cobre (o corte só vale com a
 mesma palavra dos dois lados do ponto, na entrada e na saída); a que passa fica, a que cai volta ao
 texto do Smart, e o texto montado passa inteiro pelas guardas 5 a 8. Volta inteira ao Smart a
-resposta com `trecho_novo`, com palavra a mais antes da primeira âncora ou depois da última, com
-quebra de linha ou lista, de uma frase só, ou em que mais da metade das frases cai.
+resposta com `trecho_novo`, com palavra a mais antes da primeira âncora ou depois da última, de uma
+frase só, ou em que mais da metade das frases cai.
+
+**Aceite por linha** (emenda de 24-out-2026 da ADR-016): na resposta com quebra de linha ou lista, a
+unidade é a linha. A linha que cai troca só as palavras pelas do Smart; o fim da linha, a quebra e o
+marcador ficam os do Polish. O "e" e o ordinal que viraram marcador ficam fora das linhas e passam
+pela conta do texto inteiro. Volta inteira ao Smart, além dos casos do aceite por frase, a resposta
+com uma linha sem nenhuma palavra do ditado.
 
 Limitações conhecidas das guardas (ADR-016, "Limitações conhecidas"): emoticon `:)` passa, "são
 dois pontos primeiro… segundo…" é ambíguo, e alguns casos legítimos caem no Smart por segurança
