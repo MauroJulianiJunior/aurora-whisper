@@ -1,10 +1,13 @@
 # ADR-022 — Notas: o ditado vira anotação útil, com lista, marcador e cor, no PC e no celular
 
-Status: **Proposed (25-out-2026).** As decisões do Mauro estão em "As decisões do Mauro", como ele
+Status: **Accepted (25-out-2026).** As decisões do Mauro estão em "As decisões do Mauro", como ele
 as deu. O resto é desenho desta ADR, feito a partir da leitura do código em `ca5c6b7`
 (`main` depois do relatório do Polish de 25-out). **Tudo o que não sai das decisões dele está marcado
 [derivada]**, com o padrão proposto e a alternativa, e uma linha "Para quem usa" quando muda o que ele
-vê. Nada é implementado antes da aprovação.
+vê.
+- **A aprovação, do Mauro em 25-out-2026:** E1 no padrão ("Gatilho próprio"); **E4 trocada:
+  marcar sem rede** ("Marcar sem rede"), a fila offline entra na N8; as outras escolhas menores
+  com os padrões ("Aprovo com os padrões").
 
 Data: 2026-10-25
 Contexto: depois do aceite por linha (ADR-016, sétima emenda) e da auditoria de grafia do
@@ -199,9 +202,12 @@ perguntar ao modelo do Polish. Ver E2.
   marcado de itens diferentes (o texto de cada linha igual), o servidor mescla sem selo.
 - Servidor: tabelas `notes`, `labels`, `note_labels` (migrations novas, só criação; nenhuma
   destrutiva). As rotas da nuvem seguem o padrão das de ditado.
-- **[derivada] Celular sem rede:** nesta ADR, o app do celular precisa de rede para gravar a nota
-  (como hoje para o histórico). Mercado sem sinal é o risco conhecido: a lista abre do cache do
-  service worker para leitura, e marcar sem rede fica para depois (fila local no navegador). Ver E4.
+- **Celular sem rede (E4, decisão do Mauro: "Marcar sem rede"):** no mercado sem sinal, a lista abre
+  do cache do service worker e **marcar e desmarcar funcionam offline**. As mudanças vão para uma fila
+  no navegador (IndexedDB), com o mesmo marcador por entidade do sync do PC, e sobem quando a rede
+  volta; a mescla da lista de marcar acima resolve o caso de o PC ter mudado a nota nesse meio-tempo.
+  [derivada] Offline, só marcar, desmarcar e acrescentar item; criar, apagar nota e mexer em marcador
+  pedem rede (a tela diz isso). O app mostra "Sem rede: N mudanças esperando".
 
 ### Imagens (fase N10, por último)
 
@@ -253,19 +259,19 @@ deploy e release só com a autorização do Mauro.
 | N5 | Converter trecho: por prefixo, por regra e com IA (prompt `notas-lista@1` com as guardas; benchmark próprio no `polishbench`) | N2, L |
 | N6 | Lista de marcar (marcados descem, desmarcar tudo), copiar para WhatsApp, busca única | N2 |
 | N7 | Sync das notas e marcadores: migrations do Postgres, entidades no motor, mescla da lista de marcar, rotas da nuvem. **Deploy: ponto de parada** | N1-N6 |
-| N8 | Aba Notas no celular (PWA), com "Ditar para nota" | N7 |
+| N8 | Aba Notas no celular (PWA), com "Ditar para nota" e a fila offline (marcar, desmarcar e acrescentar item sem rede) | N7 |
 | N9 | Gatilho "ditar para nota" no PC, com o destino pelo nome | N2 |
 | N10 | Imagens. **Ponto de parada antes** (servidor, disco, LGPD) | N7 |
 
 Ordem sugerida: L e N1 em paralelo; depois N2, N3, N6, N4, N5, N9; e N7, N8, N10.
 
-## Escolhas menores (padrão proposto; o Mauro pode trocar)
+## Escolhas menores (aprovadas em 25-out-2026: todas no padrão, menos a E4)
 
 - **E1. Acrescentar por voz:** segundo gatilho `Ctrl+Win+Alt` (padrão) ou frase-comando no ditado
   comum.
 - **E2. Sugestão de marcador:** local, sem IA (padrão) ou pelo modelo do Polish.
 - **E3. Formatação dentro da linha** (negrito, itálico, link): fora desta ADR (padrão) ou na N2.
-- **E4. Celular sem rede:** só leitura do cache (padrão) ou fila offline já na N8.
+- **E4. Celular sem rede:** ~~só leitura do cache~~; **o Mauro escolheu marcar sem rede** (fila offline na N8).
 - **E5. Cores:** as 8 do Keep em tons discretos (padrão) ou menos.
 - **E6. Ditado que vira nota:** escondido do histórico com `virou_nota` (padrão) ou para a lixeira.
 
@@ -279,6 +285,8 @@ Ordem sugerida: L e N1 em paralelo; depois N2, N3, N6, N4, N5, N9; e N7, N8, N10
 - Destino do "ditar para nota": casamento do nome, empate, nome inexistente, nota com lista de marcar.
 - Sync: as duas entidades no motor, conflito com selo, mescla da lista de marcar (só estados
   diferentes mescla; texto diferente vira selo), lápide.
+- Fila offline do celular: marcar sem rede, recarregar a página, a rede voltar, o PC ter mudado a
+  nota no meio-tempo (mescla), e a mudança que o servidor recusa (selo, nunca perda calada).
 - Painel: os componentes com Testing Library, nos dois temas.
 - Verificação manual (roteiro, uma pessoa sabendo o que vai acontecer): ditar dentro da nota, o
   segundo gatilho, copiar para WhatsApp.
