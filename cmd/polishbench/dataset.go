@@ -36,6 +36,7 @@ const (
 	CatHesitacao      = "hesitacao"
 	CatCurta          = "curta"
 	CatArmadilha      = "armadilha"
+	CatGrafia         = "grafia"
 	CatJaOrganizada   = "ja_organizada"
 	prefixoJaOrganiza = "ja-"
 )
@@ -44,7 +45,7 @@ const (
 // que o relatório as mostra. ja_organizada vem do manifest do ASR.
 var categoriasDasFrases = []string{
 	CatLista, CatValores, CatSiglas, CatPontuacao, CatPergunta, CatInjecao,
-	CatFalaLonga, CatHesitacao, CatCurta, CatArmadilha,
+	CatFalaLonga, CatHesitacao, CatCurta, CatArmadilha, CatGrafia,
 }
 
 // todasAsCategorias é categoriasDasFrases mais ja_organizada.

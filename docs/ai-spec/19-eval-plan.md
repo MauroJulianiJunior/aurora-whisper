@@ -135,16 +135,19 @@ barato" errado).
 - (a) As 46 `reference` de `testdata/asr-dataset/manifest-normalizado.json`, como categoria
   `ja_organizada`: o Polish tem de devolvê-las iguais. As entidades do manifest viram os termos do
   dicionário presentes.
-- (b) Dataset novo, `testdata/polish-dataset/frases.json`, com 88 frases sintéticas que imitam a
+- (b) Dataset novo, `testdata/polish-dataset/frases.json`, com 97 frases sintéticas que imitam a
   saída do whisper, sem dado real (um teste procura CPF, CNPJ, e-mail, telefone, endereço da web
   e chave). Campos: `id`, `categoria`, `entrada`, `esperado`, `termos`. O rascunho é do agente;
   **o `esperado` é revisado pelo Mauro**. Categorias: `lista` (10), `valores` (11), `siglas` (10),
   `pontuacao_falada` (12, com os casos em que NÃO é comando: "dois pontos no score", "dois
   vírgula cinco"), `pergunta` (8, não responder), `injecao` (8), `fala_longa` (6), `hesitacao`
-  (8), `curta` (5, menos de 4 palavras: nem vão ao provedor) e `armadilha` (10). O `esperado` de
+  (8), `curta` (5, menos de 4 palavras: nem vão ao provedor), `armadilha` (10) e `grafia` (9, desde
+  24-out-2026: o erro de transcrição do Whisper, a palavra que não existe em português, com o
+  `esperado` já corrigido como a ADR-016 aceita, emenda de 18-out-2026; a `grafia-09` é a palavra que
+  existe, "contáveis", que fica como foi ditada). O `esperado` de
   toda frase que vai ao provedor **passa pelas guardas do resolver, sem exceção** (teste em
   `cmd/polishbench/dataset_test.go`, que roda `Polir` com um cliente falso devolvendo o próprio
-  `esperado`: 129 frases vão ao provedor e passam, 5 são curtas). A única exceção que havia,
+  `esperado`: 138 frases vão ao provedor e passam, 5 são curtas). A única exceção que havia,
   `hesitacao-05` (a gagueira sobre o termo do dicionário, achado da S3), deixou de cair em
   30-set-2026 (ADR-016, "Ajustes depois do benchmark"). O mesmo teste confere que o `esperado`
   todo em maiúsculas cai em toda frase, e que a saída do `gpt-5-nano` em `injecao-06` cai com o
@@ -175,8 +178,13 @@ barato" errado).
   não muda fato nem entidade**: a grafia de um termo do dicionário vale se for a canônica, a da
   entrada ou a do esperado (mais a inicial maiúscula quando abre frase), e um nome só é exigido se
   já era nome na entrada. Alteração leve (palavra comum apagada, hesitação ou pontuação falada
-  mantida, nome que só o esperado capitaliza e a saída deixou em minúscula) não é crítica e é
-  contada à parte. Limite conhecido: a checagem de siglas compara com o esperado, então o dataset
+  mantida, nome que só o esperado capitaliza e a saída deixou em minúscula, e a **correção de
+  grafia** em que o modelo e o esperado discordam) não é crítica e é contada à parte. A correção de
+  grafia segue a regra da guarda (ADR-016, emenda de 18-out-2026), reescrita à parte em
+  `cmd/polishbench/grafia.go`: a palavra errada vem da entrada e não existe em português, a certa
+  existe como palavra comum, com a mesma primeira letra e a escrita parecida pela pronúncia, e
+  nunca em número, nome ou palavra de sentido nova. A correção para outra palavra que não a do
+  esperado continua `acrescimo`. Limite conhecido: a checagem de siglas compara com o esperado, então o dataset
   traz o termo na grafia do dicionário (o Smart o entrega assim; um teste garante).
 - Organização: F1 de pontuação (o sinal `, . ? ! : ;` depois de cada palavra, contra o `esperado`,
   com as palavras alinhadas; o sinal de palavra sem par conta como erro), no geral e **fora de

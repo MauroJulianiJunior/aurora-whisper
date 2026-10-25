@@ -1263,7 +1263,10 @@ dependência nova de terceiros: só a biblioteca padrão.
   aceita pela guarda conta como `acrescimo` "depois da guarda". O dataset de hoje não tem caso que a
   dispare (as palavras dele que o VERO não tem são siglas e "debora", que a guarda recusa), e os
   testes do `polishbench` seguem verdes. Quando o dataset ganhar frases com erro de transcrição, a
-  auditoria tem de aprender a regra (com o `esperado` corrigido, revisado pelo Mauro).
+  auditoria tem de aprender a regra (com o `esperado` corrigido, revisado pelo Mauro). **Feito em
+  24-out-2026:** a categoria `grafia` (9 frases) e a regra reescrita à parte em
+  `cmd/polishbench/grafia.go`; a correção em que o modelo e o esperado discordam é leve, e um teste
+  confere, caso a caso, que a guarda e a auditoria concordam.
 - **Falta medir com o modelo real** quantas das 49 recusas do diagnóstico passam agora: é rodar o
   mesmo `polishbench -historico` de novo (só o Mauro roda; gasta centavos).
 

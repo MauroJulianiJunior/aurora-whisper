@@ -443,7 +443,7 @@ func falhasPorTipo(b *strings.Builder, r Rodada) {
 	b.WriteString("Alterações leves antes da guarda (não críticas): ")
 	var partes []string
 	for _, m := range r.Metricas {
-		partes = append(partes, fmt.Sprintf("`%s`: %d omissão(ões) de palavra comum, %d sobra(s), %d nome(s) sem a maiúscula que o esperado põe", m.Cand.Rotulo(), m.LevesOmissao, m.LevesSobra, m.LevesCaixa))
+		partes = append(partes, fmt.Sprintf("`%s`: %d omissão(ões) de palavra comum, %d sobra(s), %d nome(s) sem a maiúscula que o esperado põe, %d correção(ões) de grafia que só o modelo ou só o esperado fez", m.Cand.Rotulo(), m.LevesOmissao, m.LevesSobra, m.LevesCaixa, m.LevesGrafia))
 	}
 	b.WriteString(strings.Join(partes, "; ") + ".\n\n")
 }
