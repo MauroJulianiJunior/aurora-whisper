@@ -86,6 +86,10 @@ type Preferencias struct {
 	// /api/retencao*, os 6 meses no PC e as cópias do banco. Em produção, o
 	// *expurgo.Ciclo. Nil: as rotas respondem 503.
 	Retencao Retencao
+	// Notas são as notas e os marcadores (ADR-022, N1): /api/notas* e
+	// /api/marcadores*. Em produção, o *storage.SQLiteNotaRepository. Nil: as
+	// rotas respondem 503.
+	Notas storage.NotaRepository
 	// Microfone é o aviso de microfone bloqueado pelo Windows e o botão que
 	// abre a tela certa: /api/microfone*. Nil: as rotas respondem 503.
 	Microfone Microfone
@@ -194,6 +198,21 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/retencao/ligar", s.handleLigarRetencao)
 	mux.HandleFunc("POST /api/retencao/desligar", s.handleDesligarRetencao)
 	mux.HandleFunc("POST /api/retencao/copias/apagar", s.handleApagarCopias)
+
+	mux.HandleFunc("GET /api/notas", s.handleListNotas)
+	mux.HandleFunc("POST /api/notas", s.handleCriarNota)
+	mux.HandleFunc("GET /api/notas/{id}", s.handleGetNota)
+	mux.HandleFunc("PATCH /api/notas/{id}", s.handlePatchNota)
+	mux.HandleFunc("DELETE /api/notas/{id}", s.handleDeleteNota)
+	mux.HandleFunc("POST /api/notas/{id}/restaurar", s.handleRestaurarNota)
+	mux.HandleFunc("DELETE /api/notas/{id}/definitivo", s.handleApagarNotaDeVez)
+	mux.HandleFunc("PUT /api/notas/{id}/marcadores/{marcador}", s.handleMarcarNota)
+	mux.HandleFunc("DELETE /api/notas/{id}/marcadores/{marcador}", s.handleDesmarcarNota)
+
+	mux.HandleFunc("GET /api/marcadores", s.handleListMarcadores)
+	mux.HandleFunc("POST /api/marcadores", s.handleCriarMarcador)
+	mux.HandleFunc("PATCH /api/marcadores/{id}", s.handlePatchMarcador)
+	mux.HandleFunc("DELETE /api/marcadores/{id}", s.handleDeleteMarcador)
 
 	mux.HandleFunc("GET /api/microfone", s.handleGetMicrofone)
 	mux.HandleFunc("POST /api/microfone/configuracoes", s.handleAbrirConfiguracoesDoMicrofone)

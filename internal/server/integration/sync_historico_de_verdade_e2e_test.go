@@ -226,10 +226,11 @@ func TestSyncE2E_HistoricoDeVerdadeNaoPerdeNemMudaNada(t *testing.T) {
 	pc := n.pcSobre(caminho, donoDoFixture)
 	depois06 := lerTabelasDe(t, pc.db)
 	semMudar(t, "a 0006, a 0007 e a 0008", original, depois06, "schema_migrations")
-	if m := depois06["schema_migrations"]; len(m) != 8 || m[6]["version"] != "0007_sync_aprendido" || m[7]["version"] != "0008_sync_aprendido_perdido" {
+	// (e a 0009, das notas: o Migrate roda até a última)
+	if m := depois06["schema_migrations"]; len(m) != 9 || m[6]["version"] != "0007_sync_aprendido" || m[7]["version"] != "0008_sync_aprendido_perdido" || m[8]["version"] != "0009_notas" {
 		t.Errorf("as migrations: %v", m)
 	}
-	for _, tb := range []string{"sync_mudou_aqui", "sync_aprendido", "sync_veio_da_nuvem"} {
+	for _, tb := range []string{"sync_mudou_aqui", "sync_aprendido", "sync_veio_da_nuvem", "local_notes", "local_labels", "local_note_labels"} {
 		if linhas, ok := depois06[tb]; !ok || len(linhas) != 0 {
 			t.Errorf("a tabela nova %s: presente %v, %d linhas", tb, ok, len(linhas))
 		}

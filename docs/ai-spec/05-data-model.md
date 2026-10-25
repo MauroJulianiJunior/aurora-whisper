@@ -551,6 +551,64 @@ Espelho útil de Transcription +:
 > conta nova. O que o celular criou e o PC recebeu, e editou aqui, sobe como qualquer ditado que a
 > nuvem tem (a base é a `server_version`).
 
+### Notas e marcadores (ADR-022, N1; migration `0009_notas`)
+Três tabelas novas, só criação (nenhuma linha existente muda, nenhuma tabela ganha coluna). **A N1 é só
+o banco local e a API local: o sync não entra.** As linhas ficam com `sync_state = 'pending'` e
+**nenhum marcador de nota ou de marcador é posto na `sync_outbox`** (o motor de `internal/sync` ainda
+não conhece as entidades, e um marcador de tipo desconhecido poderia travar o sync do histórico). A
+N7 faz o envio inicial a partir destas linhas. O `user_id` de `local_notes` e de `local_labels` é
+migrado pelo dono fixo como o das outras tabelas (a migração lê as tabelas do schema).
+
+#### local_notes
+| Coluna | Tipo | Notas |
+|---|---|---|
+| `id` | TEXT PK | UUID v7 (`storage.NewID`) |
+| `user_id` | TEXT | o dono local |
+| `titulo` | TEXT | pode ser vazio; até 1 KiB |
+| `corpo` | TEXT | uma linha por bloco, com o prefixo do tipo (`# `, `- `, `- [ ] `, `- [x] `, `1. `); **o banco não interpreta**; até 64 KiB (o teto do ditado e da nuvem) |
+| `cor` | TEXT nulo | um de `amarelo`, `laranja`, `vermelho`, `rosa`, `roxo`, `azul`, `verde`, `cinza`; a lista fechada é conferida em Go (`storage.CoresDaNota`), sem `CHECK` |
+| `fixada`, `arquivada` | INTEGER 0/1 | `CHECK (... IN (0, 1))` |
+| `ditado_de_origem` | TEXT nulo | o id do ditado de que a nota nasceu ("Virar nota", N3); sem chave estrangeira |
+| `created_at`, `updated_at` | TEXT | o mesmo formato de largura fixa do histórico (`formatoTempo`) |
+| `deleted_at`, `purge_at` | TEXT nulo | a lixeira de 30 dias, a mesma dos ditados |
+| `version` | INTEGER | 1 na criação; sobe em toda mudança |
+| `sync_state` | TEXT | `pending` (padrão; a N7 define o resto) |
+| `server_version`, `last_sync_error` | nulos | da N7 |
+
+Índices: `idx_local_notes_lista` (`user_id, arquivada, fixada DESC, updated_at DESC`, só não
+apagadas), `idx_local_notes_lixeira` (`user_id, deleted_at DESC`, só apagadas) e
+`idx_local_notes_purge` (`purge_at`, para o expurgo).
+
+- **Sem a retenção de 6 meses.** A nota é coisa que a pessoa guardou de propósito (ADR-022): só a
+  lixeira expira. O passo dos 6 meses do expurgo não olha esta tabela.
+- **Arquivada não é lixeira:** sai da tela principal, aparece em "Arquivo" e nunca expira.
+- **Ordem da lista:** fixadas primeiro, depois `updated_at` decrescente (a criação mais recente desempata);
+  na lixeira, `deleted_at` decrescente.
+- **Expurgo:** a lixeira vencida (`purge_at <= agora`) sai no mesmo ciclo da dos ditados
+  (`internal/agent/expurgo`, `expurgo.ComNotas`), na subida e de hora em hora; o log só tem a
+  contagem (`lixeira: expurgo das notas`).
+- **O que sobe a `version`:** editar, fixar/desafixar, arquivar/desarquivar, trocar a cor, ir para a
+  lixeira e voltar, pôr ou tirar um marcador (estes dois também sobem `updated_at`) e apagar um
+  marcador que a nota tinha (este sobe só a `version`, para a nota não pular para o topo da lista).
+  Repetir uma operação que já vale (reapagar, remarcar) não muda nada, nem a `version`.
+
+#### local_labels
+`id`, `user_id`, `nome`, `nome_dobrado`, `created_at`, `updated_at`, `deleted_at`, `version`,
+`sync_state` (padrão `pending`) e `server_version`.
+
+- **Nome único por pessoa, sem diferenciar maiúscula nem acento, entre os não apagados.** O Go
+  guarda em `nome_dobrado` o nome em minúsculas, sem acento e com os espaços colapsados
+  (`C#` e `C++` continuam diferentes), e o índice único parcial `idx_local_labels_nome`
+  (`user_id, nome_dobrado WHERE deleted_at IS NULL`) garante a regra no banco. O nome tem de 1 a 50
+  caracteres, numa linha só; o do marcador apagado fica livre.
+- **Apagar é soft** (`deleted_at`): o marcador sai de todas as notas (as linhas de
+  `local_note_labels` somem na mesma transação) e **nenhuma nota é apagada**.
+
+#### local_note_labels
+`note_id` (FK para `local_notes`, `ON DELETE CASCADE`), `label_id` (FK para `local_labels`,
+`ON DELETE CASCADE`), PK composta. Índice `idx_local_note_labels_label (label_id)`. Sai junto com a
+nota (apagar de vez, expurgo).
+
 ### local_dictionary_entries / aliases / corrections
 Espelhos sincronizáveis.
 
