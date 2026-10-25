@@ -40,7 +40,9 @@ func TestMigracao0008_SoGanhaAsColunasNulas(t *testing.T) {
 		d := depois[tb]
 		switch tb {
 		case "schema_migrations":
-			if len(d) != len(a)+1 || d[len(d)-1]["version"] != "0008_sync_aprendido_perdido" {
+			// O Migrate roda até a última: a 0008 e as migrations que vieram depois.
+			if len(d) != len(a)+2 || d[len(a)]["version"] != "0008_sync_aprendido_perdido" ||
+				d[len(a)+1]["version"] != "0009_notas" {
 				t.Fatalf("as migrations aplicadas: %v", d)
 			}
 			d = d[:len(a)]
@@ -58,8 +60,9 @@ func TestMigracao0008_SoGanhaAsColunasNulas(t *testing.T) {
 			t.Errorf("%s mudou:\nantes  %v\ndepois %v", tb, a, d)
 		}
 	}
-	if len(depois) != len(antes) {
-		t.Errorf("a 0008 criou tabela: %d antes, %d depois", len(antes), len(depois))
+	// A 0008 não cria tabela; as três novas são as das notas, da 0009.
+	if len(depois) != len(antes)+3 {
+		t.Errorf("a 0008 criou tabela: %d antes, %d depois (esperava só as 3 das notas)", len(antes), len(depois))
 	}
 
 	// O espelho lê a linha migrada: a etiqueta, sem o par perdido.

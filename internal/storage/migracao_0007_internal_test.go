@@ -160,7 +160,8 @@ func TestMigracao0007_NaoPerdeNemMudaNada(t *testing.T) {
 			t.Errorf("%s mudou:\nantes  %v\ndepois %v", tb, a, d)
 		}
 	}
-	// Só nascem as duas tabelas da 0007, vazias.
+	// Só nascem as duas tabelas da 0007, vazias (e as três das notas, da 0009,
+	// que este teste também aplica: o Migrate roda até a última).
 	var novas []string
 	for n, linhas := range depois {
 		if _, ok := antes[n]; !ok {
@@ -171,7 +172,7 @@ func TestMigracao0007_NaoPerdeNemMudaNada(t *testing.T) {
 		}
 	}
 	sort.Strings(novas)
-	if !reflect.DeepEqual(novas, []string{"sync_aprendido", "sync_veio_da_nuvem"}) {
+	if !reflect.DeepEqual(novas, []string{"local_labels", "local_note_labels", "local_notes", "sync_aprendido", "sync_veio_da_nuvem"}) {
 		t.Errorf("as tabelas novas: %v", novas)
 	}
 

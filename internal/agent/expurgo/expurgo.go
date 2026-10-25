@@ -32,6 +32,13 @@
 // em que o passo falhou: é com ela que o freio da rodada seguinte compara, e
 // a gravação depois de uma pausa que voltou atrás apagaria o freio.
 //
+// # As notas (ADR-022, N1)
+//
+// A lixeira das notas (30 dias, a mesma dos ditados) é expurgada na mesma
+// rodada, logo depois da dos ditados, com o mesmo agora (ComNotas). As notas
+// NÃO têm a retenção de 6 meses: o passo dos 6 meses só mexe no histórico. O
+// log só tem a contagem ("lixeira: expurgo das notas").
+//
 // # A lixeira que espera a nuvem
 //
 // Desde a F10 (D3), o repositório não apaga a lixeira vencida que a nuvem
@@ -99,6 +106,21 @@ type SeisMeses interface {
 	ApagarCopias(ctx context.Context) (storage.ResultadoDasCopias, error)
 }
 
+// Notas é o pedaço das notas que o expurgo usa. *storage.SQLiteNotaRepository
+// o satisfaz.
+type Notas interface {
+	PurgeExpired(ctx context.Context, now time.Time) (int, error)
+}
+
+// Opcao muda a montagem do Ciclo (Iniciar).
+type Opcao func(*Ciclo)
+
+// ComNotas põe a lixeira das notas na mesma rodada do expurgo. nil não faz
+// nada.
+func ComNotas(n Notas) Opcao {
+	return func(c *Ciclo) { c.notas = n }
+}
+
 // ErrParado: o ciclo já parou (o Agent está fechando o banco).
 var ErrParado = errors.New("expurgo: o ciclo já parou")
 
@@ -110,6 +132,7 @@ type Ciclo struct {
 	relogio clock.Clock
 	repo    Repositorio
 	seis    SeisMeses
+	notas   Notas
 	log     *slog.Logger
 
 	// mu serializa as rodadas, o Ligar, o Desligar e o Parar: Parar espera
@@ -128,8 +151,11 @@ type Ciclo struct {
 //
 // Falha de uma rodada não para o ciclo: vai para o log, e a próxima
 // tenta de novo.
-func Iniciar(relogio clock.Clock, repo Repositorio, seis SeisMeses, log *slog.Logger) *Ciclo {
+func Iniciar(relogio clock.Clock, repo Repositorio, seis SeisMeses, log *slog.Logger, opcoes ...Opcao) *Ciclo {
 	c := &Ciclo{relogio: relogio, repo: repo, seis: seis, log: log, esperando: -1}
+	for _, o := range opcoes {
+		o(c)
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.rodar(true)
@@ -152,6 +178,7 @@ func (c *Ciclo) rodar(naSubida bool) {
 	ctx := context.Background()
 	agora := c.relogio.Now()
 	c.expurgarALixeira(ctx, agora, naSubida)
+	c.expurgarAsNotas(ctx, agora, naSubida)
 	if c.seis == nil {
 		return
 	}
@@ -178,6 +205,22 @@ func (c *Ciclo) expurgarALixeira(ctx context.Context, agora time.Time, naSubida 
 		// espera seria uma linha por hora dizendo nada.
 		c.log.Info("lixeira: expurgo", "apagados", r.Apagados, "esperando_a_nuvem", r.EsperandoANuvem,
 			"proximo_em", Intervalo)
+	}
+}
+
+// expurgarAsNotas apaga a lixeira vencida das notas. Exige c.mu. Uma falha
+// aqui não impede os 6 meses do histórico, e vice-versa.
+func (c *Ciclo) expurgarAsNotas(ctx context.Context, agora time.Time, naSubida bool) {
+	if c.notas == nil {
+		return
+	}
+	n, err := c.notas.PurgeExpired(ctx, agora)
+	if err != nil {
+		c.log.Warn("lixeira: expurgo das notas falhou; tento de novo no próximo ciclo", "err", err)
+		return
+	}
+	if n > 0 || naSubida {
+		c.log.Info("lixeira: expurgo das notas", "apagadas", n, "proximo_em", Intervalo)
 	}
 }
 

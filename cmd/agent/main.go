@@ -528,7 +528,9 @@ func run(pp pastas.Pastas) error {
 			// expurgo, dono do mutex do Ligar, do Desligar e do apagar das
 			// cópias. Sem o OK gravado nas Configurações, nada dos 6 meses é
 			// apagado.
-			Retencao:  h.retencao,
+			Retencao: h.retencao,
+			// As notas e os marcadores (ADR-022, N1): /api/notas e /api/marcadores.
+			Notas:     h.notas,
 			Microfone: novoMicrofoneDoAgent(),
 			Log:       slog.Default(),
 		}, hist, dono, aprendizado), laco))
@@ -1149,6 +1151,7 @@ func avisarConflitoDeDitado(log *slog.Logger) {
 // rodada; a Local API o recebe em Preferencias.Retencao) e a função de fechar.
 type historicoAberto struct {
 	hist     *storage.SQLiteTranscriptionRepository
+	notas    *storage.SQLiteNotaRepository
 	prefs    *storage.SQLiteSettingsRepository
 	dono     string
 	retencao *expurgo.Ciclo
@@ -1214,9 +1217,12 @@ func abrirHistoricoComRetencao(log *slog.Logger, caminho, usuarioDoDicionario st
 	// tirou cópia do banco, ela foi tirada antes de qualquer linha sair. Os
 	// 6 meses leem o dono fixo eles mesmos: sem ele (a regra antiga do
 	// escolherDono), o passo pula.
-	ciclo := expurgo.Iniciar(relogio, hist, hist.SeisMeses(caminho), log)
+	// As notas (ADR-022, N1) moram no mesmo banco, e a lixeira delas é
+	// expurgada na mesma rodada. Não têm os 6 meses nem sync nesta fase.
+	notas := storage.NewSQLiteNotaRepository(db)
+	ciclo := expurgo.Iniciar(relogio, hist, hist.SeisMeses(caminho), log, expurgo.ComNotas(notas))
 	return historicoAberto{
-		hist: hist, prefs: storage.NewSQLiteSettingsRepository(db), dono: dono, retencao: ciclo,
+		hist: hist, notas: notas, prefs: storage.NewSQLiteSettingsRepository(db), dono: dono, retencao: ciclo,
 		fechar: func() { ciclo.Parar(); db.Close() },
 	}, nil
 }

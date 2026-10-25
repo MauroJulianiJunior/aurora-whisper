@@ -74,7 +74,14 @@ func povoar(t *testing.T, db *sql.DB) map[string]int64 {
 	// O espelho do aprendido e o "veio da nuvem" (0007) também são do dono.
 	executar(t, db, `INSERT INTO sync_aprendido (user_id, entity_id) VALUES ('mauro', 'l1')`)
 	executar(t, db, `INSERT INTO sync_veio_da_nuvem (user_id, entity_id) VALUES ('ana', 'l1')`)
+	// As notas e os marcadores (0009, ADR-022) também são do dono.
+	executar(t, db, `INSERT INTO local_notes (id, user_id, corpo, created_at, updated_at)
+		VALUES ('n1', 'local', 'x', 'x', 'x')`)
+	executar(t, db, `INSERT INTO local_labels (id, user_id, nome, nome_dobrado, created_at, updated_at)
+		VALUES ('m1', 'ana', 'M', 'm', 'x', 'x')`)
 	return map[string]int64{
+		"local_notes":              1,
+		"local_labels":             1,
 		"local_transcriptions":     5,
 		"local_dictionary_entries": 1,
 		"local_corrections":        1,
@@ -86,8 +93,8 @@ func povoar(t *testing.T, db *sql.DB) map[string]int64 {
 
 // tabelasComUserID são as tabelas do schema atual que têm user_id.
 var tabelasComUserID = []string{
-	"local_corrections", "local_dictionary_entries", "local_transcriptions", "sync_aprendido", "sync_state",
-	"sync_veio_da_nuvem",
+	"local_corrections", "local_dictionary_entries", "local_labels", "local_notes", "local_transcriptions",
+	"sync_aprendido", "sync_state", "sync_veio_da_nuvem",
 }
 
 // donos devolve, para a tabela, quantas linhas cada user_id tem.
