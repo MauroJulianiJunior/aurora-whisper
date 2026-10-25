@@ -765,6 +765,25 @@ dependência nova. Em quatro fatias, cada uma com testes:
 
 Falta o teste no PC, que é do Mauro: `docs/teste-manual-bandeja-e-painel.md`, parte 7.
 
+## TASK-030 — Notas (ADR-022)
+O Mauro quer transformar ditados em anotações úteis, organizadas como no Google Keep (marcadores, cor,
+fixar, arquivar), no PC e no celular, para deixar de usar o Keep. Aceita em 25-out-2026, com o gatilho
+próprio para "ditar para nota" e a lista marcável sem rede no celular. Fases (detalhe na ADR):
+- **L:** listas melhores no Polish (as guardas para lista, medidas no `polishbench`);
+- **N1:** banco local (SQLite) e API local das notas e marcadores;
+- **N2:** aba Notas no painel, editor por linhas, ditar dentro (verificação manual);
+- **N3:** "Virar nota" no histórico, com Desfazer;
+- **N4:** marcadores, filtro e sugestão local;
+- **N5:** converter trecho (prefixo, regra e IA com as guardas; prompt `notas-lista@1`);
+- **N6:** lista de marcar, copiar para WhatsApp, busca única;
+- **N7:** sync das notas e marcadores (migrations do Postgres; **deploy é ponto de parada**);
+- **N8:** aba Notas no celular, "Ditar para nota" e a fila offline;
+- **N9:** gatilho "ditar para nota" no PC;
+- **N10:** imagens (**ponto de parada antes**: disco do servidor e LGPD).
+
+Os documentos da spec (`02`, `03`, `05`, `06`, `07`, `08`, `09`, `20`) são emendados por fase, junto
+da slice que muda o contrato.
+
 ## Paralelização
 - TASK-002/003/004 podem evoluir em paralelo após contratos.
 - TASK-006 pode rodar com TASK-005.
