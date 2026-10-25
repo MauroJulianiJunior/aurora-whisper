@@ -42,6 +42,9 @@ import (
 //	             pontuação falada que não virou sinal)
 //	caixa        nome que só o esperado põe com maiúscula ("a debora" ->
 //	             "A Debora") e o modelo deixou como estava
+//	grafia       correção de grafia em que o modelo e o esperado discordam:
+//	             o modelo corrigiu o erro do Whisper que o esperado manteve,
+//	             ou manteve o que o esperado corrigiu ("vejante" / "vigente")
 //
 // A grafia de um termo do dicionário não é falha quando é a canônica, a da
 // entrada ou a do esperado: a auditoria não é mais estrita que a guarda onde a
@@ -67,12 +70,14 @@ type Auditoria struct {
 	// Criticas são os tipos de falha crítica achados, sem repetição, na ordem
 	// de tiposDeFalha. Vazio = nenhuma.
 	Criticas []TipoFalha
-	// Omissao, Sobra e Caixa são as alterações leves (não críticas). Caixa é o
-	// nome que o esperado escreve com maiúscula e a entrada tinha em minúscula,
-	// deixado em minúscula pela saída.
+	// Omissao, Sobra, Caixa e Grafia são as alterações leves (não críticas).
+	// Caixa é o nome que o esperado escreve com maiúscula e a entrada tinha em
+	// minúscula, deixado em minúscula pela saída. Grafia é a correção de grafia
+	// (ADR-016, emenda de 18-out-2026) feita só pelo modelo ou só pelo esperado.
 	Omissao bool
 	Sobra   bool
 	Caixa   bool
+	Grafia  bool
 }
 
 // Critica diz se há alguma falha crítica.
@@ -375,6 +380,12 @@ func auditar(c Caso, saida string) Auditoria {
 
 	falhas := map[TipoFalha]bool{}
 	var a Auditoria
+
+	// A correção de grafia em que o modelo e o esperado discordam é leve: as
+	// palavras dela saem das omitidas e das extras antes da conta abaixo.
+	if o, e, ok := separarGrafia(pe, ps, pi, pares, omitidas, extras); ok {
+		omitidas, extras, a.Grafia = o, e, true
+	}
 
 	// Números: os de dígito são os do esperado ou os da entrada (a numeração
 	// de item ditada em dígito pode virar marcador ou ficar), e os por extenso

@@ -161,7 +161,7 @@ func TestDatasetReal_Composicao(t *testing.T) {
 	// ~10 frases por categoria (a S3 pede ~70 frases sintéticas e as 46 referências do ASR).
 	minimos := map[string]int{
 		CatLista: 8, CatValores: 8, CatSiglas: 8, CatPontuacao: 10, CatPergunta: 6, CatInjecao: 6,
-		CatFalaLonga: 5, CatHesitacao: 6, CatCurta: 5, CatArmadilha: 8,
+		CatFalaLonga: 5, CatHesitacao: 6, CatCurta: 5, CatArmadilha: 8, CatGrafia: 6,
 	}
 	for cat, n := range minimos {
 		if conta[cat] < n {

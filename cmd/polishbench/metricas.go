@@ -86,10 +86,12 @@ type Metricas struct {
 	CriticasDepois         map[TipoFalha]int
 	// Alterações leves antes da guarda (chamadas com omissão de palavra comum,
 	// com sobra de hesitação ou pontuação falada e com nome deixado em
-	// minúscula que só o esperado capitaliza).
+	// minúscula que só o esperado capitaliza, e com correção de grafia em que o
+	// modelo e o esperado discordam).
 	LevesOmissao int
 	LevesSobra   int
 	LevesCaixa   int
+	LevesGrafia  int
 	// Maiúscula a mais (só medida, fora da regra de escolha): chamadas em que a
 	// saída põe maiúscula, no meio da frase, numa palavra que o esperado escreve
 	// em minúscula (mês, dia da semana, substantivo comum), e o total dessas
@@ -492,6 +494,9 @@ func calcular(cfg Config, s SaidaCandidato) Metricas {
 		}
 		if antes.Caixa {
 			m.LevesCaixa++
+		}
+		if antes.Grafia {
+			m.LevesGrafia++
 		}
 		if !r.Res.Reescrito && !antes.Critica() {
 			m.GuardaRecusouBom++
