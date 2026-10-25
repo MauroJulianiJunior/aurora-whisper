@@ -23,6 +23,11 @@ com maiúscula no meio da frase; ver "Emenda de 19-out-2026: o aceite por frase 
 Whisper".
 **Sétima emenda em 24-out-2026**, pedida pelo Mauro: o aceite por frase chega às **listas** e às
 respostas com quebra de linha (a linha é a unidade); ver "Emenda de 24-out-2026: o aceite por linha".
+**Oitava emenda em 25-out-2026**, pedida pelo Mauro ("a listagem em bullets ainda não tá funcionando
+legal"; fase L da ADR-022): a regra de lista da decisão 1 fica mais clara e o prompt vai à 1.0.3.
+O benchmark de 25-out mostrou que a guarda quase não recusa lista; quem não fazia a lista era o modelo,
+ensinado pelo prompt a deixar a enumeração apresentada como frase. As guardas não mudam. Ver
+`17-prompt-spec.md`, histórico da 1.0.3.
 **Nota de 10-out-2026 (ADR-021, ditar no celular):** a regra "a chave nunca sai do PC" (decisões 2 e 3
 e "Consequências") passa a valer para a chave **do PC**. Para ditar no celular, a pessoa cola uma chave
 no app, e o **servidor da nuvem** a guarda **cifrada**; o Polish do celular usa este mesmo motor
@@ -72,9 +77,12 @@ o que faz o Polish valer para quem usa: o cliente HTTP, o prompt, as guardas e a
    - pontuação falada convertida em sinal, só quando é claramente um comando ("vírgula", "ponto",
      "dois pontos", "ponto de interrogação", "nova linha", "novo parágrafo");
    - parágrafos quando o assunto muda num ditado longo (ditado curto fica num parágrafo só);
-   - lista, um item por linha, quando a pessoa anuncia ou enumera itens: `- ` no início de cada
-     item, e `1.`, `2.` **só se a pessoa numerou** ("primeiro", "item um"). A frase que apresenta a
-     lista termina em `:`. Enumeração curta dentro de uma frase continua frase.
+   - lista, um item por linha, quando a pessoa numera os itens ou quando a frase termina numa
+     enumeração de três ou mais itens que ela apresenta ("são", "tem", "faltam", "preciso de"): `- `
+     no início de cada item, e `1.`, `2.` **só se a pessoa numerou** ("primeiro", "item um"). A frase
+     que apresenta a lista termina em `:`. Continua frase a enumeração com texto depois do último
+     item, a de dois itens e a dos itens que fazem a ação da frase (oitava emenda, 25-out-2026; antes:
+     "enumeração curta dentro de uma frase continua frase").
 
    Retira **só** "ahn", "hum", "éé" e a gagueira ("que que" vira "que"). Mantém "né", "tipo",
    "então", "pra" e o jeito de falar. Não troca palavra por sinônimo, não muda tempo verbal, não

@@ -72,7 +72,7 @@ func palavrasDoTexto(s string) int { return len(strings.Fields(s)) }
 // uma vez, como a de siglas (ADR-016, "Ajustes depois do benchmark").
 //
 // Roda Polir com um cliente falso que devolve o próprio esperado, sobre o dataset
-// inteiro (as 97 frases sintéticas e as 46 já organizadas do manifest do ASR).
+// inteiro (as 100 frases sintéticas e as 46 já organizadas do manifest do ASR).
 func TestDataset_EsperadoPassaNasGuardas(t *testing.T) {
 	casos := datasetReal(t)
 	var curtas, reescritas int

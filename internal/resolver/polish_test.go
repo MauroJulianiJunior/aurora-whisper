@@ -610,7 +610,7 @@ func TestPolish_RequisicaoAoCliente(t *testing.T) {
 	if r.Mensagem != resolver.PolishMensagemUsuario(r.Text) {
 		t.Error("Mensagem não é PolishMensagemUsuario(Text)")
 	}
-	if r.PromptRef != "polish-ptbr@1.0.2" {
+	if r.PromptRef != "polish-ptbr@1.0.3" {
 		t.Errorf("PromptRef = %q", r.PromptRef)
 	}
 	esquema, _ := json.Marshal(r.Schema)

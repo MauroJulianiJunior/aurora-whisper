@@ -16,6 +16,10 @@ const (
 	// ExemploMaiusculaAMais é a saída com palavra em maiúscula no meio da frase
 	// que o esperado escreve em minúscula (só frases sintéticas).
 	ExemploMaiusculaAMais = "maiuscula_a_mais"
+	// ExemploListaErrada é a saída cuja lista não bate com a do esperado: a
+	// lista que não saiu, a que saiu sem o esperado ter, outro número de itens
+	// ou outro marcador (só frases sintéticas; só medida).
+	ExemploListaErrada = "lista_errada"
 
 	// maxExemplosPorTipo limita quantos exemplos de cada tipo o relatório traz
 	// por candidato.
@@ -550,6 +554,9 @@ func calcular(cfg Config, s SaidaCandidato) Metricas {
 			if es.Marcador == ee.Marcador {
 				m.MarcadorOK++
 			}
+		}
+		if listaErrada(es, ee) && caso.Categoria != CatJaOrganizada {
+			adicionar(ExemploListaErrada, caso, r, texto, nil, nil)
 		}
 
 		switch caso.Categoria {

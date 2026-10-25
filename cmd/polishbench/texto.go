@@ -248,6 +248,16 @@ func estruturaDe(s string) estrutura {
 	return e
 }
 
+// listaErrada diz se a lista da saída não é a do esperado: um dos dois tem
+// itens e o número de itens ou o marcador difere. Parágrafo a mais ou a menos,
+// sem lista nos dois, não conta (é o acerto de estrutura).
+func listaErrada(saida, esperado estrutura) bool {
+	if saida.Itens == 0 && esperado.Itens == 0 {
+		return false
+	}
+	return saida.Itens != esperado.Itens || saida.Marcador != esperado.Marcador
+}
+
 // mesmaEstrutura diz se dois textos têm o mesmo número de parágrafos e de
 // itens (é o "acerto de estrutura" do plano; o tipo do marcador é medido à
 // parte).

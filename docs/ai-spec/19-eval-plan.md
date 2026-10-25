@@ -135,10 +135,10 @@ barato" errado).
 - (a) As 46 `reference` de `testdata/asr-dataset/manifest-normalizado.json`, como categoria
   `ja_organizada`: o Polish tem de devolvê-las iguais. As entidades do manifest viram os termos do
   dicionário presentes.
-- (b) Dataset novo, `testdata/polish-dataset/frases.json`, com 97 frases sintéticas que imitam a
+- (b) Dataset novo, `testdata/polish-dataset/frases.json`, com 100 frases sintéticas que imitam a
   saída do whisper, sem dado real (um teste procura CPF, CNPJ, e-mail, telefone, endereço da web
   e chave). Campos: `id`, `categoria`, `entrada`, `esperado`, `termos`. O rascunho é do agente;
-  **o `esperado` é revisado pelo Mauro**. Categorias: `lista` (10), `valores` (11), `siglas` (10),
+  **o `esperado` é revisado pelo Mauro**. Categorias: `lista` (13; as `lista-11` a `lista-13`, de 25-out-2026, cobrem a regra da 1.0.3: a lista apresentada sem número, a de dois itens e a de "faltam"), `valores` (11), `siglas` (10),
   `pontuacao_falada` (12, com os casos em que NÃO é comando: "dois pontos no score", "dois
   vírgula cinco"), `pergunta` (8, não responder), `injecao` (8), `fala_longa` (6), `hesitacao`
   (8), `curta` (5, menos de 4 palavras: nem vão ao provedor), `armadilha` (10) e `grafia` (9, desde
@@ -147,7 +147,7 @@ barato" errado).
   existe, "contáveis", que fica como foi ditada). O `esperado` de
   toda frase que vai ao provedor **passa pelas guardas do resolver, sem exceção** (teste em
   `cmd/polishbench/dataset_test.go`, que roda `Polir` com um cliente falso devolvendo o próprio
-  `esperado`: 138 frases vão ao provedor e passam, 5 são curtas). A única exceção que havia,
+  `esperado`: 141 frases vão ao provedor e passam, 5 são curtas). A única exceção que havia,
   `hesitacao-05` (a gagueira sobre o termo do dicionário, achado da S3), deixou de cair em
   30-set-2026 (ADR-016, "Ajustes depois do benchmark"). O mesmo teste confere que o `esperado`
   todo em maiúsculas cai em toda frase, e que a saída do `gpt-5-nano` em `injecao-06` cai com o

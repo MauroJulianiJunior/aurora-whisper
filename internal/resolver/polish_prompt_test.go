@@ -11,7 +11,7 @@ import (
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/resolver"
 )
 
-// hashDoPromptV102 trava o texto de PolishPrompt na versão 1.0.2. Este teste
+// hashDoPromptV103 trava o texto de PolishPrompt na versão 1.0.3. Este teste
 // FALHA DE PROPÓSITO quando o prompt muda: quem mexeu tem de subir
 // PolishPromptVersao, rodar o eval (docs/ai-spec/17-prompt-spec.md: "mudança
 // exige eval") e só então atualizar o hash aqui.
@@ -27,19 +27,24 @@ import (
 // resto em minúscula, inclusive mês, dia da semana e substantivo comum) e
 // acrescenta um exemplo de enumeração dentro da frase: o gpt-6-luna, no uso real
 // de 30-set-2026, escrevia "1º DCTFWeb de Agosto" e "1. A DCTFWeb de Agosto",
-// com maiúscula no mês e no substantivo comum.
-const hashDoPromptV102 = "b0da9b12"
+// com maiúscula no mês e no substantivo comum. A 1.0.3 (25-out-2026, ADR-016 oitava emenda) reescreve a regra 4: a lista sai
+// quando a pessoa numera ou quando a frase termina numa enumeração de três ou
+// mais itens que ela apresenta; o exemplo da enumeração dentro da frase, que
+// ensinava o contrário, vira um par (a lista apresentada e a enumeração com
+// texto depois do último item). O benchmark de 25-out acertava a estrutura em
+// só 64,7% das frases com lista.
+const hashDoPromptV103 = "6b7b2a07"
 
 func TestPolishPrompt_VersaoEHashTravados(t *testing.T) {
-	if resolver.PolishPromptRef != "polish-ptbr@1.0.2" {
+	if resolver.PolishPromptRef != "polish-ptbr@1.0.3" {
 		t.Fatalf("PolishPromptRef = %q", resolver.PolishPromptRef)
 	}
 	hash := resolver.PolishPromptHash()
 	if !regexp.MustCompile(`^[0-9a-f]{8}$`).MatchString(hash) {
 		t.Fatalf("PolishPromptHash() = %q, want 8 caracteres hexadecimais", hash)
 	}
-	if hash != hashDoPromptV102 {
-		t.Fatalf("o texto de PolishPrompt mudou (hash %s, travado %s): suba PolishPromptVersao, rode o eval e atualize hashDoPromptV102", hash, hashDoPromptV102)
+	if hash != hashDoPromptV103 {
+		t.Fatalf("o texto de PolishPrompt mudou (hash %s, travado %s): suba PolishPromptVersao, rode o eval e atualize hashDoPromptV103", hash, hashDoPromptV103)
 	}
 }
 
@@ -62,10 +67,14 @@ func TestPolishPrompt_ConteudoEssencial(t *testing.T) {
 		`mesmo no início da frase (DCTFWeb, PGDAS, EFD-Reinf, eSocial, ECF)`,
 		`No campo final_text vai só o texto organizado, sem JSON, rótulos, aspas nem comentários, e sem palavra nenhuma a mais no começo ("Sim,", "Claro,") ou no fim ("Obrigado!").`,
 
-		// 1.0.2: a regra de maiúscula e o exemplo da enumeração dentro da frase.
+		// 1.0.2: a regra de maiúscula.
 		`1. Pontuação correta; maiúscula só no início das frases (e de cada item de lista), em nomes próprios e nas siglas como vieram; o resto em minúscula, inclusive meses, dias da semana e substantivos comuns ("de agosto", "da padaria", "o recibo").`,
-		`{"ditado":"os pendentes são a DCTFWeb de agosto o PGDAS da padaria e o recibo da ECF"}
-→ {"final_text":"Os pendentes são a DCTFWeb de agosto, o PGDAS da padaria e o recibo da ECF."}`,
+
+		// 1.0.3: a regra da lista e o par de exemplos (a lista apresentada e a
+		// enumeração com texto depois do último item).
+		`quando a frase termina numa enumeração de três ou mais itens que ela apresenta`,
+		`{"ditado":"mandei o balancete a DRE e o fluxo de caixa para o cliente ontem"}
+→ {"final_text":"Mandei o balancete, a DRE e o fluxo de caixa para o cliente ontem."}`,
 	} {
 		if !strings.Contains(resolver.PolishPrompt, trecho) {
 			t.Errorf("PolishPrompt perdeu o trecho: %q", trecho)
@@ -150,9 +159,9 @@ func TestPolishPrompt_ExemplosPassamPelasGuardas(t *testing.T) {
 			}
 		})
 	}
-	// Os quatro exemplos da 1.0.2; se um sumir ou virar outro formato, o teste avisa.
-	if pares != 4 {
-		t.Fatalf("achei %d exemplos no prompt, quero 4", pares)
+	// Os cinco exemplos da 1.0.3; se um sumir ou virar outro formato, o teste avisa.
+	if pares != 5 {
+		t.Fatalf("achei %d exemplos no prompt, quero 5", pares)
 	}
 }
 

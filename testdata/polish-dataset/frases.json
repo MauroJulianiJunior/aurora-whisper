@@ -12,6 +12,9 @@
     {"id": "lista-08", "categoria": "lista", "entrada": "o checklist do encerramento tem conferir o caixa conferir o estoque e conferir as duplicatas", "esperado": "O checklist do encerramento tem:\n- Conferir o caixa\n- Conferir o estoque\n- Conferir as duplicatas", "termos": []},
     {"id": "lista-09", "categoria": "lista", "entrada": "a Rosângela o Thiago e a Débora foram na reunião", "esperado": "A Rosângela, o Thiago e a Débora foram na reunião.", "termos": ["Rosângela", "Thiago"]},
     {"id": "lista-10", "categoria": "lista", "entrada": "as etapas são primeira abrir o processo segunda anexar os documentos terceira aguardar o protocolo", "esperado": "As etapas são:\n1. Abrir o processo\n2. Anexar os documentos\n3. Aguardar o protocolo", "termos": []},
+    {"id": "lista-11", "categoria": "lista", "entrada": "a lista de compras do escritório é café açúcar copo descartável e papel toalha", "esperado": "A lista de compras do escritório é:\n- Café\n- Açúcar\n- Copo descartável\n- Papel toalha", "termos": []},
+    {"id": "lista-12", "categoria": "lista", "entrada": "faltam o contrato social e a procuração do sócio", "esperado": "Faltam o contrato social e a procuração do sócio.", "termos": []},
+    {"id": "lista-13", "categoria": "lista", "entrada": "faltam três coisas para fechar o mês a folha o FGTS e a guia do INSS", "esperado": "Faltam três coisas para fechar o mês:\n- A folha\n- O FGTS\n- A guia do INSS", "termos": ["FGTS", "INSS"]},
 
     {"id": "valores-01", "categoria": "valores", "entrada": "o DAS de agosto deu R$ 1.847,32 e vence dia 20", "esperado": "O DAS de agosto deu R$ 1.847,32 e vence dia 20.", "termos": ["DAS"]},
     {"id": "valores-02", "categoria": "valores", "entrada": "a alíquota efetiva ficou em 6,73% no anexo três", "esperado": "A alíquota efetiva ficou em 6,73% no anexo três.", "termos": []},
