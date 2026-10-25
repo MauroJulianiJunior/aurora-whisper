@@ -169,7 +169,7 @@ func TestGerarRelatorio_Secoes(t *testing.T) {
 		contem(t, rel, sec)
 	}
 	// Prompt, hash do dataset, parâmetros.
-	contem(t, rel, "`polish-ptbr@1.0.2`, hash `"+resolver.PolishPromptHash()+"` (sha256 completo `"+hashCompletoDoPrompt()+"`)")
+	contem(t, rel, "`polish-ptbr@1.0.3`, hash `"+resolver.PolishPromptHash()+"` (sha256 completo `"+hashCompletoDoPrompt()+"`)")
 	contem(t, rel, "hash sha256 `"+r.HashDataset+"`")
 	contem(t, rel, "Comando: `polishbench -gastar -rodadas 2`")
 	contem(t, rel, "`openai:sem-chave` (OpenAI), esforço de raciocínio: none — **pulado, sem chave**")

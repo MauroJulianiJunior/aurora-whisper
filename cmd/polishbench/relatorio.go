@@ -773,10 +773,11 @@ func exemplos(b *strings.Builder, r Rodada) {
 		ExemploCriticaAntes:     "falha crítica ANTES da guarda",
 		ExemploGuardaRecusouBom: "saída sem falha crítica que a guarda recusou (o preço da guarda)",
 		ExemploMaiusculaAMais:   "maiúscula a mais no meio da frase (só medida)",
+		ExemploListaErrada:      "lista que não saiu, saiu a mais ou com outros itens ou marcador (só medida)",
 	}
 	algum := false
 	for _, m := range r.Metricas {
-		for _, tipo := range []string{ExemploCriticaDepois, ExemploCriticaAntes, ExemploGuardaRecusouBom, ExemploMaiusculaAMais} {
+		for _, tipo := range []string{ExemploCriticaDepois, ExemploCriticaAntes, ExemploGuardaRecusouBom, ExemploMaiusculaAMais, ExemploListaErrada} {
 			var xs []Exemplo
 			for _, e := range m.Exemplos {
 				if e.Tipo == tipo {
@@ -810,7 +811,7 @@ func exemplos(b *strings.Builder, r Rodada) {
 		}
 	}
 	if !algum {
-		b.WriteString("Nenhum exemplo: nenhuma falha crítica, nenhuma saída boa recusada e nenhuma maiúscula a mais.\n\n")
+		b.WriteString("Nenhum exemplo: nenhuma falha crítica, nenhuma saída boa recusada, nenhuma maiúscula a mais e nenhuma lista errada.\n\n")
 	}
 }
 

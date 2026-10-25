@@ -313,8 +313,8 @@ func TestRun_ModeloPerfeitoNoDatasetReal(t *testing.T) {
 	rel := a.lerRelatorio()
 
 	contem(t, rel, "# Benchmark do Polish — 2026-09-30")
-	contem(t, rel, "polish-ptbr@1.0.2")
-	contem(t, rel, "b0da9b12")
+	contem(t, rel, "polish-ptbr@1.0.3")
+	contem(t, rel, "6b7b2a07")
 	contem(t, rel, hashDoDataset(casos))
 	contem(t, rel, "**OpenAI:** `openai:gpt-6-luna`")
 	contem(t, rel, "**Anthropic:** `anthropic:claude-haiku-4-5`")
