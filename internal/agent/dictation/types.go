@@ -188,6 +188,10 @@ type RawKeyEvent struct {
 	// o evento, tipicamente via SynthesizeTapEffect. Usado para evitar o
 	// laço infinito descrito no ADR-007, seção 3.
 	FromThisProcess bool
+	// ParaNota não vem do teclado: o hook a copia da decisão (Decision.ParaNota)
+	// antes de mandar o evento ao runtime. Verdadeira, a sessão é do gatilho
+	// "ditar para nota" (ADR-022): o texto vai para uma nota, não para o campo.
+	ParaNota bool
 }
 
 // AudioBufferRef é uma referência opaca a um buffer de áudio mantido pelo
