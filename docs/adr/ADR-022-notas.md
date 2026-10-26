@@ -155,6 +155,52 @@ navegador é um campo comum para o Agent; o caso a conferir é o editor por linh
 - Alternativa: frase-comando, sem gatilho novo; mais natural, mais erro. Ver E1.
 - No celular, o equivalente é um botão "Ditar para nota" (fase N8, com a mesma regra do nome).
 
+**Decisões da N9 (26-out-2026), na implementação.** As marcadas **[desvio]** mudam algo escrito acima.
+- **Qual gatilho, pelo pico.** Ctrl+Win+Alt contém o Ctrl+Win, e o hook já arma o ditado com ele. A sessão
+  é uma só, com as decisões de suprimir e notificar do Ctrl+Win, e leva a marca "para nota" se Ctrl, Win e
+  Alt estiveram seguros juntos em algum momento entre armar e soltar (`dictation.Gatilhos`; emenda da
+  ADR-013). A ordem de apertar e de soltar não importa, e o Alt apertado no meio da gravação conta.
+  Alternativa: decidir só no aperto (o Alt atrasado em 50 ms mandaria o texto para o campo, sem aviso).
+- **O mesmo ditado até o fim da resolução**: limiar, bipe, pílula de gravação, ASR, Smart e Polish. O
+  campo protegido continua bloqueando (o núcleo decide no aperto, antes de saber o destino; nada é
+  capturado). Muda só o destino: no lugar da inserção, a gravação na nota (`internal/agent/paranota`), sem
+  SendInput nem clipboard.
+- **Só notas ativas são destino.** A arquivada e a da lixeira com o mesmo título não recebem nada; o ditado
+  vira nota nova, à vista. Por quê: o Arquivo saiu da tela de propósito, e a busca única e a sugestão de
+  marcador também só olham as ativas (N4, N6); acrescentar numa arquivada esconderia o texto. Alternativa:
+  incluir as arquivadas e desarquivar ao acrescentar.
+- **O casamento** é palavra a palavra, sem caixa e sem acento (a mesma dobra da busca), com a pontuação do
+  fim do título ignorada; depois do título vem fim de palavra e, opcionalmente, ":", ",", ";", ".", "!",
+  "?", travessão ou espaço (o ponto entra porque o ASR às vezes põe "Lista de compras. Leite"). Nota sem
+  título nunca casa.
+- **O título mais longo vence** ("lista de compras: sal" vai para "Lista de compras", não para "Lista"); com
+  o mesmo título, a editada por último. **O ditado que é só o título** não casa (não há o que acrescentar), e
+  um título mais curto não fica com o resto: vira nota nova, nada se perde.
+- **Como entra** (o resto, depois do título): na lista de marcar, itens `- [ ] ` logo depois do último item
+  aberto (todos marcados: antes do primeiro marcado), para os marcados continuarem no fim (N2); itens pela
+  regra das listas (`resolver.ItensPorRegra`, a mesma do painel), ou um item só, ou uma linha por item quando
+  o Polish já entregou a lista em linhas; a inicial maiúscula como a regra (menos sigla). Lista com `- `:
+  `- `. **[desvio]** Lista numerada: continua a contagem (a ADR não dizia). Sem lista: o resto no fim, como
+  foi ditado. Nada que já estava no corpo muda.
+- **A nota nova** leva o ditado inteiro, sem título, e `ditado_de_origem` = a linha do histórico (o Agent
+  escolhe o id antes): o cartão diz "veio de um ditado", como no "Virar nota".
+- **O histórico**: gravado na nota, o ditado sai do histórico com `virou_nota` (como na N3); **se a nota não
+  grava** (banco, corpo grande demais, a nota mudando três vezes no meio), ele fica à vista com o texto e
+  `status = 'error'`, e a pílula diz "Não salvou na nota: está no histórico." A nota que o painel salvou no
+  meio é relida e o acréscimo refeito em cima (concorrência otimista); uma nota aberta no painel durante o
+  ditado recebe o 409 de sempre ao salvar, com a escolha que a janela já oferece.
+- **A pílula**: "Lista de compras +3" (o título cortado com "…" antes de 40 letras), "Nota nova", ou a
+  falha, com ponto cinza. A gravação mostra a mesma onda de sempre: **[desvio]** nada na gravação diz que é
+  para nota (só o desfecho); se fizer falta, é uma marca pequena na cápsula, a decidir com o Mauro.
+- **Configurações**: "Ditar para nota" liga e desliga (padrão ligado; `note_trigger_enabled`, migration
+  `0011`); as teclas são só leitura, como as do ditado. Desligado, Ctrl+Win+Alt é um ditado comum.
+- Sem evento de sync (N7), como N1 e N3. O painel na aba Notas relê a lista (e as contas dos marcadores) ao
+  voltar à frente, como já fazia.
+- O que só a máquina real mostra: se Ctrl+Win+Alt colide com atalho de outro programa (não medido), e se o
+  menu Iniciar ou a barra de menus de algum app reage ao Alt solto por último (o Ctrl já quebra o "Win
+  sozinho" que abre o Iniciar; o Alt sozinho ativa menus só quando é a única tecla). Roteiro:
+  `docs/teste-manual-notas-n9.md`.
+
 ### Formatar: converter trecho
 
 No editor, selecionar linhas e escolher: **lista**, **lista de marcar**, **numerada**, **título**

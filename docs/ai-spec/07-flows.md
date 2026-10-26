@@ -48,6 +48,34 @@ foco (só em memória, 60 s). Com aviso vivo e a inserção bem-sucedida, a linh
 inserção em si não muda. Sem aviso, ou com a inserção falha, é o ditado de sempre. O "Aprender" e a
 auditoria ainda leem o `raw_text`. Ver `06-api-contract.md`, "Nota em foco".
 
+**Ditar para nota (ADR-022, N9).** Segurar **Ctrl+Win+Alt** é o mesmo pipeline até a resolução (o
+mesmo limiar, bipe, pílula de gravação, ASR, Smart e Polish); muda o passo "Inserção":
+
+```mermaid
+flowchart TD
+    R[Texto resolvido] --> M{Sessão do gatilho da nota\ne ligado nas Configurações?}
+    M -->|Não| I[Inserção no campo em foco, como sempre]
+    M -->|Sim| T{O ditado começa pelo título\nde uma nota ativa?}
+    T -->|Sim, o mais longo; empate: a editada por último| A[Acrescenta o resto na nota]
+    T -->|Não, ou só o título| N[Nota nova com o ditado inteiro, sem título]
+    A --> G{Gravou?}
+    N --> G
+    G -->|Sim| P1[Pílula: "Título +N" ou "Nota nova"]
+    P1 --> H1[Histórico com virou_nota = a nota: escondido]
+    G -->|Não| P2[Pílula: "Não salvou na nota: está no histórico."]
+    P2 --> H2[Histórico à vista, com o texto, status error]
+```
+
+- **Qual gatilho:** o hook decide pelo **pico** da sessão (`dictation.Gatilhos`): se Ctrl, Win e Alt
+  estiveram seguros juntos em algum momento entre armar e soltar, a sessão é para nota; a ordem de
+  apertar e de soltar não importa, e o Alt apertado no meio da gravação conta. As decisões de suprimir e
+  notificar são as do Ctrl+Win (nunca suprime modificador), então o Ctrl+Win sem Alt não muda.
+- **Como entra:** nota com lista de marcar recebe itens `- [ ] ` antes dos marcados (a enumeração
+  separada pela regra das listas, `resolver.ItensPorRegra`, ou um item só); lista com `- ` recebe `- `;
+  numerada continua a numeração; sem lista, o resto entra no fim como foi ditado.
+- **Nada** de SendInput nem clipboard; nenhum evento de sync (N7); o painel aberto na aba Notas relê a
+  lista ao voltar à frente.
+
 ## Smart resolve
 Na etapa 5 (ADR-019), "Cloud allowed?" é sempre "Não": o resolve com contexto na nuvem fica para
 depois.

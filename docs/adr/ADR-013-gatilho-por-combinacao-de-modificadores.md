@@ -121,6 +121,32 @@ tivesse planejado isso.
 - **A tecla de letra continua suportada.** Quem preferir F continua podendo
   configurá-la, com o defeito de ordem que a acompanha — agora documentado.
 
+## Emenda (26-out-2026): o segundo gatilho, "ditar para nota" (ADR-022, N9)
+
+A ADR-022 (E1, aprovada no padrão) acrescenta um segundo gatilho: **Ctrl+Win+Alt** manda o ditado para
+uma nota, sem inserir no campo em foco. Ele é um superconjunto do Ctrl+Win, e a regra "tem o conjunto"
+do Decider já arma o ditado com ele. Por isso o desenho é o de **não mexer na borda do hook**:
+
+- `dictation.Gatilhos` envolve o Decider de sempre. Suprimir e notificar continuam **as decisões dele,
+  evento por evento** — o teste por sorteio (`TestGatilhos_CtrlWinIgualAoDeSempre`) compara as duas
+  coisas em 50 sequências aleatórias de teclas. A sessão é uma só; o que muda é uma marca, `ParaNota`,
+  que vai no evento até o runtime.
+- A marca é o **pico** da sessão: Ctrl, Win e Alt seguros juntos em algum momento entre armar e soltar.
+  A ordem de apertar e de soltar não importa, e o Alt apertado depois de a gravação começar conta (decidir
+  só no começo mandaria para o campo, sem aviso, a lista de quem apertou o Alt 50 ms depois).
+- **Nada novo é suprimido.** A regra deste ADR — nenhum modificador suprimido — vale para os dois
+  (`TestGatilhos_NuncaSuprimeModificador`).
+- Um modificador só continua recusado, e o gatilho da nota não pode ser o do ditado nem estar contido
+  nele (`ValidarGatilhoDaNota`): contido, o ditado de sempre deixaria de existir. A regra do decisor é
+  geral (um conjunto da nota que não contém o do ditado arma a própria sessão), mas a tela só mostra as
+  teclas; o que se muda é ligar e desligar. Desligado, Ctrl+Win+Alt é um ditado comum.
+- A pausa do hook respeita a sessão de qualquer um dos dois (`Gatilhos.Armado`).
+
+O que não foi medido: se Ctrl+Win+Alt colide com atalho de outro programa nesta máquina. O detector de
+conflito (`internal/agent/conflito`) olha processos, não atalhos; o Wispr Flow, que usa Ctrl+Win, já é
+avisado, e com o superconjunto ele dispararia junto do mesmo jeito. O roteiro
+`docs/teste-manual-notas-n9.md` confere o Ctrl+Win antes de tudo.
+
 ## Consequência
 
 `AC-001` ("tap curto produz função normal") e `AC-045` ("tecla com modifier
