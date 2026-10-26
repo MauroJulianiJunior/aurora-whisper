@@ -1544,7 +1544,8 @@ Mesma semântica de `/transcriptions` da cloud, com o prefixo `/api/history`.
 
 #### GET `/api/history`
 Query:
-- `q` — trecho procurado, sem diferença de maiúsculas, no texto bruto e no final;
+- `q` — trecho procurado, **sem diferenciar maiúscula nem acento** (como o `q` de `/api/notas`: a busca única do
+  painel compara os dois do mesmo jeito; ADR-022, N6), no texto bruto e no final;
 - `from`/`to` — RFC3339, sobre `created_at`;
 - `device_id`, `mode`, `provider` — igualdade exata;
 - `trash` — `true` lista a lixeira; qualquer outro valor, o histórico ativo;
