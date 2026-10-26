@@ -149,6 +149,7 @@ func TestSepararItens_PedidoInvalido(t *testing.T) {
 		"longo demais":   map[string]string{"trecho": strings.Repeat("palavra ", 300)},
 		"corpo gigante":  map[string]string{"trecho": strings.Repeat("x", 20<<10)},
 		"tipo diferente": map[string]any{"trecho": 3},
+		"campo a mais":   map[string]any{"trecho": "leite, pão", "nota": "n1"},
 	} {
 		t.Run(nome, func(t *testing.T) {
 			w := fazer(t, h, http.MethodPost, "/api/notas/separar-itens", corpo)

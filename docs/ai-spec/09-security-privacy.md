@@ -14,7 +14,7 @@
 | Aprendido sincronizado (ADR-019): par curto, termo, restrição, nome do domínio | Confidencial | `dicionario.json` em cada PC; **F8:** uma cópia no espelho do SQLite (`historico.db`: o par da última sincronização, a projeção que o arquivo tinha, o par que chegou e não vale ali e, com a etiqueta da D4, a troca deste PC que perdeu na nuvem); Postgres com a nuvem conectada (só a troca do Aprender, só depois do clique em "Enviar o histórico"; antes dele, só o desfazer, sem texto, de um par que a nuvem já tem) | no arquivo, até desfazer; no espelho: a linha que vale no arquivo guarda a projeção (o que o arquivo já tem); o texto da linha desfeita sai quando a nuvem confirma o desfazer, ou quando some a etiqueta (30 dias, ou a pessoa aprende de novo), e a troca perdida sai com a etiqueta; o par da nuvem que não vale ali guarda o texto enquanto a conta é a mesma; o esquecer apaga o texto do que veio da conta esquecida e não está no arquivo, e o "desfeito aqui" que ele guarda fica só com o id (em todos, fica o id); na nuvem, o par ativo até desfazer, e a linha desfeita guarda o texto até a F9 decidir |
 | Provider keys | Secreto | server-side | operação |
 | Chave de API do provedor de IA de quem usa | Secreto | Gerenciador de Credenciais do Windows (Agent) | até quem usa apagar |
-| Texto ditado enviado ao provedor de IA escolhido (só no Polish, com a chave de quem usa) | Confidencial; sai da máquina | nenhuma no Agent; o provedor pode reter | até 30 dias no provedor (ADR-016) |
+| Texto ditado enviado ao provedor de IA escolhido (só no Polish, com a chave de quem usa; e, desde a N5 da ADR-022, a linha de nota que a pessoa manda separar em itens, com o Polish ligado) | Confidencial; sai da máquina | nenhuma no Agent; o provedor pode reter | até 30 dias no provedor (ADR-016) |
 | Voz do ditado no celular (ADR-021) | Sensível efêmero; **sai do aparelho** | só em memória: no app (uma variável, até o envio dar certo ou a pessoa descartar) e na API (uma variável do handler, durante o pedido). Nunca em disco, swap, log, erro ou resposta | descartada ao fim. No provedor escolhido, o que a documentação dele diz (ver "Ditar no celular") |
 | Chave de API da pessoa para ditar no celular (ADR-021) | Secreto | Postgres, **cifrada** (AES-256-GCM, subchave por HKDF); a chave de cifra é um arquivo do servidor (`AI_KEYS_SECRET_FILE`), fora do banco e do backup | até a pessoa trocar, remover, desligar o ditado ou apagar os dados. A cópia antiga, cifrada, fica nos backups (cerca de 30 dias) e no banco anterior da restauração (7 dias) |
 | Aceite e preferências do ditado no celular (ADR-021) | Pessoal | Postgres (`dictation_consents` e `dictation_settings`); nunca descem aos PCs | a vida da conta; o "Apagar meus dados" os apaga |
@@ -176,6 +176,18 @@ Polish do celular **começa desligado** e só liga com o aceite do provedor do P
 antes de chamar). O campo protegido não se aplica: o celular não escreve em outro aplicativo (a
 escrita em outro app e o campo de senha são do passo 2, e são parada própria). O que o provedor do
 Polish diz sobre retenção abaixo vale para os dois. Ver "Ditar no celular: o que sai do aparelho".
+
+**ADR-022, N5 (26-out-2026): a separação em itens das notas usa o mesmo caminho.** Quando a pessoa escolhe
+Formatar → Lista numa linha de texto corrido de uma nota **e o Polish está ligado** (modo polish, provedor e
+modelo), o Agent manda **só aquela linha** (até 2.000 caracteres, de 2 palavras ou mais) ao mesmo provedor e
+modelo do Polish, com a mesma chave lida do Gerenciador de Credenciais a cada pedido, pelo mesmo cliente
+(`polish.Montagem.ClienteDaLista`, as mesmas travas: sem retry, sem redirecionamento, HTTP/1.1, sem repassar
+corpo de erro, `store:false`) e o mesmo prazo (`polish.Prazo`). Muda só o prompt (`notas-lista@1`) e o schema.
+Nada mais da nota vai: nem o título, nem as outras linhas, nem marcador, nem dicionário. É a pessoa que pede,
+linha a linha; com o Polish desligado, a separação é pela regra, local, e nada sai. A resposta passa pelas
+guardas de `resolver.GuardarItens` (THR-009 vale igual: palavra nenhuma entra ou muda), e o texto de cada
+item é recortado da própria linha. O log leva só `como`, o motivo e a versão do prompt, nunca a linha nem a
+resposta (THR-007).
 
 **O adaptador do Polish é um só (C5a, 10-out-2026).** Ele mora em `internal/polish` e é o **mesmo** no
 Agent e no servidor (C5b): o cliente do ditado, a política de esforço e o prazo saíram de `cmd/agent` e

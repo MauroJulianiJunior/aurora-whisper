@@ -268,6 +268,47 @@ flags `-max-edicao` (o orçamento de palavras apagadas) e `-min-palavras` passam
 o relatório avisa quando a rodada usa parâmetros fora do padrão do Agent. O relatório mostra, por
 modelo, **quantas saídas sem falha crítica cada guarda recusou** ("O preço das guardas").
 
+## Notas: separar em itens (categoria `notas-lista`)
+ADR-022, fase N5: o Formatar → lista numa linha de texto corrido de uma nota, pelo prompt `notas-lista@1`
+(`17-prompt-spec.md`) e as guardas de `resolver.GuardarItens`. É o eval associado a esse prompt: mudar o
+texto do prompt exige uma rodada nova.
+
+**Quem roda é o Mauro** (o comando chama a API com a chave dele e gasta; nenhum agente nem teste o roda com
+chamada real). A partir da raiz do repositório:
+
+```
+go run ./cmd/polishbench -gastar -notas-lista -rodadas 3 -modelos openai:gpt-6-luna
+```
+
+São 21 trechos x 3 rodadas = 63 chamadas por modelo (estimativa: centavos de dólar). O relatório vai para
+`docs/benchmarks/notas-lista-YYYY-MM-DD.md` (nunca sobrescreve).
+
+**Dataset:** `testdata/polish-dataset/notas-lista.json`, trechos sintéticos por tipo: `virgula`,
+`sem_virgula` (a fala, "tomate cebola alho e um pé de alface"), `numero` (número com vírgula e valor:
+"1,5 kg", "R$ 230,90"), `unidade`, `sigla` (e nome próprio), `um_item` (o que não é lista e fica como
+está) e `injecao`. O esperado são os itens que o painel mostraria; a validação do dataset exige que a
+guarda aceite exatamente esse corte, então o benchmark nunca cobra do modelo uma lista que a guarda
+recusaria. Fica fora de `frases.json` de propósito: outro prompt, outra saída, outras métricas, e o hash do
+dataset do Polish, que os relatórios antigos citam, não muda.
+
+**Métricas, por modelo:**
+- quantas vezes a IA valeu (`como` = `ia`), a regra assumiu e nada separou; o **fallback** é a soma das
+  duas últimas sobre as medidas (nos casos `um_item` ele é o esperado);
+- as **recusas da guarda** por motivo (`json`, `itens`, `formato`, `numeros`, `palavras`, `caixa`,
+  `siglas_termos`), o **"um item"** (o modelo dizendo que o trecho não é lista) e os **erros** do provedor
+  ou da rede;
+- o **F1 dos itens**, item a item e exato (sem a caixa da inicial nem a pontuação final), sobre o que a
+  pessoa veria (depois da regra), e o F1 só das respostas aceitas;
+- as **listas exatas**, no total e por tipo de trecho;
+- o **item fora do trecho**, que tem de ser **0** (o texto de cada item é recortado do trecho; um item que
+  não é pedaço dele é buraco na guarda, e o relatório grita);
+- a latência (p50 e p95 das chamadas que foram ao provedor), as que passaram do prazo do Agent
+  (`polish.Prazo` do trecho) e o custo.
+
+Não há regra de escolha de modelo: a separação usa o modelo do Polish que a pessoa escolheu. O número que
+decide se o prompt precisa de uma 1.0.1 é o acerto nos tipos `sem_virgula` e `numero` (onde a regra não
+alcança) com o item fora do trecho em 0.
+
 ## Relatório
 `docs/benchmarks/asr-YYYY-MM-DD.md`
 

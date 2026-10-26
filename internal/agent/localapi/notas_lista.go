@@ -43,8 +43,12 @@ type itensSeparadosDTO struct {
 
 // handleSepararItens atende POST /api/notas/separar-itens.
 func (s *Server) handleSepararItens(w http.ResponseWriter, r *http.Request) {
+	// Teto de 16 KiB (o trecho vai até 2.000 caracteres) e, como nas outras
+	// rotas das notas, nenhum campo desconhecido.
 	var body separarItensDTO
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, limiteDoCorpo)).Decode(&body); err != nil {
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, limiteDoCorpo))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&body); err != nil {
 		writeError(w, http.StatusBadRequest, codeBadRequest, "corpo JSON inválido")
 		return
 	}

@@ -578,6 +578,7 @@ export function servidorFalso(
   // regra no resto (a mesma do painel e do Agent).
   function rotaSepararItens(p: Pedido): Response {
     if (p.metodo !== 'POST') return erro(405, 'BAD_REQUEST', 'método')
+    if (Object.keys(p.corpo ?? {}).some((k) => k !== 'trecho')) return erro(400, 'BAD_REQUEST', 'corpo JSON inválido')
     const trecho = typeof p.corpo?.trecho === 'string' ? p.corpo.trecho.trim() : ''
     if (!trecho) return erro(400, 'BAD_REQUEST', 'Escolha uma linha com texto para separar em itens.')
     if (/[\r\n]/.test(trecho)) return erro(400, 'BAD_REQUEST', 'Separo em itens uma linha por vez.')
