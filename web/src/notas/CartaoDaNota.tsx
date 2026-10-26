@@ -2,15 +2,20 @@ import { Fragment, type KeyboardEvent, type ReactNode, useMemo } from 'react'
 import { formatarCurta } from '../datas'
 import { BotaoComMenu } from './BotaoComMenu'
 import { type Linha, contarItens, inicioDoCorpo, lerCorpo, nomeDaNota } from './corpo'
+import { EscolherMarcadores } from './EscolherMarcadores'
 import { Icone } from './Icone'
 import { PaletaDeCores } from './PaletaDeCores'
-import { type CorDaNota, NOMES_DAS_CORES, type Nota } from './tipos'
+import { type CorDaNota, type Marcador, NOMES_DAS_CORES, type Nota } from './tipos'
 
 // O que se faz com uma nota sem abri-la (as ferramentas do cartão).
 export interface AcoesDaNota {
   fixar(nota: Nota): void
   arquivar(nota: Nota): void
   cor(nota: Nota, cor: CorDaNota | null): void
+  // marcar põe (ou tira) um marcador na hora; criarEMarcar cria o marcador e o põe,
+  // e devolve a frase de erro (null: deu certo).
+  marcar(nota: Nota, marcador: Marcador, marcar: boolean): void
+  criarEMarcar(nota: Nota, nome: string): Promise<string | null>
   copiar(nota: Nota): void
   lixeira(nota: Nota): void
 }
@@ -19,6 +24,8 @@ interface PropsComuns {
   nota: Nota
   // nomesDosMarcadores: id → nome.
   nomesDosMarcadores: ReadonlyMap<string, string>
+  // marcadores: todos, para o menu do botão de marcador.
+  marcadores: readonly Marcador[]
   // noArquivo: a vista é o Arquivo (o botão é Desarquivar).
   noArquivo: boolean
   aoAbrir(nota: Nota): void
@@ -106,7 +113,7 @@ function PeDoCartao({ nota, nomesDosMarcadores }: Pick<PropsComuns, 'nota' | 'no
 
 // Fixar (no canto) e as ferramentas do cartão: cor, arquivar e mais. Aparecem
 // com o ponteiro ou o foco no cartão; no toque ficam sempre à vista.
-function Ferramentas({ nota, noArquivo, acoes, nome }: Pick<PropsComuns, 'nota' | 'noArquivo' | 'acoes'> & { nome: string }) {
+function Ferramentas({ nota, noArquivo, acoes, nome, marcadores }: Pick<PropsComuns, 'nota' | 'noArquivo' | 'acoes' | 'marcadores'> & { nome: string }) {
   return (
     <>
       <button
@@ -128,6 +135,16 @@ function Ferramentas({ nota, noArquivo, acoes, nome }: Pick<PropsComuns, 'nota' 
                 acoes.cor(nota, c)
                 fechar()
               }}
+            />
+          )}
+        </BotaoComMenu>
+        <BotaoComMenu icone="marcador" rotulo={`Marcadores da nota “${nome}”`} titulo="Marcadores" classe="escolher">
+          {() => (
+            <EscolherMarcadores
+              marcadores={marcadores}
+              marcados={nota.marcadores}
+              aoAlternar={(m, marcar) => acoes.marcar(nota, m, marcar)}
+              aoCriar={(nomeNovo) => acoes.criarEMarcar(nota, nomeNovo)}
             />
           )}
         </BotaoComMenu>
@@ -196,7 +213,7 @@ export function CartaoDaNota(props: PropsComuns) {
         {vazia ? <p className="vazio">Nota vazia</p> : <CorpoDoCartao linhas={linhas} />}
         <PeDoCartao nota={nota} nomesDosMarcadores={props.nomesDosMarcadores} />
       </div>
-      <Ferramentas nota={nota} noArquivo={props.noArquivo} acoes={props.acoes} nome={nome} />
+      <Ferramentas nota={nota} noArquivo={props.noArquivo} acoes={props.acoes} marcadores={props.marcadores} nome={nome} />
     </article>
   )
 }
@@ -226,7 +243,7 @@ export function LinhaDaNota(props: PropsComuns) {
         <span className="nota-linha-titulo">{titulo || (linhas.some((l) => l.texto.trim() !== '') ? inicioDoCorpo(linhas, 120) : 'Nota vazia')}</span>
         {inicio && <span className="nota-linha-inicio">{inicio}</span>}
       </div>
-      <Ferramentas nota={nota} noArquivo={props.noArquivo} acoes={props.acoes} nome={nome} />
+      <Ferramentas nota={nota} noArquivo={props.noArquivo} acoes={props.acoes} marcadores={props.marcadores} nome={nome} />
     </li>
   )
 }

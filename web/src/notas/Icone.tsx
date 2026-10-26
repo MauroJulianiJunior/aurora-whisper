@@ -12,6 +12,8 @@ export type NomeDoIcone =
   | 'formatar'
   | 'imagem'
   | 'marcar'
+  | 'marcador'
+  | 'lapis'
   | 'copiar'
   | 'lixeira'
   | 'desmarcar'
@@ -68,6 +70,13 @@ const desenhos: Record<NomeDoIcone, ReactNode> = {
       <path d="m8 12.3 2.7 2.7L16 9.6" {...traco} />
     </>
   ),
+  marcador: (
+    <>
+      <path d="M4 12.6V5a1 1 0 0 1 1-1h7.6l7.7 7.7a1.5 1.5 0 0 1 0 2.1l-6.5 6.5a1.5 1.5 0 0 1-2.1 0L4 12.6Z" {...traco} />
+      <circle cx="8.5" cy="8.5" r="1.3" fill="currentColor" />
+    </>
+  ),
+  lapis: <path d="M4 20h4L19 9l-4-4L4 16v4Z M13.5 6.5l4 4" {...traco} />,
   copiar: (
     <>
       <rect x="8" y="8" width="12" height="12" rx="2" fill="none" stroke="currentColor" strokeWidth={1.7} />

@@ -1,16 +1,24 @@
-import { type KeyboardEvent, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { Conflito, problemaDe } from '../api'
+import { type KeyboardEvent, type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Conflito, ErroDaApi, problemaDe } from '../api'
 import { formatarHora } from '../datas'
 import { BotaoComMenu } from './BotaoComMenu'
 import { CamposDaNota } from './CamposDaNota'
 import { type TipoDaLinha, lerCorpo, nomeDaNota } from './corpo'
+import { EscolherMarcadores } from './EscolherMarcadores'
 import { Icone } from './Icone'
 import { PaletaDeCores } from './PaletaDeCores'
-import type { ClienteDeNotas, CorDaNota, MudancaDaNota, Nota } from './tipos'
+import { dispensarSugestao, sugestaoDispensada } from './preferencias'
+import { prenderOFoco } from './prenderOFoco'
+import { sugerirMarcador } from './sugestao'
+import type { ClienteDeNotas, CorDaNota, Marcador, MudancaDaNota, Nota } from './tipos'
+import { useAdiado } from './useAdiado'
 import { useEditorDeLinhas } from './useEditorDeLinhas'
 
 // A espera do salvar automático depois da última tecla.
 const esperaDoSalvar = 800
+// A espera da sugestão de marcador depois da última tecla: o texto da nota tem de
+// assentar antes de a regra olhar para ele.
+const esperaDaSugestao = 600
 
 // FimDaNota é como a janela termina. O Notas decide o resto (a lista, o aviso, o
 // Desfazer, o foco).
@@ -19,8 +27,13 @@ export type FimDaNota = { tipo: 'fechou' | 'arquivou' | 'desarquivou' | 'lixeira
 interface Props {
   nota: Nota
   cliente: ClienteDeNotas
-  // nomesDosMarcadores: id → nome, para as etiquetas da nota.
-  nomesDosMarcadores: ReadonlyMap<string, string>
+  // marcadores: todos, na ordem do nome (as etiquetas da nota e o menu do botão).
+  marcadores: readonly Marcador[]
+  // notasParaSugerir: as notas da tela principal, de onde sai a sugestão de marcador.
+  notasParaSugerir: readonly Nota[]
+  // criarMarcador cria um marcador novo (o Notas o guarda). Devolve o marcador, ou a
+  // frase de erro para o menu.
+  criarMarcador(nome: string): Promise<Marcador | string>
   avisar(texto: ReactNode): void
   // aoPerderLigacao: a falha foi da ligação (sem sessão, Agent fora do ar); o
   // Painel acende a faixa do topo.
@@ -56,7 +69,7 @@ const tiposDoFormatar: [TipoDaLinha, string][] = [
 // edição começou (base_version), e um 409 não perde o texto: ele continua na
 // tela, com a nota vermelha do editor do histórico, até a pessoa salvar por
 // cima.
-export function DialogoDaNota({ nota, cliente, nomesDosMarcadores, avisar, aoPerderLigacao, aoTerminar }: Props) {
+export function DialogoDaNota({ nota, cliente, marcadores, notasParaSugerir, criarMarcador, avisar, aoPerderLigacao, aoTerminar }: Props) {
   const [titulo, setTitulo] = useState(nota.titulo)
   const [cor, setCor] = useState<CorDaNota | null>(nota.cor)
   const [fixada, setFixada] = useState(nota.fixada)
@@ -159,6 +172,97 @@ export function DialogoDaNota({ nota, cliente, nomesDosMarcadores, avisar, aoPer
     return 'conflito'
   }
 
+  // mudarMarcador põe ou tira um marcador na nota, na mesma fila das gravações: a
+  // versão da nota sobe a cada mudança de marcador, e uma gravação do texto que
+  // saísse ao mesmo tempo levaria a versão velha e daria 409. Devolve se deu certo.
+  function mudarMarcador(marcadorId: string, marcar: boolean): Promise<boolean> {
+    const passo = async (): Promise<boolean> => {
+      if (parado.current === 'lixeira') return false
+      try {
+        const nova = await (marcar ? cliente.marcarNota(nota.id, marcadorId) : cliente.desmarcarNota(nota.id, marcadorId))
+        // A gravação seguinte parte da versão nova, a não ser que outra aba também tenha
+        // mexido na nota (a versão pulou): aí ela dá 409, e o conflito é tratado como sempre.
+        if (nova.version === salvo.current.versao + 1) salvo.current = { ...salvo.current, versao: nova.version }
+        // O que a janela guarda como "a nota de agora" muda só nos marcadores; o texto
+        // pendente (ainda não gravado) continua o da pessoa.
+        ultimaRef.current = { ...ultimaRef.current, marcadores: nova.marcadores, version: nova.version, updated_at: nova.updated_at }
+        setUltima(ultimaRef.current)
+        return true
+      } catch (e) {
+        if (e instanceof Conflito) {
+          await aposConflito()
+        } else if (problemaDe(e)) {
+          aoPerderLigacao(e)
+        } else if (e instanceof ErroDaApi && e.status === 404) {
+          avisar('Esse marcador não existe mais. Abra "Editar marcadores" para ver a lista.')
+        } else {
+          avisar(`Não consegui mudar o marcador: ${mensagemDe(e)}`)
+        }
+        return false
+      }
+    }
+    const p = fila.current.then(passo, passo)
+    fila.current = p
+    return p
+  }
+
+  // alternarMarcador é a caixinha do menu; criarEMarcar, o "Criar marcador" dele.
+  function alternarMarcador(m: Marcador, marcar: boolean) {
+    void mudarMarcador(m.id, marcar)
+  }
+
+  async function criarEMarcar(nomeNovo: string): Promise<string | null> {
+    const criado = await criarMarcador(nomeNovo)
+    if (typeof criado === 'string') return criado
+    await mudarMarcador(criado.id, true)
+    return null
+  }
+
+  // Tirar pelo × da etiqueta: depois que a etiqueta sai da tela, o foco vai ao × vizinho,
+  // ou ao botão de marcador se não sobrou etiqueta.
+  const focarDepoisDeTirar = useRef<number | null>(null)
+  async function tirarMarcador(id: string, posicao: number) {
+    // O pedido é de uma vez: a ref vale antes da nota nova chegar, e o efeito abaixo a lê.
+    focarDepoisDeTirar.current = posicao
+    if (!(await mudarMarcador(id, false))) focarDepoisDeTirar.current = null
+  }
+  useEffect(() => {
+    const posicao = focarDepoisDeTirar.current
+    if (posicao === null) return
+    focarDepoisDeTirar.current = null
+    const restantes = dialogo.current?.querySelectorAll<HTMLElement>('.pe .tiravel button')
+    ;(restantes?.item(Math.min(posicao, restantes.length - 1)) ?? focarBotaoDeMarcador())?.focus()
+  }, [ultima])
+
+  function focarBotaoDeMarcador(): HTMLElement | null {
+    return dialogo.current?.querySelector<HTMLElement>('button[aria-label="Marcadores"]') ?? null
+  }
+
+  // A sugestão de marcador (N4): só em nota sem marcador, e que a pessoa não
+  // dispensou. O texto olhado é o de um instante atrás (a regra não roda a cada tecla).
+  const tituloAdiado = useAdiado(titulo, esperaDaSugestao)
+  const corpoAdiado = useAdiado(corpo, esperaDaSugestao)
+  const [dispensada, setDispensada] = useState(() => sugestaoDispensada(nota.id))
+  const semMarcador = ultima.marcadores.length === 0
+  const sugestao = useMemo(
+    () =>
+      dispensada || !semMarcador
+        ? null
+        : sugerirMarcador({ id: nota.id, titulo: tituloAdiado, corpo: corpoAdiado, marcadores: [] }, notasParaSugerir, marcadores),
+    [dispensada, semMarcador, nota.id, tituloAdiado, corpoAdiado, notasParaSugerir, marcadores],
+  )
+
+  async function aceitarSugestao(id: string) {
+    await mudarMarcador(id, true)
+    focarBotaoDeMarcador()?.focus()
+  }
+
+  function recusarSugestao() {
+    dispensarSugestao(nota.id)
+    setDispensada(true)
+    focarBotaoDeMarcador()?.focus()
+  }
+
   // O salvar automático: depois de uma mudança, um instante e grava. Cor,
   // fixar e arquivar vão na hora; o texto espera a pessoa parar de digitar.
   useEffect(() => {
@@ -255,24 +359,14 @@ export function DialogoDaNota({ nota, cliente, nomesDosMarcadores, avisar, aoPer
       void fechar()
       return
     }
-    if (e.key !== 'Tab' || !dialogo.current) return
-    const focaveis = Array.from(dialogo.current.querySelectorAll<HTMLElement>('button, input, textarea, [tabindex]')).filter(
-      (el) => !el.hasAttribute('disabled') && el.getAttribute('tabindex') !== '-1',
-    )
-    const primeiro = focaveis[0]
-    const ultimo = focaveis[focaveis.length - 1]
-    if (!primeiro || !ultimo) return
-    const ativo = document.activeElement
-    if (e.shiftKey && (ativo === primeiro || !dialogo.current.contains(ativo))) {
-      e.preventDefault()
-      ultimo.focus()
-    } else if (!e.shiftKey && (ativo === ultimo || !dialogo.current.contains(ativo))) {
-      e.preventDefault()
-      primeiro.focus()
-    }
+    prenderOFoco(e, dialogo.current)
   }
 
-  const etiquetas = ultima.marcadores.map((id) => nomesDosMarcadores.get(id)).filter((n): n is string => Boolean(n))
+  const nomesDosMarcadores = new Map(marcadores.map((m) => [m.id, m.nome]))
+  const etiquetas = ultima.marcadores.flatMap((id) => {
+    const nome = nomesDosMarcadores.get(id)
+    return nome ? [{ id, nome }] : []
+  })
   const quando = formatarHora(ultima.updated_at)
 
   return (
@@ -312,11 +406,28 @@ export function DialogoDaNota({ nota, cliente, nomesDosMarcadores, avisar, aoPer
 
         {etiquetas.length > 0 && (
           <div className="pe">
-            {etiquetas.map((e) => (
-              <span key={e} className="etiqueta">
-                {e}
+            {etiquetas.map((e, i) => (
+              <span key={e.id} className="etiqueta tiravel">
+                {e.nome}
+                <button type="button" aria-label={`Tirar o marcador ${e.nome}`} title="Tirar o marcador" onClick={() => void tirarMarcador(e.id, i)}>
+                  ×
+                </button>
               </span>
             ))}
+          </div>
+        )}
+
+        {sugestao && (
+          <div className="sugestao" role="group" aria-label="Sugestão de marcador">
+            <span>
+              Marcar como <strong>{sugestao.nome}</strong>?
+            </span>
+            <button type="button" className="botao pequeno" onClick={() => void aceitarSugestao(sugestao.id)}>
+              Marcar
+            </button>
+            <button type="button" className="botao pequeno leve" onClick={recusarSugestao}>
+              Agora não
+            </button>
           </div>
         )}
 
@@ -383,6 +494,10 @@ export function DialogoDaNota({ nota, cliente, nomesDosMarcadores, avisar, aoPer
                 }}
               />
             )}
+          </BotaoComMenu>
+
+          <BotaoComMenu icone="marcador" rotulo="Marcadores" classe="escolher">
+            {() => <EscolherMarcadores marcadores={marcadores} marcados={ultima.marcadores} aoAlternar={alternarMarcador} aoCriar={criarEMarcar} />}
           </BotaoComMenu>
 
           <button type="button" className="icone-botao" aria-label="Imagem" title="Imagens chegam depois" disabled>
