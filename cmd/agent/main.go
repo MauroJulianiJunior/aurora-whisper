@@ -536,10 +536,13 @@ func run(pp pastas.Pastas) error {
 			// apagado.
 			Retencao: h.retencao,
 			// As notas e os marcadores (ADR-022, N1): /api/notas e /api/marcadores.
-			Notas:     h.notas,
-			Foco:      focoDaNota,
-			Microfone: novoMicrofoneDoAgent(),
-			Log:       slog.Default(),
+			Notas: h.notas,
+			Foco:  focoDaNota,
+			// A separação em itens das notas (ADR-022, N5): o cliente do Polish,
+			// com a chave lida do cofre a cada chamada.
+			ClienteDaLista: polish.clienteDaLista,
+			Microfone:      novoMicrofoneDoAgent(),
+			Log:            slog.Default(),
 		}, hist, dono, aprendizado), laco))
 		abrir, porta, pararPainel, err := subirPainel(api.Handler(), nuvemDoPC.Retorno(), cam.Painel, slog.Default())
 		if err != nil {
