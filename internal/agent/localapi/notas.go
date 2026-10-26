@@ -31,10 +31,19 @@ import (
 //	POST   /api/marcadores                             cria (201)
 //	PATCH  /api/marcadores/{id}                        renomeia; base_version obrigatório
 //	DELETE /api/marcadores/{id}                        apaga e tira das notas (204)
+//	POST   /api/history/{id}/virar-nota                "Virar nota" do ditado (201, a nota)
+//	POST   /api/notas/{id}/desfazer-virar              o Desfazer do aviso (200)
 //
 // Sem o repositório montado (Preferencias.Notas nil), 503.
 //
 // Esta fase não toca o sync: nada aqui põe marcador na fila da nuvem (N7).
+
+// Os 409 do "Virar nota", para o painel dizer a frase certa: o ditado está na
+// lixeira, ou já virou nota (outra aba, ou o segundo clique).
+const (
+	codeInTrash     = "IN_TRASH"
+	codeAlreadyNote = "ALREADY_NOTE"
+)
 
 // codeNameInUse é o 409 de um nome de marcador que já existe, para o painel
 // distinguir de uma versão desatualizada (também 409, CONFLICT).
@@ -125,6 +134,12 @@ func writeNotaError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusConflict, codeConflict, "a nota está na lixeira: restaure antes de mexer nela")
 	case errors.Is(err, storage.ErrNotaForaDaLixeira):
 		writeError(w, http.StatusConflict, codeConflict, "só se apaga de vez a nota que está na lixeira")
+	case errors.Is(err, storage.ErrDitadoNaLixeira):
+		writeError(w, http.StatusConflict, codeInTrash, "o ditado está na lixeira: restaure antes de virar nota")
+	case errors.Is(err, storage.ErrDitadoJaVirouNota):
+		writeError(w, http.StatusConflict, codeAlreadyNote, "este ditado já virou nota")
+	case errors.Is(err, storage.ErrNotaNaoVeioDeDitado):
+		writeError(w, http.StatusConflict, codeConflict, "a nota não está virada de um ditado, ou o ditado já voltou ao histórico")
 	case errors.Is(err, storage.ErrMarcadorDuplicado):
 		writeError(w, http.StatusConflict, codeNameInUse, "já existe um marcador com esse nome")
 	case errors.Is(err, storage.ErrCorInvalida):
@@ -440,4 +455,46 @@ func (s *Server) handleDeleteMarcador(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleVirarNota atende POST /api/history/{id}/virar-nota: a ação "Virar
+// nota" do histórico (ADR-022). Cria a nota com o texto do ditado e esconde o
+// ditado do histórico, numa transação; devolve a nota (201). 404 se o ditado
+// não existe, 409 IN_TRASH se está na lixeira, 409 ALREADY_NOTE se já virou
+// nota. Não toca o sync.
+func (s *Server) handleVirarNota(w http.ResponseWriter, r *http.Request) {
+	repo, ok := s.notasProntas(w)
+	if !ok {
+		return
+	}
+	n, err := repo.VirarNota(r.Context(), s.userID, r.PathValue("id"))
+	if err != nil {
+		writeNotaError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, toNotaDTO(n))
+}
+
+type desfeitoDTO struct {
+	DitadoID string `json:"ditado_id"`
+	// NotaApagada: a nota estava intacta e saiu; falso, a nota foi editada e
+	// ficou (só o ditado voltou ao histórico).
+	NotaApagada bool `json:"nota_apagada"`
+}
+
+// handleDesfazerVirarNota atende POST /api/notas/{id}/desfazer-virar: o
+// Desfazer do aviso "Virou nota". Devolve o ditado ao histórico e apaga a nota
+// se ninguém a editou; 409 se a nota não veio de um ditado ou o ditado já
+// voltou.
+func (s *Server) handleDesfazerVirarNota(w http.ResponseWriter, r *http.Request) {
+	repo, ok := s.notasProntas(w)
+	if !ok {
+		return
+	}
+	d, err := repo.DesfazerVirarNota(r.Context(), s.userID, r.PathValue("id"))
+	if err != nil {
+		writeNotaError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, desfeitoDTO{DitadoID: d.DitadoID, NotaApagada: d.NotaApagada})
 }

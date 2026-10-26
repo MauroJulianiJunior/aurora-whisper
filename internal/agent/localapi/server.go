@@ -209,6 +209,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /api/notas/{id}/marcadores/{marcador}", s.handleMarcarNota)
 	mux.HandleFunc("DELETE /api/notas/{id}/marcadores/{marcador}", s.handleDesmarcarNota)
 
+	mux.HandleFunc("POST /api/history/{id}/virar-nota", s.handleVirarNota)
+	mux.HandleFunc("POST /api/notas/{id}/desfazer-virar", s.handleDesfazerVirarNota)
+
 	mux.HandleFunc("GET /api/marcadores", s.handleListMarcadores)
 	mux.HandleFunc("POST /api/marcadores", s.handleCriarMarcador)
 	mux.HandleFunc("PATCH /api/marcadores/{id}", s.handlePatchMarcador)

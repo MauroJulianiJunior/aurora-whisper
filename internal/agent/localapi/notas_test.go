@@ -125,6 +125,7 @@ func TestNotasAPI_SemRepositorioE503(t *testing.T) {
 		{"GET", "/api/notas"}, {"POST", "/api/notas"}, {"GET", "/api/notas/x"}, {"PATCH", "/api/notas/x"},
 		{"DELETE", "/api/notas/x"}, {"POST", "/api/notas/x/restaurar"}, {"DELETE", "/api/notas/x/definitivo"},
 		{"PUT", "/api/notas/x/marcadores/y"}, {"DELETE", "/api/notas/x/marcadores/y"},
+		{"POST", "/api/history/x/virar-nota"}, {"POST", "/api/notas/x/desfazer-virar"},
 		{"GET", "/api/marcadores"}, {"POST", "/api/marcadores"}, {"PATCH", "/api/marcadores/x"}, {"DELETE", "/api/marcadores/x"},
 	} {
 		e := esperarErro(t, fazer(t, h, rota[0], rota[1], "{}"), 503, "UNAVAILABLE")
