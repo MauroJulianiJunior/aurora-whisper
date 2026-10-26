@@ -150,6 +150,13 @@ export interface Configuracoes {
   // microphone_always_ready (ADR-015): ligado, o microfone fica aberto o
   // tempo todo; desligado (padrão), só abre durante o ditado.
   microphone_always_ready: boolean
+  // note_hotkey (ADR-022, N9) é o gatilho "ditar para nota", só leitura como
+  // a hotkey ("ctrl+win+alt"). Ausente: o Agent não tem o gatilho, e a tela
+  // não o mostra.
+  note_hotkey?: string
+  // note_trigger_enabled liga o "ditar para nota" (padrão ligado). Desligado,
+  // as teclas dele são um ditado comum.
+  note_trigger_enabled: boolean
   text_mode: ModoTexto
   ai_provider: '' | Provedor
   ai_model: string
@@ -174,7 +181,7 @@ export interface Configuracoes {
 
 export type Editaveis = Pick<
   Configuracoes,
-  'hold_threshold_ms' | 'beep_enabled' | 'microphone_always_ready' | 'text_mode' | 'ai_provider' | 'ai_model' | 'autostart'
+  'hold_threshold_ms' | 'beep_enabled' | 'microphone_always_ready' | 'note_trigger_enabled' | 'text_mode' | 'ai_provider' | 'ai_model' | 'autostart'
 >
 
 // EstadoChave nunca traz a chave: só se há uma guardada e os 4 últimos

@@ -344,7 +344,16 @@ describe('salvar', () => {
     fireEvent.click(salvar())
     await waitFor(() => expect(aviso().textContent).toBe('Configurações salvas.'))
     expect(puts(srv).map((p) => p.corpo)).toEqual([
-      { hold_threshold_ms: 900, beep_enabled: false, microphone_always_ready: false, text_mode: 'literal', ai_provider: '', ai_model: '', base_version: 1 },
+      {
+        hold_threshold_ms: 900,
+        beep_enabled: false,
+        microphone_always_ready: false,
+        note_trigger_enabled: true,
+        text_mode: 'literal',
+        ai_provider: '',
+        ai_model: '',
+        base_version: 1,
+      },
     ])
     expect(srv.config.version).toBe(2)
     expect(desligado(salvar())).toBe(true)
@@ -1456,5 +1465,50 @@ describe('os botões guardam o foco', () => {
     expect(botao('Remover chave')).toBeTruthy()
     expect(estadoDoTeste().textContent).toBe('')
     expect(srv.pedidos.filter((p) => p.caminho === '/api/ia/testar' || p.metodo === 'DELETE')).toEqual([])
+  })
+})
+
+// O "ditar para nota" (ADR-022, N9): as teclas são só leitura, como as do
+// ditado; o que se muda é ligar e desligar.
+describe('o ditar para nota', () => {
+  const nota = () => screen.getByLabelText<HTMLInputElement>('Ditar para nota')
+
+  it('mostra as teclas do gatilho e nasce ligado', async () => {
+    await abrir()
+    expect(nota().checked).toBe(true)
+    const teclas = Array.from(document.querySelectorAll('#cfg-nota-teclas kbd'), (k) => k.textContent)
+    expect(teclas).toEqual(['Ctrl', 'Win', 'Alt'])
+    expect(descricao(nota())).toContain('não para o campo')
+    expect(descricao(nota())).toContain('Ctrl')
+  })
+
+  it('desligar vai no PUT como false, e ligar de novo como true', async () => {
+    const srv = await abrir()
+    fireEvent.click(nota())
+    expect(screen.getByText('não salvo').className).toBe('etiqueta forte')
+    fireEvent.click(salvar())
+    await waitFor(() => expect(aviso().textContent).toBe('Configurações salvas.'))
+    expect(puts(srv)[0]?.corpo).toMatchObject({ note_trigger_enabled: false, base_version: 1 })
+    expect(srv.config.note_trigger_enabled).toBe(false)
+    expect(nota().checked).toBe(false)
+
+    fireEvent.click(nota())
+    fireEvent.click(salvar())
+    await waitFor(() => expect(puts(srv)).toHaveLength(2))
+    expect(puts(srv)[1]?.corpo).toMatchObject({ note_trigger_enabled: true })
+  })
+
+  it('mexer em outro campo não muda o ditar para nota', async () => {
+    const srv = await abrir({ config: { note_trigger_enabled: false } })
+    expect(nota().checked).toBe(false)
+    fireEvent.click(bip())
+    fireEvent.click(salvar())
+    await waitFor(() => expect(aviso().textContent).toBe('Configurações salvas.'))
+    expect(puts(srv)[0]?.corpo).toMatchObject({ beep_enabled: false, note_trigger_enabled: false })
+  })
+
+  it('um Agent sem o gatilho (sem note_hotkey) não mostra a opção', async () => {
+    await abrir({ config: { note_hotkey: undefined } })
+    expect(screen.queryByLabelText('Ditar para nota')).toBeNull()
   })
 })

@@ -473,6 +473,36 @@ export function Configuracoes({ cliente, visivel, aoPerderLigacao, avisar, apren
           <p className="ajuda">Segure enquanto fala e solte para o texto entrar. Por enquanto, não dá para trocar.</p>
         </div>
 
+        {/* O segundo gatilho (ADR-022, N9): as teclas são só leitura, como as
+            do ditado; o que se muda é ligar e desligar. Um Agent sem o
+            gatilho não manda note_hotkey, e a tela não o mostra. */}
+        {salvo.note_hotkey && (
+          <div className="ajuste">
+            <label className="marcar">
+              <input
+                type="checkbox"
+                checked={rascunho.note_trigger_enabled}
+                aria-describedby={ids('cfg-nota-teclas', 'cfg-nota-ajuda', idPendente('note_trigger_enabled'))}
+                onChange={(e) => mudar({ note_trigger_enabled: e.target.checked })}
+              />
+              Ditar para nota
+            </label>
+            <p className="teclas" id="cfg-nota-teclas">
+              {teclas(salvo.note_hotkey).map((t, i) => (
+                <Fragment key={t}>
+                  {i > 0 && ' + '}
+                  <kbd>{t}</kbd>
+                </Fragment>
+              ))}
+            </p>
+            <p className="ajuda" id="cfg-nota-ajuda">
+              O texto vai para uma nota, não para o campo. Comece pelo nome da nota (“Lista de compras: leite e pão”) para acrescentar nela; sem um
+              nome que case, nasce uma nota nova. Desligado, estas teclas ditam no campo, como as do ditado.
+            </p>
+            <Pendente campo="note_trigger_enabled" ativo={pendente('note_trigger_enabled')} />
+          </div>
+        )}
+
         <div className="ajuste">
           <label className="ajuste-nome" htmlFor="cfg-segurar">
             Segurar por
