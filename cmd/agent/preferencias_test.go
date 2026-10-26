@@ -46,6 +46,26 @@ func TestPreferenciasPadrao_BatemComODefaultConfig(t *testing.T) {
 	}
 }
 
+// TestGatilhoDaNota_BateComATela: o conjunto que o hook recebe é o que a tela
+// mostra (localapi.TeclaDaNota), é válido contra o gatilho do ditado e nasce
+// ligado; desligado nas Configurações, o runtime recebe o pedido.
+func TestGatilhoDaNota_BateComATela(t *testing.T) {
+	if localapi.TeclaDaNota != "ctrl+win+alt" || gatilhoDaNota != dictation.ModControl|dictation.ModMeta|dictation.ModAlt {
+		t.Fatalf("a tela diz %q, e o hook recebe %v", localapi.TeclaDaNota, gatilhoDaNota)
+	}
+	if err := dictation.ValidarGatilhoDaNota(defaultConfig(), gatilhoDaNota); err != nil {
+		t.Fatalf("o gatilho da nota não vale contra o do ditado: %v", err)
+	}
+	p := preferenciasPadrao()
+	if !p.NoteTriggerEnabled || preferenciasDoRuntime(p).SemGatilhoDaNota {
+		t.Fatal("o gatilho da nota não nasce ligado")
+	}
+	p.NoteTriggerEnabled = false
+	if !preferenciasDoRuntime(p).SemGatilhoDaNota {
+		t.Fatal("desligado na tela, o runtime não recebe o pedido")
+	}
+}
+
 // TestPreferenciasPadrao_SaoAceitasPelaAPI: o primeiro PUT grava sobre o
 // padrão. Um padrão que a validação recusasse travaria a tela na
 // primeira gravação, com qualquer mudança.
@@ -83,6 +103,9 @@ func TestPreferenciasDoRuntime(t *testing.T) {
 		{storage.Settings{HoldThresholdMs: 700, TextMode: "literal", AIProvider: "openai", AIModel: "m"},
 			winruntime.Preferencias{HoldThreshold: 700 * time.Millisecond, Literal: true, Provedor: "openai", Modelo: "m"}},
 	} {
+		// Os casos são dos outros campos; o gatilho da nota no padrão (ligado)
+		// tem teste próprio (TestGatilhoDaNota_BateComATela).
+		c.s.NoteTriggerEnabled = true
 		if got := preferenciasDoRuntime(c.s); got != c.quero {
 			t.Errorf("preferenciasDoRuntime(%+v) = %+v, quero %+v", c.s, got, c.quero)
 		}

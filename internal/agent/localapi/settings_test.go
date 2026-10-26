@@ -20,6 +20,8 @@ import (
 // settingsView espelha a resposta de GET/PUT /api/settings.
 type settingsView struct {
 	Hotkey                string   `json:"hotkey"`
+	NoteHotkey            string   `json:"note_hotkey"`
+	NoteTriggerEnabled    bool     `json:"note_trigger_enabled"`
 	HoldThresholdMs       int64    `json:"hold_threshold_ms"`
 	BeepEnabled           bool     `json:"beep_enabled"`
 	MicrophoneAlwaysReady bool     `json:"microphone_always_ready"`
@@ -94,8 +96,8 @@ func TestSettings_GetDevolveOContratoExato(t *testing.T) {
 	}
 	sort.Strings(got)
 	quero := []string{"ai_model", "ai_provider", "autostart", "autostart_indisponivel", "beep_enabled",
-		"hold_threshold_ms", "hotkey", "microphone_always_ready", "polish_disponivel", "polish_ultimo_motivo", "reinicio_pendente",
-		"text_mode", "version"}
+		"hold_threshold_ms", "hotkey", "microphone_always_ready", "note_hotkey", "note_trigger_enabled",
+		"polish_disponivel", "polish_ultimo_motivo", "reinicio_pendente", "text_mode", "version"}
 	if !reflect.DeepEqual(got, quero) {
 		t.Fatalf("campos = %v\nquero    %v", got, quero)
 	}
@@ -111,7 +113,8 @@ func TestSettings_GetAntesDoPrimeiroPutDevolveOPadrao(t *testing.T) {
 	s.inicio.ligado, s.inicio.indisponivel = true, "só na versão de bandeja"
 	got := s.get(t)
 	quero := settingsView{
-		Hotkey: "ctrl+win", HoldThresholdMs: 700, BeepEnabled: true, TextMode: "smart",
+		Hotkey: "ctrl+win", NoteHotkey: "ctrl+win+alt", NoteTriggerEnabled: true,
+		HoldThresholdMs: 700, BeepEnabled: true, TextMode: "smart",
 		Autostart: true, AutostartIndisponivel: "só na versão de bandeja",
 		ReinicioPendente: []string{}, PolishDisponivel: true, PolishUltimoMotivo: "", Version: 0,
 	}
@@ -208,6 +211,31 @@ func TestSettings_MicrofoneSempreProntoVaiEVolta(t *testing.T) {
 	w = fazer(t, s.h, http.MethodPut, "/api/settings", map[string]any{"base_version": 3, "beep_enabled": true})
 	if got := decodeJSON[settingsView](t, w); w.Code != http.StatusOK || got.MicrophoneAlwaysReady {
 		t.Fatalf("PUT de outro campo com a preferência desligada: status = %d, %+v", w.Code, got)
+	}
+}
+
+// TestSettings_GatilhoDaNotaLigaEDesliga: o padrão é ligado (ADR-022, E1); o
+// PUT com false desliga e chega ao Agent; o PUT de outro campo não o muda; a
+// tecla da nota é só leitura e volta sempre a mesma.
+func TestSettings_GatilhoDaNotaLigaEDesliga(t *testing.T) {
+	s := novoServidorDeSettings(t)
+	if g := s.get(t); !g.NoteTriggerEnabled || g.NoteHotkey != localapi.TeclaDaNota {
+		t.Fatalf("padrão: %+v; quero o gatilho da nota ligado em %s", g, localapi.TeclaDaNota)
+	}
+	w := fazer(t, s.h, http.MethodPut, "/api/settings", map[string]any{"base_version": 0, "note_trigger_enabled": false})
+	if got := decodeJSON[settingsView](t, w); w.Code != http.StatusOK || got.NoteTriggerEnabled {
+		t.Fatalf("PUT desligando: status = %d, %+v", w.Code, got)
+	}
+	if len(s.aplicado) != 1 || s.aplicado[0].NoteTriggerEnabled {
+		t.Fatalf("o Agent recebeu %+v, quero o gatilho desligado", s.aplicado)
+	}
+	w = fazer(t, s.h, http.MethodPut, "/api/settings", map[string]any{"base_version": 1, "beep_enabled": false})
+	if got := decodeJSON[settingsView](t, w); w.Code != http.StatusOK || got.NoteTriggerEnabled {
+		t.Fatalf("PUT de outro campo religou o gatilho: %+v", got)
+	}
+	w = fazer(t, s.h, http.MethodPut, "/api/settings", map[string]any{"base_version": 2, "note_trigger_enabled": true})
+	if got := decodeJSON[settingsView](t, w); w.Code != http.StatusOK || !got.NoteTriggerEnabled || got.NoteHotkey != "ctrl+win+alt" {
+		t.Fatalf("PUT ligando: status = %d, %+v", w.Code, got)
 	}
 }
 

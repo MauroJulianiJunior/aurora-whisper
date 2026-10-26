@@ -119,6 +119,8 @@ func (rt *Runtime) recordHistory(e dictation.RecordHistoryEffect) {
 		processamentoASR = m.processamento
 	}
 	modo := rt.modoGravado(e.Attempt)
+	// Consumida aqui, gravando ou não, como as medições acima.
+	ditadoID, virouPorVoz, foiParaNota := rt.virouNotaPorVoz(e.Attempt)
 
 	if e.Text == "" && bruto == "" {
 		return
@@ -139,6 +141,14 @@ func (rt *Runtime) recordHistory(e dictation.RecordHistoryEffect) {
 	// banco, escondida, e o "Aprender" a lê). A linha tardia (tardio.go) NÃO
 	// passa por aqui: ela não foi inserida em campo nenhum e precisa aparecer.
 	t.VirouNota = virouNotaDoDitado(rt.notaEmFoco, e.Outcome)
+	// O ditado do gatilho "ditar para nota" (paranota.go): gravado na nota, sai
+	// do histórico como no "Virar nota" (virou_nota = a nota); a nota que não
+	// foi gravada deixa o ditado à vista, que é onde o texto está. O id é o que
+	// a nota nova guardou em ditado_de_origem. A nota em foco no painel não
+	// conta aqui: o texto não foi para o campo.
+	if foiParaNota {
+		t.ID, t.VirouNota = ditadoID, virouPorVoz
+	}
 	if err := rt.hist.Put(t); err != nil {
 		// Não derruba o ditado: o texto já está no campo de quem usa, e
 		// perder a linha do histórico é menos grave que transformar uma

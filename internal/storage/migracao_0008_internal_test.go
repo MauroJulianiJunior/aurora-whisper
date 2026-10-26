@@ -41,8 +41,9 @@ func TestMigracao0008_SoGanhaAsColunasNulas(t *testing.T) {
 		switch tb {
 		case "schema_migrations":
 			// O Migrate roda até a última: a 0008 e as migrations que vieram depois.
-			if len(d) != len(a)+3 || d[len(a)]["version"] != "0008_sync_aprendido_perdido" ||
-				d[len(a)+1]["version"] != "0009_notas" || d[len(a)+2]["version"] != "0010_ditado_virou_nota" {
+			if len(d) != len(a)+4 || d[len(a)]["version"] != "0008_sync_aprendido_perdido" ||
+				d[len(a)+1]["version"] != "0009_notas" || d[len(a)+2]["version"] != "0010_ditado_virou_nota" ||
+				d[len(a)+3]["version"] != "0011_local_settings_gatilho_da_nota" {
 				t.Fatalf("as migrations aplicadas: %v", d)
 			}
 			d = d[:len(a)]

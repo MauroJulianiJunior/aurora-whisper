@@ -300,7 +300,13 @@ func run(pp pastas.Pastas) error {
 	// O portão (sysinput.Enable) e a instância única são tomados em main,
 	// antes do log: ver lá.
 
-	hk := hook.New(hook.Config{Key: cfg.Key, Modifiers: cfg.Modifiers})
+	// O segundo gatilho, "ditar para nota" (ADR-022, N9), vai no mesmo hook:
+	// as decisões de suprimir e notificar continuam as do Ctrl+Win
+	// (dictation.Gatilhos), e só a marca da sessão é nova.
+	if err := dictation.ValidarGatilhoDaNota(cfg, gatilhoDaNota); err != nil {
+		return fmt.Errorf("config invalida: %w", err)
+	}
+	hk := hook.New(hook.Config{Key: cfg.Key, Modifiers: cfg.Modifiers, Nota: gatilhoDaNota})
 	if err := hk.Start(); err != nil {
 		if errors.Is(err, win32.ErrNotSupported) {
 			fmt.Printf("%s %s: suportado apenas em Windows 10/11 x64; nada a fazer nesta plataforma.\n", appName, version)
@@ -491,6 +497,10 @@ func run(pp pastas.Pastas) error {
 		// consulta ao gravar o ditado. O mesmo objeto nos dois lados; só memória.
 		focoDaNota := notafoco.Novo(nil)
 		rt.UsarNotaEmFoco(focoDaNota)
+		// O destino do gatilho "ditar para nota" (ADR-022, N9): as mesmas
+		// notas do painel, do mesmo dono. Sem o histórico, não há notas, e o
+		// Ctrl+Win+Alt é um ditado comum.
+		rt.UsarNotas(h.notas, dono)
 		aplicar := aplicarPreferencias(rt.Ajustar, sess, slog.Default())
 		carregarPreferencias(prefs, aplicar, slog.Default(), time.Sleep)
 
@@ -1517,6 +1527,8 @@ func preferenciasPadrao() storage.Settings {
 		ASRPolicy:            "local_only",
 		ProtectedFieldPolicy: "block",
 		TextMode:             localapi.ModoSmart,
+		// O "ditar para nota" nasce ligado (ADR-022, E1, aprovada no padrão).
+		NoteTriggerEnabled: true,
 	}
 }
 
@@ -1524,6 +1536,11 @@ func preferenciasPadrao() storage.Settings {
 // leitura nesta etapa; TestPreferenciasPadrao_BatemComODefaultConfig
 // confere que os dois dizem a mesma coisa.
 const teclaDeDitado = "ctrl+win"
+
+// gatilhoDaNota é o conjunto do "ditar para nota" (ADR-022, N9): Ctrl+Win+Alt,
+// um superconjunto do Ctrl+Win. A tela o mostra como localapi.TeclaDaNota
+// (TestGatilhoDaNota_BateComATela).
+const gatilhoDaNota = dictation.ModControl | dictation.ModMeta | dictation.ModAlt
 
 // aplicarNoRuntime é o localapi.Preferencias.Aplicar do Agent: aplica o
 // que foi gravado (aplicarPreferencias), e nada fica para o próximo
@@ -1547,6 +1564,8 @@ func preferenciasDoRuntime(s storage.Settings) winruntime.Preferencias {
 		Polish:        s.TextMode == localapi.ModoPolish,
 		Provedor:      s.AIProvider,
 		Modelo:        s.AIModel,
+		// Desligado nas Configurações, o Ctrl+Win+Alt é um ditado comum.
+		SemGatilhoDaNota: !s.NoteTriggerEnabled,
 	}
 }
 

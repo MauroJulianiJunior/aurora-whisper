@@ -250,6 +250,15 @@ type Runtime struct {
 	// (ADR-022, "Ditado feito dentro da nota"); nil, o ditado é sempre comum.
 	// Ver UsarNotaEmFoco.
 	notaEmFoco focoDaNota
+	// notas é o destino do gatilho "ditar para nota" (paranota.go); nil, a
+	// sessão dele é inserida como um ditado comum. semGatilhoDaNota é a
+	// escolha das Configurações ("Ditar para nota" desligado), aplicada no
+	// keydown como as outras (aplicarAjuste). paraNota e notaFeita são da
+	// tentativa em curso. Só a goroutine de Run lê e escreve os quatro.
+	notas            gravarNotaPorVoz
+	semGatilhoDaNota bool
+	paraNota         sessaoParaNota
+	notaFeita        notaDaTentativa
 
 	// resolucao é a política de resolução real (internal/resolver). Nil
 	// mantém o comportamento histórico: devolver o texto do ASR intocado.
@@ -520,8 +529,14 @@ func (rt *Runtime) handleRaw(raw dictation.RawKeyEvent) {
 		// remarcar a tentativa em curso com uma leitura mais nova. Uma marca
 		// velha não precisa ser apagada: o AttemptID só sobe, e ela nunca
 		// casa com uma tentativa nova.
-		if nova := rt.machine.CurrentAttempt(); nova != antes && elevada && alvo.Protected {
+		nova := rt.machine.CurrentAttempt()
+		if nova != antes && elevada && alvo.Protected {
 			rt.elevadaEm = nova
+		}
+		// A marca do gatilho da nota, só para a tentativa que ESTE keydown
+		// começou (pela mesma razão da marca acima).
+		if nova != antes {
+			rt.marcarParaNota(nova, raw)
 		}
 		return
 	}
@@ -536,6 +551,9 @@ func (rt *Runtime) handleRaw(raw dictation.RawKeyEvent) {
 		// devolver false.
 		return
 	}
+	// A soltura traz a marca final do gatilho da nota (o Alt apertado no meio
+	// da gravação conta), antes de o texto existir.
+	rt.marcarParaNota(attempt, raw)
 	rt.dispatch(dictation.KeyUpEvent{Attempt: attempt})
 }
 
@@ -638,8 +656,17 @@ func (rt *Runtime) apply(effects []dictation.Effect) {
 				fase = s
 				args = append(args, "motivo", "repeticao_removida")
 			}
+			// O desfecho do ditar para nota diz para onde o texto foi
+			// (paranota.go). O log diz o destino, nunca o título.
+			var texto string
+			if e.Attempt != dictation.NoAttempt && e.Attempt == rt.notaFeita.attempt {
+				if f, t := FaseDaNota(e.Phase, rt.notaFeita.res, rt.notaFeita.falhou); f != e.Phase {
+					fase, texto = f, t
+					args = append(args, "destino", "nota")
+				}
+			}
 			rt.log.Info("winruntime: overlay", args...)
-			rt.overlay.SetPhase(fase)
+			rt.mostrarFase(fase, texto)
 
 		case dictation.PlayBeepEffect:
 			// O bipe diz "pode falar": só sai com o microfone entregando
@@ -660,6 +687,13 @@ func (rt *Runtime) apply(effects []dictation.Effect) {
 			}
 
 		case dictation.InsertEffect:
+			// A sessão do gatilho da nota não insere nada no campo em foco:
+			// o texto vai para a nota, aqui mesmo (SQLite local), e a resposta
+			// volta ao núcleo como a de uma inserção (paranota.go).
+			if rt.vaiParaNota(e.Attempt) {
+				next = append(next, rt.gravarNaNota(e))
+				continue
+			}
 			rt.enfileirarInsercao(e)
 
 		case dictation.RecordHistoryEffect:
@@ -923,6 +957,10 @@ type Preferencias struct {
 	Polish   bool
 	Provedor string
 	Modelo   string
+	// SemGatilhoDaNota desliga o "ditar para nota" (ADR-022, N9): o gatilho
+	// dele vira um ditado comum, inserido no campo. Negado de propósito: o
+	// valor zero (nada gravado ainda) é o gatilho ligado, que é o padrão.
+	SemGatilhoDaNota bool
 }
 
 // Ajustar pede que p passe a valer a partir do PRÓXIMO ditado. Seguro de
@@ -968,6 +1006,7 @@ func (rt *Runtime) aplicarAjuste() {
 	}
 	rt.literal = p.Literal
 	rt.polish, rt.provedorIA, rt.modeloIA = p.Polish, p.Provedor, p.Modelo
+	rt.semGatilhoDaNota = p.SemGatilhoDaNota
 	// O que ficou valendo, lido do núcleo — não o que foi pedido.
 	cfg := rt.machine.Config()
 	args := []any{"hold_threshold", cfg.HoldThreshold, "beep", cfg.BeepEnabled, "modo", rt.modo()}
