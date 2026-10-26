@@ -6,6 +6,7 @@
 | Texto | Confidencial | SQLite; no Postgres **só depois que quem usa conecta a nuvem**, legível no servidor na v1 (ADR-019). O texto do ditado do celular nasce na nuvem, depois do aceite dela (ADR-021) | 6m, pela data do ditado; o backup da nuvem o guarda até a cópia girar |
 | Áudio (do PC) | Sensível efêmero | RAM | tentativa. Nunca sai do PC |
 | Contexto UIA | Sensível efêmero | RAM | resolução |
+| Nota em foco (ADR-022: em que nota está o cursor, o id dela ou o token da caixa "Criar uma nota") | Sensível efêmero | só na memória do Agent (`internal/agent/notafoco`). Nunca em disco, log, resposta de erro nem sync | 60 s sem renovação (o painel renova a cada ~20 s), ou o DELETE `/api/notas/foco`, ou o reinício. O que fica no banco é o efeito (`virou_nota` do ditado), não o aviso |
 | Dictionary/corrections | Confidencial | SQLite/Postgres; **hoje o `dicionario.json` local, em texto, na pasta de dados** (ADR-017; ADR-018: `%LOCALAPPDATA%\AuroraWhisper`, ou ao lado do executável no modo portátil), onde o painel grava o que aprende | até exclusão |
 | Email/google_sub/nome (`display_name`, o `name` do Google; o `avatar_url` existe na tabela e nunca é preenchido) | Pessoal | Postgres | vida da conta: o "apagar meus dados" **não** apaga o cadastro (dossiê de LGPD, `docs/lgpd-dossie.md`, decisão 2) |
 | Device token | Secreto | Credential Manager (alvo `AuroraWhisper/nuvem` no Agent instalado e `AuroraWhisper/nuvem-portatil` no `bin\`, ADR-019, F6)/hash (HMAC com `DEVICE_TOKEN_PEPPER`) | até revoke, ou 180 dias sem uso (F6) |
@@ -690,6 +691,15 @@ impressão e, se alguém real já aceitou, subir a versão.
 - cloud somente se permitido (**na etapa 5, nunca**: a rota `/resolve` não é montada, e o
   `target_app` não existe na nuvem; ADR-019);
 - não persistir.
+
+**Nota em foco (ADR-022, "Ditado feito dentro da nota").** Saber em que nota a pessoa está é contexto
+do mesmo tipo: o painel avisa o Agent (`PUT`/`DELETE /api/notas/foco`), e o Agent o guarda **só em
+memória**, com validade de 60 s, e o consulta no instante em que grava o ditado. Nenhum log recebe o id
+nem o token (nem na rota, nem no Runtime), a resposta de erro não o repete e o sync não o conhece.
+Os ids são validados (`[A-Za-z0-9_-]{1,64}`) antes de qualquer uso, porque entram numa comparação de
+texto no banco. O que persiste é só a marca `virou_nota` na linha do ditado (que já é conteúdo do
+usuário no SQLite local). A rota é do painel do PC, atrás do mesmo token e Host/Origin das outras; o
+bundle da nuvem não a contém.
 
 ## Logging proibido
 - áudio;

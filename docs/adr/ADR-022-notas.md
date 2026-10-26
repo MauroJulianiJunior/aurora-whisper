@@ -113,10 +113,27 @@ colunas de sync que o ditado já tem (`sync_state`, `server_version`, `last_sync
   a busca do histórico (e a lixeira) escondem o ditado marcado, o expurgo de 30 dias e os 6 meses o
   pulam; o Desfazer apaga a nota só na versão 1, fora da lixeira. Nada vai para a fila do sync.
 
+**Ditado feito dentro da nota.** O ditado feito com o cursor no editor de uma nota **não aparece no
+histórico**, como se fosse um "Virar nota" automático (pedido do Mauro, 25-out-2026; o texto já está
+na nota, e o histórico fica só com o que não tem outro lugar). O Agent não vê o painel, então o painel
+o avisa: enquanto o título ou uma linha da nota tem o foco e a janela do navegador também, `PUT
+/api/notas/foco` (renovado a cada ~20 s) com `{nota}` ou, no "Criar uma nota", `{token}`; ao sair,
+`DELETE`. O Agent guarda o aviso **só na memória**, com validade de 60 s (é contexto: nada em disco, log
+nem sync), e, ao gravar um ditado que deu certo, escreve `virou_nota` com o id da nota ou `nova:<token>`.
+A inserção no campo não muda. Reusa a coluna e as regras do "Virar nota" (fora do histórico sem
+lixeira, fora dos 6 meses, sem evento de sync); não define `ditado_de_origem`. No "Criar uma nota", o
+`POST /api/notas` leva o `token` e liga os ditados à nota na mesma transação; a caixa que fecha vazia
+manda `descartar`, e os ditados voltam ao histórico (nada some calado); o resto volta em 24 h. Só
+**ditados novos** são escondidos: os que já estão no histórico não mudam. Alternativa descartada: o
+Agent descobrir o campo em foco pela UIA (contexto de outro app, mais frágil, e o painel já sabe).
+Risco aceito: um ditado feito no instante em que o foco sai da nota (ou com o aviso vencido por um
+painel travado) aparece no histórico, que é o comportamento de sempre.
+
 ### Ditar dentro da nota
 
 O editor da nota é um campo de texto do painel. O Agent já insere no campo com foco (ADR-011), então
-**ditar dentro da nota funciona sem código novo no Agent**: abrir a nota, segurar `Ctrl+Win`, falar.
+**ditar dentro da nota funciona sem código novo na inserção**: abrir a nota, segurar `Ctrl+Win`, falar
+(o que mudou é só o histórico: ver "Ditado feito dentro da nota", acima).
 O Polish (se ligado) entrega a lista já com `- `. Só a verificação manual confirma (o painel no
 navegador é um campo comum para o Agent; o caso a conferir é o editor por linhas, ver "Riscos").
 

@@ -1263,6 +1263,11 @@ nuvem não os tem, e o `bundle.test.ts` confere nos dois sentidos. Prévia: `doc
 - **O texto vai como está.** Linhas com `- ` ou `1. ` viram lista pelo `notas/corpo.ts`; uma enumeração em
   texto corrido **não** vira lista sozinha: na nota, o botão "Virar lista" da N2 oferece (escolha do Mauro).
 - No cartão da nota, "veio de um ditado" já aparece (N2, `ditado_de_origem`).
+- **Ditar dentro da nota (sem tela nova).** Enquanto o título ou uma linha da nota (aberta, ou o "Criar
+  uma nota…") tem o foco **e** a janela do navegador também, o painel avisa o Agent (`useFocoDaNota`,
+  `PUT /api/notas/foco`, renovado a cada ~20 s) e o ditado feito ali não aparece no Histórico. Nada
+  aparece na tela: o aviso sai quando o foco sai da nota, quando a janela perde o foco ou quando a nota
+  fecha. A caixa "Criar uma nota…" que fecha vazia devolve ao Histórico o que foi ditado nela.
 
 ## Aba Notas (ADR-022, N2)
 Só no painel do PC (a Local API). O componente entra pelo `Ambiente` (`Ambiente.Notas`); o painel da nuvem

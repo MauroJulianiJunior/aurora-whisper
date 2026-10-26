@@ -1693,11 +1693,14 @@ desconhecida.
 #### POST `/api/notas`
 ```json
 { "titulo": "", "corpo": "- leite", "cor": "amarelo", "fixada": false, "arquivada": false,
-  "ditado_de_origem": "id", "marcadores": ["id"] }
+  "ditado_de_origem": "id", "marcadores": ["id"], "token": "uuid" }
 ```
 Todos os campos são opcionais, mas a nota não pode ter título e corpo ambos vazios. `201` com a
 nota (`version` 1). `400` para: nota vazia, `cor` fora das oito, texto acima do teto (título 1 KiB,
-corpo 64 KiB) ou com o caractere nulo, e marcador inexistente ou apagado.
+corpo 64 KiB) ou com o caractere nulo, marcador inexistente ou apagado, e `token` fora de
+`[A-Za-z0-9_-]{1,64}`. O `token` é o da caixa "Criar uma nota" aberta (ver "Nota em foco", abaixo):
+na mesma transação em que a nota nasce, os ditados marcados `nova:<token>` passam a apontar para ela.
+Ele **não** define `ditado_de_origem`.
 
 #### GET `/api/notas/{id}`
 Inclusive a da lixeira. `404` se não existe (ou é de outro dono).
@@ -1758,6 +1761,33 @@ ditado **não** volta), `409 CONFLICT` se a nota não nasceu de um ditado, ou se
 Desfazer repetido).
 
 Apagar a nota depois (lixeira e "Excluir para sempre") **não** devolve o ditado ao histórico.
+
+#### Nota em foco (ADR-022, N3, "Ditado feito dentro da nota")
+O ditado feito com o cursor dentro de uma nota **não entra no histórico**, como se fosse um "Virar nota"
+automático. Para o Agent saber onde o cursor está, o painel o avisa por duas rotas. O Agent guarda o
+aviso **só na memória**, com validade de 60 s (`internal/agent/notafoco`): nunca em disco, em log nem
+no sync (é contexto, `09-security-privacy.md`). Sem o marcador montado ou sem o repositório das notas,
+`503 UNAVAILABLE` (o painel trata como "sem aviso", e o ditado fica no histórico).
+
+**PUT `/api/notas/foco`**: `{"nota": "<id>"}` para uma nota que existe, ou `{"token": "<uuid>"}` para
+a caixa "Criar uma nota" (a nota ainda não existe; o token é inventado pelo painel a cada abertura).
+Exatamente um dos dois. `204`. `404 NOT_FOUND` (a nota não existe), `409 CONFLICT` (está na lixeira) e
+`400` (nenhum ou os dois, token ou id fora de `[A-Za-z0-9_-]{1,64}`, `descartar`). O painel manda
+quando o título ou uma linha da nota tem o foco **e** a janela do navegador também, e renova a cada
+~20 s enquanto isso vale.
+
+**DELETE `/api/notas/foco`**: o cursor saiu (foco perdido, janela sem foco, `pagehide`, nota fechada).
+O corpo é opcional: `{"nota": "<id>"}` ou `{"token": "<uuid>"}` limpa **só se o aviso ainda for
+aquele** (o DELETE atrasado da nota antiga não apaga o aviso da nova); sem corpo, limpa qualquer um.
+`{"token": "...", "descartar": true}` é a caixa que fechou **sem criar a nota**: além de limpar, devolve
+ao histórico os ditados `nova:<token>` (`virou_nota` volta a nulo; nada se perde calado). `descartar`
+só vale com `token` (`400`). `204`, também quando não havia aviso.
+
+Quando o Agent grava um ditado que **deu certo** (a inserção no campo é a de sempre) e há aviso vivo,
+a linha nasce com `virou_nota` = o id da nota ou `nova:<token>`. O ditado que falhou e a linha tardia
+(texto que chegou depois do prazo e não foi inserido) ficam no histórico. Os ditados já no histórico
+não mudam; só os novos nascem escondidos. O que sobrar de `nova:<token>` (painel fechado de repente, Agent
+reiniciado no meio) volta ao histórico 24 h depois, no expurgo das notas.
 
 ### Configurações
 Acrescentado em 29-set-2026 (tela de Configurações do painel). Fonte da verdade:

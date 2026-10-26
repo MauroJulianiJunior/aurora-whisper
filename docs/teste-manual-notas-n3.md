@@ -39,4 +39,28 @@ na subida e só acrescenta uma coluna: o histórico que você já tem continua i
 4. Nuvem: se o PC está conectado, o ditado continua aparecendo no painel da nuvem e no celular (o "virou
    nota" é só deste PC por enquanto, ponto aberto da N7).
 
+## 4. Ditar dentro da nota (não pode aparecer no Histórico)
+Aqui o Agent de verdade registra o ditado, então este roteiro precisa do Agent novo aberto e do painel novo
+(`pnpm build`). Os ditados que já estão no Histórico **não mudam**: só os novos nascem escondidos.
+1. Abra uma nota existente (aba **Notas**) e deixe o cursor no corpo dela. Segure `Ctrl+Win`, fale uma
+   frase, solte. O texto entra na nota como sempre. Volte ao **Histórico**: a frase **não** está lá.
+2. Com a nota ainda aberta, clique num botão da janela dela (por exemplo **Fixar**), de modo que o cursor
+   saia dos campos, e dite outra frase em outro lugar (outro aplicativo). Essa frase **aparece** no
+   Histórico (o aviso saiu junto com o foco).
+3. **O ponto a conferir (Ctrl+Win):** com o cursor na nota, segure `Ctrl+Win` e solte. O painel **não
+   pode** perder o foco com isso (a pílula não rouba o foco, e o Windows não deve mexer na janela do
+   navegador). Se a frase de um ditado feito logo na primeira vez aparecer no Histórico, o foco foi perdido
+   no meio: anote o navegador e o que apareceu na tela.
+4. Mude de janela com `Alt+Tab` para outro aplicativo e dite lá: aparece no Histórico (a janela do
+   navegador perdeu o foco). Volte ao navegador, com o cursor ainda na nota, e dite: some do Histórico de
+   novo.
+5. **Criar uma nota…:** abra a caixa, dite duas frases dentro dela e clique fora (ou `Ctrl+Enter`). A nota
+   nasce com as frases, e o Histórico **não** tem nenhuma delas.
+6. **Caixa vazia:** abra **Criar uma nota…**, dite uma frase, apague o texto inteiro e feche com `Esc`.
+   Nenhuma nota é criada, e a frase ditada **volta ao Histórico** (nada se perde calado).
+7. Feche o navegador com a nota aberta e o cursor no campo, e dite logo: pode aparecer fora do Histórico
+   por até 60 segundos (o aviso vence sozinho). Depois disso, volta ao normal.
+8. Nuvem: o painel da nuvem não tem nada disso, e o ditado feito dentro da nota continua subindo para o
+   histórico da nuvem (ponto aberto da N7).
+
 Se algo falhar, anote a ordem exata dos passos e se o Agent mostrou algum aviso vermelho.

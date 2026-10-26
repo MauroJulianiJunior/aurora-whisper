@@ -631,6 +631,14 @@ continua no histórico.
   já virou nota. O Desfazer (`DesfazerVirarNota`) limpa a marca e apaga a nota **só se ela está na
   `version` 1 e fora da lixeira** (qualquer edição, fixar, arquivar, marcador ou lixeira sobe a
   versão); editada, a nota fica e só o ditado volta. Também numa transação.
+- **Ditado feito dentro da nota (ADR-022, "Ditado feito dentro da nota").** O Agent grava a linha do
+  ditado **já** com `virou_nota`: o id da nota em que o cursor estava, ou **`nova:<token>`** quando
+  estava no "Criar uma nota" (a nota ainda não existe; o token é do painel, `[A-Za-z0-9_-]{1,64}`).
+  Mesmas regras de esconder, expurgo, 6 meses e sync de cima, e **não** define `ditado_de_origem`.
+  `nova:<token>` vira o id da nota na transação do `POST /api/notas` com `token`
+  (`UPDATE ... WHERE virou_nota = 'nova:'||token`); a caixa que fecha vazia volta a nulo
+  (`SoltarDitadosDaNotaNova`); o resto volta a nulo depois de 24 h (`LiberarDitadosDeNotasNovas`, no
+  expurgo das notas). O aviso de onde está o cursor **não** é gravado: vive só na memória do Agent.
 
 ### local_dictionary_entries / aliases / corrections
 Espelhos sincronizáveis.
