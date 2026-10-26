@@ -74,7 +74,8 @@
 
 import type { Aprendida, Buscador, Configuracoes, Ditado, ListaDeTermos, Provedor, ResultadoTeste, Sugestao, TermoAdicionado } from '../api'
 import type { EstadoNuvem, EstadoRetencao } from '../clienteLocal'
-import { CORES, type Marcador, type Nota } from '../notas/tipos'
+import { itensDaEnumeracao } from '../notas/corpo'
+import { CORES, type ItensSeparados, type Marcador, type Nota } from '../notas/tipos'
 
 export interface Pedido {
   metodo: string
@@ -360,6 +361,11 @@ export function servidorFalso(
   // chegar tarde.
   let portao: { filtro: (p: Pedido) => boolean; aberto: Promise<void> } | null = null
   let foraDoAr = false
+  // iaDaLista: o que a IA da pessoa "devolve" em POST /api/notas/separar-itens
+  // (N5), já depois das guardas do Agent: os itens aceitos, ou null (recusada,
+  // sem chave, sem rede), e aí vale a regra. Só é chamada com o Polish ligado
+  // nas preferências, como no Agent.
+  let iaDaLista: ((trecho: string) => string[] | null) | null = null
 
   // Como o Go (localapi, settingsPutDTO): campo AUSENTE do PUT mantém o
   // valor atual, e só o que veio é conferido e gravado.
@@ -566,6 +572,21 @@ export function servidorFalso(
   // dos ditados que a caixa (token) escondeu, para o vínculo e o descartar.
   let foco: string | null = null
   const ditadosDaCaixa = new Map<string, string[]>()
+
+  // rotaSepararItens é POST /api/notas/separar-itens (N5), como o Agent: 400
+  // para o trecho vazio ou de várias linhas; a IA só com o Polish ligado; a
+  // regra no resto (a mesma do painel e do Agent).
+  function rotaSepararItens(p: Pedido): Response {
+    if (p.metodo !== 'POST') return erro(405, 'BAD_REQUEST', 'método')
+    const trecho = typeof p.corpo?.trecho === 'string' ? p.corpo.trecho.trim() : ''
+    if (!trecho) return erro(400, 'BAD_REQUEST', 'Escolha uma linha com texto para separar em itens.')
+    if (/[\r\n]/.test(trecho)) return erro(400, 'BAD_REQUEST', 'Separo em itens uma linha por vez.')
+    const ligada = config.text_mode === 'polish' && config.ai_provider !== '' && config.ai_model.trim() !== ''
+    const daIA = ligada && iaDaLista ? iaDaLista(trecho) : null
+    if (daIA && daIA.length >= 2) return json({ itens: daIA, como: 'ia' } satisfies ItensSeparados)
+    const itens = itensDaEnumeracao(trecho, 2)
+    return json((itens ? { itens, como: 'regra' } : { itens: [], como: 'nenhum' }) satisfies ItensSeparados)
+  }
 
   // rotaFoco é PUT e DELETE /api/notas/foco, com as recusas do Agent.
   function rotaFoco(p: Pedido): Response {
@@ -843,6 +864,7 @@ export function servidorFalso(
     if (p.caminho === '/api/aprendizado' || p.caminho === '/api/aprendizado/desfazer') return rotaAprendizado(p)
     if (p.caminho.startsWith('/api/termos')) return rotaTermos(p)
     if (p.caminho === '/api/notas/foco') return rotaFoco(p)
+    if (p.caminho === '/api/notas/separar-itens') return rotaSepararItens(p)
     if (p.caminho === '/api/notas' || p.caminho.startsWith('/api/notas/')) return rotaNotas(p)
     if (p.caminho === '/api/marcadores' || p.caminho.startsWith('/api/marcadores/')) return rotaMarcadores(p)
     if (p.caminho === '/api/nuvem' || p.caminho.startsWith('/api/nuvem/')) return rotaNuvem(p)
@@ -1061,6 +1083,10 @@ export function servidorFalso(
     // testeDevolve troca o que o "provedor" responde ao Testar conexão.
     testeDevolve(r: ResultadoTeste) {
       resultadoDoTeste = r
+    },
+    // iaDaListaDevolve troca o que a IA "devolve" na separação em itens (N5).
+    iaDaListaDevolve(f: ((trecho: string) => string[] | null) | null) {
+      iaDaLista = f
     },
     interceptar(f: ((p: Pedido) => Response | undefined) | null) {
       interceptar = f

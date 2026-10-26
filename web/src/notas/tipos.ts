@@ -76,6 +76,18 @@ export interface DesfeitoOVirarNota {
   nota_apagada: boolean
 }
 
+// ItensSeparados é a resposta de POST /api/notas/separar-itens (N5): a linha de
+// texto corrido em itens, e de onde vieram. "ia": a resposta do modelo passou
+// pelas guardas (as mesmas palavras); "regra": a conversão por regra (vírgula,
+// ponto e vírgula, último " e "); "nenhum": nem uma nem outra separou, e itens
+// vem vazio.
+export type ComoSeparou = 'ia' | 'regra' | 'nenhum'
+
+export interface ItensSeparados {
+  itens: string[]
+  como: ComoSeparou
+}
+
 // ClienteDeNotas é o que a aba Notas usa. O cliente local (clienteLocal.ts) o
 // implementa sobre a Local API; os erros vêm como os do api.ts (Conflito para
 // a versão desatualizada e para a nota que foi para a lixeira em outra aba).
@@ -106,6 +118,10 @@ export interface ClienteDeNotas {
   // token) devolve ao histórico os ditados feitos na caixa que não virou nota.
   definirFoco(alvo: AlvoDoFoco): Promise<void>
   limparFoco(alvo?: AlvoDoFoco, descartar?: boolean): Promise<void>
+  // separarItens manda UMA linha de texto corrido ao Agent, que a separa em
+  // itens com a IA da pessoa (se o Polish está ligado) ou pela regra. Não grava
+  // nada: quem troca a linha é o editor, que guarda a de antes para o Desfazer.
+  separarItens(trecho: string): Promise<ItensSeparados>
 }
 
 // NOMES_DAS_CORES é o rótulo de cada cor, para o menu e para o leitor de tela.

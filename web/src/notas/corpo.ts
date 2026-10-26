@@ -269,9 +269,22 @@ export function converter(linhas: Linha[], chaves: ReadonlySet<number>, tipo: Ti
   return normalizarMarcados(linhas.map((l) => (chaves.has(l.chave) ? { ...l, tipo, feito: false } : l)))
 }
 
+// inicialDoItem põe a primeira letra do item em maiúscula. Não mexe quando a
+// primeira palavra é sigla (tem maiúscula depois da primeira letra: "eSocial",
+// "iPhone"), para não virar "ESocial". É a mesma regra do Agent
+// (inicialDoItem em internal/resolver/notas_lista.go).
+function inicialDoItem(p: string): string {
+  // A primeira palavra, sem a pontuação das bordas (como no Agent: letra ou dígito).
+  const palavra = (p.split(/\s+/)[0] ?? '').replace(/^[^\p{L}\p{Nd}]+|[^\p{L}\p{Nd}]+$/gu, '')
+  if (/\p{Lu}/u.test([...palavra].slice(1).join(''))) return p
+  return p.charAt(0).toLocaleUpperCase('pt-BR') + p.slice(1)
+}
+
 // itensDaEnumeracao lê uma enumeração ditada ("Arroz, feijão, batata e
 // queijo.") e devolve os itens, sem a vírgula, o "e" final e o ponto, cada um
-// com a primeira letra maiúscula. É a conversão por regra da ADR-022
+// com a primeira letra maiúscula (menos a sigla: inicialDoItem). É a conversão
+// por regra da ADR-022, a mesma do Agent (ItensPorRegra; os dois rodam os casos
+// de testdata/notas-lista/regra.json)
 // ("Formatar: converter trecho"): quebra na vírgula (nunca dentro de número,
 // "1,5 kg"), no ponto e vírgula e no último " e ". null quando o texto não é
 // uma enumeração: sem vírgula, com menos de `minimo` itens, com item de mais
@@ -287,7 +300,7 @@ export function itensDaEnumeracao(texto: string, minimo: number): string[] | nul
   const ultima = /^(.*\S)\s+e\s+(\S.*)$/.exec(partes[partes.length - 1] ?? '')
   if (ultima) partes.splice(partes.length - 1, 1, ultima[1]!, ultima[2]!)
   if (partes.length < minimo || partes.some((p) => p === '' || p.split(/\s+/).length > 5 || conjuncao.test(p))) return null
-  return partes.map((p) => p.charAt(0).toLocaleUpperCase('pt-BR') + p.slice(1))
+  return partes.map(inicialDoItem)
 }
 
 // separarEmItens troca a linha da chave pelos itens da enumeração dela, no
@@ -295,11 +308,21 @@ export function itensDaEnumeracao(texto: string, minimo: number): string[] | nul
 // com a chave da linha; o foco vai para o fim do último. null: a linha não é
 // uma enumeração (itensDaEnumeracao).
 export function separarEmItens(linhas: Linha[], chave: number, minimo: number, tipo?: TipoDaLinha): Edicao | null {
-  const i = linhas.findIndex((l) => l.chave === chave)
-  const a = linhas[i]
+  const a = linhas.find((l) => l.chave === chave)
   if (!a) return null
   const itens = itensDaEnumeracao(a.texto, minimo)
   if (!itens) return null
+  return trocarPorItens(linhas, chave, itens, tipo)
+}
+
+// trocarPorItens troca a linha da chave pelos itens dados, no tipo dado (ou no
+// da própria linha, se ela já é lista; senão, lista de marcar). É o fim das duas
+// conversões: a da regra (separarEmItens) e a do Agent, com IA (N5). null: a
+// linha não existe, ou não há itens.
+export function trocarPorItens(linhas: Linha[], chave: number, itens: readonly string[], tipo?: TipoDaLinha): Edicao | null {
+  const i = linhas.findIndex((l) => l.chave === chave)
+  const a = linhas[i]
+  if (!a || itens.length === 0) return null
   const t: TipoDaLinha = tipo ?? (ehLista(a.tipo) ? a.tipo : 'tarefa')
   const novas = itens.map((texto, k) => (k === 0 ? { ...a, tipo: t, texto, feito: false } : criarLinha(t, texto)))
   const ultima = novas[novas.length - 1]!

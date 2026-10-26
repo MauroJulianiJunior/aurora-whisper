@@ -506,9 +506,24 @@ describe('a nota aberta', () => {
     fireEvent.focus(primeira)
     fireEvent.click(within(dialogo()).getByRole('button', { name: 'Formatar' }))
     fireEvent.click(within(dialogo()).getByRole('button', { name: 'Lista de marcar' }))
+    // "um texto" é texto corrido: vai ao Agent (N5), que não acha itens; a linha
+    // só ganha o tipo, e o aviso diz isso.
+    await waitFor(() => expect(aviso()).toContain('Não achei itens para separar: a linha virou um item só.'))
+    expect(pedidosA(srv, '/api/notas/separar-itens', 'POST')[0]!.corpo).toEqual({ trecho: 'um texto' })
     fireEvent.keyDown(dialogo(), { key: 'Escape' })
     await waitFor(() => expect(patches(srv, 'n2')).toHaveLength(1))
     expect(patches(srv, 'n2')[0]!.corpo).toEqual({ corpo: '- [ ] um texto\n1. primeiro\n2. segundo', base_version: 1 })
+  })
+
+  it('Formatar numa linha de uma palavra só troca o prefixo, sem ir ao Agent', async () => {
+    const srv = await abrirNotas([nota({ id: 'n6', titulo: 'Curta', corpo: 'leite', updated_at: hora(11) })])
+    await screen.findByText('Curta', { selector: 'h3' })
+    abrir('n6')
+    fireEvent.focus(linhasDoDialogo()[0]!)
+    fireEvent.click(within(dialogo()).getByRole('button', { name: 'Formatar' }))
+    fireEvent.click(within(dialogo()).getByRole('button', { name: 'Lista' }))
+    expect(within(dialogo()).getByText('•')).toBeTruthy()
+    expect(pedidosA(srv, '/api/notas/separar-itens')).toHaveLength(0)
   })
 
   it('o botão de imagem existe e está desligado ("Imagens chegam depois")', async () => {
@@ -544,6 +559,94 @@ describe('a nota aberta', () => {
     fireEvent.click(within(dialogo()).getByRole('button', { name: 'Copiar texto' }))
     expect(escrever).toHaveBeenCalledWith('Compras\n\n- [ ] leite\n- [ ] café\n- [x] pão')
     await waitFor(() => expect(aviso()).toContain('Copiado.'))
+  })
+})
+
+describe('separar em itens (N5)', () => {
+  const corrida = () => nota({ id: 'n7', titulo: 'Mercado', corpo: 'leite pão café e duas dúzias de ovos\ndepois', updated_at: hora(12) })
+  const comIA = { config: { text_mode: 'polish' as const, ai_provider: 'openai' as const, ai_model: 'modelo-x' } }
+  const separacoes = (srv: { pedidos: Pedido[] }) => pedidosA(srv, '/api/notas/separar-itens', 'POST')
+
+  async function formatarComo(rotulo: string) {
+    fireEvent.focus(linhasDoDialogo()[0]!)
+    fireEvent.click(within(dialogo()).getByRole('button', { name: 'Formatar' }))
+    fireEvent.click(within(dialogo()).getByRole('button', { name: rotulo }))
+  }
+
+  it('com IA: a linha vira um item por linha, com "separado com IA, as mesmas palavras" e o Desfazer devolvendo a linha exata', async () => {
+    const srv = await abrirNotas([corrida()], comIA)
+    srv.iaDaListaDevolve(() => ['Leite', 'Pão', 'Café', 'Duas dúzias de ovos'])
+    await screen.findByText('Mercado', { selector: 'h3' })
+    abrir('n7')
+    await formatarComo('Lista de marcar')
+    expect(await within(dialogo()).findByText(/separado com IA, as mesmas palavras/)).toBeTruthy()
+    expect(separacoes(srv)[0]!.corpo).toEqual({ trecho: 'leite pão café e duas dúzias de ovos' })
+    expect(linhasDoDialogo().map((l) => l.value)).toEqual(['Leite', 'Pão', 'Café', 'Duas dúzias de ovos', 'depois'])
+    expect(within(dialogo()).getAllByRole('checkbox')).toHaveLength(4)
+
+    fireEvent.click(within(dialogo()).getByRole('button', { name: 'Desfazer' }))
+    expect(linhasDoDialogo().map((l) => l.value)).toEqual(['leite pão café e duas dúzias de ovos', 'depois'])
+    expect(within(dialogo()).queryAllByRole('checkbox')).toHaveLength(0)
+    expect(within(dialogo()).queryByText(/separado com IA/)).toBeNull()
+    // O cursor volta para o fim da linha que tinha sido separada.
+    expect(document.activeElement).toBe(linhasDoDialogo()[0])
+  })
+
+  it('a nota some na primeira edição depois, e o Desfazer não leva junto o que foi editado', async () => {
+    const srv = await abrirNotas([corrida()], comIA)
+    srv.iaDaListaDevolve(() => ['Leite', 'Pão', 'Café', 'Duas dúzias de ovos'])
+    await screen.findByText('Mercado', { selector: 'h3' })
+    abrir('n7')
+    await formatarComo('Numerada')
+    await within(dialogo()).findByText(/separado com IA/)
+    fireEvent.change(linhasDoDialogo()[1]!, { target: { value: 'Pão de forma' } })
+    expect(within(dialogo()).queryByText(/separado com IA/)).toBeNull()
+    fireEvent.keyDown(dialogo(), { key: 'Escape' })
+    await waitFor(() => expect(patches(srv, 'n7')).toHaveLength(1))
+    expect(patches(srv, 'n7')[0]!.corpo).toEqual({ corpo: '1. Leite\n2. Pão de forma\n3. Café\n4. Duas dúzias de ovos\ndepois', base_version: 1 })
+  })
+
+  it('sem o Polish ligado, o Agent separa pela regra e a nota diz "separado por regra"', async () => {
+    const srv = await abrirNotas([nota({ id: 'n8', titulo: 'Feira', corpo: 'arroz, feijão e 1,5 kg de carne', updated_at: hora(12) })])
+    // Mesmo com a "IA" pronta: sem o modo polish, ela não é chamada.
+    srv.iaDaListaDevolve(() => ['não', 'deveria'])
+    await screen.findByText('Feira', { selector: 'h3' })
+    abrir('n8')
+    await formatarComo('Lista')
+    expect(await within(dialogo()).findByText(/separado por regra/)).toBeTruthy()
+    expect(linhasDoDialogo().map((l) => l.value)).toEqual(['Arroz', 'Feijão', '1,5 kg de carne'])
+    expect(separacoes(srv)).toHaveLength(1)
+  })
+
+  it('enquanto o Agent responde, a linha mostra "separando em itens…" e continua editável; se ela mudou, nada é trocado', async () => {
+    const srv = await abrirNotas([corrida()], comIA)
+    srv.iaDaListaDevolve(() => ['Leite', 'Pão', 'Café', 'Duas dúzias de ovos'])
+    await screen.findByText('Mercado', { selector: 'h3' })
+    abrir('n7')
+    const soltar = srv.pausar((p) => p.caminho === '/api/notas/separar-itens')
+    await formatarComo('Lista')
+    expect(await within(dialogo()).findByText('separando em itens…')).toBeTruthy()
+    const linha = linhasDoDialogo()[0]!
+    expect(linha.closest('[aria-busy="true"]')).toBeTruthy()
+    fireEvent.change(linha, { target: { value: 'leite pão café e duas dúzias de ovos caipira' } })
+    await act(async () => soltar())
+    await waitFor(() => expect(aviso()).toContain('A linha mudou enquanto eu separava os itens; nada foi trocado.'))
+    expect(linhasDoDialogo().map((l) => l.value)).toEqual(['leite pão café e duas dúzias de ovos caipira', 'depois'])
+    expect(within(dialogo()).queryByText('separando em itens…')).toBeNull()
+  })
+
+  it('erro do Agent: um aviso curto, e o texto fica como estava', async () => {
+    const srv = await abrirNotas([corrida()], comIA)
+    srv.interceptar((p) =>
+      p.caminho === '/api/notas/separar-itens'
+        ? new Response(JSON.stringify({ error: { code: 'INTERNAL', message: 'Falhou.' } }), { status: 500, headers: { 'Content-Type': 'application/json' } })
+        : undefined,
+    )
+    await screen.findByText('Mercado', { selector: 'h3' })
+    abrir('n7')
+    await formatarComo('Lista')
+    await waitFor(() => expect(aviso()).toContain('Não consegui separar em itens: Falhou. O texto ficou como estava.'))
+    expect(linhasDoDialogo().map((l) => l.value)).toEqual(['leite pão café e duas dúzias de ovos', 'depois'])
   })
 })
 

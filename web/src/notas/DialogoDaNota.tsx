@@ -57,6 +57,10 @@ type Estado = { tipo: 'ok' } | { tipo: 'salvando' } | { tipo: 'erro'; mensagem: 
 
 const mensagemDe = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
+// Os tipos de lista do Formatar separam a linha de texto corrido em itens
+// (N5): o Agent responde, e a linha vira um item por linha.
+const separaEmItens = (t: TipoDaLinha) => t === 'marcador' || t === 'tarefa' || t === 'numerada'
+
 const tiposDoFormatar: [TipoDaLinha, string][] = [
   ['marcador', 'Lista'],
   ['tarefa', 'Lista de marcar'],
@@ -382,6 +386,20 @@ export function DialogoDaNota({ nota, cliente, marcadores, notasParaSugerir, cri
   })
   const quando = formatarHora(ultima.updated_at)
 
+  // formatarComItens é o Formatar de lista: numa linha de texto corrido, o Agent
+  // separa os itens (editor.formatarComItens). O aviso só aparece quando algo não
+  // saiu como pedido; a separação feita se mostra embaixo dos itens, com o
+  // Desfazer. O texto nunca some: no erro, a linha fica como estava.
+  async function formatarComItens(tipo: TipoDaLinha) {
+    const d = await editor.formatarComItens(tipo, (trecho) => cliente.separarItens(trecho))
+    if (d.tipo === 'sem-itens') avisar('Não achei itens para separar: a linha virou um item só.')
+    else if (d.tipo === 'mudou') avisar('A linha mudou enquanto eu separava os itens; nada foi trocado.')
+    else if (d.tipo === 'erro') {
+      if (problemaDe(d.erro)) aoPerderLigacao(d.erro)
+      avisar(`Não consegui separar em itens: ${mensagemDe(d.erro).replace(/\.$/, '')}. O texto ficou como estava.`)
+    }
+  }
+
   return (
     <div
       className="veu"
@@ -484,8 +502,9 @@ export function DialogoDaNota({ nota, cliente, marcadores, notasParaSugerir, cri
                       key={tipo}
                       type="button"
                       onClick={() => {
-                        editor.formatar(tipo)
                         fechar()
+                        if (separaEmItens(tipo)) void formatarComItens(tipo)
+                        else editor.formatar(tipo)
                       }}
                     >
                       {rotulo}

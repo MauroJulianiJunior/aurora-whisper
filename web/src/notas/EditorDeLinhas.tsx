@@ -26,6 +26,13 @@ const marcada = (l: Linha) => l.tipo === 'tarefa' && l.feito
 // ("Arroz, feijão, batata e queijo.") vira um item por linha, SOSSEGO_MS
 // depois da última letra. No parágrafo, o texto fica como veio, e quem decide é
 // o botão "Virar lista" (decisão do Mauro, mesmo dia).
+//
+// Aqui é só a regra, nunca a IA (N5): sem vírgula ("leite pão café"), o ditado
+// fica numa linha, e quem a separa é o Formatar → Lista, que vai ao Agent. Uma
+// chamada paga a cada ditado numa lista (quase sempre um item só), e uma linha
+// trocada segundos depois, enquanto a pessoa já digita a próxima, custariam mais
+// do que o caso ganha; e o Polish ligado já entrega a enumeração ditada em linhas
+// "- ", que a colagem separa sozinha.
 const RAJADA_MS = 30
 const RAJADA_MIN = 12
 const SOSSEGO_MS = 200
@@ -47,7 +54,7 @@ export function EditorDeLinhas({ editor, rotulo }: Props) {
   const raiz = useRef<HTMLDivElement>(null)
   const rajada = useRef<Rajada | null>(null)
   const espera = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-  const { separar } = editor
+  const { separar, separando, separacao } = editor
 
   useEffect(() => () => clearTimeout(espera.current), [])
 
@@ -212,8 +219,11 @@ export function EditorDeLinhas({ editor, rotulo }: Props) {
           )}
           {i < visiveis && (
             <div
-              className={['linha-editada', `l-${l.tipo}`, l.feito ? 'feita' : '', selecao.has(l.chave) ? 'escolhida' : ''].filter(Boolean).join(' ')}
+              className={['linha-editada', `l-${l.tipo}`, l.feito ? 'feita' : '', selecao.has(l.chave) ? 'escolhida' : '', separando === l.chave ? 'separando' : '']
+                .filter(Boolean)
+                .join(' ')}
               data-chave={l.chave}
+              aria-busy={separando === l.chave || undefined}
               onMouseDown={(e) => aoPressionar(e, i)}
             >
               {l.tipo === 'tarefa' && (
@@ -265,6 +275,19 @@ export function EditorDeLinhas({ editor, rotulo }: Props) {
                 </button>
               )}
             </div>
+          )}
+          {i < visiveis && separando === l.chave && (
+            <p className="desfazer-ia" role="status">
+              separando em itens…
+            </p>
+          )}
+          {i < visiveis && separacao?.ultima === l.chave && (
+            <p className="desfazer-ia">
+              {separacao.como === 'ia' ? 'separado com IA, as mesmas palavras' : 'separado por regra'} ·{' '}
+              <button type="button" onClick={editor.desfazerSeparacao}>
+                Desfazer
+              </button>
+            </p>
           )}
         </Fragment>
       ))}

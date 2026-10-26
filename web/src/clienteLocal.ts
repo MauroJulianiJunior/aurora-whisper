@@ -350,6 +350,15 @@ export function criarCliente(token: string, buscar: Buscador = buscadorPadrao): 
       // keepalive: o pedido sobrevive à aba que está fechando.
       await pedir(buscar, '/api/notas/foco', { ...comJson('DELETE', corpo), keepalive: true }, false)
     },
+    // A separação em itens (N5). A resposta vem normalizada: um "como" que o
+    // painel não conhece vale "nenhum", e "nenhum" nunca traz itens.
+    async separarItens(trecho) {
+      const r = await pedir(buscar, '/api/notas/separar-itens', comJson('POST', { trecho }), false)
+      const { itens, como } = (await r.json()) as { itens?: unknown; como?: unknown }
+      const lista = Array.isArray(itens) ? itens.filter((i): i is string => typeof i === 'string') : []
+      if ((como !== 'ia' && como !== 'regra') || lista.length < 2) return { itens: [], como: 'nenhum' }
+      return { itens: lista, como }
+    },
     async listarMarcadores(sinal) {
       const r = await pedir(buscar, '/api/marcadores', autorizado({ signal: sinal }), false)
       const { items } = (await r.json()) as { items?: Marcador[] | null }
