@@ -306,7 +306,7 @@ describe('criar uma nota', () => {
     fireEvent.change(corpo, { target: { value: '- maçã' } })
     fireEvent.click(screen.getByRole('button', { name: 'Fechar' }))
     await waitFor(() => expect(pedidosA(srv, '/api/notas', 'POST')).toHaveLength(1))
-    expect(pedidosA(srv, '/api/notas', 'POST')[0]!.corpo).toEqual({ titulo: 'Feira', corpo: '- maçã' })
+    expect(pedidosA(srv, '/api/notas', 'POST')[0]!.corpo).toEqual({ titulo: 'Feira', corpo: '- maçã', token: expect.any(String) })
     expect(await screen.findByText('Feira', { selector: 'h3' })).toBeTruthy()
     // A barra recolhida volta e recebe o foco.
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Criar uma nota…' })))
@@ -338,7 +338,7 @@ describe('criar uma nota', () => {
     fireEvent.change(item, { target: { value: 'ligar' } })
     fireEvent.mouseDown(document.body)
     await waitFor(() => expect(pedidosA(srv, '/api/notas', 'POST')).toHaveLength(1))
-    expect(pedidosA(srv, '/api/notas', 'POST')[0]!.corpo).toEqual({ titulo: '', corpo: '- [ ] ligar' })
+    expect(pedidosA(srv, '/api/notas', 'POST')[0]!.corpo).toEqual({ titulo: '', corpo: '- [ ] ligar', token: expect.any(String) })
   })
 
   it('se o Agent recusar, a caixa continua aberta com o texto e a frase', async () => {

@@ -1,7 +1,9 @@
 import { type ClipboardEvent, type KeyboardEvent, useEffect, useRef } from 'react'
 import { colar } from './corpo'
 import { EditorDeLinhas } from './EditorDeLinhas'
+import type { ClienteDeNotas } from './tipos'
 import type { EditorDeLinhasEstado } from './useEditorDeLinhas'
+import { useFocoDaNota } from './useFocoDaNota'
 
 interface Props {
   titulo: string
@@ -9,6 +11,10 @@ interface Props {
   editor: EditorDeLinhasEstado
   // rotulo: o nome do grupo do corpo, para o leitor de tela.
   rotulo: string
+  // foco: de que nota (ou de que caixa "Criar uma nota", pelo token) estes campos
+  // são, para avisar o Agent enquanto o cursor está neles (useFocoDaNota). Sem
+  // ele, nada é avisado.
+  foco?: { cliente: ClienteDeNotas; nota?: string; token?: string }
 }
 
 const temQuebra = /[\r\n]/
@@ -18,8 +24,9 @@ const quebras = /\r\n?|\n/
 // corpo por linhas. O título é um campo de uma linha só: o texto de várias
 // linhas colado ali (um ditado que caiu no campo errado) não perde nada, a
 // primeira linha fica no título e o resto vai para o começo do corpo.
-export function CamposDaNota({ titulo, aoMudarTitulo, editor, rotulo }: Props) {
+export function CamposDaNota({ titulo, aoMudarTitulo, editor, rotulo, foco }: Props) {
   const raiz = useRef<HTMLDivElement>(null)
+  useFocoDaNota(raiz, foco?.cliente, foco?.nota, foco?.token)
   const campoTitulo = useRef<HTMLInputElement>(null)
 
   // O cursor começa no corpo, também na nota nova, como no Keep (decisão do

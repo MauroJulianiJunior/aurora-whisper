@@ -337,6 +337,16 @@ export function criarCliente(token: string, buscar: Buscador = buscadorPadrao): 
     async apagarNotaDeVez(id) {
       await pedir(buscar, `${daNota(id)}/definitivo`, autorizado({ method: 'DELETE' }), false)
     },
+    // O aviso de nota em foco (ADR-022, "Ditado feito dentro da nota"). Melhor
+    // esforço: quem chama ignora a falha, e o Agent deixa o aviso vencer em 60 s.
+    async definirFoco(alvo) {
+      await pedir(buscar, '/api/notas/foco', comJson('PUT', alvo), false)
+    },
+    async limparFoco(alvo, descartar) {
+      const corpo = alvo ? { ...alvo, ...(descartar ? { descartar: true } : {}) } : {}
+      // keepalive: o pedido sobrevive à aba que está fechando.
+      await pedir(buscar, '/api/notas/foco', { ...comJson('DELETE', corpo), keepalive: true }, false)
+    },
     async listarMarcadores(sinal) {
       const r = await pedir(buscar, '/api/marcadores', autorizado({ signal: sinal }), false)
       const { items } = (await r.json()) as { items?: Marcador[] | null }

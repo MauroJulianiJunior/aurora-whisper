@@ -14,6 +14,15 @@ interface Props {
 
 const mensagemDe = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
+// novoToken identifica uma abertura da caixa: um UUID (só letras, dígitos e
+// hífen, o que o Agent aceita). O painel não tem Math.random determinístico a
+// preservar: o token só precisa ser único entre as aberturas.
+function novoToken(): string {
+  const c = globalThis.crypto
+  if (typeof c?.randomUUID === 'function') return c.randomUUID()
+  return `${Date.now().toString(36)}-${Math.floor(Math.random() * 2 ** 32).toString(36)}`
+}
+
 // CriarNota é o "Criar uma nota…" do alto da tela (ADR-022): uma barra
 // recolhida que abre num título e no corpo por linhas. Fechar com algo
 // escrito grava a nota; fechar vazio não grava nada.
@@ -74,6 +83,10 @@ function CaixaAberta({
 }) {
   const [titulo, setTitulo] = useState('')
   const [erro, setErro] = useState<string | null>(null)
+  // O token da caixa (ADR-022, "Ditado feito dentro da nota"): a nota ainda não
+  // tem id, e o Agent esconde do histórico o que for ditado aqui sob este token
+  // até a nota nascer (criarNota o leva) ou a caixa fechar vazia (descartar).
+  const [token] = useState(novoToken)
   const editor = useEditorDeLinhas(corpoInicial)
   const { corpo } = editor
   const raiz = useRef<HTMLDivElement>(null)
@@ -86,10 +99,16 @@ function CaixaAberta({
   async function fechar() {
     if (gravando.current) return
     const { titulo: t, corpo: c } = agora.current
-    if (t.trim() === '' && c.trim() === '') return aoFechar(null)
+    if (t.trim() === '' && c.trim() === '') {
+      // Nada a gravar: o que foi ditado aqui (e depois apagado) volta ao
+      // histórico, para nada se perder calado. Melhor esforço: o Agent também
+      // solta o que sobrar depois de 24 h.
+      cliente.limparFoco({ token }, true).catch(() => undefined)
+      return aoFechar(null)
+    }
     gravando.current = true
     try {
-      const nota = await cliente.criarNota({ titulo: t.trim(), corpo: c })
+      const nota = await cliente.criarNota({ titulo: t.trim(), corpo: c, token })
       aoFechar(nota)
     } catch (e) {
       gravando.current = false
@@ -128,6 +147,7 @@ function CaixaAberta({
         aoMudarTitulo={setTitulo}
         editor={editor}
         rotulo="Texto da nova nota"
+        foco={{ cliente, token }}
       />
       {erro && (
         <p className="nota" role="alert">
