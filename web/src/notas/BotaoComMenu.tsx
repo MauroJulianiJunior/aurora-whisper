@@ -8,6 +8,8 @@ interface Props {
   desabilitado?: boolean
   // title: a dica do botão; sem ela, é o rótulo.
   titulo?: string
+  // classe: a mais do menu (Marcadores: "escolher", o menu com campo de busca).
+  classe?: string
   // children recebe o fechar: o item que age fecha o menu.
   children(fechar: () => void): ReactNode
 }
@@ -18,7 +20,7 @@ interface Props {
 // são botões comuns, e o Tab passa por eles. Esc fecha e devolve o foco ao botão
 // (sem fechar a janela da nota, que também ouve o Esc); clicar fora ou sair
 // dele com o Tab também fecha.
-export function BotaoComMenu({ icone, rotulo, desabilitado, titulo, children }: Props) {
+export function BotaoComMenu({ icone, rotulo, desabilitado, titulo, classe, children }: Props) {
   const [aberto, setAberto] = useState(false)
   const raiz = useRef<HTMLSpanElement>(null)
   const botao = useRef<HTMLButtonElement>(null)
@@ -60,7 +62,7 @@ export function BotaoComMenu({ icone, rotulo, desabilitado, titulo, children }: 
         <Icone nome={icone} />
       </button>
       {aberto && (
-        <div className="menu" role="group" aria-label={rotulo}>
+        <div className={classe ? `menu ${classe}` : 'menu'} role="group" aria-label={rotulo}>
           {children(() => setAberto(false))}
         </div>
       )}

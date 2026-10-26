@@ -3135,6 +3135,238 @@ a.botao {
   }
 }
 
+/* Marcadores (ADR-022, N4; a prévia aprovada em docs/notas-previa-n4.html): o chip
+   "Editar marcadores", a janela dele, o menu do botão de marcador, a etiqueta
+   com × e a faixa da sugestão. */
+.filtro.editar {
+  border-style: dashed;
+}
+
+.botao.pequeno {
+  height: 30px;
+  padding: 0 10px;
+  font-size: 12.5px;
+}
+
+.marcadores-janela {
+  width: min(26rem, 100%);
+}
+
+.marcadores-janela h3 {
+  margin: 0 0 12px;
+  font-family: var(--fonte-titulo);
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.campo-novo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 6px 0 12px;
+  border: 1px solid var(--contorno);
+  border-radius: var(--raio-md);
+  background: var(--fundo);
+}
+
+.campo-novo:focus-within {
+  border-color: var(--foco);
+  box-shadow: 0 0 0 1px var(--foco);
+}
+
+.campo-novo input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  outline: none;
+  font-size: 14px;
+}
+
+.campo-novo input::placeholder {
+  color: var(--texto-3);
+}
+
+.mais-m {
+  width: 16px;
+  color: var(--texto-2);
+  font-size: 16px;
+  line-height: 1;
+  text-align: center;
+}
+
+.erro-campo {
+  flex-basis: 100%;
+  margin: 6px 2px 0;
+  color: var(--risco-texto);
+  font-size: 12.5px;
+}
+
+.vazio-menu {
+  margin: 8px 4px 4px;
+  color: var(--texto-3);
+  font-size: 12.5px;
+}
+
+.lista-marcadores {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lista-marcadores li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 4px 0 10px;
+  border-radius: var(--raio-sm);
+}
+
+.lista-marcadores li:hover {
+  background: var(--realce);
+}
+
+.lista-marcadores .nome-m {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+
+.lista-marcadores .qtd {
+  color: var(--texto-3);
+  font-family: var(--fonte-mono);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+.lista-marcadores li.renomeando {
+  flex-wrap: wrap;
+  padding: 2px 0;
+}
+
+.lista-marcadores li.renomeando:hover {
+  background: transparent;
+}
+
+.lista-marcadores li.renomeando .campo-novo {
+  flex: 1 1 100%;
+  border-color: var(--foco);
+  box-shadow: 0 0 0 1px var(--foco);
+}
+
+.lista-marcadores li.apagando {
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  padding: 8px 6px 8px 10px;
+  border: 1px solid var(--linha-forte);
+  background: var(--fundo);
+}
+
+.apagando .pergunta {
+  flex-basis: 100%;
+  font-size: 13px;
+}
+
+.apagando .pergunta span {
+  color: var(--texto-2);
+}
+
+.rodape-janela {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+/* O menu do botão de marcador: o campo em cima, as caixinhas embaixo. */
+.menu.escolher {
+  width: 16rem;
+  min-width: 0;
+  padding: 8px;
+}
+
+.escolher .campo-novo {
+  height: 34px;
+}
+
+.escolher .opcoes {
+  max-height: 14rem;
+  margin: 6px 0 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.escolher .opcoes li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  padding: 0 8px;
+  border-radius: var(--raio-sm);
+  font-size: 13.5px;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.escolher .opcoes li:hover,
+.escolher .opcoes li.ativo {
+  background: var(--realce);
+}
+
+.escolher .opcoes li.criar-m {
+  font-weight: 500;
+}
+
+.escolher .opcoes li.criar-m strong {
+  font-weight: 600;
+}
+
+/* A etiqueta da nota aberta, com o × para tirar o marcador. */
+.etiqueta.tiravel {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding-right: 3px;
+}
+
+.etiqueta.tiravel button {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--texto-2);
+  font-size: 13px;
+  line-height: 1;
+}
+
+.etiqueta.tiravel button:hover {
+  background: color-mix(in srgb, var(--texto) 10%, transparent);
+  color: var(--texto);
+}
+
+/* A sugestão de marcador: uma faixa tracejada, discreta, dentro da nota aberta. */
+.sugestao {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 8px 8px 8px 12px;
+  border: 1px dashed color-mix(in srgb, var(--texto) 25%, transparent);
+  border-radius: var(--raio-md);
+  font-size: 13px;
+}
+
+.sugestao span {
+  flex: 1;
+  min-width: 12rem;
+}
+
 /* Temas de Contraste: a caixa marcada é só fundo, e o navegador a pintaria
    do fundo da página. */
 @media (forced-colors: active) {

@@ -246,6 +246,13 @@ itens acima.
   e Agora não), só em nota sem marcador; "Agora não" vale para aquela nota.
 - **Só sugere marcador que já tem 2 notas ou mais.**
 - **Uma nota pode ter vários marcadores.**
+- **Feito na N4 (26-out-2026), só no painel (o Go da N1 bastou):** a regra da sugestão é uma função pura
+  (`web/src/notas/sugestao.ts`): palavras do título e do corpo (sem acento, sem palavra vazia, 3 letras ou
+  mais, uma vez por nota); cada marcador de 2 notas ou mais ganha a soma, sobre as palavras em comum, da fração
+  das suas notas que usam a palavra; sugere o melhor com pelo menos 2 palavras em comum, 1 ponto e 1,5 vez o
+  segundo. Por quê: é a "frequência dentro do marcador" do texto da ADR, sem biblioteca, e o empate não
+  sugere nada. Alternativa: Jaccard (penaliza a nota curta contra o marcador de vocabulário largo). Só as
+  notas da tela principal entram na conta; as do Arquivo não.
 
 ### Sync
 

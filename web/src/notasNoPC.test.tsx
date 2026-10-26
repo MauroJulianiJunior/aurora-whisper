@@ -159,11 +159,11 @@ describe('a grade', () => {
 })
 
 describe('os marcadores', () => {
-  it('uma fileira: Notas, um chip por marcador (com a conta), Arquivo e Lixeira', async () => {
+  it('uma fileira: Notas, um chip por marcador (com a conta), Arquivo, Lixeira e Editar marcadores', async () => {
     await abrirNotas()
     const fila = await screen.findByRole('group', { name: 'Marcadores' })
     await waitFor(() => expect(within(fila).getByRole('button', { name: 'Compras 1' })).toBeTruthy())
-    expect(Array.from(fila.querySelectorAll('button')).map((b) => b.textContent)).toEqual(['Notas 3', 'Compras 1', 'Ideias 0', 'Arquivo', 'Lixeira'])
+    expect(Array.from(fila.querySelectorAll('button')).map((b) => b.textContent)).toEqual(['Notas 3', 'Compras 1', 'Ideias 0', 'Arquivo', 'Lixeira', 'Editar marcadores'])
     expect(within(fila).getByRole('button', { name: 'Notas 3' }).getAttribute('aria-pressed')).toBe('true')
   })
 
@@ -487,11 +487,11 @@ describe('a nota aberta', () => {
     fireEvent.click(within(dialogo()).getByRole('button', { name: 'Mais' }))
     fireEvent.click(within(dialogo()).getByRole('button', { name: 'Apagar marcados' }))
     expect(linhasDoDialogo().map((l) => l.value)).toEqual(['leite', 'café'])
-    expect(within(dialogo()).queryByRole('button', { name: /marcado/ })).toBeNull()
+    expect(within(dialogo()).queryByRole('button', { name: /\d+ marcados?/ })).toBeNull()
     fireEvent.click(within(dialogo()).getByRole('checkbox', { name: 'café' }))
     fireEvent.click(within(dialogo()).getByRole('button', { name: 'Mais' }))
     fireEvent.click(within(dialogo()).getByRole('button', { name: 'Desmarcar tudo' }))
-    expect(within(dialogo()).queryByRole('button', { name: /marcado/ })).toBeNull()
+    expect(within(dialogo()).queryByRole('button', { name: /\d+ marcados?/ })).toBeNull()
   })
 
   it('Formatar troca o prefixo da linha do cursor', async () => {

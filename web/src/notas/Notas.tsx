@@ -1,10 +1,12 @@
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
-import { Conflito, problemaDe } from '../api'
+import { Conflito, ErroDaApi, problemaDe } from '../api'
 import { Aurora } from '../Aurora'
 import { type AcoesDaNota, CartaoDaNota, LinhaDaNota, TabelaDeNotas } from './CartaoDaNota'
 import { CriarNota } from './CriarNota'
 import { DialogoDaNota, type FimDaNota } from './DialogoDaNota'
+import { EditarMarcadores } from './EditarMarcadores'
 import { Icone } from './Icone'
+import { acharPorNome, limparNome, ordenarPorNome } from './marcadores'
 import { NotaNaLixeira } from './NotaNaLixeira'
 import { type FormaDeVer, FORMAS, gravarColunas, gravarForma, lerColunas, lerForma, limitar, limitesDeColunas } from './preferencias'
 import type { ClienteDeNotas, CorDaNota, FiltroDasNotas, Marcador, Nota, VistaDasNotas } from './tipos'
@@ -38,6 +40,10 @@ interface Resultado {
   erro?: string
 }
 
+// Sem a primeira leitura, a lista de marcadores é esta (a mesma de sempre, para o que
+// depende dela não recalcular).
+const semMarcadores: Marcador[] = []
+
 const mensagemDe = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
 const nomesDasFormas: Record<FormaDeVer, string> = { grade: 'Quadradinhos', lista: 'Lista', detalhes: 'Detalhes' }
@@ -69,6 +75,10 @@ export function Notas({ cliente, busca, aoPerderLigacao: aoPerderLigacaoDoPainel
   const [resultado, setResultado] = useState<Resultado | null>(null)
   const [recarga, setRecarga] = useState(0)
   const [aberta, setAberta] = useState<Nota | null>(null)
+  // editando: a janela "Editar marcadores" está aberta; o chip dela ganha o foco de volta.
+  const [editando, setEditando] = useState(false)
+  const chipEditar = useRef<HTMLButtonElement>(null)
+  const eraEditando = useRef(false)
   const [forma, setForma] = useState<FormaDeVer>(lerForma)
   const estreita = useTelaEstreita()
   const [colunasNoPc, setColunasNoPc] = useState(() => lerColunas(false))
@@ -169,6 +179,11 @@ export function Notas({ cliente, busca, aoPerderLigacao: aoPerderLigacaoDoPainel
     destino?.focus()
   })
 
+  useEffect(() => {
+    if (eraEditando.current && !editando) chipEditar.current?.focus()
+    eraEditando.current = editando
+  }, [editando])
+
   const falhar = useCallback(
     (e: unknown) => {
       if (problemaDe(e)) aoPerderLigacao(e)
@@ -178,12 +193,18 @@ export function Notas({ cliente, busca, aoPerderLigacao: aoPerderLigacaoDoPainel
   )
 
   const mudarItens = (f: (itens: Nota[]) => Nota[]) => setResultado((r) => r && { ...r, itens: f(r.itens) })
-  const trocar = (nova: Nota) => mudarItens((itens) => itens.map((n) => (n.id === nova.id ? nova : n)))
+  // trocar põe a nota nova na lista e na base (as contas dos marcadores saem dela).
+  const trocar = (nova: Nota) => {
+    const por = (itens: Nota[]) => itens.map((n) => (n.id === nova.id ? nova : n))
+    setResultado((r) => r && { ...r, itens: por(r.itens), base: por(r.base) })
+  }
+  const mudarMarcadores = (f: (atuais: Marcador[]) => Marcador[]) => setResultado((r) => r && { ...r, marcadores: f(r.marcadores) })
   const tirar = (id: string) => mudarItens((itens) => itens.filter((n) => n.id !== id))
 
   const visiveis = resultado?.consulta === consulta ? resultado : null
   const ordenados = visiveis ? ordenar(visiveis.itens) : []
-  const nomesDosMarcadores = new Map((resultado?.marcadores ?? []).map((m) => [m.id, m.nome]))
+  const marcadores = resultado?.marcadores ?? semMarcadores
+  const nomesDosMarcadores = new Map(marcadores.map((m) => [m.id, m.nome]))
 
   // O que se faz com uma nota que muda de lista (arquivar, desarquivar, ir para
   // a lixeira): sai da tela, o foco vai ao vizinho e a pílula oferece o Desfazer.
@@ -285,7 +306,53 @@ export function Notas({ cliente, busca, aoPerderLigacao: aoPerderLigacaoDoPainel
     )
   }
 
+  // criarMarcador cria o marcador que o menu do botão de marcador pediu. Devolve o
+  // marcador, ou a frase de erro que o menu mostra.
+  async function criarMarcador(nome: string): Promise<Marcador | string> {
+    const limpo = limparNome(nome)
+    const igual = acharPorNome(marcadores, limpo)
+    if (igual) return `Já existe o marcador "${igual.nome}".`
+    try {
+      const novo = await cliente.criarMarcador(limpo)
+      mudarMarcadores((l) => ordenarPorNome([...l.filter((m) => m.id !== novo.id), novo]))
+      return novo
+    } catch (e) {
+      if (e instanceof ErroDaApi && e.status === 409 && e.codigo === 'NAME_IN_USE') return `Já existe o marcador "${limpo}".`
+      if (problemaDe(e)) aoPerderLigacao(e)
+      return `Não consegui criar o marcador: ${mensagemDe(e)}`
+    }
+  }
+
+  // marcarNoCartao põe ou tira o marcador de uma nota sem abri-la. Uma de cada vez: a
+  // nota que volta de um pedido já traz os marcadores do anterior.
+  const filaDosMarcadores = useRef<Promise<unknown>>(Promise.resolve())
+  function marcarNoCartao(nota: Nota, m: Marcador, marcar: boolean): Promise<void> {
+    const passo = async () => {
+      try {
+        trocar(await (marcar ? cliente.marcarNota(nota.id, m.id) : cliente.desmarcarNota(nota.id, m.id)))
+      } catch (e) {
+        if (e instanceof Conflito) {
+          avisar('Esta nota mudou em outra aba. A lista foi lida de novo; repita se ainda quiser.')
+          recarregar()
+        } else if (e instanceof ErroDaApi && e.status === 404) {
+          avisar('Esse marcador não existe mais.')
+          recarregar()
+        } else falhar(e)
+      }
+    }
+    const p = filaDosMarcadores.current.then(passo, passo)
+    filaDosMarcadores.current = p
+    return p
+  }
+
   const acoes: AcoesDaNota = {
+    marcar: (nota, m, marcar) => void marcarNoCartao(nota, m, marcar),
+    criarEMarcar: async (nota, nome) => {
+      const criado = await criarMarcador(nome)
+      if (typeof criado === 'string') return criado
+      await marcarNoCartao(nota, criado, true)
+      return null
+    },
     fixar: (nota) => {
       void editar(nota, { fixada: !nota.fixada }).then((nova) => nova && trocar(nova))
     },
@@ -392,13 +459,13 @@ export function Notas({ cliente, busca, aoPerderLigacao: aoPerderLigacaoDoPainel
       forma === 'detalhes' ? null : forma === 'lista' ? (
         <ul className="notas-lista">
           {itens.map((n) => (
-            <LinhaDaNota key={n.id} nota={n} nomesDosMarcadores={nomesDosMarcadores} noArquivo={noArquivo} aoAbrir={abrir} acoes={acoes} />
+            <LinhaDaNota key={n.id} nota={n} nomesDosMarcadores={nomesDosMarcadores} marcadores={marcadores} noArquivo={noArquivo} aoAbrir={abrir} acoes={acoes} />
           ))}
         </ul>
       ) : (
         <div className="grade" data-colunas={colunas}>
           {itens.map((n) => (
-            <CartaoDaNota key={n.id} nota={n} nomesDosMarcadores={nomesDosMarcadores} noArquivo={noArquivo} aoAbrir={abrir} acoes={acoes} />
+            <CartaoDaNota key={n.id} nota={n} nomesDosMarcadores={nomesDosMarcadores} marcadores={marcadores} noArquivo={noArquivo} aoAbrir={abrir} acoes={acoes} />
           ))}
         </div>
       )
@@ -443,7 +510,7 @@ export function Notas({ cliente, busca, aoPerderLigacao: aoPerderLigacaoDoPainel
             Notas{' '}
             {resultado && <span className="filtro-n">{base.length}</span>}
           </button>
-          {(resultado?.marcadores ?? []).map((m) => (
+          {marcadores.map((m) => (
             <button key={m.id} type="button" className="filtro" aria-pressed={vista === 'ativas' && marcador === m.id} onClick={() => escolherVista('ativas', m.id)}>
               {m.nome}{' '}
               <span className="filtro-n">{base.filter((n) => n.marcadores.includes(m.id)).length}</span>
@@ -454,6 +521,9 @@ export function Notas({ cliente, busca, aoPerderLigacao: aoPerderLigacaoDoPainel
           </button>
           <button type="button" className="filtro" aria-pressed={vista === 'lixeira'} onClick={() => escolherVista('lixeira', null)}>
             Lixeira
+          </button>
+          <button ref={chipEditar} type="button" className="filtro editar" aria-haspopup="dialog" onClick={() => setEditando(true)}>
+            Editar marcadores
           </button>
         </div>
 
@@ -502,10 +572,27 @@ export function Notas({ cliente, busca, aoPerderLigacao: aoPerderLigacaoDoPainel
           key={aberta.id}
           nota={aberta}
           cliente={cliente}
-          nomesDosMarcadores={nomesDosMarcadores}
+          marcadores={marcadores}
+          notasParaSugerir={base}
+          criarMarcador={criarMarcador}
           avisar={avisar}
           aoPerderLigacao={aoPerderLigacao}
           aoTerminar={terminou}
+        />
+      )}
+
+      {editando && (
+        <EditarMarcadores
+          cliente={cliente}
+          marcadores={marcadores}
+          notasAtivas={base}
+          aoMudar={(f) => {
+            mudarMarcadores(f)
+            recarregar()
+          }}
+          aoFechar={() => setEditando(false)}
+          aoPerderLigacao={aoPerderLigacao}
+          avisar={avisar}
         />
       )}
     </div>

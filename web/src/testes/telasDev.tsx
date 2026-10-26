@@ -39,6 +39,10 @@
 //                      Abrir (leva à aba Notas, com a nota na janela) e Desfazer.
 //   Nas notas, ?forma=lista|detalhes escolhe a forma de ver, e ?abrir=<título> abre
 //   a nota com esse título (para ver a janela sem clicar).
+//   (N4) No cenário notas, "Editar marcadores" (no fim da fileira) abre a janela de criar,
+//   renomear e apagar; o botão de marcador do cartão e da nota abre o menu com caixinhas;
+//   e ?abrir=Lista do sábado abre uma lista sem marcador parecida com as do Compras, com a
+//   faixa "Marcar como Compras?".
 //   No historico, o clique em Apagar os mais antigos pergunta na linha, e o Apagar
 //   liga a regra no Agent de mentira (a prévia some; a Privacidade ganha a linha).
 // A tela de Configurações abre sozinha; ?config=0 deixa no Histórico.
@@ -133,6 +137,10 @@ const notasDeExemplo: Nota[] = [
   nota({ id: 'n10', titulo: 'Na lixeira', corpo: 'Apagada ontem.', deleted_at: hora(3), updated_at: hora(3) }),
   // Um ditado de enumeração que caiu como texto: mostra o botão "Virar lista".
   nota({ id: 'n11', titulo: 'Feira', corpo: 'Arroz, feijão, batata, presunto e queijo.', updated_at: hora(2) }),
+  // N4: a segunda nota do marcador Compras e uma lista sem marcador parecida com elas.
+  // Abra com ?abrir=Lista do sábado para ver a faixa "Marcar como Compras?".
+  nota({ id: 'n12', titulo: 'Mercado', corpo: '- leite\n- ovos\n- arroz\n- café', marcadores: ['m1'], updated_at: hora(1) }),
+  nota({ id: 'n13', titulo: 'Lista do sábado', corpo: '- [ ] leite\n- [ ] pão\n- [ ] ovos\n- [ ] manteiga', updated_at: hora(14) }),
 ]
 
 const srv = servidorFalso(ditados, {

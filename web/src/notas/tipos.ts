@@ -88,6 +88,18 @@ export interface ClienteDeNotas {
   restaurarNota(id: string): Promise<Nota>
   apagarNotaDeVez(id: string): Promise<void>
   listarMarcadores(sinal?: AbortSignal): Promise<Marcador[]>
+  // Os marcadores (N4). criarMarcador recusa o nome já usado (sem diferenciar
+  // maiúscula nem acento) com ErroDaApi de codigo NAME_IN_USE; renomearMarcador
+  // pede a versão do marcador e recusa do mesmo jeito (Conflito: versão velha);
+  // apagarMarcador tira o marcador das notas e não apaga nota.
+  criarMarcador(nome: string): Promise<Marcador>
+  renomearMarcador(id: string, versao: number, nome: string): Promise<Marcador>
+  apagarMarcador(id: string): Promise<void>
+  // marcarNota e desmarcarNota põem e tiram um marcador de uma nota (idempotentes) e
+  // devolvem a nota como ficou: a versão dela sobe, e é a nova que vale (Conflito:
+  // a nota está na lixeira).
+  marcarNota(notaId: string, marcadorId: string): Promise<Nota>
+  desmarcarNota(notaId: string, marcadorId: string): Promise<Nota>
   // definirFoco avisa o Agent de que o cursor está neste alvo (PUT
   // /api/notas/foco); o aviso vence sozinho em 60 s, então se renova. limparFoco
   // o tira (DELETE): com alvo, só se o aviso ainda for aquele; descartar (só com

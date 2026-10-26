@@ -233,7 +233,8 @@ describe('o papel de cada cor do design system', () => {
     const usam = regras.filter((r) => /var\(--risco/.test(r.corpo)).map((r) => r.seletor)
     expect(usam.sort()).toEqual(
       // '.menu .risco' é o "Mover para a lixeira" dos menus das notas.
-      ['.botao.risco', ".botao.risco:hover:not(:disabled, [aria-disabled='true'])", '.etiqueta.risco', '.faixa', '.menu .risco', '.nota'].sort(),
+      // '.erro-campo' é a frase de nome repetido nos campos de marcador (texto no --superficie).
+      ['.botao.risco', ".botao.risco:hover:not(:disabled, [aria-disabled='true'])", '.erro-campo', '.etiqueta.risco', '.faixa', '.menu .risco', '.nota'].sort(),
     )
   })
 
