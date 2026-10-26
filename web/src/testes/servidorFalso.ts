@@ -860,12 +860,13 @@ export function servidorFalso(
 
     if (!id) {
       const lixeira = p.busca.get('trash') === 'true'
-      const q = (p.busca.get('q') ?? '').toLowerCase()
+      // Sem diferenciar maiúscula nem acento, como o Agent (storage.dobrar; N6).
+      const q = dobrar(p.busca.get('q') ?? '')
       const lista = ordenar(
         itens
           .filter((i) => Boolean(i.deleted_at) === lixeira)
           .filter((i) => !virouNota.has(i.id))
-          .filter((i) => !q || i.final_text.toLowerCase().includes(q) || i.raw_text.toLowerCase().includes(q)),
+          .filter((i) => !q || dobrar(i.final_text).includes(q) || dobrar(i.raw_text).includes(q)),
         lixeira ? 'deleted_at' : 'created_at',
       )
       // O cursor aqui é só o deslocamento; o da API é opaco, e o painel

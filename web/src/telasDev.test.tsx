@@ -90,6 +90,25 @@ describe('os cenários das Notas em /telas-dev.html', () => {
     await import('./testes/telasDev')
     await screen.findByText('Nenhuma nota ainda.', undefined, { timeout: 4000 })
   })
+
+  it('busca: a busca "fgts" já digitada mostra uma nota e três ditados; ?q=imposto mostra o "Ver todas"', async () => {
+    window.history.replaceState(null, '', '/telas-dev.html?cenario=busca')
+    vi.resetModules()
+    await import('./testes/telasDev')
+    const notas = await screen.findByRole('region', { name: 'Notas · 1' }, { timeout: 4000 })
+    expect(notas.textContent).toContain('Fechamento de outubro · Folha e FGTS')
+    expect(screen.getByRole('region', { name: 'Ditados · 3' })).toBeTruthy()
+    expect((screen.getByRole('searchbox', { name: 'Buscar nas notas e nos ditados' }) as HTMLInputElement).value).toBe('fgts')
+  })
+
+  it('busca com ?q=imposto: sete notas e seis ditados, cinco de cada e o "Ver todas"', async () => {
+    window.history.replaceState(null, '', '/telas-dev.html?cenario=busca&q=imposto')
+    vi.resetModules()
+    await import('./testes/telasDev')
+    const notas = await screen.findByRole('region', { name: 'Notas · 7' }, { timeout: 4000 })
+    expect(within(notas).getByRole('button', { name: 'Ver todas as 7 notas' })).toBeTruthy()
+    expect(within(screen.getByRole('region', { name: 'Ditados · 6' })).getByRole('button', { name: 'Ver todos os 6 ditados' })).toBeTruthy()
+  })
 })
 
 // A orientação das chaves (lançamento): o primeiro uso e a seção IA sem chave,

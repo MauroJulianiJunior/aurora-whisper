@@ -130,6 +130,11 @@ describe('o bundle local (bin\\painel)', () => {
     expect(local.js).toContain('Virou nota')
     // O aviso de nota em foco (o ditado feito dentro da nota não vai ao histórico).
     expect(local.js).toContain('/api/notas/foco')
+    // ADR-022, N6: a busca única nas notas e nos ditados, e o Copiar para WhatsApp.
+    expect(local.js).toContain('Buscar nas notas e nos ditados')
+    expect(local.js).toContain('Ver notas e ditados')
+    expect(local.js).toContain('Copiar para WhatsApp')
+    expect(local.js).toContain('Copiado para o WhatsApp.')
   })
 
   // A orientação das chaves (lançamento, garantia 1): o campo da chave da IA diz onde
@@ -355,6 +360,13 @@ describe('o bundle da nuvem (dist-nuvem)', () => {
     'Virou nota',
     // O aviso de nota em foco mexe no Agent do PC.
     '/api/notas/foco',
+    // ADR-022, N6: a busca única e o Copiar para WhatsApp são das notas, que só o PC tem.
+    'Buscar nas notas e nos ditados',
+    'Ver notas e ditados',
+    'Só nas notas',
+    'Só nos ditados',
+    'Copiar para WhatsApp',
+    'Copiado para o WhatsApp.',
     // O primeiro uso do PC (a tecla do ditado do PC, sem chave) e a introdução da IA
     // das Configurações do PC não são do app do celular.
     'Segure Ctrl+Win',

@@ -541,6 +541,19 @@ describe('regras que o jsdom não aplica', () => {
     expect(bloco('\n.linha.estatica .texto {')).toMatch(/line-clamp:\s*none/)
   })
 
+  // A busca única (ADR-022, N6): o trecho que casa vai em <mark> sobre o fundo de
+  // seleção (o contraste do texto sobre --selecao está na lista de cima), a aba
+  // Notas por trás dela só mostra a janela da nota, e no toque cada resultado tem
+  // 44 px.
+  it('a busca única: o <mark> usa o fundo de seleção, a aba por trás só mostra a janela, e no toque o resultado tem 44 px', () => {
+    expect(valor(bloco('\n.resultado mark {'), 'background')).toBe('var(--selecao)')
+    expect(valor(bloco('\n.notas[data-oculta] > :not(.veu) {'), 'display')).toBe('none')
+    const toque = Array.from(css.matchAll(/@media \(pointer: coarse\)/g)).map((m) => bloco(css.slice(m.index)))
+    const corpo = toque.map((b) => b.match(/\.resultado,\s*\.ver-todas\s*\{([^}]*)\}/)?.[1]).find(Boolean)
+    expect(corpo, 'falta .resultado, .ver-todas no toque').toBeDefined()
+    expect(valor(corpo!, 'min-height')).toBe('44px')
+  })
+
   // A confirmação do bloco Histórico (F10) fica dentro do ajuste, depois do texto
   // dele: sem a regra, a caixa com borda cola na última linha (gap 0). O
   // historicoNoPC.test.tsx confere que ela fica onde a regra a alcança.

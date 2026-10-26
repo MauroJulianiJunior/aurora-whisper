@@ -27,6 +27,9 @@ interface Props {
   // abrirNota: o "Abrir" do aviso "Virou nota" (N3): a nota que a janela abre
   // assim que a aba aparece. vez sobe a cada pedido.
   abrirNota?: { id: string; vez: number } | null
+  // oculta e aoTerminarNota: a busca única (N6) está à vista; ver PropsDasNotas.
+  oculta?: boolean
+  aoTerminarNota?(): void
 }
 
 // O que a tela mostra: a lista da consulta, e a lista das notas ativas inteira
@@ -63,7 +66,7 @@ function vizinhoDe(ordenados: Nota[], id: string): string | null {
 // fileira de marcadores com as formas de ver, a grade (ou a lista, ou os
 // detalhes), a nota aberta numa janela, o Arquivo e a Lixeira. Só o PC o tem
 // (ambienteLocal.tsx): o painel da nuvem não importa este arquivo.
-export function Notas({ cliente, busca, aoPerderLigacao: aoPerderLigacaoDoPainel, avisar, abrirNota }: Props) {
+export function Notas({ cliente, busca, aoPerderLigacao: aoPerderLigacaoDoPainel, avisar, abrirNota, oculta, aoTerminarNota }: Props) {
   // O Painel passa uma função nova a cada render: a daqui é estável, e lê a
   // do momento (senão cada render do Painel leria a lista de novo).
   const ligacao = useRef(aoPerderLigacaoDoPainel)
@@ -373,6 +376,7 @@ export function Notas({ cliente, busca, aoPerderLigacao: aoPerderLigacaoDoPainel
 
   function terminou(fim: FimDaNota) {
     setAberta(null)
+    aoTerminarNota?.()
     const { nota, tipo } = fim
     if (tipo === 'fechou') {
       focarDepois.current = { id: nota.id }
@@ -506,7 +510,7 @@ export function Notas({ cliente, busca, aoPerderLigacao: aoPerderLigacaoDoPainel
   const anuncio = total === null ? '' : total === 1 ? '1 nota.' : `${total} notas.`
 
   return (
-    <div className="notas" ref={raiz}>
+    <div className="notas" ref={raiz} data-oculta={oculta ? '' : undefined}>
       <p className="so-leitor anuncio" role="status">
         {anuncio}
       </p>

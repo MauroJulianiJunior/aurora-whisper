@@ -3387,6 +3387,126 @@ a.botao {
   }
 }
 
+/* ─── A busca única (ADR-022, N6) ───────────────────────────────────── */
+
+/* O campo do topo procura nas notas e nos ditados: dois grupos, cada um com o
+   nome na mono (como o dia do histórico), e uma linha por resultado. A bolinha é
+   a cor da nota; a hora, o quando do ditado. O trecho que casa vai em <mark>. */
+.grupo-busca + .grupo-busca {
+  margin-top: 8px;
+}
+
+.grupo-busca .dia {
+  text-transform: uppercase;
+}
+
+.resultados {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.resultado {
+  display: grid;
+  grid-template-columns: 4.5rem minmax(0, 1fr);
+  align-items: baseline;
+  gap: 12px;
+  width: 100%;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: var(--raio-md);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  transition: background-color 120ms var(--curva);
+}
+
+.resultado:hover {
+  background: var(--realce);
+}
+
+.resultado .bolinha {
+  margin: 0 0 0 4px;
+  align-self: baseline;
+  position: relative;
+  top: 1px;
+}
+
+.resultado strong {
+  font-family: var(--fonte-titulo);
+  font-weight: 600;
+}
+
+.resultado-texto {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  font-size: 15px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.resultado mark {
+  padding: 0 2px;
+  border-radius: 3px;
+  background: var(--selecao);
+  color: inherit;
+}
+
+.ver-todas {
+  margin: 2px 0 0 calc(4.5rem + 12px);
+  padding: 6px 12px;
+  border: 0;
+  border-radius: var(--raio-md);
+  background: transparent;
+  color: var(--texto-2);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ver-todas:hover {
+  background: var(--realce);
+  color: var(--texto);
+}
+
+/* Um grupo que não leu: o aviso do grupo, e o botão de tentar de novo. */
+.estado-grupo {
+  padding: 4px 12px 8px;
+  color: var(--texto-2);
+}
+
+.estado-grupo p {
+  margin: 0 0 8px;
+}
+
+/* Quem foi a um grupo só ("Ver todas") vê a lista da aba, filtrada, e esta linha
+   que traz os dois grupos de volta. */
+.escopo-busca {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin: 4px 0 8px;
+  padding: 0 12px;
+  color: var(--texto-2);
+  font-size: 13px;
+}
+
+/* A aba Notas por trás da busca: só a janela de uma nota aberta aparece. */
+.notas[data-oculta] > :not(.veu) {
+  display: none;
+}
+
+/* No toque, cada resultado tem os 44 px de um alvo. */
+@media (pointer: coarse) {
+  .resultado,
+  .ver-todas {
+    min-height: 44px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .dialogo {
     animation: none;
