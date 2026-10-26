@@ -771,7 +771,11 @@ fixar, arquivar), no PC e no celular, para deixar de usar o Keep. Aceita em 25-o
 próprio para "ditar para nota" e a lista marcável sem rede no celular. Fases (detalhe na ADR):
 - **L:** listas melhores no Polish (as guardas para lista, medidas no `polishbench`);
 - **N1:** banco local (SQLite) e API local das notas e marcadores;
-- **N2:** aba Notas no painel, editor por linhas, ditar dentro (verificação manual);
+- **N2:** aba Notas no painel, editor por linhas, ditar dentro (verificação manual). **Feita nos dublês
+  (25-out-2026):** a aba entre Histórico e Lixeira (só no PC), os marcadores, as três formas de ver com
+  colunas guardadas por aparelho, criar, a nota aberta com autosave e conflito, o editor por linhas, o
+  Arquivo e a Lixeira (`web/src/notas/`, AC-081 e AC-082). **Falta o teste no PC, que é do Mauro:**
+  `docs/teste-manual-notas-n2.md` (o olhar no navegador e ditar dentro da nota);
 - **N3:** "Virar nota" no histórico, com Desfazer;
 - **N4:** marcadores, filtro e sugestão local;
 - **N5:** converter trecho (prefixo, regra e IA com as guardas; prompt `notas-lista@1`);
