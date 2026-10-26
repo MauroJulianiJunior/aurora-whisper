@@ -1653,7 +1653,7 @@ Tira da lixeira. `204`.
 
 ### Notas e marcadores (ADR-022, N1)
 Acrescentado com a fase N1 da ADR-022: o banco local e a API local das notas e dos marcadores.
-A tela chegou na N2 (aba Notas do painel do PC, `08-ui-ux-spec.md`). **Ainda não há "Virar nota" (N3) nem sync (N7).** Fonte da verdade:
+A tela chegou na N2 (aba Notas do painel do PC, `08-ui-ux-spec.md`). O "Virar nota" chegou na N3 (abaixo, "Virar nota"). **Ainda não há sync (N7).** Fonte da verdade:
 `internal/agent/localapi/notas.go`. O modelo está em `05-data-model.md`, "Notas e marcadores".
 
 Convenções, como no histórico: JSON em `snake_case`, datas RFC3339, erros no envelope da cloud com
@@ -1661,7 +1661,7 @@ Convenções, como no histórico: JSON em `snake_case`, datas RFC3339, erros no 
 desconhecido** (`400`), para um nome digitado errado num `PATCH` não virar um pedido vazio calado. Sem
 o repositório montado, toda rota responde `503 UNAVAILABLE`. Códigos: `BAD_REQUEST`, `NOT_FOUND`,
 `CONFLICT` (versão desatualizada, ou nota na lixeira / fora dela), `NAME_IN_USE` (`409`, o nome de
-marcador já existe) e `INTERNAL`.
+marcador já existe), `IN_TRASH` e `ALREADY_NOTE` (`409`, do "Virar nota") e `INTERNAL`.
 
 A nota nos corpos de resposta:
 ```json
@@ -1740,6 +1740,24 @@ desatualizada, `409 NAME_IN_USE` para nome de outro marcador (mudar só a caixa 
 
 #### DELETE `/api/marcadores/{id}`
 Apaga o marcador e o tira de todas as notas; **não apaga nota**. `204`; repetido, `204`.
+
+#### Virar nota (ADR-022, N3)
+O ditado do histórico vira nota; o Desfazer devolve. Nenhuma das duas rotas toca o sync.
+
+**POST `/api/history/{id}/virar-nota`** (sem corpo). Cria a nota com o texto do ditado (`final_text`;
+o `raw_text` se o final está vazio), sem título nem cor, com `ditado_de_origem` = `{id}`, e marca o
+ditado como "virou nota" na mesma transação: ele sai da lista do histórico e da busca, **sem ir para a
+lixeira**. `201` com a nota. `404 NOT_FOUND` (ditado inexistente, ou de outro dono), `409 IN_TRASH`
+(está na lixeira), `409 ALREADY_NOTE` (já virou nota: outra aba, ou o segundo clique), `400` (sem texto
+nenhum) e `503` sem o repositório das notas.
+
+**POST `/api/notas/{id}/desfazer-virar`** (sem corpo). Devolve o ditado ao histórico e apaga a nota
+**se ela não foi editada** desde que nasceu (versão 1, fora da lixeira); editada, a nota fica.
+`200 {"ditado_id": "...", "nota_apagada": true|false}`. `404` se a nota não existe (apagada de vez: o
+ditado **não** volta), `409 CONFLICT` se a nota não nasceu de um ditado, ou se o ditado já voltou (o
+Desfazer repetido).
+
+Apagar a nota depois (lixeira e "Excluir para sempre") **não** devolve o ditado ao histórico.
 
 ### Configurações
 Acrescentado em 29-set-2026 (tela de Configurações do painel). Fonte da verdade:

@@ -1241,11 +1241,34 @@ onda (hoje -48 a -14 dBFS) e o bitrate (hoje 32 kbit/s), que partem dos valores 
 - No Android: o menu do Chrome, **Instalar app**. Sem prompt próprio na v1.
 - No iPhone: **depois do MVP** (Compartilhar, depois "Adicionar à Tela de Início").
 
+## Virar nota no histórico (ADR-022, N3)
+Só no painel do PC. O texto, o botão e as rotas entram pelo `Ambiente` (`Ambiente.virarNota`); o painel da
+nuvem não os tem, e o `bundle.test.ts` confere nos dois sentidos. Prévia: `docs/notas-previa-n2.html`, cena 4.
+
+- **O botão "Virar nota"** fica no editor do histórico, **ao lado do Copiar**. Fica desligado quando o
+  texto do editor não é o texto de que o Agent faz a nota (o final salvo, ou o bruto se o final está vazio):
+  com edição por salvar, o botão espera o **Salvar** que está ao lado, e a dica diz "Salve a edição antes de
+  virar nota." (a mesma regra do Copiar para o texto vazio e do ditado que foi para a lixeira em outra aba).
+  Enquanto o pedido está no ar, não aceita um segundo clique.
+- **Depois do clique:** a linha sai da lista (o foco vai para a vizinha, como em "Mover para a lixeira"), e
+  o aviso de baixo diz **"Virou nota"**, com **Abrir** e **Desfazer** (Ctrl+Z fora de campo de texto também
+  desfaz). O aviso espera 8 s, como os outros com Desfazer, e espera enquanto o ponteiro ou o foco estão nele.
+- **Abrir** troca para a aba Notas e abre a nota na janela dela. Sair da aba e voltar não reabre a nota.
+- **Desfazer** devolve o ditado ao lugar dele na lista; se a nota estava intacta, ela sai ("Ditado de volta
+  ao histórico."), e se a pessoa já a tinha editado, ela fica e o aviso diz "Ditado de volta ao histórico. A
+  nota ficou, porque você a editou.".
+- **Erros:** o Agent fora do ar ou recusando (ditado na lixeira em outra aba) vai para o aviso, "Não deu
+  certo: ...", com o editor ainda aberto. "Já virou nota" tira a linha da lista (ela estava velha) e o aviso
+  diz isso.
+- **O texto vai como está.** Linhas com `- ` ou `1. ` viram lista pelo `notas/corpo.ts`; uma enumeração em
+  texto corrido **não** vira lista sozinha: na nota, o botão "Virar lista" da N2 oferece (escolha do Mauro).
+- No cartão da nota, "veio de um ditado" já aparece (N2, `ditado_de_origem`).
+
 ## Aba Notas (ADR-022, N2)
 Só no painel do PC (a Local API). O componente entra pelo `Ambiente` (`Ambiente.Notas`); o painel da nuvem
 não importa nada dele, e o `bundle.test.ts` confere nos dois sentidos. A fonte da verdade é o código
 (`web/src/notas/`); a prévia aprovada pelo Mauro é `docs/notas-previa-n2.html`. O que não é desta fase:
-"Virar nota" (N3), criar/renomear/atribuir marcador (N4), converter trecho (N5), copiar para WhatsApp e
+criar/renomear/atribuir marcador (N4), converter trecho (N5), copiar para WhatsApp e
 busca única (N6), sync (N7), celular (N8), gatilho de voz (N9), imagens (N10).
 
 **Onde fica e a largura.** Entre **Histórico** e **Lixeira**. Com a aba aberta o painel usa a largura da

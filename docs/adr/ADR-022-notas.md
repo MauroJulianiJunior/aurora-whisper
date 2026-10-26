@@ -108,6 +108,10 @@ colunas de sync que o ditado já tem (`sync_state`, `server_version`, `last_sync
   ela não foi editada). Alternativa: mandar para a lixeira (mais simples, sem coluna nova).
 - Apagar a nota depois não devolve o ditado ao histórico.
 - A retenção de 6 meses do histórico não alcança o ditado que virou nota (o texto vive na nota).
+- **Feito na N3 (25-out-2026):** rota `POST /api/history/{id}/virar-nota` e `POST
+  /api/notas/{id}/desfazer-virar`; a coluna `virou_nota` (migration 0010), sem chave estrangeira; a lista e
+  a busca do histórico (e a lixeira) escondem o ditado marcado, o expurgo de 30 dias e os 6 meses o
+  pulam; o Desfazer apaga a nota só na versão 1, fora da lixeira. Nada vai para a fila do sync.
 
 ### Ditar dentro da nota
 
@@ -258,6 +262,15 @@ Anexar imagem à nota (o ícone do Keep). Desenho prévio, a confirmar quando a 
   (ADR-011); se o editor tiver um campo por linha, o texto ditado com várias linhas cai num campo só.
   A N2 testa isso na verificação manual; a saída provável é o editor tratar a colagem de várias
   linhas (cada linha vira um bloco).
+- **"Virar nota" e o sync (N7), ponto aberto.** `virou_nota` é só deste PC e não gera evento: a nuvem
+  continua com o ditado no histórico dela, e nada diz a ela que ele "virou nota". Quando a N7 trouxer a
+  nota para a nuvem, decidir: (a) o ditado some também do histórico da nuvem e do celular (a coluna
+  sobe, como uma mudança de campo), ou (b) a nuvem mantém os dois. Hoje vale (b), por omissão.
+- **"Virar nota" guarda o texto bruto para sempre.** A retenção de 6 meses não alcança o ditado que
+  virou nota (a ADR, lida à letra), então o `raw_text` dele (e o `final_text`) fica no PC sem prazo,
+  mesmo que a pessoa apague a nota da lixeira depois (o ditado fica escondido, com o id solto). Se isso
+  incomodar na LGPD (o ditado é dado pessoal), a saída é limpar o `raw_text` do ditado quando a nota
+  for apagada de vez, ou deixá-lo voltar à regra dos 6 meses nesse caso. Não foi decidido.
 - **O segundo gatilho** pode colidir com atalho de outro programa (`Ctrl+Win+Alt` é pouco usado, mas
   não foi medido). O detector de conflito de atalho do Agent (`internal/agent/conflito`) passa a
   olhar os dois.
