@@ -431,6 +431,12 @@ uma nota a leva para o topo (como hoje) ou ela fica onde ele a pôs? Fixadas e o
 cada uma no seu grupo? E no celular, segurar e arrastar? Deve vir antes da N7, para o sync já nascer
 com a posição.
 
+**Respostas do Mauro (26-out-2026):**
+- a nota nova entra no **topo**;
+- editar **não** move a nota: ela "fica onde eu coloquei";
+- **fixadas se arrastam entre si** (e as outras, entre as outras);
+- no celular, **segurar e arrastar**.
+
 ## Escolhas menores (aprovadas em 25-out-2026: todas no padrão, menos a E4)
 
 - **E1. Acrescentar por voz:** segundo gatilho `Ctrl+Win+Alt` (padrão) ou frase-comando no ditado
