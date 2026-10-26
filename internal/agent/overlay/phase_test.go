@@ -90,7 +90,8 @@ func fasesDoOverlay() []dictation.OverlayPhase {
 // fasesSoDoOverlay são as que o núcleo não emite: o runtime as mostra no
 // lugar de uma do núcleo, ou fora de uma tentativa.
 func fasesSoDoOverlay() []dictation.OverlayPhase {
-	return []dictation.OverlayPhase{FaseJanelaElevada, FaseTextoNoHistorico, FaseRepeticaoRemovida, FaseMicrofoneBloqueado}
+	return []dictation.OverlayPhase{FaseJanelaElevada, FaseTextoNoHistorico, FaseRepeticaoRemovida, FaseMicrofoneBloqueado,
+		FaseNaNota, FaseNotaNova, FaseNotaNaoSalvou}
 }
 
 // nomeDaFase é o String() da fase, que para as do overlay devolve
@@ -105,6 +106,12 @@ func nomeDaFase(p dictation.OverlayPhase) string {
 		return "repeticao-removida"
 	case FaseMicrofoneBloqueado:
 		return "microfone-bloqueado"
+	case FaseNaNota:
+		return "na-nota"
+	case FaseNotaNova:
+		return "nota-nova"
+	case FaseNotaNaoSalvou:
+		return "nota-nao-salvou"
 	}
 	return p.String()
 }

@@ -230,6 +230,9 @@ func TestSinal_CadaDesfechoTemOSeuPonto(t *testing.T) {
 		FaseTextoNoHistorico:          corCinza,
 		FaseRepeticaoRemovida:         corVerde,
 		FaseMicrofoneBloqueado:        corVermelho,
+		FaseNaNota:                    corVerde,
+		FaseNotaNova:                  corVerde,
+		FaseNotaNaoSalvou:             corCinza,
 	}
 	for _, p := range fasesDoOverlay() {
 		cor, ok := sinalPara(p)

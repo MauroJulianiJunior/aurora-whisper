@@ -98,6 +98,10 @@ func TestPilulaEmPNG(t *testing.T) {
 		{"texto-no-historico", FrameState{Phase: FaseTextoNoHistorico}},
 		{"repeticao-removida", FrameState{Phase: FaseRepeticaoRemovida}},
 		{"microfone-bloqueado", FrameState{Phase: FaseMicrofoneBloqueado}},
+		{"na-nota", FrameState{Phase: FaseNaNota, Texto: "Lista de compras +3"}},
+		{"na-nota-titulo-longo", FrameState{Phase: FaseNaNota, Texto: "Ideias para o roteiro do vídeo de lançamento… +12"}},
+		{"nota-nova", FrameState{Phase: FaseNotaNova}},
+		{"nota-nao-salvou", FrameState{Phase: FaseNotaNaoSalvou}},
 	}
 	fundos := []fundoPNG{
 		{"claro", 245, 225},

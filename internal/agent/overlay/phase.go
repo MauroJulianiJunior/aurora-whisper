@@ -78,6 +78,28 @@ const FaseRepeticaoRemovida dictation.OverlayPhase = 1002
 // ditado não aconteceu.
 const FaseMicrofoneBloqueado dictation.OverlayPhase = 1003
 
+// As três fases do "ditar para nota" (ADR-022, N9): o texto não foi inserido
+// no campo, foi para uma nota, e a pílula diz para onde.
+//
+// Fora do núcleo, como as outras desta lista: para o núcleo, ir para a nota é
+// a inserção daquela tentativa, e ele emite OverlaySuccess (ou
+// OverlayInsertFailed, se a nota não foi gravada); o runtime, que sabe que a
+// sessão era do gatilho da nota, troca a fase por uma destas.
+const (
+	// FaseNaNota: o resto do ditado entrou numa nota que já existia. É a única
+	// fase com texto variável: "Lista de compras +3", que o runtime manda por
+	// SetPhaseComTexto. Sem texto, a pílula diz Label ("Na nota"). Ponto
+	// verde: deu certo.
+	FaseNaNota dictation.OverlayPhase = 1004
+	// FaseNotaNova: nenhum título casou, e o ditado virou uma nota nova. Ponto
+	// verde.
+	FaseNotaNova dictation.OverlayPhase = 1005
+	// FaseNotaNaoSalvou: a nota não foi gravada, e o ditado ficou no histórico,
+	// à vista. Ponto cinza, como FaseTextoNoHistorico: não se perdeu, mas não
+	// está onde a pessoa mandou.
+	FaseNotaNaoSalvou dictation.OverlayPhase = 1006
+)
+
 // FaseDoMicrofone escolhe a fase de um erro: OverlayError vira
 // FaseMicrofoneBloqueado quando o microfone está bloqueado pelo Windows.
 // Qualquer outra fase passa intacta — a marca só troca a mensagem de um
@@ -159,6 +181,17 @@ func Label(phase dictation.OverlayPhase) string {
 		// elevada (travado em TestComporMensagem_QuebrasDasMensagens). O
 		// passo a passo cabe no painel, não na pílula.
 		return "O Windows bloqueou o microfone. Veja o painel."
+	case FaseNaNota:
+		// O de verdade é o título e o número ("Lista de compras +3"), que o
+		// runtime manda junto da fase (SetPhaseComTexto). Isto é só o que a
+		// pílula diz se o texto não vier.
+		return "Na nota"
+	case FaseNotaNova:
+		return "Nota nova"
+	case FaseNotaNaoSalvou:
+		// O que aconteceu e onde está o texto, sem "tente novamente": o
+		// ditado está salvo no histórico.
+		return "Não salvou na nota: está no histórico."
 	case dictation.OverlayInsertFailed:
 		// A transcrição deu certo; só a inserção falhou, e o texto NÃO
 		// está na área de transferência. Mandar colar aqui faria a
@@ -199,7 +232,8 @@ func isTerminalPhase(phase dictation.OverlayPhase) bool {
 	case dictation.OverlaySuccess, dictation.OverlayError,
 		dictation.OverlayBlocked, dictation.OverlayClipboard,
 		dictation.OverlayInsertFailed, FaseJanelaElevada, FaseTextoNoHistorico,
-		FaseRepeticaoRemovida, FaseMicrofoneBloqueado:
+		FaseRepeticaoRemovida, FaseMicrofoneBloqueado,
+		FaseNaNota, FaseNotaNova, FaseNotaNaoSalvou:
 		return true
 	default:
 		return false

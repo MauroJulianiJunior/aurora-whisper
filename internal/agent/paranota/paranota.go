@@ -332,14 +332,10 @@ func primeiraMarcada(linhas []string) int {
 // A pílula
 // ---------------------------------------------------------------------
 
-// Os textos fixos da pílula do "ditar para nota".
-const (
-	// TextoNotaNova: nenhum título casou, e nasceu uma nota com o ditado.
-	TextoNotaNova = "Nota nova"
-	// TextoNaoSalvou: a nota não foi gravada. O ditado não se perdeu: fica no
-	// histórico, à vista (ADR-022: nada some calado).
-	TextoNaoSalvou = "Não salvou na nota: está no histórico."
-)
+// TextoNotaNova: nenhum título casou, e nasceu uma nota com o ditado. É o
+// Label de overlay.FaseNotaNova; a falha ("Não salvou na nota") é só do overlay
+// (overlay.FaseNotaNaoSalvou).
+const TextoNotaNova = "Nota nova"
 
 // maxTituloNaPilula é quanto do título cabe na pílula, em letras. A pílula
 // tem até duas linhas de ~30 letras (overlay.MensagemLarguraMax); 40 deixa o

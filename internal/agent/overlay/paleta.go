@@ -112,9 +112,9 @@ var (
 // testes de mensagem percorrem fasesDoOverlay desde então.
 func sinalPara(phase dictation.OverlayPhase) (Cor, bool) {
 	switch phase {
-	case dictation.OverlaySuccess, FaseRepeticaoRemovida:
+	case dictation.OverlaySuccess, FaseRepeticaoRemovida, FaseNaNota, FaseNotaNova:
 		return corVerde, true
-	case dictation.OverlayClipboard, FaseTextoNoHistorico:
+	case dictation.OverlayClipboard, FaseTextoNoHistorico, FaseNotaNaoSalvou:
 		return corCinza, true
 	case dictation.OverlayError, dictation.OverlayBlocked, dictation.OverlayInsertFailed, FaseJanelaElevada,
 		FaseMicrofoneBloqueado:

@@ -136,9 +136,20 @@ func larguraUtil(temSinal bool) int {
 // pílula está na largura do bloco, as margens são MensagemMargemX; quando
 // a largura mínima manda, sobra dos dois lados por igual.
 func ComporMensagem(phase dictation.OverlayPhase) Mensagem {
+	return ComporMensagemComTexto(phase, "")
+}
+
+// ComporMensagemComTexto é ComporMensagem com o texto dado no lugar do Label da
+// fase — o "Lista de compras +3" do ditar para nota (FaseNaNota). Texto vazio é
+// o Label. O texto passa pela mesma quebra e pelo mesmo corte (até MaxLinhas,
+// com "…"), então nenhum texto sai da pílula.
+func ComporMensagemComTexto(phase dictation.OverlayPhase, texto string) Mensagem {
+	if texto == "" {
+		texto = Label(phase)
+	}
 	t := tipo()
 	sinal, temSinal := sinalPara(phase)
-	linhas := QuebraEquilibrada(Label(phase), t.largura, larguraUtil(temSinal))
+	linhas := QuebraEquilibrada(texto, t.largura, larguraUtil(temSinal))
 
 	larguraTexto := 0
 	for _, l := range linhas {
