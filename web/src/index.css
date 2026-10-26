@@ -2275,8 +2275,8 @@ a.botao {
   display: flex;
   align-items: center;
   gap: 4px;
-  max-width: 40rem;
-  margin: 12px auto 6px;
+  max-width: 46rem;
+  margin: 14px auto 6px;
   padding: 0 8px 0 4px;
   border: 1px solid var(--linha);
   border-radius: var(--raio-md);
@@ -2352,7 +2352,7 @@ a.botao {
   margin: 0 0 12px;
   border: 1px solid var(--linha);
   border-radius: var(--raio-md);
-  background: var(--superficie);
+  background: var(--cor-nota, var(--superficie));
   break-inside: avoid;
   transition: box-shadow 120ms var(--curva);
 }
@@ -2541,7 +2541,7 @@ a.botao {
   padding-right: 6px;
   border: 1px solid var(--linha);
   border-radius: var(--raio-md);
-  background: var(--superficie);
+  background: var(--cor-nota, var(--superficie));
 }
 
 .nota-linha-abrir {
@@ -2689,7 +2689,7 @@ a.botao {
   padding: 16px 16px 10px;
   border: 1px solid var(--linha);
   border-radius: var(--raio-lg);
-  background: var(--superficie);
+  background: var(--cor-nota, var(--superficie));
   box-shadow: 0 24px 60px rgb(0 0 0 / 0.28);
   animation: abrir 200ms var(--curva);
 }

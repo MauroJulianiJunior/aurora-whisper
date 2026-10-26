@@ -34,6 +34,8 @@
 //                      (uma fixada, uma lista de marcar, uma que veio de um ditado, uma no
 //                      Arquivo, uma na Lixeira) e três marcadores;
 //   notas-vazio        a aba Notas sem nenhuma nota.
+//   Nas notas, ?forma=lista|detalhes escolhe a forma de ver, e ?abrir=<título> abre
+//   a nota com esse título (para ver a janela sem clicar).
 //   No historico, o clique em Apagar os mais antigos pergunta na linha, e o Apagar
 //   liga a regra no Agent de mentira (a prévia some; a Privacidade ganha a linha).
 // A tela de Configurações abre sozinha; ?config=0 deixa no Histórico.
@@ -133,6 +135,10 @@ const srv = servidorFalso(ditados, {
 // O Agent de antes da F10: as rotas dão 404.
 if (cenario === 'historico-velho') srv.agentSemRetencao()
 
+// A forma de ver pedida na URL, antes da primeira pintura.
+const formaPedida = busca.get('forma')
+if (formaPedida) localStorage.setItem('aurora.notas.forma', formaPedida)
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App sessao={Promise.resolve('tok')} buscar={srv.buscar} />
@@ -147,6 +153,20 @@ if (busca.get('config') !== '0') {
     const botao = Array.from(document.querySelectorAll<HTMLButtonElement>('.vistas button')).find((b) => b.textContent === aba)
     if (botao) {
       botao.click()
+      clearInterval(id)
+      abrirNota()
+    }
+  }, 50)
+}
+
+// ?abrir=<título>: clica no cartão da nota com esse título, quando a grade chegar.
+function abrirNota() {
+  const titulo = busca.get('abrir')
+  if (!titulo) return
+  const id = setInterval(() => {
+    const cartao = Array.from(document.querySelectorAll<HTMLElement>('.cartao-abrir')).find((c) => c.textContent?.includes(titulo))
+    if (cartao) {
+      cartao.click()
       clearInterval(id)
     }
   }, 50)

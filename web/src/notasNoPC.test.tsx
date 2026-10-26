@@ -364,8 +364,9 @@ describe('a nota aberta', () => {
     expect(d.getAttribute('data-cor')).toBe('amarelo')
     expect(campoTitulo().value).toBe('Compras')
     expect(linhasDoDialogo().map((l) => l.value)).toEqual(['leite', 'café', 'pão'])
-    // Com texto, o foco vai para o fim do corpo.
-    expect(document.activeElement).toBe(linhasDoDialogo()[2])
+    // Com texto, o foco vai para o fim do último item ainda aberto: o pão,
+    // marcado, fica embaixo e não recebe o ditado.
+    expect(document.activeElement).toBe(linhasDoDialogo()[1])
     expect(within(d).getByText(/editada às \d\d:\d\d/)).toBeTruthy()
   })
 

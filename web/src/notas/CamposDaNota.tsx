@@ -27,8 +27,11 @@ export function CamposDaNota({ titulo, aoMudarTitulo, editor, focoInicial, rotul
 
   useEffect(() => {
     if (focoInicial === 'titulo') return campoTitulo.current?.focus()
-    const campos = raiz.current?.querySelectorAll('textarea')
-    const ultimo = campos?.item(campos.length - 1)
+    // O fim da última linha ainda aberta: o item marcado fica embaixo, mas quem
+    // abre a lista quer continuar nela (um ditado ali cairia num item já feito).
+    const abertos = raiz.current?.querySelectorAll('.linha-editada:not(.feita) textarea')
+    const campos = abertos?.length ? abertos : raiz.current?.querySelectorAll('textarea')
+    const ultimo = campos?.item(campos.length - 1) as HTMLTextAreaElement | undefined
     if (!ultimo) return
     ultimo.focus()
     ultimo.setSelectionRange(ultimo.value.length, ultimo.value.length)

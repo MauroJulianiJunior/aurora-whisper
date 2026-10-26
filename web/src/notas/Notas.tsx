@@ -411,18 +411,6 @@ export function Notas({ cliente, busca, aoPerderLigacao: aoPerderLigacaoDoPainel
         {anuncio}
       </p>
 
-      {vista === 'ativas' && (
-        <CriarNota
-          cliente={cliente}
-          aoCriar={(nota) => {
-            mudarItens((itens) => (marcador || busca ? itens : [nota, ...itens]))
-            if (marcador || busca) avisar('Nota criada.')
-            recarregar()
-          }}
-          aoPerderLigacao={aoPerderLigacao}
-        />
-      )}
-
       <div className="barra-de-notas">
         <div className="filtros" role="group" aria-label="Marcadores">
           <button type="button" className="filtro" aria-pressed={vista === 'ativas' && marcador === null} onClick={() => escolherVista('ativas', null)}>
@@ -468,6 +456,18 @@ export function Notas({ cliente, busca, aoPerderLigacao: aoPerderLigacaoDoPainel
           </div>
         )}
       </div>
+
+      {vista === 'ativas' && (
+        <CriarNota
+          cliente={cliente}
+          aoCriar={(nota) => {
+            mudarItens((itens) => (marcador || busca ? itens : [nota, ...itens]))
+            if (marcador || busca) avisar('Nota criada.')
+            recarregar()
+          }}
+          aoPerderLigacao={aoPerderLigacao}
+        />
+      )}
 
       {conteudo}
 
