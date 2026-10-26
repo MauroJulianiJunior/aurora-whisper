@@ -145,6 +145,11 @@ func lerTabelasDe(t *testing.T, db *sql.DB) map[string][]map[string]any {
 			if v, ok := m["virou_nota"]; ok && v == nil && tb == "local_transcriptions" {
 				delete(m, "virou_nota")
 			}
+			// A note_trigger_enabled (0011, "Ditar para nota") nasce com o padrão
+			// ligado: com ele, não é mudança.
+			if v, ok := m["note_trigger_enabled"]; ok && v == int64(1) && tb == "local_settings" {
+				delete(m, "note_trigger_enabled")
+			}
 			out[tb] = append(out[tb], m)
 		}
 		r.Close()
@@ -231,8 +236,9 @@ func TestSyncE2E_HistoricoDeVerdadeNaoPerdeNemMudaNada(t *testing.T) {
 	pc := n.pcSobre(caminho, donoDoFixture)
 	depois06 := lerTabelasDe(t, pc.db)
 	semMudar(t, "a 0006, a 0007 e a 0008", original, depois06, "schema_migrations")
-	// (e a 0009, das notas, e a 0010, do ditado que virou nota: o Migrate roda até a última)
-	if m := depois06["schema_migrations"]; len(m) != 10 || m[6]["version"] != "0007_sync_aprendido" || m[7]["version"] != "0008_sync_aprendido_perdido" || m[8]["version"] != "0009_notas" || m[9]["version"] != "0010_ditado_virou_nota" {
+	// (e a 0009, das notas, a 0010, do ditado que virou nota, e a 0011, do gatilho
+	// da nota: o Migrate roda até a última)
+	if m := depois06["schema_migrations"]; len(m) != 11 || m[6]["version"] != "0007_sync_aprendido" || m[7]["version"] != "0008_sync_aprendido_perdido" || m[8]["version"] != "0009_notas" || m[9]["version"] != "0010_ditado_virou_nota" || m[10]["version"] != "0011_local_settings_gatilho_da_nota" {
 		t.Errorf("as migrations: %v", m)
 	}
 	for _, tb := range []string{"sync_mudou_aqui", "sync_aprendido", "sync_veio_da_nuvem", "local_notes", "local_labels", "local_note_labels"} {
