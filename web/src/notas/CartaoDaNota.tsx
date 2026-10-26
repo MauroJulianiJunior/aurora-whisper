@@ -17,6 +17,7 @@ export interface AcoesDaNota {
   marcar(nota: Nota, marcador: Marcador, marcar: boolean): void
   criarEMarcar(nota: Nota, nome: string): Promise<string | null>
   copiar(nota: Nota): void
+  copiarWhatsApp(nota: Nota): void
   lixeira(nota: Nota): void
 }
 
@@ -169,6 +170,16 @@ function Ferramentas({ nota, noArquivo, acoes, nome, marcadores }: Pick<PropsCom
               >
                 <Icone nome="copiar" />
                 Copiar texto
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  acoes.copiarWhatsApp(nota)
+                  fechar()
+                }}
+              >
+                <Icone nome="conversa" />
+                Copiar para WhatsApp
               </button>
               <hr />
               <button

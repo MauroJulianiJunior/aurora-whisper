@@ -788,7 +788,15 @@ próprio para "ditar para nota" e a lista marcável sem rede no celular. Fases (
   "Agora não" por nota (AC-085); sem mudança no Go. **Falta o teste no PC, que é do Mauro:**
   `docs/teste-manual-notas-n4.md`;
 - **N5:** converter trecho (prefixo, regra e IA com as guardas; prompt `notas-lista@1`);
-- **N6:** lista de marcar, copiar para WhatsApp, busca única;
+- **N6:** lista de marcar, copiar para WhatsApp, busca única. **Feita nos dublês (26-out-2026):** a lista de
+  marcar (os marcados descem, "Desmarcar tudo", "Apagar marcados") já tinha saído na N2 e foi só conferida;
+  novos, o **Copiar para WhatsApp** (`notas/whatsapp.ts`, função pura, e `copiarParaWhatsApp.ts`, a área de
+  transferência só no clique e o `navigator.share` no celular) no Mais da nota e do cartão, e a **busca única**
+  (`busca/BuscaUnica.tsx` e `busca/destaque.ts`): o campo do topo procura nas notas e nos ditados, em dois
+  grupos, com o trecho em `<mark>`, "Ver todas", teclado e região viva (AC-086, AC-087). No Go, uma só mudança:
+  a busca do histórico passou a ignorar acento, como a das notas (`storage.dobrar`). **Falta o teste no PC,
+  que é do Mauro:** `docs/teste-manual-notas-n6.md` (colar no WhatsApp Web de verdade; o celular fica para a
+  N8);
 - **N7:** sync das notas e marcadores (migrations do Postgres; **deploy é ponto de parada**);
 - **N8:** aba Notas no celular, "Ditar para nota" e a fila offline;
 - **N9:** gatilho "ditar para nota" no PC;

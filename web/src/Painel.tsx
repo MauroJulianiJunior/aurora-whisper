@@ -1,6 +1,6 @@
 import { type KeyboardEvent, type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { type Aprendida, Conflito, type Ditado, type EscolhaDoSelo, ForaDoAr, type Problema, type Sugestao, problemaDe } from './api'
-import type { Ambiente, Aprendiz, SecaoDasConfiguracoes } from './ambiente'
+import type { Ambiente, Aprendiz, GrupoDaBusca, SecaoDasConfiguracoes } from './ambiente'
 import { Aurora } from './Aurora'
 import { Aviso, type AvisoDados } from './Aviso'
 import { agruparPorDia, formatarCurta, formatarHora } from './datas'
@@ -66,7 +66,7 @@ function semChave<T>(r: Record<string, T>, id: string): Record<string, T> {
 }
 
 export function Painel({ ambiente, focarNoTitulo = false }: Props) {
-  const { cliente, textos, Configuracoes, Faixa, AvisoDoMicrofone, ditar: Ditar, Notas, virarNota: acaoVirarNota } = ambiente
+  const { cliente, textos, Configuracoes, Faixa, AvisoDoMicrofone, ditar: Ditar, Notas, virarNota: acaoVirarNota, buscaUnica } = ambiente
   const [vista, setVista] = useState<Vista>('historico')
   // emNotas: a aba Notas (só no PC, ambiente.Notas) está à vista, no lugar da
   // lista. A busca do topo passa a ser a dela. Como as Configurações, é uma
@@ -86,6 +86,13 @@ export function Painel({ ambiente, focarNoTitulo = false }: Props) {
   const [secaoPedida, setSecaoPedida] = useState<{ nome: SecaoDasConfiguracoes; vez: number } | null>(null)
   const [texto, setTexto] = useState('')
   const [busca, setBusca] = useState('')
+  // escopo: a busca única (ambiente.buscaUnica, só no PC) mostra as notas e os
+  // ditados juntos; "Ver todas", ou abrir um ditado achado, leva a um grupo só, e
+  // a aba dele mostra a lista filtrada pela mesma busca. null: os dois grupos.
+  const [escopo, setEscopo] = useState<GrupoDaBusca | null>(null)
+  // recargaDaNota sobe quando a janela de uma nota achada na busca fecha: os
+  // resultados são lidos de novo.
+  const [recargaDaNota, setRecargaDaNota] = useState(0)
   const [recarga, setRecarga] = useState(0)
   const [resultado, setResultado] = useState<Resultado | null>(null)
   const [carregandoMais, setCarregandoMais] = useState(false)
@@ -113,6 +120,7 @@ export function Painel({ ambiente, focarNoTitulo = false }: Props) {
   const titulo = useRef<HTMLHeadingElement>(null)
   const campoBusca = useRef<HTMLInputElement>(null)
   const lista = useRef<HTMLDivElement>(null)
+  const areaDaBusca = useRef<HTMLDivElement>(null)
   // focarDepois: a linha que recebe o foco no próximo render, depois que
   // uma linha sai (lixeira, restaurar) ou entra (Desfazer, mais antigos).
   // id null: não há linha para onde ir, e o foco vai para a busca.
@@ -137,7 +145,16 @@ export function Painel({ ambiente, focarNoTitulo = false }: Props) {
     chegouAtual.current = chegou
   })
 
-  const chave = `${vista}\u0000${busca}\u0000${recarga}`
+  // Com a busca única (Histórico e Notas), o campo do topo não filtra a lista da
+  // aba: os resultados dos dois grupos tomam o lugar dela, e a lista só lê a busca
+  // quando a pessoa foi aos ditados ("Ver todos"). Na Lixeira, a busca é a dela.
+  const comBuscaUnica = Boolean(buscaUnica) && !(vista === 'lixeira' && !emNotas)
+  const buscaDoHistorico = comBuscaUnica && escopo !== 'ditados' ? '' : busca
+  const buscaDasNotas = buscaUnica && escopo !== 'notas' ? '' : busca
+  // buscaUnicaAtiva: os resultados dos dois grupos estão à vista.
+  const buscaUnicaAtiva = comBuscaUnica && !configurando && busca !== '' && escopo === null
+
+  const chave = `${vista}\u0000${buscaDoHistorico}\u0000${recarga}`
   const carregando = resultado?.chave !== chave
 
   const mostrarAviso = useCallback((dados: Omit<AvisoDados, 'id'>) => {
@@ -187,8 +204,8 @@ export function Painel({ ambiente, focarNoTitulo = false }: Props) {
     if (emNotas) return
     const ctrl = new AbortController()
     ultimaCarga.current = Date.now()
-    const consulta = { chave, vista, busca }
-    cliente.listar({ lixeira: vista === 'lixeira', busca }, ctrl.signal).then(
+    const consulta = { chave, vista, busca: buscaDoHistorico }
+    cliente.listar({ lixeira: vista === 'lixeira', busca: buscaDoHistorico }, ctrl.signal).then(
       (p) => {
         // hoje é o momento desta carga, não o da montagem: a aba fica
         // aberta por dias, e "Hoje" congelado passava a marcar os ditados
@@ -231,7 +248,7 @@ export function Painel({ ambiente, focarNoTitulo = false }: Props) {
       },
     )
     return () => ctrl.abort()
-  }, [cliente, vista, busca, chave, avisar, acender, textos, emNotas])
+  }, [cliente, vista, buscaDoHistorico, chave, avisar, acender, textos, emNotas])
 
   // Voltar para a aba recarrega a lista: quem dita com o painel aberto ao
   // lado precisa ver o ditado novo sem apertar F5 — que, por segurança,
@@ -400,12 +417,14 @@ export function Painel({ ambiente, focarNoTitulo = false }: Props) {
       setNotaPedida(null) // saindo das Notas, o pedido acaba: voltar à aba não reabre a nota
       setTexto('')
       setBusca('')
+      setEscopo(null)
     }
     if (v === vista) return
     largar(aberto)
     setVista(v)
     setTexto('')
     setBusca('')
+    setEscopo(null)
     setAberto(null)
     setChegou(null)
   }
@@ -433,7 +452,59 @@ export function Painel({ ambiente, focarNoTitulo = false }: Props) {
     setConfigurando(false)
     setTexto('')
     setBusca('')
+    setEscopo(null)
     setEmNotas(true)
+  }
+
+  // mudarTexto é o que a pessoa digita no campo do topo. Sem texto, a busca acaba:
+  // o escopo e o pedido de abrir uma nota achada saem junto.
+  function mudarTexto(novo: string) {
+    setTexto(novo)
+    if (novo.trim() === '') encerrarBusca()
+  }
+
+  // encerrarBusca tira o escopo e, fora das Notas (onde a aba se desmonta com a
+  // busca), o pedido de abrir a nota: montar a aba de novo não a reabre.
+  function encerrarBusca() {
+    setEscopo(null)
+    if (!emNotas) setNotaPedida(null)
+  }
+
+  // limparBusca é o Esc: o campo esvazia e a lista da aba volta.
+  function limparBusca() {
+    setTexto('')
+    setBusca('')
+    encerrarBusca()
+  }
+
+  // verTodas é o "Ver todas" de um grupo da busca única: a aba do grupo, com a
+  // mesma busca (o texto fica no campo) e uma linha embaixo que traz os dois
+  // grupos de volta.
+  function verTodas(grupo: GrupoDaBusca) {
+    largar(aberto)
+    setAberto(null)
+    setChegou(null)
+    setEscopo(grupo)
+    if (grupo === 'notas') {
+      setEmNotas(true)
+    } else {
+      setEmNotas(false)
+      setNotaPedida(null)
+      setVista('historico')
+    }
+  }
+
+  // abrirDitadoAchado leva ao histórico, filtrado pela busca (o ditado está nessa
+  // lista), com o ditado aberto no editor.
+  function abrirDitadoAchado(item: Ditado) {
+    verTodas('ditados')
+    abrir(item)
+  }
+
+  // abrirNotaAchada abre a nota na janela, sobre os resultados: a aba Notas fica
+  // montada por trás, escondida (PropsDasNotas.oculta).
+  function abrirNotaAchada(id: string) {
+    setNotaPedida((p) => ({ id, vez: (p?.vez ?? 0) + 1 }))
   }
 
   function abrir(item: Ditado) {
@@ -821,21 +892,29 @@ export function Painel({ ambiente, focarNoTitulo = false }: Props) {
 
   // campo é a busca. Na nuvem, o gravador do ditado a recebe e a põe ao lado do
   // microfone.
+  const rotuloDoCampo = buscaUnica && comBuscaUnica ? buscaUnica.placeholder : emNotas ? 'Buscar nas notas' : naLixeira ? 'Buscar na lixeira' : 'Buscar no histórico'
+  const primeiroResultado = () => areaDaBusca.current?.querySelector<HTMLElement>('[data-resultado]') ?? null
   const campo = (
     <input
       ref={campoBusca}
       type="search"
       className="busca"
-      placeholder={emNotas ? 'Buscar nas notas' : naLixeira ? 'Buscar na lixeira' : 'Buscar no histórico'}
-      aria-label={emNotas ? 'Buscar nas notas' : naLixeira ? 'Buscar na lixeira' : 'Buscar no histórico'}
+      placeholder={rotuloDoCampo}
+      aria-label={rotuloDoCampo}
       aria-keyshortcuts="Control+K"
       value={texto}
-      onChange={(e) => setTexto(e.target.value)}
+      onChange={(e) => mudarTexto(e.target.value)}
       onKeyDown={(e) => {
         if (e.key === 'Escape' && texto) {
           e.preventDefault()
-          setTexto('')
-          setBusca('')
+          limparBusca()
+        } else if (buscaUnicaAtiva && texto.trim() === busca && (e.key === 'ArrowDown' || e.key === 'Enter')) {
+          // Da busca para os resultados: a seta desce a eles; o Enter abre o primeiro.
+          const primeiro = primeiroResultado()
+          if (!primeiro) return
+          e.preventDefault()
+          if (e.key === 'Enter') primeiro.click()
+          else primeiro.focus()
         }
       }}
     />
@@ -1003,10 +1082,51 @@ export function Painel({ ambiente, focarNoTitulo = false }: Props) {
             foco na busca, não ouvia se ela tinha achado algo (WCAG 4.1.3,
             revisão de 29-set-2026). */}
         <p className="so-leitor anuncio" role="status">
-          {(!configurando && !emNotas && visivel?.anuncio) || ''}
+          {(!configurando && !emNotas && !buscaUnicaAtiva && visivel?.anuncio) || ''}
         </p>
-        {!configurando && !emNotas && conteudo}
-        {Notas && emNotas && !configurando && <Notas busca={busca} aoPerderLigacao={falhar} avisar={avisar} abrirNota={notaPedida} />}
+        {buscaUnica && escopo && busca !== '' && !configurando && (
+          <p className="escopo-busca">
+            {buscaUnica.rotuloDoEscopo[escopo]} para “{busca}”
+            <button
+              type="button"
+              className="botao pequeno leve"
+              onClick={() => {
+                setEscopo(null)
+                campoBusca.current?.focus()
+              }}
+            >
+              {buscaUnica.rotuloDeVoltar}
+            </button>
+          </p>
+        )}
+        {!configurando && !emNotas && !buscaUnicaAtiva && conteudo}
+        {buscaUnica && buscaUnicaAtiva && (
+          <div ref={areaDaBusca}>
+            <buscaUnica.Resultados
+              busca={busca}
+              recarga={recarga + recargaDaNota}
+              aoAbrirNota={abrirNotaAchada}
+              aoAbrirDitado={abrirDitadoAchado}
+              aoVerTodas={verTodas}
+              aoLimpar={() => {
+                limparBusca()
+                campoBusca.current?.focus()
+              }}
+              aoVoltarAoCampo={() => campoBusca.current?.focus()}
+              aoPerderLigacao={falhar}
+            />
+          </div>
+        )}
+        {Notas && !configurando && (emNotas || buscaUnicaAtiva) && (
+          <Notas
+            busca={buscaDasNotas}
+            aoPerderLigacao={falhar}
+            avisar={avisar}
+            abrirNota={notaPedida}
+            oculta={buscaUnicaAtiva}
+            aoTerminarNota={() => setRecargaDaNota((n) => n + 1)}
+          />
+        )}
         {abriuConfiguracoes && (
           <Configuracoes
             visivel={configurando}

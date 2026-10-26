@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 import { SemSessao } from './api'
 import { type Pedido, ditado, servidorFalso } from './testes/servidorFalso'
+import { renderizarSoHistorico } from './testes/soHistorico'
 
 const em = (dia: number, hora: number, minuto = 0) => new Date(2026, 8, dia, hora, minuto).toISOString()
 
@@ -20,9 +21,14 @@ function cinco() {
   return [15, 14, 13, 12, 11].map((h, i) => ditado({ id: `p${i + 1}`, created_at: em(28, h), final_text: `Ditado número ${i + 1}.` }))
 }
 
-function montar(itens = base(), opcoes: { porPagina?: number } = {}) {
-  const srv = servidorFalso(itens, opcoes)
-  render(<App sessao={Promise.resolve('tok')} buscar={srv.buscar} />)
+// soHistorico: o Painel sem a busca única (ADR-022, N6), com a busca do topo só
+// no histórico, que é a da nuvem e a da Lixeira. Os testes da lista com busca
+// (a mensagem de vazio de cada consulta, o cursor, a região viva) a usam.
+function montar(itens = base(), opcoes: { porPagina?: number; soHistorico?: boolean } = {}) {
+  const { soHistorico, ...doServidor } = opcoes
+  const srv = servidorFalso(itens, doServidor)
+  if (soHistorico) renderizarSoHistorico(srv.buscar)
+  else render(<App sessao={Promise.resolve('tok')} buscar={srv.buscar} />)
   return srv
 }
 
@@ -176,7 +182,7 @@ describe('painel', () => {
   })
 
   it('busca vai para a API e mostra quando não acha nada', async () => {
-    const srv = montar()
+    const srv = montar(base(), { soHistorico: true })
     await linha(/Manda para o Thiago/)
     const busca = screen.getByRole('searchbox', { name: 'Buscar no histórico' })
 
@@ -586,7 +592,7 @@ describe('carga da lista', () => {
   })
 
   it('enquanto a consulta nova não responde, a mensagem de vazio é a da consulta que está na tela', async () => {
-    const srv = montar()
+    const srv = montar(base(), { soHistorico: true })
     await linha(/Manda para o Thiago/)
     const busca = screen.getByRole('searchbox')
     fireEvent.change(busca, { target: { value: 'inexistente' } })
@@ -605,7 +611,7 @@ describe('carga da lista', () => {
   })
 
   it('"Mostrar mais antigos" pede a página com a busca e o cursor do resultado na tela', async () => {
-    const srv = montar(cinco(), { porPagina: 2 })
+    const srv = montar(cinco(), { porPagina: 2, soHistorico: true })
     await linha(/Ditado número 1/)
     const soltar = srv.pausar((p) => p.busca.get('q') === 'zzz')
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'zzz' } })
@@ -620,7 +626,7 @@ describe('carga da lista', () => {
   })
 
   it('a região viva anuncia cada carga: quantos, nada encontrado, erro', async () => {
-    const srv = montar()
+    const srv = montar(base(), { soHistorico: true })
     await linha(/Manda para o Thiago/)
     expect(anuncio().getAttribute('role')).toBe('status')
     expect(anuncio().textContent).toBe('3 ditados no histórico.')

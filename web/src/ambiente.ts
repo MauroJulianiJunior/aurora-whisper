@@ -122,6 +122,52 @@ export interface PropsDasNotas {
   // abrirNota: o pedido do "Abrir" do aviso "Virou nota": a nota que a janela
   // abre. vez sobe a cada pedido, para o mesmo pedido de novo valer de novo.
   abrirNota?: { id: string; vez: number } | null
+  // oculta: a busca única está à vista (ADR-022, N6). A aba fica montada, com o
+  // que a pessoa estava fazendo, mas só a janela da nota aparece, para abrir uma
+  // nota achada na busca sem sair dos resultados.
+  oculta?: boolean
+  // aoTerminarNota: a janela de uma nota fechou (salvou, arquivou, foi para a
+  // lixeira). A busca única relê os resultados.
+  aoTerminarNota?(): void
+}
+
+// GrupoDaBusca é um dos dois grupos da busca única: o que o Painel sabe dizer
+// deles sem saber o que são notas.
+export type GrupoDaBusca = 'notas' | 'ditados'
+
+// PropsDosResultadosDaBusca é o que o Painel passa aos resultados da busca única
+// (ADR-022, N6): "Ctrl+K procura nas notas e no histórico, em dois grupos".
+export interface PropsDosResultadosDaBusca {
+  // busca: o texto do campo do topo (já com a espera da digitação).
+  busca: string
+  // recarga: sobe quando os resultados devem ser lidos de novo (voltar à aba, o
+  // sync, uma nota que fechou). O que está na tela fica até a leitura chegar.
+  recarga: number
+  // aoAbrirNota abre a nota na janela, sobre os resultados.
+  aoAbrirNota(id: string): void
+  // aoAbrirDitado leva ao histórico, com o ditado aberto no editor.
+  aoAbrirDitado(ditado: Ditado): void
+  // aoVerTodas leva à aba do grupo, com a mesma busca.
+  aoVerTodas(grupo: GrupoDaBusca): void
+  // aoLimpar é o Esc nos resultados: a busca acaba e o foco volta ao campo.
+  aoLimpar(): void
+  // aoVoltarAoCampo é a seta para cima no primeiro resultado.
+  aoVoltarAoCampo(): void
+  aoPerderLigacao(e: unknown): void
+}
+
+// BuscaUnica é a busca do topo que procura nas notas e nos ditados (ADR-022, N6).
+// Só o PC a tem (as notas moram no Agent): o texto e os resultados vêm daqui, e o
+// Painel, que é o mesmo código dos dois builds, não carrega nada disso no da nuvem
+// (bundle.test.ts).
+export interface BuscaUnica {
+  // placeholder: o texto do campo, e o nome dele para o leitor de tela.
+  placeholder: string
+  // rotuloDoEscopo: a linha de baixo do campo quando a pessoa foi a um grupo só
+  // ("Ver todas"), e rotuloDeVoltar, o botão que traz os dois grupos de volta.
+  rotuloDoEscopo: Record<GrupoDaBusca, string>
+  rotuloDeVoltar: string
+  Resultados: ComponentType<PropsDosResultadosDaBusca>
 }
 
 // AcaoVirarNota é a ação "Virar nota" do histórico (ADR-022, N3). Só o PC a tem
@@ -149,6 +195,9 @@ export interface Ambiente {
   Notas?: ComponentType<PropsDasNotas>
   // virarNota é o "Virar nota" do editor do histórico (ADR-022, N3). Só o PC.
   virarNota?: AcaoVirarNota
+  // buscaUnica é a busca nas notas e nos ditados (ADR-022, N6). Só o PC. Sem ela, a
+  // busca do topo procura no histórico, como sempre.
+  buscaUnica?: BuscaUnica
   // AvisoDoMicrofone é o aviso do topo quando o Windows bloqueia o microfone, com
   // o botão que abre a tela certa. Só o PC o tem (o Agent lê o registro do
   // Windows); é o componente, e não só a consulta, para o texto e as rotas não

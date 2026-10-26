@@ -84,27 +84,31 @@ describe('a aba', () => {
     expect(document.querySelector('.painel')!.classList.contains('larga')).toBe(true)
     expect(screen.getByRole('button', { name: 'Notas' }).getAttribute('aria-pressed')).toBe('true')
     expect(screen.getByRole('button', { name: 'Histórico' }).getAttribute('aria-pressed')).toBe('false')
-    expect(screen.getByRole('searchbox', { name: 'Buscar nas notas' })).toBeTruthy()
+    // A busca do topo é a única (ADR-022, N6): a mesma nas duas abas.
+    expect(screen.getByRole('searchbox', { name: 'Buscar nas notas e nos ditados' })).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: 'Histórico' }))
     expect(document.querySelector('.painel')!.classList.contains('larga')).toBe(false)
-    expect(screen.getByRole('searchbox', { name: 'Buscar no histórico' })).toBeTruthy()
+    expect(screen.getByRole('searchbox', { name: 'Buscar nas notas e nos ditados' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Notas' }))
     fireEvent.click(screen.getByRole('button', { name: 'Configurações' }))
     expect(document.querySelector('.painel')!.classList.contains('larga')).toBe(false)
     expect(screen.getByRole('button', { name: 'Notas' }).getAttribute('aria-pressed')).toBe('false')
   })
 
-  it('a busca do topo busca nas notas (q), e trocar de aba a limpa', async () => {
+  it('a busca do topo busca nas notas e nos ditados (q), e trocar de aba a limpa', async () => {
     const srv = await abrirNotas()
     await screen.findByText('Compras', { selector: 'h3' })
-    fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar nas notas' }), { target: { value: 'ideia' } })
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar nas notas e nos ditados' }), { target: { value: 'ideia' } })
     await waitFor(() => expect(srv.pedidos.some((p) => p.caminho === '/api/notas' && p.busca.get('q') === 'ideia')).toBe(true))
-    await waitFor(() => expect(cartoes()).toEqual(['n2']))
-    // O histórico, escondido, não lê a busca das notas.
-    expect(srv.pedidos.some((p) => p.caminho === '/api/history' && p.busca.get('q') === 'ideia')).toBe(false)
+    // Os dois grupos (busca única): os ditados também são lidos.
+    expect(srv.pedidos.some((p) => p.caminho === '/api/history' && p.busca.get('q') === 'ideia')).toBe(true)
+    await screen.findByRole('heading', { name: 'Notas · 1', level: 2 })
+    // A aba Notas fica por trás, escondida, sem o filtro: os resultados é que mostram a busca.
+    expect(document.querySelector('.notas')!.hasAttribute('data-oculta')).toBe(true)
     fireEvent.click(screen.getByRole('button', { name: 'Histórico' }))
-    expect((screen.getByRole('searchbox', { name: 'Buscar no histórico' }) as HTMLInputElement).value).toBe('')
+    expect((screen.getByRole('searchbox', { name: 'Buscar nas notas e nos ditados' }) as HTMLInputElement).value).toBe('')
+    expect(document.querySelector('.busca-unica')).toBeNull()
   })
 
   it('o painel da nuvem não tem a aba (o ambiente dela não traz as notas)', async () => {

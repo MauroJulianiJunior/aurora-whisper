@@ -43,6 +43,12 @@
 //   renomear e apagar; o botão de marcador do cartão e da nota abre o menu com caixinhas;
 //   e ?abrir=Lista do sábado abre uma lista sem marcador parecida com as do Compras, com a
 //   faixa "Marcar como Compras?".
+//   busca              (ADR-022, N6) a busca única: o Histórico com a busca "fgts" já digitada, uma
+//                      nota e três ditados nos dois grupos (e as sete notas de "imposto" para o
+//                      "Ver todas"; digite imposto). ?q=<texto> escolhe outra busca. Nas notas
+//                      de qualquer cenário, o menu Mais do cartão e da nota tem o "Copiar para
+//                      WhatsApp" (no PC ele grava na área de transferência de verdade: clique só
+//                      no navegador de quem está vendo).
 //   No historico, o clique em Apagar os mais antigos pergunta na linha, e o Apagar
 //   liga a regra no Agent de mentira (a prévia some; a Privacidade ganha a linha).
 // A tela de Configurações abre sozinha; ?config=0 deixa no Histórico.
@@ -113,6 +119,16 @@ const nuvem =
 const ditados =
   cenario === 'primeiro-uso'
     ? []
+    : cenario === 'busca'
+      ? [
+          ditado({ id: 'b1', created_at: new Date(2026, 9, 25, 10).toISOString(), final_text: 'Faltam três coisas para fechar o mês: a folha, o FGTS e a guia do INSS.' }),
+          ditado({ id: 'b2', created_at: new Date(2026, 9, 22, 15).toISOString(), final_text: 'O FGTS da padaria venceu dia 20, confere se pagaram.' }),
+          ditado({ id: 'b3', created_at: new Date(2026, 9, 18, 9).toISOString(), final_text: 'Mandar o relatório do FGTS digital para o Grupo Ramos.' }),
+          ditado({ id: 'b4', created_at: new Date(2026, 9, 17, 9).toISOString(), final_text: 'Marcar a reunião de quinta com a Fernanda e levar o imposto de renda.' }),
+          ...Array.from({ length: 5 }, (_, i) =>
+            ditado({ id: `i${i}`, created_at: new Date(2026, 9, 16, 9, i).toISOString(), final_text: `Pagar o imposto número ${i + 1} até sexta.` }),
+          ),
+        ]
     : cenario === 'virar-nota'
       ? [
           ditado({ id: 'd1', created_at: new Date(2026, 9, 25, 14).toISOString(), final_text: 'Manda o relatório amanhã cedo.' }),
@@ -144,6 +160,16 @@ const notasDeExemplo: Nota[] = [
 ]
 
 const srv = servidorFalso(ditados, {
+  ...(cenario === 'busca'
+    ? {
+        notas: [
+          nota({ id: 'f1', titulo: 'Fechamento de outubro', corpo: '# Pauta\n- DCTFWeb\n- [ ] Folha e FGTS', cor: 'azul', updated_at: hora(9) }),
+          nota({ id: 'f2', titulo: 'Reunião com o contador', corpo: 'conferir o extrato do Itaú', updated_at: hora(10) }),
+          ...Array.from({ length: 7 }, (_, i) => nota({ id: `t${i}`, titulo: `Imposto ${i + 1}`, corpo: '- [ ] conferir', updated_at: hora(8, i) })),
+        ],
+        marcadores: [],
+      }
+    : {}),
   ...(cenario === 'notas'
     ? { notas: notasDeExemplo, marcadores: [marcador({ id: 'm1', nome: 'Compras' }), marcador({ id: 'm2', nome: 'Escritório' }), marcador({ id: 'm3', nome: 'Ideias' })] }
     : {}),
@@ -169,7 +195,17 @@ createRoot(document.getElementById('root')!).render(
 
 // Abre as Configurações sozinha (ou as Notas, nos cenários delas): o botão da
 // barra é o único com esse nome.
-if (busca.get('config') !== '0') {
+if (cenario === 'busca') {
+  // Digita a busca no campo do topo, como a pessoa faria (o React só vê o evento "input").
+  const texto = busca.get('q') ?? 'fgts'
+  const id = setInterval(() => {
+    const campo = document.querySelector<HTMLInputElement>('input[type=search]')
+    if (!campo) return
+    clearInterval(id)
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(campo, texto)
+    campo.dispatchEvent(new Event('input', { bubbles: true }))
+  }, 50)
+} else if (busca.get('config') !== '0') {
   const aba = cenario.startsWith('notas') ? 'Notas' : 'Configurações'
   const id = setInterval(() => {
     const botao = Array.from(document.querySelectorAll<HTMLButtonElement>('.vistas button')).find((b) => b.textContent === aba)

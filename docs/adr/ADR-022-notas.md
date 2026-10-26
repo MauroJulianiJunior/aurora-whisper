@@ -192,6 +192,13 @@ sistema real"). No celular, abre o compartilhamento do Android (`navigator.share
 A busca do painel (Ctrl+K) procura nas notas e no histórico, com os resultados em dois grupos
 ("Notas", "Ditados"). Nas notas, procura em título e corpo. Para quem usa: a "memória" do pedido.
 
+**[derivada] N6: um campo só, sem diferenciar acento.** O campo "Buscar nas notas" da N2 e a busca do
+histórico viraram o mesmo campo, "Buscar nas notas e nos ditados", nas abas Histórico e Notas; com texto,
+os dois grupos (até 5 de cada) tomam o lugar da lista, e "Ver todas" leva à aba do grupo com a mesma busca.
+Só as notas ativas entram (Arquivo e Lixeira não). A busca do histórico do Agent passou a ignorar acento,
+como a das notas, para o mesmo termo achar o mesmo nos dois grupos. Por quê: duas buscas no mesmo painel
+confundiriam, e "reuniao" achar a nota mas não o ditado seria um erro.
+
 ### Sugestão de marcador
 
 **[derivada] Local, sem IA.** Ao salvar uma nota sem marcador, o painel compara as palavras dela com

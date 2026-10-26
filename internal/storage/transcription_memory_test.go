@@ -162,6 +162,12 @@ func TestTranscriptionRepository_List_FiltersByQueryDeviceModeProvider(t *testin
 			wantID string
 		}{
 			{"query", storage.TranscriptionListFilter{UserID: "user-1", Query: "contabilidade"}, "tr-1"},
+			// A busca não diferencia maiúscula nem acento, em nenhum dos dois lados
+			// (a busca única do painel compara ditados e notas do mesmo jeito).
+			{"query com maiúscula", storage.TranscriptionListFilter{UserID: "user-1", Query: "CONTABILIDADE"}, "tr-1"},
+			{"query sem o acento do texto", storage.TranscriptionListFilter{UserID: "user-1", Query: "reuniao"}, "tr-1"},
+			{"query com o acento que o texto não tem", storage.TranscriptionListFilter{UserID: "user-1", Query: "assúnto"}, "tr-2"},
+			{"query acentuada em maiúscula", storage.TranscriptionListFilter{UserID: "user-1", Query: "REUNIÃO"}, "tr-1"},
 			{"device", storage.TranscriptionListFilter{UserID: "user-1", DeviceID: &device2}, "tr-2"},
 			{"mode", storage.TranscriptionListFilter{UserID: "user-1", Mode: strPtr("literal")}, "tr-2"},
 			{"provider", storage.TranscriptionListFilter{UserID: "user-1", ASRProvider: strPtr("local")}, "tr-1"},

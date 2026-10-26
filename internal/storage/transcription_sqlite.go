@@ -232,14 +232,10 @@ func (r *SQLiteTranscriptionRepository) List(ctx context.Context, filter Transcr
 	if filter.To != nil {
 		onde, args = append(onde, "created_at <= ?"), append(args, emTexto(*filter.To))
 	}
-	if q := strings.ToLower(strings.TrimSpace(filter.Query)); q != "" {
-		// LOWER() no SQLite só rebaixa ASCII. A busca do histórico
-		// precisa achar "balancete" digitando "Balancete", mas também
-		// "Rosângela" digitando "rosângela" — por isso a comparação de
-		// acentuados não pode depender do LOWER do banco. O filtro de
-		// texto é aplicado em Go, abaixo.
-		_ = q
-	}
+	// A busca por texto roda em Go, abaixo: LOWER() no SQLite só rebaixa ASCII, e a
+	// busca do histórico precisa achar "balancete" digitando "Balancete" e
+	// "Rosângela" digitando "rosangela" (a busca única do painel, ADR-022, N6,
+	// compara notas e ditados do mesmo jeito).
 	if filter.Cursor != "" {
 		ck, err := decodeCursor(filter.Cursor)
 		if err != nil {
@@ -265,7 +261,7 @@ func (r *SQLiteTranscriptionRepository) List(ctx context.Context, filter Transcr
 	}
 	defer linhas.Close()
 
-	busca := strings.ToLower(strings.TrimSpace(filter.Query))
+	busca := dobrar(strings.TrimSpace(filter.Query))
 	achadas := make([]Transcription, 0, limite+1)
 	for linhas.Next() {
 		t, err := lerTranscricao(linhas)
@@ -273,8 +269,8 @@ func (r *SQLiteTranscriptionRepository) List(ctx context.Context, filter Transcr
 			return TranscriptionPage{}, err
 		}
 		if busca != "" &&
-			!strings.Contains(strings.ToLower(t.RawText), busca) &&
-			!strings.Contains(strings.ToLower(t.FinalText), busca) {
+			!strings.Contains(dobrar(t.RawText), busca) &&
+			!strings.Contains(dobrar(t.FinalText), busca) {
 			continue
 		}
 		achadas = append(achadas, t)

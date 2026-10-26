@@ -175,8 +175,9 @@ describe('onde as marcas entram', () => {
     montar()
     await screen.findByRole('button', { name: /Manda para o Thiago/ })
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'inexistente' } })
-    await screen.findByText('Nada encontrado para “inexistente”.', { selector: '.estado p' })
-    expect(auroraGrande('.estado')).toBeNull()
+    // Os resultados da busca única; a aba Notas, por trás deles, tem o estado vazio dela.
+    await screen.findByText('Nada encontrado para “inexistente”.', { selector: '.busca-unica .estado p' })
+    expect(auroraGrande('.busca-unica .estado')).toBeNull()
   })
 
   // A Aurora pequena saiu da faixa (decisão do Mauro, 29-set-2026): chamava

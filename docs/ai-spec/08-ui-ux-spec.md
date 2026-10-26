@@ -1273,12 +1273,11 @@ nuvem não os tem, e o `bundle.test.ts` confere nos dois sentidos. Prévia: `doc
 Só no painel do PC (a Local API). O componente entra pelo `Ambiente` (`Ambiente.Notas`); o painel da nuvem
 não importa nada dele, e o `bundle.test.ts` confere nos dois sentidos. A fonte da verdade é o código
 (`web/src/notas/`); a prévia aprovada pelo Mauro é `docs/notas-previa-n2.html`. O que não é desta fase:
-converter trecho (N5), copiar para WhatsApp e
-busca única (N6), sync (N7), celular (N8), gatilho de voz (N9), imagens (N10).
+converter trecho (N5), sync (N7), celular (N8), gatilho de voz (N9), imagens (N10).
 
 **Onde fica e a largura.** Entre **Histórico** e **Lixeira**. Com a aba aberta o painel usa a largura da
-janela (até 96 rem); as outras telas seguem em 46 rem. O título vira "Notas" e a busca do topo passa a ser
-"Buscar nas notas" (o histórico não lê essa busca enquanto a aba está à vista).
+janela (até 96 rem); as outras telas seguem em 46 rem. O título vira "Notas". A busca do topo é a busca
+única (N6, abaixo): "Buscar nas notas e nos ditados", a mesma no Histórico e nas Notas.
 
 **Fileira de marcadores**, embaixo da busca: **Notas** (as ativas), um chip por marcador (com a conta de
 notas), **Arquivo**, **Lixeira** e, no fim, o chip tracejado **Editar marcadores** (N4). O filtro por marcador
@@ -1345,6 +1344,49 @@ seleciona várias linhas para o **Formatar**.
   Recalcula 600 ms depois da última tecla. **Agora não** vale para aquela nota (ids no `localStorage`,
   `aurora.notas.sugestao.dispensadas`, os 300 mais recentes; todo acesso em `try/catch`).
 
+**Copiar para WhatsApp (N6).** No **Mais** da nota aberta e no do cartão, ao lado de "Copiar texto". Converte
+a nota em texto de WhatsApp (`web/src/notas/whatsapp.ts`, função pura com tabela de testes): o título e cada
+seção (`# Seção`) em `*negrito*`, marcador como `• item`, lista de marcar como `☐ item` (aberto) e `✅ item`
+(marcado), numerada como `1. item`, parágrafo como está. Uma linha em branco depois do título e antes de cada
+seção que não abre o texto; as do corpo se juntam numa só; item e seção vazios saem. O WhatsApp não tem escape
+para `*`: os asteriscos do título e das seções saem (fechariam o negrito); os do corpo ficam (quem escreveu
+`*urgente*` já escreveu em WhatsApp). A área de transferência só é usada pelo clique de quem pediu
+(`navigator.clipboard.writeText`, nunca pelo Agent); a pílula diz "Copiado para o WhatsApp.", ou, se falhar,
+"Não consegui copiar. Selecione o texto e use Ctrl+C." (na nota aberta) / "Abra a nota e use Ctrl+C." (no
+cartão). Em tela estreita (`useTelaEstreita`, até 640 px) com `navigator.share`, abre a folha de compartilhar
+do sistema com o texto; fechar a folha sem escolher não é erro, e se ela falhar o texto vai para a área de
+transferência. Nota sem texto: "A nota está vazia: não há o que copiar.". Na nota aberta, copia o que está na
+janela, mesmo antes de salvar.
+
+**Busca única (N6; prévia aprovada em `docs/notas-previa-n2.html`, cena 5).** "Ctrl+K procura nas notas e no
+histórico, em dois grupos" (Mauro). Só no painel do PC (`Ambiente.buscaUnica`); o da nuvem e a aba Lixeira do
+topo seguem com a busca de sempre.
+- **Um campo só.** "Buscar nas notas e nos ditados", nas abas **Histórico** e **Notas** (o Ctrl+K leva a ele).
+  Com texto (250 ms depois da última tecla), os **resultados** tomam o lugar da lista da aba; sem texto (apagar
+  ou **Esc**), a aba volta. O filtro "Buscar nas notas" da N2 deixou de existir: a mesma busca, no mesmo campo,
+  vira os dois grupos. Trocar de aba limpa a busca, como sempre.
+- **Dois grupos**, só os que têm resultado: **NOTAS · n** (a bolinha da cor da nota, o título em Space Grotesk,
+  " · " e a primeira linha do corpo que casa, sem o prefixo da lista; se o termo só está no título, o começo do
+  corpo) e **DITADOS · n** (o quando na mono: a hora se foi hoje, "ontem", ou "22 out"; e o texto, cortado em
+  volta do trecho que casa). Até **5** de cada; com mais, **Ver todas as N notas** / **Ver todos os N
+  ditados**. Os ditados chegam em páginas (50): com mais de uma, o grupo diz "50+". Notas: as ativas (o
+  Arquivo e a Lixeira das notas não entram); ditados: o histórico (a Lixeira dos ditados não entra).
+- **O trecho que casa** vai em `<mark>` (fundo `--selecao`), sem diferenciar **maiúscula nem acento**, como o
+  Agent (`storage.dobrar`) faz nas notas e, desde a N6, no histórico: "reuniao" acha "Reunião" nos dois grupos.
+- **Abrir.** A nota abre na **janela** sobre os resultados (a aba Notas fica montada por trás, escondida); ao
+  fechar, os resultados são lidos de novo e o foco volta ao resultado. O ditado leva ao **Histórico**, na lista
+  filtrada pela mesma busca, com o editor dele aberto. **Ver todas** leva à aba do grupo com a mesma busca
+  (a lista da aba filtrada, como era a busca da N2), e uma linha embaixo do campo diz "Só nas notas para “…”" /
+  "Só nos ditados para “…”" com **Ver notas e ditados** para trazer os dois grupos de volta.
+- **Teclado.** A seta para baixo no campo desce ao primeiro resultado; as setas andam por todos (e pelos "Ver
+  todas"); para cima do primeiro volta ao campo; **Enter** no campo abre o primeiro resultado; **Esc** (no campo
+  ou num resultado) acaba a busca e deixa o foco no campo. Os resultados são botões; Tab passa por todos.
+- **Estados.** "Carregando…" só se demorar (como o resto do painel); "Nada encontrado para “…”."; se um grupo
+  falhar, ele diz "Não consegui buscar nas notas/nos ditados: …" com **Tentar de novo** e o outro aparece; a falha
+  de ligação acende a faixa do topo. Uma busca nova cancela a anterior, e a resposta lenta de uma não aparece
+  embaixo da outra. A região viva (`role="status"`) diz "1 nota e 3 ditados para “fgts”." / "Nada encontrado…".
+- **Toque.** Cada resultado tem 44 px de altura mínima.
+
 **Arquivo e Lixeira.** O Arquivo mostra as arquivadas (com Desarquivar). A Lixeira mostra as apagadas com
 **Restaurar** e **Excluir para sempre**, que pergunta na própria linha, sem janela: "Excluir para sempre? Não
 dá para desfazer.", com **Excluir** (risco) e **Cancelar**, o foco já no Cancelar e Esc cancelando.
@@ -1361,7 +1403,8 @@ e validade** (os colchetes da janela, a caixa marcada); o vermelho só no risco,
 `aria-live` que o painel já tem; `forced-colors` e `prefers-reduced-motion` tratados.
 
 **Verificação manual (do Mauro):** `docs/teste-manual-notas-n2.md` (ditar dentro da nota e o Enter
-digitado, no Agent de verdade, e o olhar no navegador).
+digitado, no Agent de verdade, e o olhar no navegador); `docs/teste-manual-notas-n6.md` (copiar para o
+WhatsApp Web e a busca única).
 
 ## Local x cloud
 Local: Agent runtime, mic, hotkey, modelos, logs locais.

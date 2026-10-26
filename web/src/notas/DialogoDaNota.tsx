@@ -4,6 +4,7 @@ import { formatarHora } from '../datas'
 import { BotaoComMenu } from './BotaoComMenu'
 import { CamposDaNota } from './CamposDaNota'
 import { type TipoDaLinha, lerCorpo, nomeDaNota } from './corpo'
+import { copiarParaWhatsApp } from './copiarParaWhatsApp'
 import { EscolherMarcadores } from './EscolherMarcadores'
 import { Icone } from './Icone'
 import { PaletaDeCores } from './PaletaDeCores'
@@ -13,6 +14,7 @@ import { sugerirMarcador } from './sugestao'
 import type { ClienteDeNotas, CorDaNota, Marcador, MudancaDaNota, Nota } from './tipos'
 import { useAdiado } from './useAdiado'
 import { useEditorDeLinhas } from './useEditorDeLinhas'
+import { useTelaEstreita } from './useTelaEstreita'
 
 // A espera do salvar automático depois da última tecla.
 const esperaDoSalvar = 800
@@ -79,6 +81,7 @@ export function DialogoDaNota({ nota, cliente, marcadores, notasParaSugerir, cri
   const editor = useEditorDeLinhas(nota.corpo)
   const { corpo, marcados } = editor
   const dialogo = useRef<HTMLDivElement>(null)
+  const estreita = useTelaEstreita()
   // O nome da janela é o da nota quando ela abriu: não muda a cada tecla.
   const [nome] = useState(() => nomeDaNota(nota.titulo, lerCorpo(nota.corpo)))
 
@@ -346,6 +349,16 @@ export function DialogoDaNota({ nota, cliente, marcadores, notasParaSugerir, cri
     )
   }
 
+  // copiarWhatsApp entrega o que está na janela agora (mesmo o que ainda não foi
+  // salvo) como texto de WhatsApp, no clique de quem pediu.
+  function copiarWhatsApp() {
+    copiarParaWhatsApp(agora.current.titulo, agora.current.corpo, {
+      avisar,
+      estreita,
+      aoSelecionar: 'Selecione o texto e use Ctrl+C.',
+    })
+  }
+
   // O foco não sai da janela: Tab no último campo volta ao primeiro, e Shift+Tab
   // no primeiro vai ao último.
   function aoTeclar(e: KeyboardEvent<HTMLDivElement>) {
@@ -526,6 +539,16 @@ export function DialogoDaNota({ nota, cliente, marcadores, notasParaSugerir, cri
                 >
                   <Icone nome="copiar" />
                   Copiar texto
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    copiarWhatsApp()
+                    fechar()
+                  }}
+                >
+                  <Icone nome="conversa" />
+                  Copiar para WhatsApp
                 </button>
                 <hr />
                 <button

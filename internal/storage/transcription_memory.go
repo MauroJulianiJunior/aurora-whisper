@@ -127,7 +127,7 @@ func (r *InMemoryTranscriptionRepository) List(_ context.Context, filter Transcr
 		cursor = &ck
 	}
 
-	query := strings.ToLower(strings.TrimSpace(filter.Query))
+	query := dobrar(strings.TrimSpace(filter.Query))
 
 	r.mu.Lock()
 	matched := make([]Transcription, 0, len(r.byID))
@@ -157,8 +157,8 @@ func (r *InMemoryTranscriptionRepository) List(_ context.Context, filter Transcr
 			continue
 		}
 		if query != "" &&
-			!strings.Contains(strings.ToLower(t.RawText), query) &&
-			!strings.Contains(strings.ToLower(t.FinalText), query) {
+			!strings.Contains(dobrar(t.RawText), query) &&
+			!strings.Contains(dobrar(t.FinalText), query) {
 			continue
 		}
 		matched = append(matched, t)

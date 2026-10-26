@@ -110,7 +110,7 @@ type TranscriptionListFilter struct {
 	// "user sempre deriva da sessão").
 	UserID string
 
-	// Query busca por substring, case-insensitive, em RawText e
+	// Query busca por substring, sem diferenciar maiúscula nem acento, em RawText e
 	// FinalText. Vazio não filtra por texto.
 	Query string
 

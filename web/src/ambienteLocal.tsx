@@ -9,6 +9,7 @@ import { efeitoDeAprender, perguntaDeSugestao, resultadoDeAprender, resultadoDeD
 import type { Cliente } from './clienteLocal'
 import { Configuracoes } from './Configuracoes'
 import { AvisoDoMicrofone } from './AvisoDoMicrofone'
+import { BuscaUnica } from './busca/BuscaUnica'
 import { FaixaLocal } from './FaixaLocal'
 import { Notas } from './notas/Notas'
 
@@ -24,6 +25,13 @@ export function ambienteLocal(cliente: Cliente): Ambiente {
     Faixa: FaixaLocal,
     // As notas moram no Agent (ADR-022): a aba só existe no PC.
     Notas: (props) => <Notas cliente={cliente} {...props} />,
+    // A busca do topo procura nas notas e nos ditados, em dois grupos (ADR-022, N6).
+    buscaUnica: {
+      placeholder: 'Buscar nas notas e nos ditados',
+      rotuloDoEscopo: { notas: 'Só nas notas', ditados: 'Só nos ditados' },
+      rotuloDeVoltar: 'Ver notas e ditados',
+      Resultados: (props) => <BuscaUnica cliente={cliente} {...props} />,
+    },
     // "Virar nota" no editor do histórico (ADR-022, N3).
     virarNota: {
       rotulo: 'Virar nota',
