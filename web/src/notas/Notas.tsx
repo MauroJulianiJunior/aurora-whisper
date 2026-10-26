@@ -2,6 +2,7 @@ import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { Conflito, ErroDaApi, problemaDe } from '../api'
 import { Aurora } from '../Aurora'
 import { type AcoesDaNota, CartaoDaNota, LinhaDaNota, TabelaDeNotas } from './CartaoDaNota'
+import { copiarParaWhatsApp } from './copiarParaWhatsApp'
 import { CriarNota } from './CriarNota'
 import { DialogoDaNota, type FimDaNota } from './DialogoDaNota'
 import { EditarMarcadores } from './EditarMarcadores'
@@ -306,6 +307,11 @@ export function Notas({ cliente, busca, aoPerderLigacao: aoPerderLigacaoDoPainel
     )
   }
 
+  // copiarWhatsApp copia a nota do cartão como texto de WhatsApp, no clique.
+  function copiarWhatsApp(nota: Nota) {
+    copiarParaWhatsApp(nota.titulo, nota.corpo, { avisar, estreita, aoSelecionar: 'Abra a nota e use Ctrl+C.' })
+  }
+
   // criarMarcador cria o marcador que o menu do botão de marcador pediu. Devolve o
   // marcador, ou a frase de erro que o menu mostra.
   async function criarMarcador(nome: string): Promise<Marcador | string> {
@@ -361,6 +367,7 @@ export function Notas({ cliente, busca, aoPerderLigacao: aoPerderLigacaoDoPainel
     },
     arquivar: (nota) => void arquivar(nota),
     copiar,
+    copiarWhatsApp,
     lixeira: (nota) => void paraALixeira(nota),
   }
 
