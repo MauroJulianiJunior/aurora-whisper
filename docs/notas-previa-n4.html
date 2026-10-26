@@ -1,0 +1,544 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="color-scheme" content="light dark" />
+<title>Prévia dos marcadores</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&display=swap" rel="stylesheet" />
+<style>
+/* Tokens copiados de web/src/index.css (o painel de hoje). As cores das
+   notas são as únicas novas: oito nomes (storage.CoresDaNota), um tom
+   suave por tema, só de fundo. */
+:root {
+  --fonte: Inter, 'Segoe UI', Arial, sans-serif;
+  --fonte-titulo: 'Space Grotesk', 'Segoe UI', Arial, sans-serif;
+  --fonte-mono: 'IBM Plex Mono', Consolas, monospace;
+  --raio-sm: 6px; --raio-md: 10px; --raio-lg: 16px; --raio-pilula: 999px;
+  --curva: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --tinta: #00e676; --tinta-forte: #3ded8f; --tinta-texto: #070a09; --moldura: #00e676;
+  --pilula: #111916; --pilula-borda: #24322d; --pilula-acao-borda: #3a4943;
+  --pilula-texto: #f5f7f5; --pilula-texto-2: #aeb9b4; --acento: #00e676;
+
+  --fundo: #f5f7f5; --superficie: #ffffff; --realce: #eaefec; --texto: #101512;
+  --texto-2: #4f5c56; --texto-3: #5b6962; --contorno: #7a8781; --linha: #dde4e0;
+  --linha-forte: #c4cec9; --foco: #0f3d2e; --selecao: #c2f2d8; --risco-texto: #c62828;
+  --marca-traco: #070a09; --marca-moldura: #00e676;
+  --sombra: 0 1px 2px rgb(7 10 9 / 0.05), 0 8px 24px rgb(7 10 9 / 0.08);
+  --veu: rgb(7 10 9 / 0.32);
+  --borda-cor: rgb(7 10 9 / 0.07);
+
+  --n-amarelo: #f8efc4; --n-laranja: #f7e2cf; --n-vermelho: #f5dad6; --n-rosa: #f3dde7;
+  --n-roxo: #e5e0f3; --n-azul: #d9e7f2; --n-verde: #dcede2; --n-cinza: #e6eae8;
+  --pagina: #e9eeeb;
+}
+:root[data-tema='escuro'] {
+  --fundo: #070a09; --superficie: #0c1210; --realce: #111916; --texto: #f5f7f5;
+  --texto-2: #aeb9b4; --texto-3: #9aa4a0; --contorno: #627069; --linha: #24322d;
+  --linha-forte: #3a4943; --foco: #00e676; --selecao: #1d5a43; --risco-texto: #ff3b3b;
+  --marca-traco: #f5f7f5;
+  --sombra: 0 1px 2px rgb(0 0 0 / 0.4), 0 18px 50px rgb(0 0 0 / 0.22);
+  --veu: rgb(0 0 0 / 0.55);
+  --borda-cor: rgb(255 255 255 / 0.06);
+
+  --n-amarelo: #29261a; --n-laranja: #2c2119; --n-vermelho: #2c1b1a; --n-rosa: #2a1c24;
+  --n-roxo: #211e2e; --n-azul: #17212b; --n-verde: #15241e; --n-cinza: #1a201e;
+  --pagina: #000;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--pagina); color: var(--texto);
+  font-family: var(--fonte); font-size: 14px; line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+button, input, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px; }
+::selection { background: var(--selecao); }
+
+/* ─── A página da prévia (não é o painel) ─── */
+.previa { max-width: 62rem; margin: 0 auto; padding: 32px 16px 80px; }
+.cabeca { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 16px; margin-bottom: 28px; }
+.cabeca h1 { margin: 0 0 4px; font-family: var(--fonte-titulo); font-size: 24px; font-weight: 600; letter-spacing: -0.02em; }
+.cabeca p { margin: 0; color: var(--texto-2); max-width: 38rem; }
+.cena { margin: 0 0 44px; }
+.cena > h2 { margin: 0 0 4px; font-family: var(--fonte-titulo); font-size: 17px; font-weight: 600; }
+.cena > p { margin: 0 0 14px; color: var(--texto-2); max-width: 44rem; }
+.janela {
+  position: relative; overflow: hidden;
+  border: 1px solid var(--linha-forte); border-radius: var(--raio-lg);
+  background: var(--fundo);
+}
+.decidir { padding: 20px 22px; border: 1px solid var(--linha-forte); border-radius: var(--raio-lg); background: var(--superficie); }
+.decidir h2 { margin: 0 0 10px; font-family: var(--fonte-titulo); font-size: 17px; }
+.decidir ol { margin: 0; padding-left: 20px; }
+.decidir li { margin: 8px 0; }
+.decidir li span { color: var(--texto-2); }
+
+/* ─── O painel ─── */
+.painel { max-width: 46rem; margin: 0 auto; padding: 0 24px 40px; }
+.topo { padding: 18px 0 12px; background: var(--fundo); }
+.barra { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
+.nome { display: inline-flex; align-items: center; gap: 10px; font-family: var(--fonte-titulo); font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
+.marca-moldura { stroke: var(--marca-moldura); }
+.marca-pico { stroke: var(--marca-traco); }
+.vistas { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--linha); border-radius: var(--raio-md); }
+.vistas button { height: 30px; padding: 0 12px; border: 1px solid transparent; border-radius: var(--raio-sm); background: transparent; color: var(--texto-2); font-size: 13px; font-weight: 500; }
+.vistas button:hover { background: var(--realce); color: var(--texto); }
+.vistas button[aria-pressed='true'] { border-color: var(--foco); background: var(--tinta); color: var(--tinta-texto); }
+.busca-caixa { position: relative; }
+.busca { display: block; width: 100%; height: 40px; padding: 0 64px 0 14px; border: 1px solid var(--contorno); border-radius: var(--raio-md); background: var(--superficie); font-size: 14px; }
+.busca::placeholder { color: var(--texto-3); opacity: 1; }
+.busca-caixa kbd { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); padding: 1px 6px; border: 1px solid var(--linha-forte); border-radius: var(--raio-sm); color: var(--texto-3); font-family: var(--fonte-mono); font-size: 11px; }
+
+/* Marcadores: uma fileira embaixo da busca, no lugar da lateral do Keep. */
+.filtros { display: flex; gap: 6px; margin-top: 12px; overflow-x: auto; scrollbar-width: none; }
+.filtro { flex: none; display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: 1px solid var(--linha); border-radius: var(--raio-pilula); background: transparent; color: var(--texto-2); font-size: 12.5px; font-weight: 500; }
+.filtro:hover { background: var(--realce); color: var(--texto); }
+.filtro[aria-pressed='true'] { border-color: var(--texto); color: var(--texto); background: var(--superficie); }
+.filtro .conta { color: var(--texto-3); font-family: var(--fonte-mono); font-size: 11px; }
+.filtro.separa { margin-left: 6px; }
+.filtro.editar { border-style: dashed; }
+
+/* Criar uma nota: fechado é uma linha só. */
+.criar { display: flex; align-items: center; gap: 10px; margin: 18px 0 6px; height: 46px; padding: 0 8px 0 16px; border: 1px solid var(--linha); border-radius: var(--raio-md); background: var(--superficie); color: var(--texto-3); box-shadow: var(--sombra); }
+.criar span { flex: 1; }
+.icone-botao { display: inline-grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: var(--raio-sm); background: transparent; color: var(--texto-2); }
+.icone-botao:hover { background: var(--realce); color: var(--texto); }
+.icone-botao[aria-pressed='true'] { color: var(--texto); background: var(--realce); }
+.icone-botao:disabled { opacity: 0.4; cursor: default; }
+.icone-botao svg { width: 18px; height: 18px; }
+
+.secao { margin: 22px 0 8px; padding: 0 2px; font-family: var(--fonte-mono); font-size: 12px; font-weight: 500; letter-spacing: 0.02em; color: var(--texto-3); }
+.grade { columns: 2 15rem; column-gap: 12px; }
+.cartao {
+  position: relative; break-inside: avoid; margin: 0 0 12px;
+  padding: 12px 14px 10px; border: 1px solid var(--linha); border-radius: var(--raio-md);
+  background: var(--superficie);
+}
+.cartao[data-cor] { border-color: var(--borda-cor); }
+[data-cor='amarelo'] { --cor-nota: var(--n-amarelo); background: var(--cor-nota); } [data-cor='laranja'] { --cor-nota: var(--n-laranja); background: var(--cor-nota); }
+[data-cor='vermelho'] { --cor-nota: var(--n-vermelho); background: var(--cor-nota); } [data-cor='rosa'] { --cor-nota: var(--n-rosa); background: var(--cor-nota); }
+[data-cor='roxo'] { --cor-nota: var(--n-roxo); background: var(--cor-nota); } [data-cor='azul'] { --cor-nota: var(--n-azul); background: var(--cor-nota); }
+[data-cor='verde'] { --cor-nota: var(--n-verde); background: var(--cor-nota); } [data-cor='cinza'] { --cor-nota: var(--n-cinza); background: var(--cor-nota); }
+.cartao h3 { margin: 0 28px 6px 0; font-family: var(--fonte-titulo); font-size: 15px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.35; }
+.cartao p { margin: 0 0 6px; font-size: 13.5px; }
+.cartao ul, .cartao ol { margin: 0 0 6px; padding-left: 18px; font-size: 13.5px; }
+.cartao li { margin: 1px 0; }
+.marcar-lista { list-style: none; padding: 0 !important; }
+.marcar-lista li { display: flex; align-items: baseline; gap: 8px; }
+.caixa { flex: none; position: relative; top: 2px; width: 14px; height: 14px; border: 1.5px solid var(--contorno); border-radius: 4px; }
+.caixa.feita { border-color: var(--foco); background: var(--tinta); }
+.caixa.feita::after { content: ''; position: absolute; left: 3.5px; top: 0.5px; width: 4px; height: 8px; border: solid var(--tinta-texto); border-width: 0 2px 2px 0; transform: rotate(45deg); }
+.feito { color: var(--texto-3); text-decoration: line-through; }
+.marcados { margin: 2px 0 6px; color: var(--texto-3); font-family: var(--fonte-mono); font-size: 11.5px; }
+.pe { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
+.etiqueta { padding: 1px 7px; border: 1px solid var(--linha-forte); border-radius: var(--raio-sm); color: var(--texto-2); font-family: var(--fonte-mono); font-size: 11px; font-weight: 500; white-space: nowrap; }
+[data-cor] .etiqueta { border-color: color-mix(in srgb, var(--texto) 18%, transparent); }
+.origem { color: var(--texto-3); font-family: var(--fonte-mono); font-size: 11px; }
+.fixar { position: absolute; top: 6px; right: 6px; opacity: 0; }
+.cartao:hover .fixar, .cartao.sob-ponteiro .fixar, .fixar[aria-pressed='true'] { opacity: 1; }
+.ferramentas { display: flex; gap: 2px; margin: 6px -8px -4px; opacity: 0; transition: opacity 120ms var(--curva); }
+.cartao:hover .ferramentas, .cartao.sob-ponteiro .ferramentas { opacity: 1; }
+.ferramentas .icone-botao { width: 30px; height: 30px; }
+.ferramentas .icone-botao svg { width: 16px; height: 16px; }
+.cartao.sob-ponteiro { box-shadow: var(--sombra); }
+
+/* ─── A nota aberta: janela sobre a grade, com os colchetes do editor ─── */
+.palco { position: relative; }
+.palco .por-tras { filter: saturate(0.9); }
+.veu { position: absolute; inset: 0; background: var(--veu); }
+.dialogo {
+  position: absolute; left: 50%; top: 92px; transform: translateX(-50%);
+  width: min(34rem, calc(100% - 32px));
+  padding: 16px 16px 10px; border: 1px solid var(--borda-cor); border-radius: var(--raio-lg);
+  box-shadow: 0 24px 60px rgb(0 0 0 / 0.28);
+}
+.dialogo.sem-cor { background: var(--superficie); border-color: var(--linha); }
+.dialogo::before, .dialogo::after { content: ''; position: absolute; width: 28px; height: 28px; border: 0 solid var(--moldura); pointer-events: none; }
+.dialogo::before { top: -1px; left: -1px; border-top-width: 2px; border-left-width: 2px; border-top-left-radius: var(--raio-lg); }
+.dialogo::after { right: -1px; bottom: -1px; border-right-width: 2px; border-bottom-width: 2px; border-bottom-right-radius: var(--raio-lg); }
+.titulo-campo { display: block; width: 100%; margin: 0 0 8px; padding: 2px 34px 2px 0; border: 0; background: transparent; font-family: var(--fonte-titulo); font-size: 19px; font-weight: 600; letter-spacing: -0.01em; outline: none; }
+.titulo-campo::placeholder { color: var(--texto-3); }
+.linhas { margin: 0; padding: 0; list-style: none; font-size: 15px; }
+.linhas li { display: flex; align-items: baseline; gap: 10px; min-height: 30px; padding: 3px 0; }
+.linhas .caixa { top: 3px; width: 16px; height: 16px; cursor: pointer; }
+.linhas .caixa.feita::after { left: 4.5px; top: 1px; }
+.linhas .alca { width: 10px; color: var(--texto-3); opacity: 0; font-size: 12px; cursor: grab; }
+.linhas li:hover .alca { opacity: 1; }
+.linhas .novo-item { color: var(--texto-3); }
+.linhas .mais-item { font-size: 18px; line-height: 1; width: 16px; text-align: center; }
+.recolher { display: flex; align-items: center; gap: 6px; margin: 6px 0 2px; padding: 6px 0 4px; border: 0; border-top: 1px solid color-mix(in srgb, var(--texto) 12%, transparent); width: 100%; background: transparent; color: var(--texto-3); font-family: var(--fonte-mono); font-size: 12px; text-align: left; }
+.meta { margin: 10px 0 0; color: var(--texto-3); font-family: var(--fonte-mono); font-size: 11.5px; }
+.barra-nota { display: flex; align-items: center; gap: 2px; margin: 8px -8px 0; }
+.empurra { flex: 1; }
+.botao { height: 36px; padding: 0 14px; border: 1px solid var(--linha-forte); border-radius: var(--raio-sm); background: transparent; font-size: 13px; font-weight: 600; white-space: nowrap; }
+.botao:hover { border-color: var(--foco); background: var(--realce); }
+.botao.primario { border-color: transparent; background: var(--tinta); color: var(--tinta-texto); }
+.botao.leve { border-color: transparent; }
+.botao.pequeno { height: 30px; padding: 0 10px; font-size: 12.5px; }
+
+.menu {
+  position: absolute; z-index: 2; min-width: 15rem; padding: 6px;
+  border: 1px solid var(--linha); border-radius: var(--raio-md);
+  background: var(--superficie); box-shadow: var(--sombra);
+}
+.menu button { display: flex; align-items: center; gap: 10px; width: 100%; height: 34px; padding: 0 10px; border: 0; border-radius: var(--raio-sm); background: transparent; font-size: 13px; text-align: left; }
+.menu button:hover, .menu button.ativo { background: var(--realce); }
+.menu button svg { width: 16px; height: 16px; color: var(--texto-2); }
+.menu hr { margin: 5px 4px; border: 0; border-top: 1px solid var(--linha); }
+.menu .risco { color: var(--risco-texto); }
+.menu .risco svg { color: currentColor; }
+.menu .titulo-menu { padding: 4px 10px 6px; color: var(--texto-3); font-family: var(--fonte-mono); font-size: 11px; }
+.menu kbd { margin-left: auto; color: var(--texto-3); font-family: var(--fonte-mono); font-size: 11px; }
+
+.cores { display: flex; gap: 6px; padding: 4px; }
+.cores .cor { width: 26px; height: 26px; padding: 0; border: 1px solid color-mix(in srgb, var(--texto) 20%, transparent); border-radius: 50%; background: var(--cor-nota, var(--superficie)); }
+.cores .cor[aria-pressed='true'] { outline: 2px solid var(--foco); outline-offset: 2px; }
+.cores .cor.nenhuma { position: relative; background: var(--superficie); }
+.cores .cor.nenhuma::after { content: ''; position: absolute; left: 50%; top: 3px; bottom: 3px; width: 1.5px; background: var(--texto-3); transform: rotate(45deg); }
+
+.sugestao { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 12px 0 0; padding: 8px 8px 8px 12px; border: 1px dashed color-mix(in srgb, var(--texto) 25%, transparent); border-radius: var(--raio-md); font-size: 13px; }
+.sugestao span { flex: 1; min-width: 12rem; }
+
+/* Converter trecho */
+.selecionado { background: var(--selecao); border-radius: 3px; box-shadow: 0 0 0 2px var(--selecao); }
+.antes-depois { display: grid; grid-template-columns: 1fr auto 1fr; gap: 16px; align-items: start; padding: 24px; }
+.antes-depois .seta { align-self: center; color: var(--texto-3); font-family: var(--fonte-mono); }
+.mini { position: relative; padding: 14px 16px 12px; border: 1px solid var(--linha); border-radius: var(--raio-lg); background: var(--superficie); }
+.mini h4 { margin: 0 0 8px; font-family: var(--fonte-titulo); font-size: 16px; font-weight: 600; }
+.mini p { margin: 0; font-size: 15px; }
+.mini .menu { position: relative; margin-top: 12px; }
+.formatos { display: flex; flex-wrap: wrap; gap: 4px; padding: 2px; }
+.formatos button { width: auto; height: 30px; padding: 0 10px; border: 1px solid var(--linha); border-radius: var(--raio-sm); }
+.formatos button.ativo { border-color: var(--texto); background: var(--realce); }
+.desfazer-ia { display: flex; align-items: center; gap: 8px; margin-top: 10px; color: var(--texto-3); font-family: var(--fonte-mono); font-size: 11.5px; }
+.desfazer-ia button { padding: 0; border: 0; background: none; color: var(--texto); font-family: var(--fonte); font-weight: 600; font-size: 12.5px; text-decoration: underline; text-underline-offset: 3px; }
+
+/* Histórico (para mostrar "Virar nota") */
+.dia { margin: 22px 0 4px; padding: 0 12px; font-family: var(--fonte-mono); font-size: 12px; font-weight: 500; letter-spacing: 0.02em; color: var(--texto-3); }
+.linha { display: grid; grid-template-columns: 3.25rem minmax(0, 1fr); gap: 12px; padding: 10px 12px; border-radius: var(--raio-md); }
+.hora { color: var(--texto-3); font-family: var(--fonte-mono); font-size: 12px; }
+.texto { font-size: 15px; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.editor { position: relative; display: grid; grid-template-columns: 3.25rem minmax(0, 1fr); gap: 12px; margin: 8px 0; padding: 16px 14px 14px 12px; border: 1px solid var(--linha); border-radius: var(--raio-lg); background: var(--superficie); box-shadow: var(--sombra); }
+.editor::before, .editor::after { content: ''; position: absolute; width: 28px; height: 28px; border: 0 solid var(--moldura); }
+.editor::before { top: -1px; left: -1px; border-top-width: 2px; border-left-width: 2px; border-top-left-radius: var(--raio-lg); }
+.editor::after { right: -1px; bottom: -1px; border-right-width: 2px; border-bottom-width: 2px; border-bottom-right-radius: var(--raio-lg); }
+.rotulo { margin-bottom: 6px; color: var(--texto-2); font-size: 12px; font-weight: 600; }
+.campo { width: 100%; padding: 9px 12px; border: 1px solid var(--contorno); border-radius: var(--raio-md); background: var(--fundo); font-size: 15px; line-height: 1.5; white-space: pre-wrap; }
+.acoes { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 14px; }
+.novo { position: relative; }
+.novo::after { content: 'novo'; position: absolute; top: -8px; right: -6px; padding: 0 5px; border-radius: var(--raio-pilula); background: var(--texto); color: var(--fundo); font-family: var(--fonte-mono); font-size: 9.5px; line-height: 15px; }
+.aviso-regiao { display: flex; justify-content: center; padding: 8px 16px 24px; }
+.aviso { display: inline-flex; align-items: center; gap: 12px; min-height: 40px; padding: 5px 5px 5px 18px; border: 1px solid var(--pilula-borda); border-radius: var(--raio-pilula); background: var(--pilula); color: var(--pilula-texto); font-size: 13px; box-shadow: 0 8px 28px rgb(0 0 0 / 0.28); }
+.aviso-acao { height: 30px; padding: 0 12px; border: 1px solid var(--pilula-acao-borda); border-radius: var(--raio-pilula); background: transparent; color: var(--acento); font-size: 13px; font-weight: 600; }
+
+/* Busca única */
+.grupo-busca { margin-top: 18px; }
+.resultado { display: grid; grid-template-columns: 3.25rem minmax(0, 1fr); gap: 12px; padding: 9px 12px; border-radius: var(--raio-md); }
+.resultado:hover { background: var(--realce); }
+.resultado .ponto { width: 10px; height: 10px; margin: 6px 0 0 4px; border-radius: 50%; border: 1px solid var(--borda-cor); }
+.resultado b { font-family: var(--fonte-titulo); font-weight: 600; }
+mark { background: var(--selecao); color: inherit; border-radius: 3px; padding: 0 2px; }
+
+/* Celular */
+.celulares { display: flex; flex-wrap: wrap; gap: 28px; justify-content: center; padding: 28px 16px; }
+.celular { width: 340px; max-width: 100%; height: 640px; overflow: hidden; position: relative; border: 1px solid var(--linha-forte); border-radius: 28px; background: var(--fundo); box-shadow: var(--sombra); }
+.celular .painel { padding: 0 14px; }
+.celular .topo { padding-top: 16px; }
+.celular .grade { columns: 1; }
+.celular .vistas button { padding: 0 9px; font-size: 12.5px; }
+.faixa-rede { display: flex; align-items: center; gap: 8px; margin: 10px 0 0; padding: 7px 12px; border: 1px solid var(--pilula-borda); border-radius: var(--raio-pilula); background: var(--pilula); color: var(--pilula-texto); font-size: 12.5px; }
+.faixa-rede .bolinha { width: 7px; height: 7px; border-radius: 50%; background: var(--pilula-texto-2); }
+.ditar-nota { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 18px 0 14px; border: 0; border-radius: var(--raio-pilula); background: var(--tinta); color: var(--tinta-texto); font-weight: 600; font-size: 14px; box-shadow: 0 8px 24px rgb(0 0 0 / 0.25); white-space: nowrap; }
+.ditar-nota svg { width: 18px; height: 18px; }
+
+/* A pílula do overlay (Agent, não o painel) */
+.pilulas { display: flex; flex-wrap: wrap; gap: 24px; justify-content: center; align-items: center; padding: 40px 16px; background: repeating-linear-gradient(135deg, var(--realce) 0 12px, var(--fundo) 12px 24px); }
+.pilula-overlay { display: inline-flex; align-items: center; gap: 12px; height: 38px; padding: 0 16px 0 14px; border-radius: var(--raio-pilula); background: #202020; color: #f5f5f5; font-family: 'IBM Plex Mono', Consolas, monospace; font-size: 13px; letter-spacing: 0.04em; box-shadow: 0 6px 18px rgb(0 0 0 / 0.3); }
+.onda { display: inline-flex; align-items: center; gap: 2px; height: 16px; }
+.onda i { display: block; width: 2px; border-radius: 1px; background: #6e6e6e; }
+.pilula-overlay .destino { color: #f5f5f5; }
+.pilula-overlay .mais { color: #6e6e6e; }
+
+.legenda { margin: 10px 0 0; color: var(--texto-3); font-family: var(--fonte-mono); font-size: 11.5px; text-align: center; }
+
+.tema { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--linha-forte); border-radius: var(--raio-md); background: var(--superficie); }
+.tema button { height: 30px; padding: 0 12px; border: 1px solid transparent; border-radius: var(--raio-sm); background: transparent; color: var(--texto-2); font-size: 13px; font-weight: 500; }
+.tema button[aria-pressed='true'] { border-color: var(--foco); background: var(--tinta); color: var(--tinta-texto); }
+
+@media (max-width: 720px) {
+  .antes-depois { grid-template-columns: 1fr; }
+  .antes-depois .seta { justify-self: center; transform: rotate(90deg); }
+  .painel { padding: 0 14px 32px; }
+  .barra { flex-wrap: wrap; }
+  .dialogo { top: 60px; }
+}
+
+/* Só o que é novo na N4. */
+.marcadores-janela { width: min(26rem, calc(100% - 32px)); }
+.marcadores-janela h3 { margin: 0 0 12px; font-family: var(--fonte-titulo); font-size: 17px; font-weight: 600; }
+.campo-novo { display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 6px 0 12px; border: 1px solid var(--contorno); border-radius: var(--raio-md); background: var(--fundo); }
+.campo-novo input { flex: 1; min-width: 0; border: 0; background: transparent; outline: none; font-size: 14px; }
+.campo-novo input::placeholder { color: var(--texto-3); }
+.lista-marcadores { list-style: none; margin: 10px 0 0; padding: 0; }
+.lista-marcadores li { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 4px 0 10px; border-radius: var(--raio-sm); }
+.lista-marcadores li:hover { background: var(--realce); }
+.lista-marcadores .nome-m { flex: 1; font-size: 14px; }
+.lista-marcadores .qtd { color: var(--texto-3); font-family: var(--fonte-mono); font-size: 11.5px; }
+.lista-marcadores li.renomeando { background: transparent; padding: 0; }
+.lista-marcadores li.renomeando .campo-novo { flex: 1; border-color: var(--foco); box-shadow: 0 0 0 1px var(--foco); }
+.lista-marcadores li.apagando { flex-wrap: wrap; gap: 6px 8px; padding: 8px 6px 8px 10px; border: 1px solid var(--linha-forte); background: var(--fundo); }
+.apagando .pergunta { flex-basis: 100%; font-size: 13px; }
+.apagando .pergunta span { color: var(--texto-2); }
+.botao.risco { border-color: transparent; background: var(--risco-texto); color: #fff; }
+.erro-campo { margin: 6px 2px 0; color: var(--risco-texto); font-size: 12.5px; }
+.rodape-janela { display: flex; justify-content: flex-end; margin-top: 12px; }
+
+.escolher { width: 16rem; padding: 8px; }
+.escolher .campo-novo { height: 34px; }
+.escolher .opcoes { list-style: none; margin: 6px 0 0; padding: 0; }
+.escolher .opcoes li { display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 8px; border-radius: var(--raio-sm); font-size: 13.5px; }
+.escolher .opcoes li:hover, .escolher .opcoes li.ativo { background: var(--realce); }
+.escolher .criar-m { color: var(--texto); font-weight: 500; }
+.escolher .criar-m b { font-weight: 600; }
+.mais-m { font-size: 16px; line-height: 1; width: 16px; text-align: center; color: var(--texto-2); }
+.etiqueta.tiravel { display: inline-flex; align-items: center; gap: 4px; padding-right: 3px; }
+.etiqueta.tiravel button { width: 16px; height: 16px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--texto-2); font-size: 12px; line-height: 1; }
+.etiqueta.tiravel button:hover { background: color-mix(in srgb, var(--texto) 10%, transparent); color: var(--texto); }
+.lado-a-lado { display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start; justify-content: center; padding: 28px 16px; }
+.lado-a-lado .dialogo { position: relative; left: auto; top: auto; transform: none; }
+.lado-a-lado .menu { position: relative; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-fixar" viewBox="0 0 24 24"><path d="M9 4h6l-1 6 3 3v2H7v-2l3-3-1-6Z M12 15v5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round"/></symbol>
+    <symbol id="i-cor" viewBox="0 0 24 24"><path d="M12 3.5a8.5 8.5 0 1 0 0 17c1.2 0 1.8-.8 1.8-1.7 0-1.4-1.3-1.6-1.3-2.8 0-1 .8-1.6 1.8-1.6h2.2a4 4 0 0 0 4-4C20.5 6.6 16.7 3.5 12 3.5Z" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="7.8" cy="11" r="1.2" fill="currentColor"/><circle cx="10.5" cy="7.4" r="1.2" fill="currentColor"/><circle cx="15" cy="7.6" r="1.2" fill="currentColor"/></symbol>
+    <symbol id="i-marcador" viewBox="0 0 24 24"><path d="M4 12.6V5a1 1 0 0 1 1-1h7.6l7.7 7.7a1.5 1.5 0 0 1 0 2.1l-6.5 6.5a1.5 1.5 0 0 1-2.1 0L4 12.6Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><circle cx="8.5" cy="8.5" r="1.3" fill="currentColor"/></symbol>
+    <symbol id="i-arquivar" viewBox="0 0 24 24"><path d="M4 5h16v4H4z M5.5 9v10h13V9 M10 13h4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round"/></symbol>
+    <symbol id="i-mais" viewBox="0 0 24 24"><circle cx="12" cy="5.5" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="18.5" r="1.6" fill="currentColor"/></symbol>
+    <symbol id="i-formatar" viewBox="0 0 24 24"><path d="M9 6h11 M9 12h11 M9 18h11" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="4.5" cy="6" r="1.3" fill="currentColor"/><circle cx="4.5" cy="12" r="1.3" fill="currentColor"/><circle cx="4.5" cy="18" r="1.3" fill="currentColor"/></symbol>
+    <symbol id="i-imagem" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="9" cy="10" r="1.6" fill="currentColor"/><path d="m4 18 5-5 4 4 2.5-2.5L20 19" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></symbol>
+    <symbol id="i-marcar" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="m8 12.3 2.7 2.7L16 9.6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-copiar" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" fill="none" stroke="currentColor" stroke-width="1.7"/></symbol>
+    <symbol id="i-lixeira" viewBox="0 0 24 24"><path d="M4.5 7h15 M9.5 7V4.5h5V7 M6.5 7l1 12.5h9l1-12.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round"/></symbol>
+    <symbol id="i-desmarcar" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M8.5 12h7" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+    <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3.5" width="6" height="11" rx="3" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0 M12 18v2.5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></symbol>
+    <symbol id="i-nota" viewBox="0 0 24 24"><path d="M6 3.5h8.5L19 8v12.5H6z M14 3.5V8.5h5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></symbol>
+    <symbol id="i-whats" viewBox="0 0 24 24"><path d="M5 19.5 6 16a7.5 7.5 0 1 1 2.8 2.6L5 19.5Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></symbol>
+  </defs>
+</svg>
+
+<template id="t-marca"><svg width="16" height="16" viewBox="0 0 32 32" aria-hidden="true"><path class="marca-moldura" d="M4 12V11A3 3 0 0 1 7 8H8M24 8H25A3 3 0 0 1 28 11V12M28 20V21A3 3 0 0 1 25 24H24M8 24H7A3 3 0 0 1 4 21V20" fill="none" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path class="marca-pico" d="M16 4V28" fill="none" stroke-width="4" stroke-linecap="round"/></svg></template>
+
+<div class="previa">
+  <header class="cabeca">
+    <div>
+      <h1>Prévia dos marcadores (N4)</h1>
+      <p>Três peças: a janela "Editar marcadores", o botão de marcador na nota e a sugestão. Mesmas cores e componentes da aba Notas que você aprovou.</p>
+    </div>
+    <div class="tema" role="group" aria-label="Tema">
+      <button type="button" data-tema="claro">Claro</button>
+      <button type="button" data-tema="escuro">Escuro</button>
+    </div>
+  </header>
+
+  <section class="cena">
+    <h2>1. A fileira, com "Editar marcadores" no fim</h2>
+    <p>O botão tracejado abre a janela da cena 2. O número ao lado de cada marcador é quantas notas ele tem.</p>
+    <div class="janela">
+      <div class="painel" style="max-width: 62rem; padding-bottom: 20px">
+        <div class="topo">
+          <div class="busca-caixa"><input class="busca" placeholder="Buscar nas notas" tabindex="-1" /></div>
+          <div class="filtros">
+            <button class="filtro">Notas <span class="conta">9</span></button>
+            <button class="filtro" aria-pressed="true">Compras <span class="conta">3</span></button>
+            <button class="filtro">Escritório <span class="conta">4</span></button>
+            <button class="filtro">Ideias <span class="conta">2</span></button>
+            <button class="filtro separa">Arquivo</button>
+            <button class="filtro">Lixeira</button>
+            <button class="filtro editar">Editar marcadores</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="cena">
+    <h2>2. Editar marcadores</h2>
+    <p>Uma janela pequena, como a da nota. Criar no campo de cima (Enter cria). Clicar no nome renomeia ali mesmo. A lixeirinha pergunta na própria linha, sem janela por cima de janela, e diz o que acontece com as notas. Nome repetido não passa.</p>
+    <div class="janela">
+      <div class="lado-a-lado">
+        <div class="dialogo sem-cor marcadores-janela" role="dialog" aria-label="Editar marcadores">
+          <h3>Editar marcadores</h3>
+          <div class="campo-novo">
+            <span class="mais-m">+</span>
+            <input placeholder="Criar marcador" value="compras" aria-label="Criar marcador" />
+            <button class="botao pequeno primario" disabled style="opacity:.45">Criar</button>
+          </div>
+          <p class="erro-campo">Já existe o marcador "Compras".</p>
+          <ul class="lista-marcadores">
+            <li><span class="nome-m">Compras</span><span class="qtd">3 notas</span>
+              <button class="icone-botao" aria-label="Renomear Compras"><svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16v4Z M13.5 6.5l4 4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg></button>
+              <button class="icone-botao" aria-label="Apagar Compras"><svg><use href="#i-lixeira"/></svg></button></li>
+            <li class="renomeando"><div class="campo-novo"><input value="Escritório F5" aria-label="Novo nome de Escritório" /><button class="botao pequeno primario">Salvar</button></div></li>
+            <li class="apagando">
+              <div class="pergunta">Apagar "Ideias"? <span>Ele sai das 2 notas; as notas ficam.</span></div>
+              <span class="empurra"></span>
+              <button class="botao pequeno">Cancelar</button>
+              <button class="botao pequeno risco">Apagar</button>
+            </li>
+            <li><span class="nome-m">Viagem</span><span class="qtd">nenhuma nota</span>
+              <button class="icone-botao" aria-label="Renomear Viagem"><svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16v4Z M13.5 6.5l4 4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg></button>
+              <button class="icone-botao" aria-label="Apagar Viagem"><svg><use href="#i-lixeira"/></svg></button></li>
+          </ul>
+          <div class="rodape-janela"><button class="botao leve">Fechar</button></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="cena">
+    <h2>3. Marcador na nota</h2>
+    <p>O botão de marcador da nota (e o do cartão) abre uma lista com caixinhas: marca e desmarca na hora. Digitando um nome que não existe, aparece "Criar". Na nota, cada marcador tem um × para tirar.</p>
+    <div class="janela">
+      <div class="lado-a-lado">
+        <div class="dialogo" data-cor="amarelo" style="width: min(30rem, 100%)">
+          <input class="titulo-campo" value="Lista de compras" aria-label="Título" />
+          <ul class="linhas">
+            <li><span class="caixa"></span><span>Leite</span></li>
+            <li><span class="caixa"></span><span>Pão de forma</span></li>
+            <li><span class="caixa"></span><span>Café</span></li>
+          </ul>
+          <div class="pe" style="margin-top:10px">
+            <span class="etiqueta tiravel">Compras <button aria-label="Tirar o marcador Compras">×</button></span>
+            <span class="etiqueta tiravel">Feira <button aria-label="Tirar o marcador Feira">×</button></span>
+          </div>
+          <div class="barra-nota">
+            <button class="icone-botao" aria-label="Formatar"><svg><use href="#i-formatar"/></svg></button>
+            <button class="icone-botao" aria-label="Cor"><svg><use href="#i-cor"/></svg></button>
+            <button class="icone-botao" aria-label="Marcadores" aria-pressed="true"><svg><use href="#i-marcador"/></svg></button>
+            <button class="icone-botao" aria-label="Imagem" disabled><svg><use href="#i-imagem"/></svg></button>
+            <button class="icone-botao" aria-label="Arquivar"><svg><use href="#i-arquivar"/></svg></button>
+            <button class="icone-botao" aria-label="Mais"><svg><use href="#i-mais"/></svg></button>
+            <span class="empurra"></span>
+            <button class="botao leve">Fechar</button>
+          </div>
+        </div>
+        <div class="menu escolher">
+          <div class="campo-novo"><input value="fei" aria-label="Buscar ou criar marcador" /></div>
+          <ul class="opcoes">
+            <li class="ativo"><span class="caixa feita"></span>Feira</li>
+            <li class="criar-m"><span class="mais-m">+</span><span>Criar marcador “<b>fei</b>”</span></li>
+          </ul>
+          <hr />
+          <ul class="opcoes">
+            <li><span class="caixa feita"></span>Compras</li>
+            <li><span class="caixa"></span>Escritório</li>
+            <li><span class="caixa"></span>Ideias</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="cena">
+    <h2>4. A sugestão</h2>
+    <p>Quando a nota está sem marcador e o texto dela parece com o das notas de um marcador (a segunda lista de compras, por exemplo), aparece uma faixa discreta na própria nota. Só pergunta; um clique marca. "Agora não" some com ela para essa nota. Tudo calculado no PC, sem IA.</p>
+    <div class="janela">
+      <div class="lado-a-lado">
+        <div class="dialogo sem-cor" style="width: min(30rem, 100%)">
+          <input class="titulo-campo" placeholder="Título" aria-label="Título" />
+          <ul class="linhas">
+            <li><span class="caixa"></span><span>Detergente</span></li>
+            <li><span class="caixa"></span><span>Papel toalha</span></li>
+            <li><span class="caixa"></span><span>Café</span></li>
+          </ul>
+          <div class="sugestao">
+            <span>Marcar como <strong>Compras</strong>?</span>
+            <button class="botao pequeno">Marcar</button>
+            <button class="botao pequeno leve">Agora não</button>
+          </div>
+          <div class="barra-nota">
+            <button class="icone-botao" aria-label="Formatar"><svg><use href="#i-formatar"/></svg></button>
+            <button class="icone-botao" aria-label="Cor"><svg><use href="#i-cor"/></svg></button>
+            <button class="icone-botao" aria-label="Marcadores"><svg><use href="#i-marcador"/></svg></button>
+            <button class="icone-botao" aria-label="Imagem" disabled><svg><use href="#i-imagem"/></svg></button>
+            <button class="icone-botao" aria-label="Arquivar"><svg><use href="#i-arquivar"/></svg></button>
+            <button class="icone-botao" aria-label="Mais"><svg><use href="#i-mais"/></svg></button>
+            <span class="empurra"></span>
+            <button class="botao leve">Fechar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="decidir">
+    <h2>Para você decidir</h2>
+    <ol>
+      <li><strong>A sugestão aparece dentro da nota aberta</strong>, como na cena 4. <span>A alternativa é perguntar no aviso de baixo, depois de fechar a nota.</span></li>
+      <li><strong>A partir de quantas notas o painel começa a sugerir:</strong> 2 notas no marcador. <span>Com 1 nota só, ele erraria muito.</span></li>
+      <li><strong>Nota pode ter vários marcadores</strong> (como no Keep). <span>Já está assim no banco desde a N1.</span></li>
+    </ol>
+  </section>
+</div>
+
+<script>
+  // Tema: segue o Windows; os botões trocam.
+  const raiz = document.documentElement
+  const escuro = matchMedia('(prefers-color-scheme: dark)').matches
+  function tema(t) {
+    raiz.dataset.tema = t
+    document.querySelectorAll('.tema button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.tema === t)))
+  }
+  tema(escuro ? 'escuro' : 'claro')
+  document.querySelectorAll('.tema button').forEach((b) => b.addEventListener('click', () => tema(b.dataset.tema)))
+
+  // A marca do cabeçalho.
+  const marca = document.getElementById('t-marca')
+  document.querySelectorAll('[data-marca]').forEach((el) => el.prepend(marca.content.cloneNode(true)))
+
+  // A onda da pílula: barras em cinza, o pico em quase branco.
+  const alturas = [4, 7, 11, 15, 9, 13, 6, 10, 4]
+  document.querySelectorAll('[data-onda]').forEach((onda) => {
+    alturas.forEach((h, i) => {
+      const barra = document.createElement('i')
+      barra.style.height = h + 'px'
+      if (i === 3) barra.style.background = '#f5f5f5'
+      onda.append(barra)
+    })
+  })
+
+  // Marcar desce o item; desmarcar sobe.
+  const abertos = document.getElementById('abertos'); if (abertos) {
+  const marcados = document.getElementById('marcados')
+  const novo = abertos.querySelector('.novo-item')
+  function contar() {
+    const n = marcados.children.length
+    document.getElementById('conta-marcados').textContent = n === 1 ? '1 marcado' : n + ' marcados'
+  }
+  function alternar(caixa) {
+    const li = caixa.closest('li')
+    const texto = li.lastElementChild
+    const feita = caixa.getAttribute('aria-checked') === 'true'
+    caixa.setAttribute('aria-checked', String(!feita))
+    caixa.classList.toggle('feita', !feita)
+    texto.classList.toggle('feito', !feita)
+    if (feita) abertos.insertBefore(li, novo)
+    else marcados.prepend(li)
+    contar()
+  }
+  }
+  if (abertos) document.querySelectorAll('.dialogo .caixa').forEach((c) => {
+    c.addEventListener('click', () => alternar(c))
+    c.addEventListener('keydown', (e) => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); alternar(c) } })
+  })
+</script>
+</body>
+</html>

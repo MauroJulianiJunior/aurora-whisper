@@ -236,6 +236,17 @@ itens acima.
 - **A linha em edição tem um fundo leve, a linha inteira**, no lugar do traço verde à esquerda ("ficou
   muito genérico").
 
+**Marcadores, prévia da N4 aprovada pelo Mauro (26-out-2026, "Concordo"):** `docs/notas-previa-n4.html`.
+- "Editar marcadores" no fim da fileira abre uma janela pequena: criar no campo de cima (nome
+  repetido, sem diferenciar maiúscula, é recusado com aviso), renomear na linha, apagar com a
+  pergunta na própria linha ("Ele sai das N notas; as notas ficam").
+- O botão de marcador da nota e do cartão abre uma lista com caixinhas (marca e desmarca na hora), com
+  "Criar marcador" para o nome que não existe; na nota, cada marcador tem um × para tirar.
+- **A sugestão aparece dentro da nota aberta**, numa faixa discreta ("Marcar como Compras?" com Marcar
+  e Agora não), só em nota sem marcador; "Agora não" vale para aquela nota.
+- **Só sugere marcador que já tem 2 notas ou mais.**
+- **Uma nota pode ter vários marcadores.**
+
 ### Sync
 
 - **[derivada]** Duas entidades novas no motor (`internal/sync`): `nota` e `marcador`, ao lado de
