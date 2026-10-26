@@ -54,7 +54,7 @@ func (r *SQLiteNotaRepository) now() time.Time {
 }
 
 const colunasNota = `id, user_id, titulo, corpo, cor, fixada, arquivada, ditado_de_origem,
-	created_at, updated_at, deleted_at, purge_at, version, sync_state, server_version, last_sync_error`
+	created_at, updated_at, deleted_at, purge_at, version, sync_state, server_version, last_sync_error, posicao`
 
 const colunasMarcador = `id, user_id, nome, created_at, updated_at, deleted_at, version, sync_state, server_version`
 
@@ -66,7 +66,7 @@ func lerNota(s scanner) (Nota, error) {
 	var serverVersion sql.NullInt64
 	var criada, atualizada string
 	if err := s.Scan(&n.ID, &n.UserID, &n.Titulo, &n.Corpo, &cor, &fixada, &arquivada, &origem,
-		&criada, &atualizada, &deletedAt, &purgeAt, &n.Version, &n.SyncState, &serverVersion, &lastErr); err != nil {
+		&criada, &atualizada, &deletedAt, &purgeAt, &n.Version, &n.SyncState, &serverVersion, &lastErr, &n.Posicao); err != nil {
 		return Nota{}, err
 	}
 	var err error
@@ -244,11 +244,16 @@ func (r *SQLiteNotaRepository) Criar(ctx context.Context, p NovaNota) (Nota, err
 // miolo do Criar e do VirarNota (que a cria na mesma transação em que marca
 // o ditado).
 func inserirNota(ctx context.Context, tx *sql.Tx, id string, agora time.Time, p NovaNota) error {
+	// A nota nova entra no topo do grupo dela (ADR-022, N2b).
+	posicao, err := posicaoNoTopo(ctx, tx, p.UserID, p.Arquivada, p.Fixada)
+	if err != nil {
+		return err
+	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO local_notes
-		(id, user_id, titulo, corpo, cor, fixada, arquivada, ditado_de_origem, created_at, updated_at, version, sync_state)
-		VALUES (?,?,?,?,?,?,?,?,?,?,1,'pending')`,
+		(id, user_id, titulo, corpo, cor, fixada, arquivada, ditado_de_origem, created_at, updated_at, version, sync_state, posicao)
+		VALUES (?,?,?,?,?,?,?,?,?,?,1,'pending',?)`,
 		id, p.UserID, p.Titulo, p.Corpo, corNula(p.Cor), boolInt(p.Fixada), boolInt(p.Arquivada),
-		corNula(p.DitadoDeOrigem), emTexto(agora), emTexto(agora)); err != nil {
+		corNula(p.DitadoDeOrigem), emTexto(agora), emTexto(agora), posicao); err != nil {
 		return fmt.Errorf("storage: gravando a nota: %w", err)
 	}
 	for _, m := range p.Marcadores {
@@ -276,9 +281,9 @@ func (r *SQLiteNotaRepository) Listar(ctx context.Context, f FiltroDeNotas) ([]N
 	}
 	onde := []string{"n.user_id = ?"}
 	args := []any{f.UserID}
-	// A ordem vem daqui, nunca do filtro.
-	// rowid desempata em ordem de criação (o id v7 só ordena por milissegundo).
-	ordem := "n.fixada DESC, n.updated_at DESC, n.rowid DESC"
+	// A ordem vem daqui, nunca do filtro: a posição manual (a menor é o topo), e
+	// o rowid desempata em ordem de criação (o id v7 só ordena por milissegundo).
+	ordem := "n.fixada DESC, n.posicao ASC, n.rowid DESC"
 	switch vista {
 	case VistaAtivas:
 		onde = append(onde, "n.deleted_at IS NULL", "n.arquivada = 0")
@@ -332,6 +337,41 @@ func (r *SQLiteNotaRepository) Listar(ctx context.Context, f FiltroDeNotas) ([]N
 	return notas, nil
 }
 
+// posicaoNoTopo devolve a posição que põe uma nota acima da primeira do grupo
+// (arquivada, fixada) do usuário: as ativas fixadas, as ativas comuns, e assim
+// por diante. Grupo vazio, a chave do meio. Lê na transação de quem vai gravar:
+// o SQLite deixa uma escrita por vez, então duas notas novas não pegam a mesma
+// chave.
+func posicaoNoTopo(ctx context.Context, q consulta, userID string, arquivada, fixada bool) (string, error) {
+	var primeira sql.NullString
+	err := q.QueryRowContext(ctx,
+		`SELECT MIN(posicao) FROM local_notes
+		 WHERE user_id = ? AND arquivada = ? AND fixada = ? AND deleted_at IS NULL AND posicao <> ''`,
+		userID, boolInt(arquivada), boolInt(fixada)).Scan(&primeira)
+	if err != nil {
+		return "", fmt.Errorf("storage: lendo a primeira posição do grupo: %w", err)
+	}
+	k, err := PosicaoEntre("", primeira.String)
+	if err != nil {
+		return "", fmt.Errorf("storage: gerando a posição da nota: %w", err)
+	}
+	return k, nil
+}
+
+// grupoDaNota lê o grupo em que a nota está (arquivada, fixada).
+func grupoDaNota(ctx context.Context, tx *sql.Tx, userID, id string) (arquivada, fixada bool, err error) {
+	var a, f int
+	err = tx.QueryRowContext(ctx,
+		`SELECT arquivada, fixada FROM local_notes WHERE id = ? AND user_id = ?`, id, userID).Scan(&a, &f)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, false, ErrNotFound
+	}
+	if err != nil {
+		return false, false, fmt.Errorf("storage: lendo o grupo da nota: %w", err)
+	}
+	return a == 1, f == 1, nil
+}
+
 // prefixar põe o prefixo de tabela em cada coluna de uma lista "a, b, c".
 func prefixar(prefixo, colunas string) string {
 	partes := strings.Split(colunas, ",")
@@ -357,6 +397,28 @@ func (r *SQLiteNotaRepository) Atualizar(ctx context.Context, userID, id string,
 		}
 		sets := []string{"version = version + 1", "updated_at = ?"}
 		args := []any{emTexto(agora)}
+		// Fixar, desafixar, arquivar e desarquivar levam a nota para o topo do
+		// grupo de destino. Editar o resto (texto, cor) não mexe na posição.
+		if m.Fixada != nil || m.Arquivada != nil {
+			arquivada, fixada, err := grupoDaNota(ctx, tx, userID, id)
+			if err != nil {
+				return err
+			}
+			destArquivada, destFixada := arquivada, fixada
+			if m.Arquivada != nil {
+				destArquivada = *m.Arquivada
+			}
+			if m.Fixada != nil {
+				destFixada = *m.Fixada
+			}
+			if destArquivada != arquivada || destFixada != fixada {
+				posicao, err := posicaoNoTopo(ctx, tx, userID, destArquivada, destFixada)
+				if err != nil {
+					return err
+				}
+				sets, args = append(sets, "posicao = ?"), append(args, posicao)
+			}
+		}
 		if m.Titulo != nil {
 			sets, args = append(sets, "titulo = ?"), append(args, *m.Titulo)
 		}
@@ -448,10 +510,20 @@ func notaExiste(ctx context.Context, tx *sql.Tx, userID, id string) error {
 func (r *SQLiteNotaRepository) Restaurar(ctx context.Context, userID, id string) (Nota, error) {
 	agora := r.now()
 	err := naTransacao(ctx, r.db, func(tx *sql.Tx) error {
+		// A nota que volta da lixeira vai para o topo do grupo dela (a ordem de
+		// quando foi apagada não vale mais: o grupo pode ter mudado de tamanho).
+		arquivada, fixada, err := grupoDaNota(ctx, tx, userID, id)
+		if err != nil {
+			return err
+		}
+		posicao, err := posicaoNoTopo(ctx, tx, userID, arquivada, fixada)
+		if err != nil {
+			return err
+		}
 		res, err := tx.ExecContext(ctx,
-			`UPDATE local_notes SET deleted_at = NULL, purge_at = NULL, updated_at = ?, version = version + 1
+			`UPDATE local_notes SET deleted_at = NULL, purge_at = NULL, updated_at = ?, version = version + 1, posicao = ?
 			 WHERE id = ? AND user_id = ? AND deleted_at IS NOT NULL`,
-			emTexto(agora), id, userID)
+			emTexto(agora), posicao, id, userID)
 		if err != nil {
 			return fmt.Errorf("storage: restaurando a nota: %w", err)
 		}

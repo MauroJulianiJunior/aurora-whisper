@@ -24,6 +24,7 @@ import (
 //	PATCH  /api/notas/{id}                             edita, fixa, arquiva, cor; base_version obrigatório
 //	DELETE /api/notas/{id}                             para a lixeira (204)
 //	POST   /api/notas/{id}/restaurar                   tira da lixeira
+//	POST   /api/notas/{id}/mover                       arrasta a nota: {antes, depois} (200, a nota)
 //	DELETE /api/notas/{id}/definitivo                  apaga de vez, só da lixeira (204)
 //	PUT    /api/notas/{id}/marcadores/{marcador}       põe o marcador
 //	DELETE /api/notas/{id}/marcadores/{marcador}       tira o marcador
@@ -63,7 +64,10 @@ type notaDTO struct {
 	Fixada    bool    `json:"fixada"`
 	Arquivada bool    `json:"arquivada"`
 	// Marcadores são os ids dos marcadores da nota, na ordem do nome.
-	Marcadores     []string   `json:"marcadores"`
+	Marcadores []string `json:"marcadores"`
+	// Posicao é a ordem manual (índice fracionário): o painel não a usa para
+	// ordenar (a lista já vem ordenada), mas é o que o sync da N7 leva.
+	Posicao        string     `json:"posicao"`
 	DitadoDeOrigem *string    `json:"ditado_de_origem,omitempty"`
 	CreatedAt      time.Time  `json:"created_at"`
 	UpdatedAt      time.Time  `json:"updated_at"`
@@ -78,7 +82,7 @@ func toNotaDTO(n storage.Nota) notaDTO {
 	}
 	return notaDTO{
 		ID: n.ID, Titulo: n.Titulo, Corpo: n.Corpo, Cor: n.Cor, Fixada: n.Fixada, Arquivada: n.Arquivada,
-		Marcadores: ms, DitadoDeOrigem: n.DitadoDeOrigem,
+		Marcadores: ms, Posicao: n.Posicao, DitadoDeOrigem: n.DitadoDeOrigem,
 		CreatedAt: n.CreatedAt, UpdatedAt: n.UpdatedAt, DeletedAt: n.DeletedAt, Version: n.Version,
 	}
 }
@@ -135,6 +139,11 @@ func writeNotaError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusConflict, codeConflict, "versão desatualizada")
 	case errors.Is(err, storage.ErrNotaNaLixeira):
 		writeError(w, http.StatusConflict, codeConflict, "a nota está na lixeira: restaure antes de mexer nela")
+	case errors.Is(err, storage.ErrVizinhoInvalido):
+		writeError(w, http.StatusConflict, codeConflict,
+			"as notas vizinhas mudaram (ou não estão no mesmo grupo): a lista será lida de novo")
+	case errors.Is(err, storage.ErrMoverSemVizinho):
+		writeError(w, http.StatusBadRequest, codeBadRequest, "mover pede a nota de antes ou a de depois")
 	case errors.Is(err, storage.ErrNotaForaDaLixeira):
 		writeError(w, http.StatusConflict, codeConflict, "só se apaga de vez a nota que está na lixeira")
 	case errors.Is(err, storage.ErrDitadoNaLixeira):
@@ -333,6 +342,43 @@ func (s *Server) handleRestaurarNota(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	n, err := repo.Restaurar(r.Context(), s.userID, r.PathValue("id"))
+	if err != nil {
+		writeNotaError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, toNotaDTO(n))
+}
+
+type moverNotaRequest struct {
+	// Antes e Depois são as vizinhas da nota DEPOIS de soltar: a de cima e a de
+	// baixo (na grade, a anterior e a seguinte na ordem de leitura). null ou
+	// ausente é "nada desse lado": Antes nulo é o topo do grupo, Depois nulo o fim.
+	Antes  *string `json:"antes"`
+	Depois *string `json:"depois"`
+}
+
+// handleMoverNota atende POST /api/notas/{id}/mover: o arrastar da ordem
+// manual (ADR-022, N2b). Sem base_version: mover não é editar o texto. 409 se
+// as vizinhas não valem (outra aba mudou a lista, ou são de outro grupo, da
+// lixeira ou do Arquivo); 400 sem nenhuma vizinha. Devolve a nota, com a
+// versão nova.
+func (s *Server) handleMoverNota(w http.ResponseWriter, r *http.Request) {
+	repo, ok := s.notasProntas(w)
+	if !ok {
+		return
+	}
+	var body moverNotaRequest
+	if !lerCorpoDasNotas(w, r, &body) {
+		return
+	}
+	antes, depois := "", ""
+	if body.Antes != nil {
+		antes = *body.Antes
+	}
+	if body.Depois != nil {
+		depois = *body.Depois
+	}
+	n, err := repo.Mover(r.Context(), s.userID, r.PathValue("id"), antes, depois)
 	if err != nil {
 		writeNotaError(w, err)
 		return
