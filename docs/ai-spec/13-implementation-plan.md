@@ -782,7 +782,11 @@ próprio para "ditar para nota" e a lista marcável sem rede no celular. Fases (
   sync (AC-083); e o ditado feito dentro da nota, que nasce fora do histórico (o painel avisa o
   Agent pelo `PUT`/`DELETE /api/notas/foco`, só em memória; AC-084). **Falta o teste no PC, que é do
   Mauro:** `docs/teste-manual-notas-n3.md`;
-- **N4:** marcadores, filtro e sugestão local;
+- **N4:** marcadores, filtro e sugestão local. **Feita nos dublês (26-out-2026):** a janela "Editar marcadores"
+  (criar, renomear, apagar com a pergunta na linha e a conta de notas), o botão de marcador na nota e no
+  cartão (menu com caixinhas, criar e marcar), a etiqueta com ×, a faixa de sugestão local (`sugestao.ts`) e o
+  "Agora não" por nota (AC-085); sem mudança no Go. **Falta o teste no PC, que é do Mauro:**
+  `docs/teste-manual-notas-n4.md`;
 - **N5:** converter trecho (prefixo, regra e IA com as guardas; prompt `notas-lista@1`);
 - **N6:** lista de marcar, copiar para WhatsApp, busca única;
 - **N7:** sync das notas e marcadores (migrations do Postgres; **deploy é ponto de parada**);

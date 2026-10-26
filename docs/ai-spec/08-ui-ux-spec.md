@@ -1273,7 +1273,7 @@ nuvem não os tem, e o `bundle.test.ts` confere nos dois sentidos. Prévia: `doc
 Só no painel do PC (a Local API). O componente entra pelo `Ambiente` (`Ambiente.Notas`); o painel da nuvem
 não importa nada dele, e o `bundle.test.ts` confere nos dois sentidos. A fonte da verdade é o código
 (`web/src/notas/`); a prévia aprovada pelo Mauro é `docs/notas-previa-n2.html`. O que não é desta fase:
-criar/renomear/atribuir marcador (N4), converter trecho (N5), copiar para WhatsApp e
+converter trecho (N5), copiar para WhatsApp e
 busca única (N6), sync (N7), celular (N8), gatilho de voz (N9), imagens (N10).
 
 **Onde fica e a largura.** Entre **Histórico** e **Lixeira**. Com a aba aberta o painel usa a largura da
@@ -1281,7 +1281,8 @@ janela (até 96 rem); as outras telas seguem em 46 rem. O título vira "Notas" e
 "Buscar nas notas" (o histórico não lê essa busca enquanto a aba está à vista).
 
 **Fileira de marcadores**, embaixo da busca: **Notas** (as ativas), um chip por marcador (com a conta de
-notas), **Arquivo** e **Lixeira**. Sem edição de marcador (N4). O filtro por marcador usa `?marcador=`.
+notas), **Arquivo**, **Lixeira** e, no fim, o chip tracejado **Editar marcadores** (N4). O filtro por marcador
+usa `?marcador=`.
 
 **Formas de ver:** quadradinhos (padrão), lista e detalhes. Colunas dos quadradinhos: de 1 a 6, **4 no PC**;
 em tela estreita (até 640 px), de 1 a 3, **2**. A escolha fica no `localStorage`, por aparelho
@@ -1317,6 +1318,32 @@ item vazio sai da lista); **Backspace** no começo tira o prefixo e, sem prefixo
 (colagem) e o Enter digitado dão o mesmo resultado. Na lista de marcar, o marcado desce para baixo da
 divisória recolhível "N marcados"; a ordem guardada é a ordem da tela. Shift+clique ou Shift+setas
 seleciona várias linhas para o **Formatar**.
+
+**Marcadores (N4; prévia aprovada em `docs/notas-previa-n4.html`).** Uma nota pode ter vários.
+- **Editar marcadores** abre uma janela pequena (`role="dialog"`, `aria-modal`, foco preso, Esc fecha, o foco
+  volta ao chip). O campo de cima, "Criar marcador" (Enter ou **Criar**), recusa nome vazio e nome repetido sem
+  diferenciar maiúscula nem acento, com o aviso `Já existe o marcador "X".` e o **Criar** desligado; o limite é o
+  do Agent (50 caracteres). Cada marcador mostra a conta de notas ("3 notas", "1 nota", "nenhuma nota", contando
+  as do Arquivo), um lápis que renomeia na própria linha (campo e **Salvar**; Enter salva, Esc cancela, mesma
+  regra do nome repetido) e uma lixeirinha que pergunta também na linha, sem janela por cima de janela:
+  `Apagar "X"? Ele sai das N notas; as notas ficam.`, com **Cancelar** (foco, lado seguro; Esc também cancela)
+  e **Apagar** (estilo de risco). Cada mudança vale na hora; **Fechar** só fecha.
+- O botão de marcador (ícone de etiqueta) da nota aberta e do cartão abre um menu com campo de busca e uma
+  caixinha por marcador (marca e desmarca na hora, `PUT`/`DELETE /api/notas/{id}/marcadores/{marcador}`). O
+  texto digitado filtra; sem nome igual (sem caixa nem acento) aparece **Criar marcador "texto"**, que cria e
+  já põe na nota. Padrão ARIA de caixa de combinação com lista de várias escolhas: o foco fica no campo, setas
+  movem a linha ativa, Enter alterna, Esc fecha o menu (sem fechar a janela) e devolve o foco ao botão.
+- Na nota aberta, cada marcador é uma etiqueta com × ("Tirar o marcador X").
+- A mudança de marcador sobe a versão da nota no Agent: a janela da nota a adota (as gravações do texto e as
+  dos marcadores seguem numa fila só), e o cartão troca pela nota que voltou, sem recarregar.
+- **Sugestão (local, sem IA; nada sai do PC).** Dentro da nota aberta **sem marcador**, uma faixa tracejada:
+  "Marcar como **X**?" com **Marcar** e **Agora não**. Nunca marca sozinha. Só entram marcadores com 2 notas ou
+  mais. A regra (`web/src/notas/sugestao.ts`): palavras do título e do corpo (minúscula, sem acento, sem prefixo
+  de lista, sem número, sem palavra vazia, 3 letras ou mais, cada uma uma vez por nota); a nota de cada
+  marcador é a soma, sobre as palavras em comum, da fração das notas do marcador que usam a palavra; sugere o
+  melhor se tiver pelo menos 2 palavras em comum e 1 ponto, e se tiver pelo menos 1,5 vez os pontos do segundo.
+  Recalcula 600 ms depois da última tecla. **Agora não** vale para aquela nota (ids no `localStorage`,
+  `aurora.notas.sugestao.dispensadas`, os 300 mais recentes; todo acesso em `try/catch`).
 
 **Arquivo e Lixeira.** O Arquivo mostra as arquivadas (com Desarquivar). A Lixeira mostra as apagadas com
 **Restaurar** e **Excluir para sempre**, que pergunta na própria linha, sem janela: "Excluir para sempre? Não
