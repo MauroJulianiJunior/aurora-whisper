@@ -38,6 +38,10 @@ type deps struct {
 	// caminho vazio escolhe docs/benchmarks/polish-AAAA-MM-DD.md, sem
 	// sobrescrever nada.
 	GravarRelatorio func(caminho string, dia time.Time, dados []byte) (string, error)
+	// GravarRelatorioDaLista é o mesmo do modo -notas-lista: caminho vazio
+	// escolhe docs/benchmarks/notas-lista-AAAA-MM-DD.md. Nil usa
+	// gravarRelatorioDaLista.
+	GravarRelatorioDaLista func(caminho string, dia time.Time, dados []byte) (string, error)
 	// AbrirHistorico abre o historico.db só para leitura (modo -historico).
 	// Nil usa abrirHistorico.
 	AbrirHistorico func(caminho string) (*sql.DB, error)
@@ -69,15 +73,23 @@ func depsReais() deps {
 		Agora:           time.Now,
 		LerArquivo:      os.ReadFile,
 		GravarRelatorio: gravarRelatorio,
+		// O modo -notas-lista grava com o nome dele.
+		GravarRelatorioDaLista: gravarRelatorioDaLista,
 	}
 }
 
 // gravarRelatorio grava sem nunca sobrescrever: um relatório é o registro de
 // uma rodada que custou dinheiro.
 func gravarRelatorio(caminho string, dia time.Time, dados []byte) (string, error) {
+	return gravarRelatorioComPrefixo("polish", caminho, dia, dados)
+}
+
+// gravarRelatorioComPrefixo é gravarRelatorio com o nome do arquivo padrão
+// (docs/benchmarks/<prefixo>-AAAA-MM-DD.md, -2, -3... se já existir).
+func gravarRelatorioComPrefixo(prefixo, caminho string, dia time.Time, dados []byte) (string, error) {
 	tentativas := []string{caminho}
 	if caminho == "" {
-		base := filepath.Join("docs", "benchmarks", "polish-"+dia.Format("2006-01-02"))
+		base := filepath.Join("docs", "benchmarks", prefixo+"-"+dia.Format("2006-01-02"))
 		tentativas = []string{base + ".md"}
 		for i := 2; i < 100; i++ {
 			tentativas = append(tentativas, fmt.Sprintf("%s-%d.md", base, i))
@@ -141,6 +153,8 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, d deps) i
 	historico := fs.String("historico", "", "DIAGNÓSTICO: em vez do dataset, os ditados longos do seu histórico (o caminho do historico.db, ou "+historicoLocal+" para o do Agent instalado). Mostra NO TERMINAL o que o modelo mudou nas respostas recusadas pela guarda de palavras; não grava relatório nem arquivo nenhum")
 	minCaracteres := fs.Int("min-caracteres", 500, "com -historico: só os ditados com pelo menos estes caracteres")
 	maxDitados := fs.Int("max-ditados", 15, "com -historico: no máximo estes ditados, os mais recentes (1 a 100)")
+	notasLista := fs.Bool("notas-lista", false, "mede a categoria notas-lista (ADR-022, N5): a separação em itens das notas, com o prompt "+resolver.NotasListaPromptRef+" e as guardas, sobre "+padraoNotasLista+"; grava docs/benchmarks/notas-lista-AAAA-MM-DD.md. Usa -modelos, -rodadas, -prazo-max, -limite-usd, -preco e -relatorio; o resto das flags é do Polish")
+	frasesDaLista := fs.String("notas-lista-frases", padraoNotasLista, "com -notas-lista: o dataset dos trechos")
 	conexaoNova := fs.Bool("conexao-nova", false, "abre uma conexão nova (TCP+TLS) a cada chamada, sem reaproveitar: é o que o Agent paga quando os ditados são espaçados por mais de 90 s, o pior caso da latência. Padrão: conexão reaproveitada (as chamadas saem seguidas), que subestima esse caso")
 	fs.Usage = func() { uso(stderr, fs) }
 	if err := fs.Parse(args); err != nil {
@@ -208,6 +222,17 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, d deps) i
 	case *minCaracteres < 1 || *maxDitados < 1 || *maxDitados > 100:
 		fmt.Fprintln(stderr, "polishbench: -min-caracteres tem de ser positivo e -max-ditados tem de ficar entre 1 e 100")
 		return 2
+	}
+
+	if *notasLista {
+		if *historico != "" {
+			fmt.Fprintln(stderr, "polishbench: -notas-lista e -historico não andam juntos")
+			return 2
+		}
+		return rodarNotasLista(ctx, rodadaDaLista{
+			Frases: *frasesDaLista, Relatorio: *relatorio, Rodadas: *rodadas, PrazoMax: *prazoMax,
+			LimiteUSD: *limiteUSD, Cands: cands, Precos: precos, Comando: comandoDe(fs),
+		}, stdout, stderr, d)
 	}
 
 	if *historico != "" {
@@ -333,43 +358,13 @@ type execucao struct {
 func pedirChavesERodar(ctx context.Context, cands []Candidato, precos map[string]Preco, exec *Executor, stdout, stderr io.Writer, d deps) (execucao, int) {
 	var ex execucao
 	cfg := exec.Cfg
-	chaves := map[string]string{}
-	for _, c := range cands {
-		if _, lida := chaves[c.Provedor]; lida {
-			continue
-		}
-		chave, err := d.Leitor.Ler(perguntaDaChave(c.Provedor))
-		if err != nil {
-			if errors.Is(err, ErrInterrompido) {
-				fmt.Fprintln(stderr, "polishbench: interrompido antes de gastar.")
-				return ex, 1
-			}
-			fmt.Fprintf(stderr, "polishbench: %v\n", err)
-			return ex, 1
-		}
-		chaves[c.Provedor] = chave
-		if chave != "" {
-			ex.segredos = append(ex.segredos, chave)
-		}
+	lidas, cod := lerChaves(cands, stdout, stderr, d)
+	if cod != 0 {
+		return ex, cod
 	}
-	defer func() {
-		for k := range chaves {
-			chaves[k] = ""
-		}
-	}()
-	var aRodar []Candidato
-	for _, c := range cands {
-		if chaves[c.Provedor] == "" {
-			ex.pulados = append(ex.pulados, c)
-			fmt.Fprintf(stdout, "%s: sem chave, pulado\n", c.Rotulo())
-			continue
-		}
-		aRodar = append(aRodar, c)
-	}
-	if len(aRodar) == 0 {
-		fmt.Fprintln(stderr, "polishbench: nenhuma chave informada; nada a medir.")
-		return ex, 1
-	}
+	defer lidas.apagar()
+	chaves, aRodar := lidas.chaves, lidas.aRodar
+	ex.segredos, ex.pulados = lidas.segredos, lidas.pulados
 
 	// A execução.
 	total := &gasto{}
@@ -416,13 +411,71 @@ func pedirChavesERodar(ctx context.Context, cands []Candidato, precos map[string
 	return ex, 0
 }
 
+// chavesLidas é o que lerChaves devolve.
+type chavesLidas struct {
+	// chaves: provedor -> chave ("" quando a pessoa pulou).
+	chaves map[string]string
+	// segredos são as chaves lidas, para mascarar tudo o que sai.
+	segredos []string
+	// pulados são os candidatos sem chave; aRodar, os outros, na ordem.
+	pulados, aRodar []Candidato
+}
+
+// apagar esquece as chaves do mapa no fim da rodada.
+func (c chavesLidas) apagar() {
+	for k := range c.chaves {
+		c.chaves[k] = ""
+	}
+}
+
+// lerChaves pede uma chave por provedor (lida com o eco desligado; fica só na
+// memória do processo) e separa os candidatos que têm chave. cod diferente de
+// zero: parou antes de gastar (Ctrl+C, erro do console ou nenhuma chave). É a
+// mesma leitura do Polish e do modo -notas-lista.
+func lerChaves(cands []Candidato, stdout, stderr io.Writer, d deps) (chavesLidas, int) {
+	l := chavesLidas{chaves: map[string]string{}}
+	for _, c := range cands {
+		if _, lida := l.chaves[c.Provedor]; lida {
+			continue
+		}
+		chave, err := d.Leitor.Ler(perguntaDaChave(c.Provedor))
+		if err != nil {
+			l.apagar()
+			if errors.Is(err, ErrInterrompido) {
+				fmt.Fprintln(stderr, "polishbench: interrompido antes de gastar.")
+				return chavesLidas{}, 1
+			}
+			fmt.Fprintf(stderr, "polishbench: %v\n", err)
+			return chavesLidas{}, 1
+		}
+		l.chaves[c.Provedor] = chave
+		if chave != "" {
+			l.segredos = append(l.segredos, chave)
+		}
+	}
+	for _, c := range cands {
+		if l.chaves[c.Provedor] == "" {
+			l.pulados = append(l.pulados, c)
+			fmt.Fprintf(stdout, "%s: sem chave, pulado\n", c.Rotulo())
+			continue
+		}
+		l.aRodar = append(l.aRodar, c)
+	}
+	if len(l.aRodar) == 0 {
+		l.apagar()
+		fmt.Fprintln(stderr, "polishbench: nenhuma chave informada; nada a medir.")
+		return chavesLidas{}, 1
+	}
+	return l, 0
+}
+
 // flagsDoComando são as flags que o relatório repete, na ordem. Ficam de fora
 // os caminhos de arquivo (o relatório é versionado, e um caminho pode ter o
 // nome de quem rodou).
 var flagsDoComando = []string{
 	"gastar", "rodadas", "modelos", "preco", "paralelo", "prazo-agente", "prazo-max",
 	"fallback-max", "p95-max", "limite-usd", "min-palavras", "max-edicao",
-	"linha-de-base", "f1-min", "estrutura-min", "conexao-nova",
+	"linha-de-base", "f1-min", "estrutura-min", "conexao-nova", "notas-lista",
 }
 
 // comandoDe reconstrói as flags que a pessoa passou, só as de flagsDoComando.
@@ -434,7 +487,7 @@ func comandoDe(fs *flag.FlagSet) string {
 		f := fs.Lookup(nome)
 		switch {
 		case f == nil || !definidas[nome]:
-		case nome == "gastar" || nome == "conexao-nova":
+		case nome == "gastar" || nome == "conexao-nova" || nome == "notas-lista":
 			// Flags booleanas: só o nome (e nada se a pessoa passou =false).
 			if f.Value.String() == "true" {
 				partes = append(partes, "-"+nome)
@@ -572,6 +625,13 @@ em vez do dataset, lê o histórico do Agent (só para leitura) e mostra NO TERM
 por palavra, o que o modelo mudou nas respostas recusadas. Não grava relatório nem arquivo:
 
   `+comandoHistorico+`
+
+NOTAS (ADR-022, N5): a separação em itens das notas (Formatar → Lista), com o prompt
+`+resolver.NotasListaPromptRef+` e as guardas, sobre os trechos de `+padraoNotasLista+`.
+Mede a IA valendo, as recusas por motivo, o F1 dos itens e as listas exatas por tipo, e
+grava docs/benchmarks/notas-lista-AAAA-MM-DD.md:
+
+  `+comandoNotasLista+`
 
 Preços padrão (US$ por 1 milhão de tokens, entrada/saída; pesquisa de 29-set-2026,
 confira na página do provedor; -preco vence):

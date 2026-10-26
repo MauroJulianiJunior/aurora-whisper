@@ -57,6 +57,16 @@
 // 387 por modelo com -rodadas 3. Ctrl+C interrompe e grava o relatório
 // do que foi medido, sem decisão.
 //
+// # A categoria notas-lista (-notas-lista)
+//
+// A separação em itens das notas (ADR-022, N5: Formatar → Lista numa linha de
+// texto corrido) tem prompt próprio (notas-lista@1), guardas próprias e o
+// próprio dataset, testdata/polish-dataset/notas-lista.json. Roda à parte,
+// pelo mesmo resolver.SepararItens da API local, e grava
+// docs/benchmarks/notas-lista-AAAA-MM-DD.md (notaslista.go):
+//
+//	go run ./cmd/polishbench -gastar -notas-lista -rodadas 3 -modelos openai:gpt-6-luna
+//
 // # O que ele faz
 //
 //	dataset -> resolver.Polir (Polidor de internal/ia + as guardas) -> métricas -> regra -> relatório
