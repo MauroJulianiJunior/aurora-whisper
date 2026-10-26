@@ -369,6 +369,10 @@ var semAcento = map[rune]rune{
 	'ç': 'c', 'ñ': 'n', 'ý': 'y', 'ÿ': 'y',
 }
 
+// Dobrar é dobrar para quem está fora do pacote: o "ditar para nota" (ADR-022,
+// N9) casa o título da nota na mesma forma em que a busca compara.
+func Dobrar(s string) string { return dobrar(s) }
+
 // dobrar põe s em minúsculas e sem acento: a forma em que se compara o nome
 // do marcador e se busca no texto das notas. Não mexe em pontuação nem em
 // espaço ("C#" e "C++" continuam diferentes).
