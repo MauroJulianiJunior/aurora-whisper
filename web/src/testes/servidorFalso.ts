@@ -568,7 +568,7 @@ export function servidorFalso(
       const c = p.corpo ?? {}
       if (Object.keys(c).some((k) => !camposDoPost.includes(k))) return erro(400, 'BAD_REQUEST', 'corpo JSON inválido')
       if (!ehTexto(c.titulo) || !ehTexto(c.corpo)) return erro(400, 'BAD_REQUEST', 'corpo JSON inválido')
-      if (!corValida(c.cor)) return erro(400, 'BAD_REQUEST', 'cor inválida: use ' + CORES.join(', ') + ' ou null')
+      if ('cor' in c && !corValida(c.cor)) return erro(400, 'BAD_REQUEST', 'cor inválida: use ' + CORES.join(', ') + ' ou null')
       const titulo = (c.titulo as string | undefined) ?? ''
       const corpo = (c.corpo as string | undefined) ?? ''
       if (titulo === '' && corpo === '') return erro(400, 'BAD_REQUEST', 'a nota está vazia')

@@ -30,6 +30,10 @@
 //   chaves             a seção IA com a OpenAI escolhida e nenhuma chave guardada: a
 //                      linha de onde criar a chave embaixo do campo;
 //   chaves-anthropic   o mesmo, com a Anthropic.
+//   notas              (ADR-022, N2) a aba Notas, que abre sozinha: oito notas, uma de cada cor
+//                      (uma fixada, uma lista de marcar, uma que veio de um ditado, uma no
+//                      Arquivo, uma na Lixeira) e três marcadores;
+//   notas-vazio        a aba Notas sem nenhuma nota.
 //   No historico, o clique em Apagar os mais antigos pergunta na linha, e o Apagar
 //   liga a regra no Agent de mentira (a prévia some; a Privacidade ganha a linha).
 // A tela de Configurações abre sozinha; ?config=0 deixa no Histórico.
@@ -43,7 +47,8 @@ import type { Aprendida } from '../api'
 import type { EstadoNuvem, EstadoRetencao } from '../clienteLocal'
 import '../fontes.css'
 import '../index.css'
-import { ditado, servidorFalso } from './servidorFalso'
+import type { Nota } from '../notas/tipos'
+import { ditado, marcador, nota, servidorFalso } from './servidorFalso'
 
 const busca = new URLSearchParams(window.location.search)
 const cenario = busca.get('cenario') ?? 'estados'
@@ -99,7 +104,25 @@ const nuvem =
 const ditados = cenario === 'primeiro-uso' ? [] : [ditado({ id: 'd1', created_at: new Date(2026, 9, 7, 14).toISOString(), final_text: 'Manda o relatório amanhã cedo.' })]
 const provedorDaIA = cenario === 'chaves' ? 'openai' : cenario === 'chaves-anthropic' ? 'anthropic' : ''
 
+// As notas (ADR-022, N2): uma de cada cor, para ver os oito tons no tema do navegador.
+const hora = (h: number, m = 0) => new Date(2026, 9, 25, h, m).toISOString()
+const notasDeExemplo: Nota[] = [
+  nota({ id: 'n1', titulo: 'Compras da semana', corpo: '- [ ] leite\n- [ ] café\n- [ ] ovos\n- [x] pão\n- [x] manteiga', cor: 'amarelo', fixada: true, marcadores: ['m1'], updated_at: hora(9) }),
+  nota({ id: 'n2', titulo: 'Reunião com o contador', corpo: '# Pauta\n- conferir o extrato do Itaú\n- boleto do aluguel\n1. mandar o DAS\n2. pagar o ISS', cor: 'azul', marcadores: ['m2'], updated_at: hora(10), ditado_de_origem: 'd1' }),
+  nota({ id: 'n3', titulo: 'Ideia de vídeo', corpo: 'Um Reels curto sobre o que muda na reforma para o MEI.', cor: 'roxo', marcadores: ['m3'], updated_at: hora(11) }),
+  nota({ id: 'n4', corpo: 'Ligar para a Fernanda antes das cinco e confirmar a gravação de quinta.', cor: 'laranja', updated_at: hora(12) }),
+  nota({ id: 'n5', titulo: 'Ponto de atenção', corpo: 'Rever o prazo da DCTFWeb.', cor: 'vermelho', updated_at: hora(8) }),
+  nota({ id: 'n6', titulo: 'Para lembrar', corpo: '- trocar o filtro\n- regar as plantas', cor: 'verde', updated_at: hora(7) }),
+  nota({ id: 'n7', titulo: 'Presente', corpo: 'Livro de receitas, a capa dura.', cor: 'rosa', updated_at: hora(6) }),
+  nota({ id: 'n8', titulo: 'Sem cor', corpo: 'Uma nota comum.', cor: 'cinza', updated_at: hora(5) }),
+  nota({ id: 'n9', titulo: 'Arquivada', corpo: 'Já resolvido.', arquivada: true, updated_at: hora(4) }),
+  nota({ id: 'n10', titulo: 'Na lixeira', corpo: 'Apagada ontem.', deleted_at: hora(3), updated_at: hora(3) }),
+]
+
 const srv = servidorFalso(ditados, {
+  ...(cenario === 'notas'
+    ? { notas: notasDeExemplo, marcadores: [marcador({ id: 'm1', nome: 'Compras' }), marcador({ id: 'm2', nome: 'Escritório' }), marcador({ id: 'm3', nome: 'Ideias' })] }
+    : {}),
   aprendidas,
   ...(provedorDaIA ? { config: { ai_provider: provedorDaIA } } : {}),
   ...(nuvem ? { nuvem } : {}),
@@ -116,10 +139,12 @@ createRoot(document.getElementById('root')!).render(
   </StrictMode>,
 )
 
-// Abre as Configurações sozinha: o botão da barra é o único com esse nome.
+// Abre as Configurações sozinha (ou as Notas, nos cenários delas): o botão da
+// barra é o único com esse nome.
 if (busca.get('config') !== '0') {
+  const aba = cenario.startsWith('notas') ? 'Notas' : 'Configurações'
   const id = setInterval(() => {
-    const botao = Array.from(document.querySelectorAll('button')).find((b) => b.textContent === 'Configurações')
+    const botao = Array.from(document.querySelectorAll<HTMLButtonElement>('.vistas button')).find((b) => b.textContent === aba)
     if (botao) {
       botao.click()
       clearInterval(id)

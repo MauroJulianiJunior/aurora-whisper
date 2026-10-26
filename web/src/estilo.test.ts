@@ -9,6 +9,9 @@ import { describe, expect, it } from 'vitest'
 import { linhaDoAprendido } from './aprendizado'
 import { bloco, contraste, css, regras, temaClaro, temaEscuro, temas, valor } from './testes/css'
 
+// Os oito tons das notas (storage.CoresDaNota), em cada tema.
+const notaCores = ['amarelo', 'laranja', 'vermelho', 'rosa', 'roxo', 'azul', 'verde', 'cinza'].map((c) => `n-${c}`)
+
 // Cada par [frente, fundos...] é texto que precisa de 4,5:1 (WCAG 1.4.3),
 // ou um contorno que precisa de 3:1 (WCAG 1.4.11).
 const texto: [string, ...string[]][] = [
@@ -35,12 +38,21 @@ const texto: [string, ...string[]][] = [
   // etiqueta "novo" em cinza, sobre o fundo do que entrou.
   ['texto-2', 'entrou'],
   ['texto-3', 'entrou'],
+  // As notas coloridas (ADR-022): o título, o corpo, as etiquetas e a hora do
+  // cartão e da nota aberta, a linha riscada dos marcados e o texto dos botões
+  // da barra, tudo sobre os oito tons de cada tema.
+  ['texto', ...notaCores],
+  ['texto-2', ...notaCores],
+  ['texto-3', ...notaCores],
 ]
 
 const contorno: [string, ...string[]][] = [
   ['contorno', 'fundo', 'superficie'],
-  // O foco encosta no fundo da página, no do cartão e no da linha.
-  ['foco', 'fundo', 'superficie', 'realce'],
+  // O foco encosta no fundo da página, no do cartão e no da linha, e na nota
+  // colorida que está aberta.
+  ['foco', 'fundo', 'superficie', 'realce', ...notaCores],
+  // A borda da caixa de marcar (--texto-2) sobre os oito tons.
+  ['texto-2', ...notaCores],
 ]
 
 describe('contraste', () => {
@@ -220,7 +232,8 @@ describe('o papel de cada cor do design system', () => {
   it('vermelho: só na etiqueta "falhou", nas notas de erro e conflito, na faixa de Agent fora do ar e no botão de risco', () => {
     const usam = regras.filter((r) => /var\(--risco/.test(r.corpo)).map((r) => r.seletor)
     expect(usam.sort()).toEqual(
-      ['.botao.risco', ".botao.risco:hover:not(:disabled, [aria-disabled='true'])", '.etiqueta.risco', '.faixa', '.nota'].sort(),
+      // '.menu .risco' é o "Mover para a lixeira" dos menus das notas.
+      ['.botao.risco', ".botao.risco:hover:not(:disabled, [aria-disabled='true'])", '.etiqueta.risco', '.faixa', '.menu .risco', '.nota'].sort(),
     )
   })
 
@@ -266,7 +279,10 @@ describe('o papel de cada cor do design system', () => {
         '.aviso-texto:focus-visible',
         '.botao.primario',
         ".botao.primario:hover:not(:disabled, [aria-disabled='true'])",
+        // A nota aberta: os colchetes do editor e a caixa de marcar marcada.
+        '.caixa.feita',
         '.confirmado .termo',
+        '.dialogo::before,\n.dialogo::after',
         '.editor::before,\n.editor::after',
         '.marca-moldura',
       ].sort(),

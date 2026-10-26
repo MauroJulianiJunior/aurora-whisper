@@ -66,8 +66,12 @@ function semChave<T>(r: Record<string, T>, id: string): Record<string, T> {
 }
 
 export function Painel({ ambiente, focarNoTitulo = false }: Props) {
-  const { cliente, textos, Configuracoes, Faixa, AvisoDoMicrofone, ditar: Ditar } = ambiente
+  const { cliente, textos, Configuracoes, Faixa, AvisoDoMicrofone, ditar: Ditar, Notas } = ambiente
   const [vista, setVista] = useState<Vista>('historico')
+  // emNotas: a aba Notas (só no PC, ambiente.Notas) está à vista, no lugar da
+  // lista. A busca do topo passa a ser a dela. Como as Configurações, é uma
+  // tela à parte: o histórico não muda por baixo.
+  const [emNotas, setEmNotas] = useState(false)
   // configurando: a tela de Configurações está à vista, no lugar da lista.
   // A vista da lista não muda por baixo: voltar leva à mesma lista, com a
   // mesma busca. A tela, uma vez aberta, fica montada e só se esconde, e
@@ -384,6 +388,12 @@ export function Painel({ ambiente, focarNoTitulo = false }: Props) {
 
   function trocarVista(v: Vista) {
     setConfigurando(false)
+    // Vindo das Notas, a busca era das notas: começa limpa, como em toda troca.
+    if (emNotas) {
+      setEmNotas(false)
+      setTexto('')
+      setBusca('')
+    }
     if (v === vista) return
     largar(aberto)
     setVista(v)
@@ -400,8 +410,22 @@ export function Painel({ ambiente, focarNoTitulo = false }: Props) {
     if (configurando) return
     largar(aberto)
     setAberto(null)
+    setEmNotas(false)
     setConfigurando(true)
     setAbriuConfiguracoes(true)
+  }
+
+  // abrirNotas leva à aba Notas. O editor aberto do histórico fecha, como ao
+  // trocar de vista, e a busca recomeça (ela passa a buscar nas notas).
+  function abrirNotas() {
+    if (emNotas) return
+    largar(aberto)
+    setAberto(null)
+    setChegou(null)
+    setConfigurando(false)
+    setTexto('')
+    setBusca('')
+    setEmNotas(true)
   }
 
   function abrir(item: Ditado) {
@@ -743,8 +767,8 @@ export function Painel({ ambiente, focarNoTitulo = false }: Props) {
       ref={campoBusca}
       type="search"
       className="busca"
-      placeholder={naLixeira ? 'Buscar na lixeira' : 'Buscar no histórico'}
-      aria-label={naLixeira ? 'Buscar na lixeira' : 'Buscar no histórico'}
+      placeholder={emNotas ? 'Buscar nas notas' : naLixeira ? 'Buscar na lixeira' : 'Buscar no histórico'}
+      aria-label={emNotas ? 'Buscar nas notas' : naLixeira ? 'Buscar na lixeira' : 'Buscar no histórico'}
       aria-keyshortcuts="Control+K"
       value={texto}
       onChange={(e) => setTexto(e.target.value)}
@@ -854,7 +878,7 @@ export function Painel({ ambiente, focarNoTitulo = false }: Props) {
   }
 
   return (
-    <div className="painel">
+    <div className={emNotas ? 'painel larga' : 'painel'}>
       <header className="topo" ref={topo}>
         {problema && (
           <Faixa
@@ -872,10 +896,15 @@ export function Painel({ ambiente, focarNoTitulo = false }: Props) {
             Aurora Whisper
           </span>
           <div className="vistas" role="group" aria-label="Mostrar">
-            <button type="button" aria-pressed={!configurando && vista === 'historico'} onClick={() => trocarVista('historico')}>
+            <button type="button" aria-pressed={!configurando && !emNotas && vista === 'historico'} onClick={() => trocarVista('historico')}>
               Histórico
             </button>
-            <button type="button" aria-pressed={!configurando && naLixeira} onClick={() => trocarVista('lixeira')}>
+            {Notas && (
+              <button type="button" aria-pressed={emNotas} onClick={abrirNotas}>
+                Notas
+              </button>
+            )}
+            <button type="button" aria-pressed={!configurando && !emNotas && naLixeira} onClick={() => trocarVista('lixeira')}>
               Lixeira
             </button>
             <button type="button" aria-pressed={configurando} onClick={() => abrirConfiguracoes()}>
@@ -905,18 +934,19 @@ export function Painel({ ambiente, focarNoTitulo = false }: Props) {
         )}
       </header>
 
-      <main className="conteudo" aria-busy={!configurando && carregando}>
+      <main className="conteudo" aria-busy={!configurando && !emNotas && carregando}>
         <h1 className="so-leitor" ref={titulo} tabIndex={focarNoTitulo ? -1 : undefined}>
-          {configurando ? 'Configurações' : (visivel?.vista ?? vista) === 'lixeira' ? 'Lixeira' : 'Histórico'}
+          {configurando ? 'Configurações' : emNotas ? 'Notas' : (visivel?.vista ?? vista) === 'lixeira' ? 'Lixeira' : 'Histórico'}
         </h1>
         {/* A região viva existe sempre e anuncia cada carga — quantos
             ditados, nada encontrado, erro. Quem usa leitor de tela, com o
             foco na busca, não ouvia se ela tinha achado algo (WCAG 4.1.3,
             revisão de 29-set-2026). */}
         <p className="so-leitor anuncio" role="status">
-          {(!configurando && visivel?.anuncio) || ''}
+          {(!configurando && !emNotas && visivel?.anuncio) || ''}
         </p>
-        {!configurando && conteudo}
+        {!configurando && !emNotas && conteudo}
+        {Notas && emNotas && !configurando && <Notas busca={busca} aoPerderLigacao={falhar} avisar={avisar} />}
         {abriuConfiguracoes && (
           <Configuracoes
             visivel={configurando}
