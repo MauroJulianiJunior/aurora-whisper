@@ -61,6 +61,13 @@ export interface MudancaDaNota {
   arquivada?: boolean
 }
 
+// DesfeitoOVirarNota é a resposta do Desfazer do "Virar nota" (N3): o ditado que
+// voltou ao histórico e se a nota saiu (estava intacta) ou ficou (foi editada).
+export interface DesfeitoOVirarNota {
+  ditado_id: string
+  nota_apagada: boolean
+}
+
 // ClienteDeNotas é o que a aba Notas usa. O cliente local (clienteLocal.ts) o
 // implementa sobre a Local API; os erros vêm como os do api.ts (Conflito para
 // a versão desatualizada e para a nota que foi para a lixeira em outra aba).

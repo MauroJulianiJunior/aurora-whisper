@@ -21,6 +21,9 @@ interface Props {
   aoPerderLigacao(e: unknown): void
   // avisar: a pílula do Painel; desfazer, quando existe, vira o botão e o Ctrl+Z.
   avisar(texto: ReactNode, desfazer?: () => void): void
+  // abrirNota: o "Abrir" do aviso "Virou nota" (N3): a nota que a janela abre
+  // assim que a aba aparece. vez sobe a cada pedido.
+  abrirNota?: { id: string; vez: number } | null
 }
 
 // O que a tela mostra: a lista da consulta, e a lista das notas ativas inteira
@@ -53,7 +56,7 @@ function vizinhoDe(ordenados: Nota[], id: string): string | null {
 // fileira de marcadores com as formas de ver, a grade (ou a lista, ou os
 // detalhes), a nota aberta numa janela, o Arquivo e a Lixeira. Só o PC o tem
 // (ambienteLocal.tsx): o painel da nuvem não importa este arquivo.
-export function Notas({ cliente, busca, aoPerderLigacao: aoPerderLigacaoDoPainel, avisar }: Props) {
+export function Notas({ cliente, busca, aoPerderLigacao: aoPerderLigacaoDoPainel, avisar, abrirNota }: Props) {
   // O Painel passa uma função nova a cada render: a daqui é estável, e lê a
   // do momento (senão cada render do Painel leria a lista de novo).
   const ligacao = useRef(aoPerderLigacaoDoPainel)
@@ -107,6 +110,29 @@ export function Notas({ cliente, busca, aoPerderLigacao: aoPerderLigacaoDoPainel
     )
     return () => ctrl.abort()
   }, [cliente, vista, marcador, busca, consulta, recarga, aoPerderLigacao])
+
+  // O "Abrir" do aviso "Virou nota": lê a nota e abre a janela dela. A lista
+  // também é lida de novo (a nota nova não estava nela).
+  useEffect(() => {
+    if (!abrirNota) return
+    let cancelado = false
+    cliente.obterNota(abrirNota.id).then(
+      (n) => {
+        if (cancelado) return
+        recarregar()
+        if (n.deleted_at) avisar('Esta nota está na lixeira.')
+        else setAberta(n)
+      },
+      (e: unknown) => {
+        if (cancelado) return
+        if (problemaDe(e)) aoPerderLigacao(e)
+        else avisar('Não consegui abrir a nota.')
+      },
+    )
+    return () => {
+      cancelado = true
+    }
+  }, [abrirNota, cliente, recarregar, avisar, aoPerderLigacao])
 
   // Voltar para a aba lê de novo: a nota pode ter mudado em outra aba.
   useEffect(() => {

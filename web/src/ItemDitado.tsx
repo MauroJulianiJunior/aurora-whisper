@@ -28,6 +28,9 @@ interface Props {
   // no topo, com a etiqueta "novo" (o fundo sozinho não diz nada a quem não vê
   // a cor).
   novo?: boolean
+  // virarNota: a ação "Virar nota" (ADR-022, N3), só no PC. Sem ela, o editor
+  // não tem o botão. aoVirar devolve quando a ação terminou (deu certo ou não).
+  virarNota?: { rotulo: string; aoVirar(): Promise<void> }
 }
 
 // TextoDaLinha é o texto que a linha mostra. Ditado que falhou antes de
@@ -159,9 +162,13 @@ function Editor({
   outroLugar,
   edicaoSemConexao,
   aoEscolher,
+  virarNota,
 }: Props & { rascunho: Rascunho }) {
   const campo = useRef<HTMLTextAreaElement>(null)
   const [salvando, setSalvando] = useState(false)
+  // virando: o pedido do "Virar nota" está no ar. O segundo clique espera, para
+  // não pedir duas vezes o que o Agent recusaria com "já virou nota".
+  const [virando, setVirando] = useState(false)
 
   // Escolhida a versão, o selo sai da tela com o botão que tinha o foco: o
   // foco vai para o texto, que é o que ficou.
@@ -184,6 +191,9 @@ function Editor({
   // uma quebra de linha acrescentada (revisão de 29-set-2026).
   const identico = item.raw_text === texto
   const vazio = texto.trim() === ''
+  // foraDoSalvo: o que o editor mostra não é o texto de que o Agent faz a nota (o
+  // final salvo, ou o bruto quando o final está vazio: a mesma regra do histórico).
+  const foraDoSalvo = texto !== (item.final_text.trim() !== '' ? item.final_text : item.raw_text)
 
   // Com o selo, o foco vai para o texto sem rolar até ele: a página rola até
   // o começo do cartão, para o selo (em cima do texto) não ficar escondido
@@ -205,6 +215,16 @@ function Editor({
       await aoSalvar()
     } finally {
       setSalvando(false)
+    }
+  }
+
+  async function virar() {
+    if (!virarNota || virando) return
+    setVirando(true)
+    try {
+      await virarNota.aoVirar()
+    } finally {
+      setVirando(false)
     }
   }
 
@@ -317,6 +337,21 @@ function Editor({
             <button type="button" className="botao" disabled={vazio} onClick={() => aoCopiar(texto)}>
               Copiar
             </button>
+            {virarNota && (
+              // A nota nasce do texto SALVO do ditado: com edição por salvar, o
+              // botão espera o Salvar (que está ao lado), em vez de virar nota um
+              // texto diferente do que a pessoa está vendo. Mesma regra do Copiar
+              // para o texto vazio e para o ditado que foi para a lixeira.
+              <button
+                type="button"
+                className="botao"
+                disabled={foraDoSalvo || vazio || naLixeira || virando}
+                title={foraDoSalvo ? 'Salve a edição antes de virar nota.' : undefined}
+                onClick={() => void virar()}
+              >
+                {virarNota.rotulo}
+              </button>
+            )}
             <button type="button" className="botao" onClick={aoMoverParaLixeira}>
               Mover para a lixeira
             </button>

@@ -9,6 +9,9 @@ export interface AvisoDados {
   // desfazer: a pílula oferece "Desfazer", e Ctrl+Z fora de campo de
   // texto faz o mesmo enquanto ela existe (Painel.tsx).
   desfazer?(): void
+  // abrir: a pílula oferece "Abrir" (o aviso "Virou nota" leva à nota). Vem antes
+  // do Desfazer, sem atalho de teclado, e sumir é com o clique.
+  abrir?(): void
   // aprender: a pílula oferece "Aprender" (ADR-017: a sugestão de trocar um
   // termo), e Alt+A fora de campo de texto faz o mesmo enquanto ela
   // existe (Painel.tsx). O clique é o único caminho para o dicionário: o
@@ -135,6 +138,18 @@ function Pilula({ aviso, aoSumir, saiu, herdarFoco }: PropsPilula) {
             Aprender
           </button>
         </>
+      )}
+      {aviso.abrir && (
+        <button
+          type="button"
+          className="aviso-acao"
+          onClick={() => {
+            aviso.abrir?.()
+            aoSumir()
+          }}
+        >
+          Abrir
+        </button>
       )}
       {aviso.desfazer && (
         <>

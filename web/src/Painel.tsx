@@ -66,12 +66,15 @@ function semChave<T>(r: Record<string, T>, id: string): Record<string, T> {
 }
 
 export function Painel({ ambiente, focarNoTitulo = false }: Props) {
-  const { cliente, textos, Configuracoes, Faixa, AvisoDoMicrofone, ditar: Ditar, Notas } = ambiente
+  const { cliente, textos, Configuracoes, Faixa, AvisoDoMicrofone, ditar: Ditar, Notas, virarNota: acaoVirarNota } = ambiente
   const [vista, setVista] = useState<Vista>('historico')
   // emNotas: a aba Notas (só no PC, ambiente.Notas) está à vista, no lugar da
   // lista. A busca do topo passa a ser a dela. Como as Configurações, é uma
   // tela à parte: o histórico não muda por baixo.
   const [emNotas, setEmNotas] = useState(false)
+  // notaPedida: o "Abrir" do aviso "Virou nota": a nota que a aba Notas abre na
+  // janela. vez sobe a cada pedido.
+  const [notaPedida, setNotaPedida] = useState<{ id: string; vez: number } | null>(null)
   // configurando: a tela de Configurações está à vista, no lugar da lista.
   // A vista da lista não muda por baixo: voltar leva à mesma lista, com a
   // mesma busca. A tela, uma vez aberta, fica montada e só se esconde, e
@@ -394,6 +397,7 @@ export function Painel({ ambiente, focarNoTitulo = false }: Props) {
     // Vindo das Notas, a busca era das notas: começa limpa, como em toda troca.
     if (emNotas) {
       setEmNotas(false)
+      setNotaPedida(null) // saindo das Notas, o pedido acaba: voltar à aba não reabre a nota
       setTexto('')
       setBusca('')
     }
@@ -414,6 +418,7 @@ export function Painel({ ambiente, focarNoTitulo = false }: Props) {
     largar(aberto)
     setAberto(null)
     setEmNotas(false)
+    setNotaPedida(null)
     setConfigurando(true)
     setAbriuConfiguracoes(true)
   }
@@ -623,18 +628,69 @@ export function Painel({ ambiente, focarNoTitulo = false }: Props) {
   // antiga não voltava à tela (revisão de 29-set-2026).
   function desfazerLixeira(item: Ditado, buscaDeOrigem: string) {
     cliente.restaurar(item.id).then(() => {
-      const r = resultadoAtual.current
-      if (r?.vista === 'lixeira') {
-        // A pessoa já foi para a Lixeira: lá, ele não está mais.
-        focarDepois.current = { id: vizinho(r.itens, item.id) }
-        tirar(item.id)
-      } else if (r && (r.busca === '' || r.busca === buscaDeOrigem)) {
-        // Numa busca diferente da de onde ele saiu, não dá para saber se
-        // ele casa com ela: fica de fora até a próxima carga.
-        setResultado((x) => (x && x.vista === 'historico' ? { ...x, itens: inserirEmOrdem(x.itens, item, 'created_at', Boolean(x.proximo)) } : x))
-        focarDepois.current = { id: item.id }
-      }
+      recolocar(item, buscaDeOrigem)
       avisar('Ditado de volta ao histórico.')
+    }, falhar)
+  }
+
+  // recolocar devolve ao histórico, na tela, o ditado que saiu dele (da lixeira
+  // ou pelo "Virar nota") e que o Desfazer trouxe de volta.
+  function recolocar(item: Ditado, buscaDeOrigem: string) {
+    const r = resultadoAtual.current
+    if (r?.vista === 'lixeira') {
+      // A pessoa já foi para a Lixeira: lá, ele não está mais.
+      focarDepois.current = { id: vizinho(r.itens, item.id) }
+      tirar(item.id)
+    } else if (r && (r.busca === '' || r.busca === buscaDeOrigem)) {
+      // Numa busca diferente da de onde ele saiu, não dá para saber se
+      // ele casa com ela: fica de fora até a próxima carga.
+      setResultado((x) => (x && x.vista === 'historico' ? { ...x, itens: inserirEmOrdem(x.itens, item, 'created_at', Boolean(x.proximo)) } : x))
+      focarDepois.current = { id: item.id }
+    }
+  }
+
+  // virarNota é o "Virar nota" do editor (ADR-022, N3): o Agent cria a nota e
+  // esconde o ditado do histórico (sem lixeira), e o aviso oferece Abrir (a
+  // nota, na aba Notas) e Desfazer (o ditado volta; a nota sai se ninguém a
+  // editou). Como no Mover para a lixeira, o foco vai para o vizinho.
+  async function virarNota(item: Ditado) {
+    if (!acaoVirarNota) return
+    const buscaDeOrigem = resultadoAtual.current?.busca ?? ''
+    let nota: { id: string }
+    try {
+      nota = await acaoVirarNota.virar(item.id)
+    } catch (e) {
+      // Já virou nota (outra aba, ou o clique anterior): ele não é mais do
+      // histórico, e a lista que está na tela estava velha.
+      if (acaoVirarNota.jaVirou(e) && e instanceof Error) {
+        tirar(item.id)
+        setRascunhos((rs) => semChave(rs, item.id))
+        setAberto((a) => (a === item.id ? null : a))
+        return avisar(e.message)
+      }
+      return falhar(e)
+    }
+    const atual = resultadoAtual.current
+    focarDepois.current = { id: atual ? vizinho(atual.itens, item.id) : null }
+    tirar(item.id)
+    setRascunhos((rs) => semChave(rs, item.id))
+    setAberto((a) => (a === item.id ? null : a))
+    mostrarAviso({
+      texto: acaoVirarNota.virou,
+      abrir: () => {
+        setNotaPedida((p) => ({ id: nota.id, vez: (p?.vez ?? 0) + 1 }))
+        abrirNotas()
+      },
+      desfazer: () => void desfazerVirarNota(item, nota.id, buscaDeOrigem),
+    })
+  }
+
+  function desfazerVirarNota(item: Ditado, notaId: string, buscaDeOrigem: string) {
+    const acao = acaoVirarNota
+    if (!acao) return
+    acao.desfazer(notaId).then((r) => {
+      recolocar(item, buscaDeOrigem)
+      avisar(r.nota_apagada ? acao.voltou : acao.voltouComNota)
     }, falhar)
   }
 
@@ -865,6 +921,7 @@ export function Painel({ ambiente, focarNoTitulo = false }: Props) {
                     edicaoSemConexao={textos.edicaoSemConexao}
                     aoEscolher={ambiente.resolverConflito && ((escolha) => escolher(item, escolha))}
                     novo={chegou === item.id}
+                    virarNota={acaoVirarNota && { rotulo: acaoVirarNota.rotulo, aoVirar: () => virarNota(item) }}
                   />
                 ),
               )}
@@ -949,7 +1006,7 @@ export function Painel({ ambiente, focarNoTitulo = false }: Props) {
           {(!configurando && !emNotas && visivel?.anuncio) || ''}
         </p>
         {!configurando && !emNotas && conteudo}
-        {Notas && emNotas && !configurando && <Notas busca={busca} aoPerderLigacao={falhar} avisar={avisar} />}
+        {Notas && emNotas && !configurando && <Notas busca={busca} aoPerderLigacao={falhar} avisar={avisar} abrirNota={notaPedida} />}
         {abriuConfiguracoes && (
           <Configuracoes
             visivel={configurando}

@@ -25,7 +25,7 @@ import {
   buscadorPadrao,
   pedir,
 } from './api'
-import type { ClienteDeNotas, Marcador, Nota } from './notas/tipos'
+import type { ClienteDeNotas, DesfeitoOVirarNota, Marcador, Nota } from './notas/tipos'
 
 // EstadoNuvem é o GET /api/nuvem (ADR-019, F6): se este PC está ligado à
 // nuvem. Nunca traz o token do aparelho, que fica no Gerenciador de
@@ -184,6 +184,14 @@ export interface Cliente extends ClienteDoHistorico, ClienteDeNotas {
   // resolverConflito é a escolha do selo (F7c), o mesmo PATCH da nuvem: o
   // 409 vem como Conflito, e o painel relê o ditado.
   resolverConflito(id: string, versao: number, escolha: EscolhaDoSelo): Promise<Ditado>
+  // virarNota é o "Virar nota" do histórico (ADR-022, N3; POST
+  // /api/history/{id}/virar-nota): cria a nota com o texto do ditado e esconde o
+  // ditado do histórico, sem lixeira. Os 409 vêm como ErroDaApi, com o codigo
+  // IN_TRASH (o ditado está na lixeira) ou ALREADY_NOTE (já virou nota).
+  virarNota(ditadoId: string): Promise<Nota>
+  // desfazerVirarNota é o Desfazer do aviso (POST /api/notas/{id}/desfazer-virar):
+  // o ditado volta ao histórico, e a nota sai se ninguém a editou.
+  desfazerVirarNota(notaId: string): Promise<DesfeitoOVirarNota>
   // mudancas é o contador de mudanças do sync (ADR-021, S; GET
   // /api/nuvem/mudancas): quantas rodadas gravaram no histórico algo que veio
   // da nuvem, desde que o Agent subiu. Só um número. A leitura é também o
@@ -282,6 +290,15 @@ export function criarCliente(token: string, buscar: Buscador = buscadorPadrao): 
     },
     async moverParaLixeira(id) {
       await pedir(buscar, doItem(id), autorizado({ method: 'DELETE' }))
+    },
+    async virarNota(ditadoId) {
+      // conflitoEhVersao false: o 409 aqui não é versão, é "na lixeira" ou "já virou nota".
+      const r = await pedir(buscar, `${doItem(ditadoId)}/virar-nota`, autorizado({ method: 'POST' }), false)
+      return (await r.json()) as Nota
+    },
+    async desfazerVirarNota(notaId) {
+      const r = await pedir(buscar, `${daNota(notaId)}/desfazer-virar`, autorizado({ method: 'POST' }), false)
+      return (await r.json()) as DesfeitoOVirarNota
     },
     async restaurar(id) {
       await pedir(buscar, `${doItem(id)}/restore`, autorizado({ method: 'POST' }))

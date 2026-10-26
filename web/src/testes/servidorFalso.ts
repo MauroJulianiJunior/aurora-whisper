@@ -546,8 +546,55 @@ export function servidorFalso(
   const corValida = (c: unknown) => c === null || c === '' || (typeof c === 'string' && (CORES as readonly string[]).includes(c))
   const ehTexto = (v: unknown) => v === undefined || typeof v === 'string'
 
+  // "Virar nota" (ADR-022, N3): o ditado que virou nota sai das listas do
+  // histórico (sem ir para a lixeira), e a coluna virou_nota guarda o id da nota.
+  const virouNota = new Map<string, string>()
+
+  // virarNota é POST /api/history/{id}/virar-nota, como o Agent: 404, 409
+  // IN_TRASH, 409 ALREADY_NOTE, e a nota nasce com o texto final (o bruto, se o
+  // final está vazio), sem título nem cor, com ditado_de_origem.
+  function rotaVirarNota(p: Pedido, id: string): Response {
+    if (p.metodo !== 'POST') return erro(405, 'BAD_REQUEST', 'método')
+    const d = itens.find((i) => i.id === id)
+    if (!d) return erro(404, 'NOT_FOUND', 'registro não encontrado')
+    if (d.deleted_at) return erro(409, 'IN_TRASH', 'o ditado está na lixeira: restaure antes de virar nota')
+    if (virouNota.has(id)) return erro(409, 'ALREADY_NOTE', 'este ditado já virou nota')
+    const corpo = d.final_text.trim() !== '' ? d.final_text : d.raw_text
+    if (corpo.trim() === '') return erro(400, 'BAD_REQUEST', 'a nota está vazia')
+    const quando = agoraDasNotas()
+    const nova: Nota = {
+      id: `nota-${++seqDasNotas}`,
+      titulo: '',
+      corpo,
+      cor: null,
+      fixada: false,
+      arquivada: false,
+      marcadores: [],
+      ditado_de_origem: id,
+      created_at: quando,
+      updated_at: quando,
+      version: 1,
+    }
+    bancoDeNotas.push(nova)
+    virouNota.set(id, nova.id)
+    return json({ ...nova }, 201)
+  }
+
+  // desfazerVirar é POST /api/notas/{id}/desfazer-virar: o ditado volta; a nota
+  // sai se está na versão 1 e fora da lixeira, e fica se foi editada.
+  function desfazerVirar(n: Nota): Response {
+    const ditado = n.ditado_de_origem
+    if (!ditado || virouNota.get(ditado) !== n.id) {
+      return erro(409, 'CONFLICT', 'a nota não está virada de um ditado, ou o ditado já voltou ao histórico')
+    }
+    virouNota.delete(ditado)
+    const apagada = n.version === 1 && !n.deleted_at
+    if (apagada) bancoDeNotas.splice(bancoDeNotas.indexOf(n), 1)
+    return json({ ditado_id: ditado, nota_apagada: apagada })
+  }
+
   function rotaNotas(p: Pedido): Response {
-    const m = p.caminho.match(/^\/api\/notas(?:\/([^/]+)(\/restaurar|\/definitivo)?)?$/)
+    const m = p.caminho.match(/^\/api\/notas(?:\/([^/]+)(\/restaurar|\/definitivo|\/desfazer-virar)?)?$/)
     if (!m) return erro(404, 'NOT_FOUND', 'rota')
     const [, idBruto, sufixo] = m
     if (!idBruto) {
@@ -601,6 +648,7 @@ export function servidorFalso(
       }
       return json({ ...n })
     }
+    if (sufixo === '/desfazer-virar' && p.metodo === 'POST') return desfazerVirar(n)
     if (sufixo === '/definitivo' && p.metodo === 'DELETE') {
       if (!n.deleted_at) return erro(409, 'CONFLICT', 'só se apaga de vez a nota que está na lixeira')
       bancoDeNotas.splice(bancoDeNotas.indexOf(n), 1)
@@ -675,6 +723,8 @@ export function servidorFalso(
       return abrirConfiguracoesFalha ? erro(500, 'INTERNAL', 'Não consegui abrir as configurações do Windows.') : new Response(null, { status: 204 })
     }
 
+    const viraNota = p.caminho.match(/^\/api\/history\/([^/]+)\/virar-nota$/)
+    if (viraNota) return rotaVirarNota(p, decodeURIComponent(viraNota[1] ?? ''))
     const rota = p.caminho.match(/^\/api\/history(?:\/([^/]+))?(\/restore)?$/)
     if (!rota) return erro(404, 'NOT_FOUND', 'rota')
     const [, id, restaurar] = rota
@@ -685,6 +735,7 @@ export function servidorFalso(
       const lista = ordenar(
         itens
           .filter((i) => Boolean(i.deleted_at) === lixeira)
+          .filter((i) => !virouNota.has(i.id))
           .filter((i) => !q || i.final_text.toLowerCase().includes(q) || i.raw_text.toLowerCase().includes(q)),
         lixeira ? 'deleted_at' : 'created_at',
       )
@@ -738,6 +789,8 @@ export function servidorFalso(
     itens,
     // notas e marcadores são o que o banco das notas tem agora.
     notas: bancoDeNotas,
+    // virouNota: ditado -> nota, dos ditados escondidos do histórico.
+    virouNota,
     marcadores: bancoDeMarcadores,
     // notaPorFora simula outra aba mexendo na nota: a versão sobe, a data
     // também.
