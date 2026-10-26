@@ -22,6 +22,8 @@ import {
   type Provedor,
   type ResultadoTeste,
   type Sugestao,
+  Conflito,
+  ErroDaApi,
   buscadorPadrao,
   pedir,
 } from './api'
@@ -255,6 +257,7 @@ export function criarCliente(token: string, buscar: Buscador = buscadorPadrao): 
   })
   const doItem = (id: string) => `/api/history/${encodeURIComponent(id)}`
   const daNota = (id: string) => `/api/notas/${encodeURIComponent(id)}`
+  const doMarcador = (id: string) => `/api/marcadores/${encodeURIComponent(id)}`
   const comJson = (method: string, corpo: unknown): RequestInit =>
     autorizado({ method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) })
   const daChave = (provedor: Provedor) => `/api/ia/chave?${new URLSearchParams({ provedor })}`
@@ -351,6 +354,34 @@ export function criarCliente(token: string, buscar: Buscador = buscadorPadrao): 
       const r = await pedir(buscar, '/api/marcadores', autorizado({ signal: sinal }), false)
       const { items } = (await r.json()) as { items?: Marcador[] | null }
       return items ?? []
+    },
+    async criarMarcador(nome) {
+      // conflitoEhVersao false: o 409 daqui é o nome já usado (NAME_IN_USE).
+      const r = await pedir(buscar, '/api/marcadores', comJson('POST', { nome }), false)
+      return (await r.json()) as Marcador
+    },
+    async renomearMarcador(id, versao, nome) {
+      // Dois 409: o nome já usado (NAME_IN_USE, que a tela mostra) e a versão
+      // velha (CONFLICT, que vira Conflito).
+      try {
+        const r = await pedir(buscar, doMarcador(id), comJson('PATCH', { nome, base_version: versao }), false)
+        return (await r.json()) as Marcador
+      } catch (e) {
+        if (e instanceof ErroDaApi && e.status === 409 && e.codigo !== 'NAME_IN_USE') throw new Conflito()
+        throw e
+      }
+    },
+    async apagarMarcador(id) {
+      await pedir(buscar, doMarcador(id), autorizado({ method: 'DELETE' }), false)
+    },
+    async marcarNota(notaId, marcadorId) {
+      // O 409 é a nota que foi para a lixeira em outra aba (Conflito).
+      const r = await pedir(buscar, `${daNota(notaId)}/marcadores/${encodeURIComponent(marcadorId)}`, autorizado({ method: 'PUT' }))
+      return (await r.json()) as Nota
+    },
+    async desmarcarNota(notaId, marcadorId) {
+      const r = await pedir(buscar, `${daNota(notaId)}/marcadores/${encodeURIComponent(marcadorId)}`, autorizado({ method: 'DELETE' }))
+      return (await r.json()) as Nota
     },
     async configuracoes() {
       const r = await pedir(buscar, '/api/settings', autorizado())

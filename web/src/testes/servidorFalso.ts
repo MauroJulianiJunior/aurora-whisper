@@ -64,6 +64,13 @@
 // POST/PATCH recusa campo desconhecido, nota vazia e cor fora das oito (400);
 // mover para a lixeira, restaurar e todo PATCH sobem a versão; o apagar de vez
 // só vale na lixeira (409 fora dela). notaPorFora faz o papel de outra aba.
+//
+// Os marcadores (N4) seguem o Agent: nome único sem diferenciar maiúscula nem acento
+// (409 NAME_IN_USE, no POST e no PATCH), PATCH com base_version (409 CONFLICT para a
+// versão velha), apagar tira o marcador das notas (a versão delas sobe, a hora não),
+// e PUT/DELETE em /api/notas/{id}/marcadores/{marcador} são idempotentes, sobem a
+// versão da nota só quando mudam algo e devolvem a nota (409 na lixeira, 404 sem o
+// marcador).
 
 import type { Aprendida, Buscador, Configuracoes, Ditado, ListaDeTermos, Provedor, ResultadoTeste, Sugestao, TermoAdicionado } from '../api'
 import type { EstadoNuvem, EstadoRetencao } from '../clienteLocal'
@@ -539,8 +546,11 @@ export function servidorFalso(
   const bancoDeMarcadores = marcadoresIniciais.map((m) => ({ ...m }))
   let relogioDasNotas = Date.UTC(2026, 9, 25, 12)
   let seqDasNotas = 0
+  let seqDosMarcadores = 0
   const agoraDasNotas = () => new Date((relogioDasNotas += 1000)).toISOString()
   const dobrar = (s: string) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase()
+  const MAX_NOME_DO_MARCADOR = 50
+  const camposDoMarcador = ['nome', 'base_version']
   const camposDoPost = ['titulo', 'corpo', 'cor', 'fixada', 'arquivada', 'ditado_de_origem', 'marcadores', 'token']
   const camposDoPatch = ['base_version', 'titulo', 'corpo', 'cor', 'fixada', 'arquivada']
   const corValida = (c: unknown) => c === null || c === '' || (typeof c === 'string' && (CORES as readonly string[]).includes(c))
@@ -630,8 +640,83 @@ export function servidorFalso(
     return json({ ditado_id: ditado, nota_apagada: apagada })
   }
 
+  // nomeDoMarcador limpa o nome como o Agent (espaços das pontas fora, sequências
+  // viram um) e o recusa vazio ou grande demais.
+  function nomeDoMarcador(bruto: unknown): string | null {
+    if (typeof bruto !== 'string') return null
+    const nome = bruto.split(/\s+/).filter(Boolean).join(' ')
+    return nome === '' || [...nome].length > MAX_NOME_DO_MARCADOR ? null : nome
+  }
+  const nomeEmUso = (nome: string, exceto = '') => bancoDeMarcadores.some((x) => x.id !== exceto && dobrar(x.nome) === dobrar(nome))
+  const porNomeDoMarcador = (a: Marcador, b: Marcador) => dobrar(a.nome).localeCompare(dobrar(b.nome)) || a.id.localeCompare(b.id)
+
+  // rotaMarcadores é /api/marcadores e /api/marcadores/{id}.
+  function rotaMarcadores(p: Pedido): Response {
+    const m = p.caminho.match(/^\/api\/marcadores(?:\/([^/]+))?$/)
+    if (!m) return erro(404, 'NOT_FOUND', 'rota')
+    if (!m[1]) {
+      if (p.metodo === 'GET') return json({ items: [...bancoDeMarcadores].sort(porNomeDoMarcador).map((x) => ({ ...x })) })
+      if (p.metodo !== 'POST') return erro(405, 'BAD_REQUEST', 'método')
+      const c = p.corpo ?? {}
+      if (Object.keys(c).some((k) => k !== 'nome')) return erro(400, 'BAD_REQUEST', 'corpo JSON inválido')
+      const nome = nomeDoMarcador(c.nome)
+      if (nome === null) return erro(400, 'BAD_REQUEST', 'nome de marcador inválido: de 1 a 50 caracteres, em uma linha')
+      if (nomeEmUso(nome)) return erro(409, 'NAME_IN_USE', 'já existe um marcador com esse nome')
+      const quando = agoraDasNotas()
+      const novo: Marcador = { id: `marcador-${++seqDosMarcadores}`, nome, created_at: quando, updated_at: quando, version: 1 }
+      bancoDeMarcadores.push(novo)
+      return json({ ...novo }, 201)
+    }
+    const id = decodeURIComponent(m[1])
+    const alvo = bancoDeMarcadores.find((x) => x.id === id)
+    if (!alvo) return erro(404, 'NOT_FOUND', 'registro não encontrado')
+    if (p.metodo === 'DELETE') {
+      bancoDeMarcadores.splice(bancoDeMarcadores.indexOf(alvo), 1)
+      for (const n of bancoDeNotas) {
+        if (!n.marcadores.includes(id)) continue
+        n.marcadores = n.marcadores.filter((x) => x !== id)
+        n.version += 1
+      }
+      return new Response(null, { status: 204 })
+    }
+    if (p.metodo !== 'PATCH') return erro(405, 'BAD_REQUEST', 'método')
+    const c = p.corpo ?? {}
+    if (Object.keys(c).some((k) => !camposDoMarcador.includes(k))) return erro(400, 'BAD_REQUEST', 'corpo JSON inválido')
+    if (typeof c.base_version !== 'number') return erro(400, 'BAD_REQUEST', 'base_version é obrigatório')
+    const nome = nomeDoMarcador(c.nome)
+    if (nome === null) return erro(400, 'BAD_REQUEST', 'nome de marcador inválido: de 1 a 50 caracteres, em uma linha')
+    if (c.base_version !== alvo.version) return erro(409, 'CONFLICT', 'versão desatualizada')
+    if (nomeEmUso(nome, id)) return erro(409, 'NAME_IN_USE', 'já existe um marcador com esse nome')
+    alvo.nome = nome
+    alvo.version += 1
+    alvo.updated_at = agoraDasNotas()
+    return json({ ...alvo })
+  }
+
+  // marcadoresDaNota é PUT e DELETE /api/notas/{id}/marcadores/{marcador}.
+  function marcadoresDaNota(p: Pedido, n: Nota, marcadorId: string): Response {
+    if (p.metodo !== 'PUT' && p.metodo !== 'DELETE') return erro(405, 'BAD_REQUEST', 'método')
+    if (n.deleted_at) return erro(409, 'CONFLICT', 'a nota está na lixeira: restaure antes de mexer nela')
+    const tem = n.marcadores.includes(marcadorId)
+    if (p.metodo === 'PUT') {
+      if (!bancoDeMarcadores.some((x) => x.id === marcadorId)) return erro(404, 'NOT_FOUND', 'registro não encontrado')
+      if (!tem) {
+        const nomes = new Map(bancoDeMarcadores.map((x) => [x.id, x]))
+        n.marcadores = [...n.marcadores, marcadorId].sort((a, b) => porNomeDoMarcador(nomes.get(a)!, nomes.get(b)!))
+      }
+    } else if (tem) {
+      n.marcadores = n.marcadores.filter((x) => x !== marcadorId)
+    }
+    const mudou = p.metodo === 'PUT' ? !tem : tem
+    if (mudou) {
+      n.version += 1
+      n.updated_at = agoraDasNotas()
+    }
+    return json({ ...n, marcadores: [...n.marcadores] })
+  }
+
   function rotaNotas(p: Pedido): Response {
-    const m = p.caminho.match(/^\/api\/notas(?:\/([^/]+)(\/restaurar|\/definitivo|\/desfazer-virar)?)?$/)
+    const m = p.caminho.match(/^\/api\/notas(?:\/([^/]+)(\/restaurar|\/definitivo|\/desfazer-virar|\/marcadores\/[^/]+)?)?$/)
     if (!m) return erro(404, 'NOT_FOUND', 'rota')
     const [, idBruto, sufixo] = m
     if (!idBruto) {
@@ -696,6 +781,7 @@ export function servidorFalso(
       bancoDeNotas.splice(bancoDeNotas.indexOf(n), 1)
       return new Response(null, { status: 204 })
     }
+    if (sufixo?.startsWith('/marcadores/')) return marcadoresDaNota(p, n, decodeURIComponent(sufixo.slice('/marcadores/'.length)))
     if (sufixo) return erro(405, 'BAD_REQUEST', 'método')
     switch (p.metodo) {
       case 'GET':
@@ -758,7 +844,7 @@ export function servidorFalso(
     if (p.caminho.startsWith('/api/termos')) return rotaTermos(p)
     if (p.caminho === '/api/notas/foco') return rotaFoco(p)
     if (p.caminho === '/api/notas' || p.caminho.startsWith('/api/notas/')) return rotaNotas(p)
-    if (p.caminho === '/api/marcadores' && p.metodo === 'GET') return json({ items: bancoDeMarcadores.map((m) => ({ ...m })) })
+    if (p.caminho === '/api/marcadores' || p.caminho.startsWith('/api/marcadores/')) return rotaMarcadores(p)
     if (p.caminho === '/api/nuvem' || p.caminho.startsWith('/api/nuvem/')) return rotaNuvem(p)
     if (p.caminho === '/api/retencao' || p.caminho.startsWith('/api/retencao/')) return rotaRetencao(p)
     if (p.caminho === '/api/microfone' && p.metodo === 'GET') return json(microfone)

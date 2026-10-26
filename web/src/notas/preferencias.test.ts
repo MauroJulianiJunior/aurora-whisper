@@ -1,5 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { gravarColunas, gravarForma, lerColunas, lerForma, limitar, COLUNAS_NO_CELULAR, COLUNAS_NO_PC } from './preferencias'
+import {
+  COLUNAS_NO_CELULAR,
+  COLUNAS_NO_PC,
+  dispensarSugestao,
+  gravarColunas,
+  gravarForma,
+  lerColunas,
+  lerForma,
+  limitar,
+  sugestaoDispensada,
+} from './preferencias'
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -56,6 +66,36 @@ describe('as colunas', () => {
   })
 })
 
+describe('a sugestão de marcador dispensada', () => {
+  it('lembra cada nota em que a pessoa disse "Agora não"', () => {
+    expect(sugestaoDispensada('n1')).toBe(false)
+    dispensarSugestao('n1')
+    dispensarSugestao('n1')
+    dispensarSugestao('n2')
+    expect(sugestaoDispensada('n1')).toBe(true)
+    expect(sugestaoDispensada('n2')).toBe(true)
+    expect(sugestaoDispensada('n3')).toBe(false)
+    expect(JSON.parse(window.localStorage.getItem('aurora.notas.sugestao.dispensadas')!)).toEqual(['n1', 'n2'])
+  })
+
+  it('guarda só as 300 mais recentes', () => {
+    for (let i = 0; i < 305; i++) dispensarSugestao(`n${i}`)
+    expect(sugestaoDispensada('n0')).toBe(false)
+    expect(sugestaoDispensada('n4')).toBe(false)
+    expect(sugestaoDispensada('n5')).toBe(true)
+    expect(sugestaoDispensada('n304')).toBe(true)
+  })
+
+  it('um valor estranho no armazenamento vale como lista vazia', () => {
+    window.localStorage.setItem('aurora.notas.sugestao.dispensadas', '{"a":1}')
+    expect(sugestaoDispensada('a')).toBe(false)
+    window.localStorage.setItem('aurora.notas.sugestao.dispensadas', 'não é json')
+    expect(sugestaoDispensada('a')).toBe(false)
+    dispensarSugestao('a')
+    expect(sugestaoDispensada('a')).toBe(true)
+  })
+})
+
 describe('com o armazenamento quebrado', () => {
   it('ler e gravar não derrubam nada, e valem os padrões', () => {
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
@@ -69,6 +109,8 @@ describe('com o armazenamento quebrado', () => {
     expect(lerForma()).toBe('grade')
     expect(lerColunas(false)).toBe(4)
     expect(lerColunas(true)).toBe(2)
+    expect(() => dispensarSugestao('n1')).not.toThrow()
+    expect(sugestaoDispensada('n1')).toBe(false)
   })
 
   it('o acesso ao localStorage que já falha ao ser tocado também é engolido', () => {

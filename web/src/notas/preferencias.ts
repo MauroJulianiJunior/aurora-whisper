@@ -63,3 +63,29 @@ export function lerColunas(estreita: boolean): number {
 export function gravarColunas(estreita: boolean, n: number): void {
   gravar(chaveDasColunas(estreita), String(limitar(n, limitesDeColunas(estreita))))
 }
+
+// As notas em que a pessoa disse "Agora não" à sugestão de marcador (N4): a
+// faixa não volta para elas. Guarda os ids, os mais recentes no fim, até
+// maxDispensadas (a lista não cresce para sempre). Sem armazenamento, a faixa
+// só deixa de aparecer enquanto a nota estiver aberta.
+const chaveDasDispensadas = 'aurora.notas.sugestao.dispensadas'
+const maxDispensadas = 300
+
+function lerDispensadas(): string[] {
+  try {
+    const v: unknown = JSON.parse(ler(chaveDasDispensadas) ?? '[]')
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+export function sugestaoDispensada(notaId: string): boolean {
+  return lerDispensadas().includes(notaId)
+}
+
+export function dispensarSugestao(notaId: string): void {
+  const ids = lerDispensadas().filter((id) => id !== notaId)
+  ids.push(notaId)
+  gravar(chaveDasDispensadas, JSON.stringify(ids.slice(-maxDispensadas)))
+}
