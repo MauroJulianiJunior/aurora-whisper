@@ -50,7 +50,15 @@ export interface NovaNota {
   cor?: CorDaNota | null
   fixada?: boolean
   arquivada?: boolean
+  // token: o da caixa "Criar uma nota" (AlvoDoFoco): os ditados feitos dentro
+  // dela passam a ser os da nota que nasce.
+  token?: string
 }
+
+// AlvoDoFoco é onde está o cursor (ADR-022, "Ditado feito dentro da nota"): uma
+// nota que já existe, ou a caixa "Criar uma nota", que ainda não tem id e se
+// identifica por um token que o painel inventa a cada abertura.
+export type AlvoDoFoco = { nota: string } | { token: string }
 
 // MudancaDaNota é o PATCH: só vai o que mudou. cor null tira a cor.
 export interface MudancaDaNota {
@@ -59,6 +67,13 @@ export interface MudancaDaNota {
   cor?: CorDaNota | null
   fixada?: boolean
   arquivada?: boolean
+}
+
+// DesfeitoOVirarNota é a resposta do Desfazer do "Virar nota" (N3): o ditado que
+// voltou ao histórico e se a nota saiu (estava intacta) ou ficou (foi editada).
+export interface DesfeitoOVirarNota {
+  ditado_id: string
+  nota_apagada: boolean
 }
 
 // ClienteDeNotas é o que a aba Notas usa. O cliente local (clienteLocal.ts) o
@@ -73,6 +88,12 @@ export interface ClienteDeNotas {
   restaurarNota(id: string): Promise<Nota>
   apagarNotaDeVez(id: string): Promise<void>
   listarMarcadores(sinal?: AbortSignal): Promise<Marcador[]>
+  // definirFoco avisa o Agent de que o cursor está neste alvo (PUT
+  // /api/notas/foco); o aviso vence sozinho em 60 s, então se renova. limparFoco
+  // o tira (DELETE): com alvo, só se o aviso ainda for aquele; descartar (só com
+  // token) devolve ao histórico os ditados feitos na caixa que não virou nota.
+  definirFoco(alvo: AlvoDoFoco): Promise<void>
+  limparFoco(alvo?: AlvoDoFoco, descartar?: boolean): Promise<void>
 }
 
 // NOMES_DAS_CORES é o rótulo de cada cor, para o menu e para o leitor de tela.

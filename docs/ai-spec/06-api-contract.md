@@ -1653,7 +1653,7 @@ Tira da lixeira. `204`.
 
 ### Notas e marcadores (ADR-022, N1)
 Acrescentado com a fase N1 da ADR-022: o banco local e a API local das notas e dos marcadores.
-A tela chegou na N2 (aba Notas do painel do PC, `08-ui-ux-spec.md`). **Ainda não há "Virar nota" (N3) nem sync (N7).** Fonte da verdade:
+A tela chegou na N2 (aba Notas do painel do PC, `08-ui-ux-spec.md`). O "Virar nota" chegou na N3 (abaixo, "Virar nota"). **Ainda não há sync (N7).** Fonte da verdade:
 `internal/agent/localapi/notas.go`. O modelo está em `05-data-model.md`, "Notas e marcadores".
 
 Convenções, como no histórico: JSON em `snake_case`, datas RFC3339, erros no envelope da cloud com
@@ -1661,7 +1661,7 @@ Convenções, como no histórico: JSON em `snake_case`, datas RFC3339, erros no 
 desconhecido** (`400`), para um nome digitado errado num `PATCH` não virar um pedido vazio calado. Sem
 o repositório montado, toda rota responde `503 UNAVAILABLE`. Códigos: `BAD_REQUEST`, `NOT_FOUND`,
 `CONFLICT` (versão desatualizada, ou nota na lixeira / fora dela), `NAME_IN_USE` (`409`, o nome de
-marcador já existe) e `INTERNAL`.
+marcador já existe), `IN_TRASH` e `ALREADY_NOTE` (`409`, do "Virar nota") e `INTERNAL`.
 
 A nota nos corpos de resposta:
 ```json
@@ -1693,11 +1693,14 @@ desconhecida.
 #### POST `/api/notas`
 ```json
 { "titulo": "", "corpo": "- leite", "cor": "amarelo", "fixada": false, "arquivada": false,
-  "ditado_de_origem": "id", "marcadores": ["id"] }
+  "ditado_de_origem": "id", "marcadores": ["id"], "token": "uuid" }
 ```
 Todos os campos são opcionais, mas a nota não pode ter título e corpo ambos vazios. `201` com a
 nota (`version` 1). `400` para: nota vazia, `cor` fora das oito, texto acima do teto (título 1 KiB,
-corpo 64 KiB) ou com o caractere nulo, e marcador inexistente ou apagado.
+corpo 64 KiB) ou com o caractere nulo, marcador inexistente ou apagado, e `token` fora de
+`[A-Za-z0-9_-]{1,64}`. O `token` é o da caixa "Criar uma nota" aberta (ver "Nota em foco", abaixo):
+na mesma transação em que a nota nasce, os ditados marcados `nova:<token>` passam a apontar para ela.
+Ele **não** define `ditado_de_origem`.
 
 #### GET `/api/notas/{id}`
 Inclusive a da lixeira. `404` se não existe (ou é de outro dono).
@@ -1740,6 +1743,51 @@ desatualizada, `409 NAME_IN_USE` para nome de outro marcador (mudar só a caixa 
 
 #### DELETE `/api/marcadores/{id}`
 Apaga o marcador e o tira de todas as notas; **não apaga nota**. `204`; repetido, `204`.
+
+#### Virar nota (ADR-022, N3)
+O ditado do histórico vira nota; o Desfazer devolve. Nenhuma das duas rotas toca o sync.
+
+**POST `/api/history/{id}/virar-nota`** (sem corpo). Cria a nota com o texto do ditado (`final_text`;
+o `raw_text` se o final está vazio), sem título nem cor, com `ditado_de_origem` = `{id}`, e marca o
+ditado como "virou nota" na mesma transação: ele sai da lista do histórico e da busca, **sem ir para a
+lixeira**. `201` com a nota. `404 NOT_FOUND` (ditado inexistente, ou de outro dono), `409 IN_TRASH`
+(está na lixeira), `409 ALREADY_NOTE` (já virou nota: outra aba, ou o segundo clique), `400` (sem texto
+nenhum) e `503` sem o repositório das notas.
+
+**POST `/api/notas/{id}/desfazer-virar`** (sem corpo). Devolve o ditado ao histórico e apaga a nota
+**se ela não foi editada** desde que nasceu (versão 1, fora da lixeira); editada, a nota fica.
+`200 {"ditado_id": "...", "nota_apagada": true|false}`. `404` se a nota não existe (apagada de vez: o
+ditado **não** volta), `409 CONFLICT` se a nota não nasceu de um ditado, ou se o ditado já voltou (o
+Desfazer repetido).
+
+Apagar a nota depois (lixeira e "Excluir para sempre") **não** devolve o ditado ao histórico.
+
+#### Nota em foco (ADR-022, N3, "Ditado feito dentro da nota")
+O ditado feito com o cursor dentro de uma nota **não entra no histórico**, como se fosse um "Virar nota"
+automático. Para o Agent saber onde o cursor está, o painel o avisa por duas rotas. O Agent guarda o
+aviso **só na memória**, com validade de 60 s (`internal/agent/notafoco`): nunca em disco, em log nem
+no sync (é contexto, `09-security-privacy.md`). Sem o marcador montado ou sem o repositório das notas,
+`503 UNAVAILABLE` (o painel trata como "sem aviso", e o ditado fica no histórico).
+
+**PUT `/api/notas/foco`**: `{"nota": "<id>"}` para uma nota que existe, ou `{"token": "<uuid>"}` para
+a caixa "Criar uma nota" (a nota ainda não existe; o token é inventado pelo painel a cada abertura).
+Exatamente um dos dois. `204`. `404 NOT_FOUND` (a nota não existe), `409 CONFLICT` (está na lixeira) e
+`400` (nenhum ou os dois, token ou id fora de `[A-Za-z0-9_-]{1,64}`, `descartar`). O painel manda
+quando o título ou uma linha da nota tem o foco **e** a janela do navegador também, e renova a cada
+~20 s enquanto isso vale.
+
+**DELETE `/api/notas/foco`**: o cursor saiu (foco perdido, janela sem foco, `pagehide`, nota fechada).
+O corpo é opcional: `{"nota": "<id>"}` ou `{"token": "<uuid>"}` limpa **só se o aviso ainda for
+aquele** (o DELETE atrasado da nota antiga não apaga o aviso da nova); sem corpo, limpa qualquer um.
+`{"token": "...", "descartar": true}` é a caixa que fechou **sem criar a nota**: além de limpar, devolve
+ao histórico os ditados `nova:<token>` (`virou_nota` volta a nulo; nada se perde calado). `descartar`
+só vale com `token` (`400`). `204`, também quando não havia aviso.
+
+Quando o Agent grava um ditado que **deu certo** (a inserção no campo é a de sempre) e há aviso vivo,
+a linha nasce com `virou_nota` = o id da nota ou `nova:<token>`. O ditado que falhou e a linha tardia
+(texto que chegou depois do prazo e não foi inserido) ficam no histórico. Os ditados já no histórico
+não mudam; só os novos nascem escondidos. O que sobrar de `nova:<token>` (painel fechado de repente, Agent
+reiniciado no meio) volta ao histórico 24 h depois, no expurgo das notas.
 
 ### Configurações
 Acrescentado em 29-set-2026 (tela de Configurações do painel). Fonte da verdade:

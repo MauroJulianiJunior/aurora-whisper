@@ -776,7 +776,12 @@ próprio para "ditar para nota" e a lista marcável sem rede no celular. Fases (
   colunas guardadas por aparelho, criar, a nota aberta com autosave e conflito, o editor por linhas, o
   Arquivo e a Lixeira (`web/src/notas/`, AC-081 e AC-082). **Falta o teste no PC, que é do Mauro:**
   `docs/teste-manual-notas-n2.md` (o olhar no navegador e ditar dentro da nota);
-- **N3:** "Virar nota" no histórico, com Desfazer;
+- **N3:** "Virar nota" no histórico, com Desfazer. **Feita nos dublês (25-out-2026):** migration
+  `0010` (coluna `virou_nota`), `VirarNota` e `DesfazerVirarNota` numa transação, as duas rotas, o botão
+  no editor com o aviso Abrir/Desfazer, o ditado fora do histórico sem lixeira e fora dos 6 meses, sem
+  sync (AC-083); e o ditado feito dentro da nota, que nasce fora do histórico (o painel avisa o
+  Agent pelo `PUT`/`DELETE /api/notas/foco`, só em memória; AC-084). **Falta o teste no PC, que é do
+  Mauro:** `docs/teste-manual-notas-n3.md`;
 - **N4:** marcadores, filtro e sugestão local;
 - **N5:** converter trecho (prefixo, regra e IA com as guardas; prompt `notas-lista@1`);
 - **N6:** lista de marcar, copiar para WhatsApp, busca única;

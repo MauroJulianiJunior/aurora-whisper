@@ -42,6 +42,12 @@ flowchart TD
     Y --> Z[Liberar áudio]
 ```
 
+**Ditado feito dentro de uma nota (ADR-022).** O passo "Histórico textual" consulta o aviso de nota em
+foco (só em memória, 60 s). Com aviso vivo e a inserção bem-sucedida, a linha é gravada com `virou_nota`
+(o id da nota, ou `nova:<token>` no "Criar uma nota") e **não aparece** na lista do histórico; a
+inserção em si não muda. Sem aviso, ou com a inserção falha, é o ditado de sempre. O "Aprender" e a
+auditoria ainda leem o `raw_text`. Ver `06-api-contract.md`, "Nota em foco".
+
 ## Smart resolve
 Na etapa 5 (ADR-019), "Cloud allowed?" é sempre "Não": o resolve com contexto na nuvem fica para
 depois.

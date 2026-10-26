@@ -4,6 +4,7 @@
 // a escolha sobe pela fila do sync). Só o build local chega aqui (App.tsx).
 
 import type { Ambiente } from './ambiente'
+import { ErroDaApi } from './api'
 import { efeitoDeAprender, perguntaDeSugestao, resultadoDeAprender, resultadoDeDesfazer } from './aprendizado'
 import type { Cliente } from './clienteLocal'
 import { Configuracoes } from './Configuracoes'
@@ -23,6 +24,16 @@ export function ambienteLocal(cliente: Cliente): Ambiente {
     Faixa: FaixaLocal,
     // As notas moram no Agent (ADR-022): a aba só existe no PC.
     Notas: (props) => <Notas cliente={cliente} {...props} />,
+    // "Virar nota" no editor do histórico (ADR-022, N3).
+    virarNota: {
+      rotulo: 'Virar nota',
+      virou: 'Virou nota',
+      voltou: 'Ditado de volta ao histórico.',
+      voltouComNota: 'Ditado de volta ao histórico. A nota ficou, porque você a editou.',
+      jaVirou: (e) => e instanceof ErroDaApi && e.codigo === 'ALREADY_NOTE',
+      virar: (id) => cliente.virarNota(id),
+      desfazer: (notaId) => cliente.desfazerVirarNota(notaId),
+    },
     textos: {
       // O primeiro uso: o ditado funciona sem chave nenhuma, e a chave (a da IA,
       // nas Configurações) só serve ao Polish, que é opcional. A tecla é a de

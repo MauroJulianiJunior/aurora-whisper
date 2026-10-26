@@ -609,6 +609,37 @@ apagadas), `idx_local_notes_lixeira` (`user_id, deleted_at DESC`, só apagadas) 
 `ON DELETE CASCADE`), PK composta. Índice `idx_local_note_labels_label (label_id)`. Sai junto com a
 nota (apagar de vez, expurgo).
 
+#### local_transcriptions.virou_nota (ADR-022, N3; migration `0010_ditado_virou_nota`)
+Uma coluna nova, nula, em `local_transcriptions`, e o índice parcial `idx_local_transcriptions_virou_nota`
+(`virou_nota WHERE virou_nota IS NOT NULL`). Só criação: nenhum ditado existente muda, e todo ele
+continua no histórico.
+
+- **O que é:** o id da nota em que o ditado virou ("Virar nota"). **Sem chave estrangeira**: apagar a
+  nota de vez não devolve o ditado ao histórico (o id fica solto de propósito).
+- **Esconde sem apagar.** `List` (histórico **e** lixeira) filtra `virou_nota IS NULL`. O ditado
+  marcado **não vai para a lixeira** (`deleted_at` e `purge_at` ficam nulos), então o expurgo de 30
+  dias não o alcança; e a **retenção de 6 meses** também não (`foraDaJanela` pula `virou_nota` não
+  nulo, e a prévia não o conta): o texto dele vive na nota, e a ADR diz que a regra "não alcança o
+  ditado que virou nota". `Get` por id não filtra: o "Aprender" e a auditoria continuam achando o
+  `raw_text`.
+- **Local, sem sync.** Marcar ou desmarcar não passa por `emitir`: nada entra na `sync_outbox`, e o
+  ditado **não sobe a `version` nem o `updated_at`** (a base do próximo envio à nuvem fica a mesma). A
+  nuvem continua mostrando o ditado. O que a nuvem deve fazer com "virou nota" é ponto aberto da N7.
+- **Tudo ou nada.** "Virar nota" cria a nota (`corpo` = `final_text`, ou `raw_text` se o final está
+  vazio; sem título nem cor; `ditado_de_origem` = o ditado) e marca o ditado na mesma transação
+  (`SQLiteNotaRepository.VirarNota`). Recusa o ditado inexistente (ou de outro dono), na lixeira e o que
+  já virou nota. O Desfazer (`DesfazerVirarNota`) limpa a marca e apaga a nota **só se ela está na
+  `version` 1 e fora da lixeira** (qualquer edição, fixar, arquivar, marcador ou lixeira sobe a
+  versão); editada, a nota fica e só o ditado volta. Também numa transação.
+- **Ditado feito dentro da nota (ADR-022, "Ditado feito dentro da nota").** O Agent grava a linha do
+  ditado **já** com `virou_nota`: o id da nota em que o cursor estava, ou **`nova:<token>`** quando
+  estava no "Criar uma nota" (a nota ainda não existe; o token é do painel, `[A-Za-z0-9_-]{1,64}`).
+  Mesmas regras de esconder, expurgo, 6 meses e sync de cima, e **não** define `ditado_de_origem`.
+  `nova:<token>` vira o id da nota na transação do `POST /api/notas` com `token`
+  (`UPDATE ... WHERE virou_nota = 'nova:'||token`); a caixa que fecha vazia volta a nulo
+  (`SoltarDitadosDaNotaNova`); o resto volta a nulo depois de 24 h (`LiberarDitadosDeNotasNovas`, no
+  expurgo das notas). O aviso de onde está o cursor **não** é gravado: vive só na memória do Agent.
+
 ### local_dictionary_entries / aliases / corrections
 Espelhos sincronizáveis.
 

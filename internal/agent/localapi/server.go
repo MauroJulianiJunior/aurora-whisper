@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/agent/chaves"
+	"github.com/MauroJulianiJunior/aurora-whisper/internal/agent/notafoco"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/dictionary"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/storage"
 )
@@ -90,6 +91,11 @@ type Preferencias struct {
 	// /api/marcadores*. Em produção, o *storage.SQLiteNotaRepository. Nil: as
 	// rotas respondem 503.
 	Notas storage.NotaRepository
+	// Foco é o aviso, só em memória, de que o cursor está dentro de uma nota
+	// (ADR-022, "Ditado feito dentro da nota"): PUT e DELETE /api/notas/foco.
+	// Em produção é o mesmo *notafoco.Marcador que o Runtime consulta ao gravar
+	// um ditado. Nil: as duas rotas respondem 503 e todo ditado vai ao histórico.
+	Foco *notafoco.Marcador
 	// Microfone é o aviso de microfone bloqueado pelo Windows e o botão que
 	// abre a tela certa: /api/microfone*. Nil: as rotas respondem 503.
 	Microfone Microfone
@@ -208,6 +214,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /api/notas/{id}/definitivo", s.handleApagarNotaDeVez)
 	mux.HandleFunc("PUT /api/notas/{id}/marcadores/{marcador}", s.handleMarcarNota)
 	mux.HandleFunc("DELETE /api/notas/{id}/marcadores/{marcador}", s.handleDesmarcarNota)
+
+	mux.HandleFunc("PUT /api/notas/foco", s.handlePutFoco)
+	mux.HandleFunc("DELETE /api/notas/foco", s.handleDeleteFoco)
+
+	mux.HandleFunc("POST /api/history/{id}/virar-nota", s.handleVirarNota)
+	mux.HandleFunc("POST /api/notas/{id}/desfazer-virar", s.handleDesfazerVirarNota)
 
 	mux.HandleFunc("GET /api/marcadores", s.handleListMarcadores)
 	mux.HandleFunc("POST /api/marcadores", s.handleCriarMarcador)

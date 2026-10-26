@@ -34,6 +34,9 @@
 //                      (uma fixada, uma lista de marcar, uma que veio de um ditado, uma no
 //                      Arquivo, uma na Lixeira) e três marcadores;
 //   notas-vazio        a aba Notas sem nenhuma nota.
+//   virar-nota         (ADR-022, N3) o Histórico com três ditados (abra com ?config=0): o
+//                      editor de um deles tem o "Virar nota", e o aviso "Virou nota" tem
+//                      Abrir (leva à aba Notas, com a nota na janela) e Desfazer.
 //   Nas notas, ?forma=lista|detalhes escolhe a forma de ver, e ?abrir=<título> abre
 //   a nota com esse título (para ver a janela sem clicar).
 //   No historico, o clique em Apagar os mais antigos pergunta na linha, e o Apagar
@@ -103,7 +106,16 @@ const nuvem =
   cenario === 'pergunta' ? conectado(800, 3) : cenario === 'so-trocas' ? conectado(0, 3) : cenario === 'conectado' ? conectado(0, 0) : cenario === 'freio' ? conectado(0, 0, 12) : undefined
 
 // O primeiro uso é o histórico vazio; a IA com um provedor escolhido e sem chave mostra a linha de onde criá-la.
-const ditados = cenario === 'primeiro-uso' ? [] : [ditado({ id: 'd1', created_at: new Date(2026, 9, 7, 14).toISOString(), final_text: 'Manda o relatório amanhã cedo.' })]
+const ditados =
+  cenario === 'primeiro-uso'
+    ? []
+    : cenario === 'virar-nota'
+      ? [
+          ditado({ id: 'd1', created_at: new Date(2026, 9, 25, 14).toISOString(), final_text: 'Manda o relatório amanhã cedo.' }),
+          ditado({ id: 'd2', created_at: new Date(2026, 9, 25, 15).toISOString(), final_text: '- leite\n- café\n- pão' }),
+          ditado({ id: 'd3', created_at: new Date(2026, 9, 25, 16).toISOString(), final_text: 'Arroz, feijão, batata, presunto e queijo.' }),
+        ]
+      : [ditado({ id: 'd1', created_at: new Date(2026, 9, 7, 14).toISOString(), final_text: 'Manda o relatório amanhã cedo.' })]
 const provedorDaIA = cenario === 'chaves' ? 'openai' : cenario === 'chaves-anthropic' ? 'anthropic' : ''
 
 // As notas (ADR-022, N2): uma de cada cor, para ver os oito tons no tema do navegador.

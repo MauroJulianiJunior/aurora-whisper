@@ -119,12 +119,36 @@ export interface PropsDasNotas {
   aoPerderLigacao(e: unknown): void
   // avisar: a pílula de baixo da tela; com desfazer, ela oferece o Desfazer.
   avisar(texto: ReactNode, desfazer?: () => void): void
+  // abrirNota: o pedido do "Abrir" do aviso "Virou nota": a nota que a janela
+  // abre. vez sobe a cada pedido, para o mesmo pedido de novo valer de novo.
+  abrirNota?: { id: string; vez: number } | null
+}
+
+// AcaoVirarNota é a ação "Virar nota" do histórico (ADR-022, N3). Só o PC a tem
+// (as notas moram no Agent): o texto e a rota vêm daqui, e o Painel, que é o
+// mesmo código dos dois builds, não carrega nada disso no da nuvem.
+export interface AcaoVirarNota {
+  // rotulo: o texto do botão ("Virar nota").
+  rotulo: string
+  // virou: o texto do aviso depois de virar ("Virou nota").
+  virou: string
+  // voltou: o aviso do Desfazer, com a nota apagada; voltouComNota: com a nota
+  // mantida porque a pessoa já a tinha editado.
+  voltou: string
+  voltouComNota: string
+  // jaVirou diz se a falha de virar() é "este ditado já virou nota" (outra aba,
+  // ou o clique anterior): a lista na tela estava velha.
+  jaVirou(e: unknown): boolean
+  virar(ditadoId: string): Promise<{ id: string }>
+  desfazer(notaId: string): Promise<{ nota_apagada: boolean }>
 }
 
 export interface Ambiente {
   cliente: ClienteDoHistorico
   // Notas é a aba Notas. Só o PC a tem; sem ela, o Painel não mostra o botão.
   Notas?: ComponentType<PropsDasNotas>
+  // virarNota é o "Virar nota" do editor do histórico (ADR-022, N3). Só o PC.
+  virarNota?: AcaoVirarNota
   // AvisoDoMicrofone é o aviso do topo quando o Windows bloqueia o microfone, com
   // o botão que abre a tela certa. Só o PC o tem (o Agent lê o registro do
   // Windows); é o componente, e não só a consulta, para o texto e as rotas não

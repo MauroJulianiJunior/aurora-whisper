@@ -124,6 +124,12 @@ describe('o bundle local (bin\\painel)', () => {
     expect(local.js).toContain('/api/marcadores')
     expect(local.js).toContain('Criar uma nota…')
     expect(local.js).toContain('aurora.notas.forma')
+    // ADR-022, N3: o "Virar nota" do histórico e o Desfazer dele.
+    expect(local.js).toContain('/virar-nota')
+    expect(local.js).toContain('/desfazer-virar')
+    expect(local.js).toContain('Virou nota')
+    // O aviso de nota em foco (o ditado feito dentro da nota não vai ao histórico).
+    expect(local.js).toContain('/api/notas/foco')
   })
 
   // A orientação das chaves (lançamento, garantia 1): o campo da chave da IA diz onde
@@ -342,6 +348,13 @@ describe('o bundle da nuvem (dist-nuvem)', () => {
     'Criar uma nota',
     'aurora.notas',
     'Imagens chegam depois',
+    // ADR-022, N3: o "Virar nota" mexe no histórico do PC e cria a nota no Agent.
+    '/virar-nota',
+    '/desfazer-virar',
+    'Virar nota',
+    'Virou nota',
+    // O aviso de nota em foco mexe no Agent do PC.
+    '/api/notas/foco',
     // O primeiro uso do PC (a tecla do ditado do PC, sem chave) e a introdução da IA
     // das Configurações do PC não são do app do celular.
     'Segure Ctrl+Win',

@@ -74,6 +74,11 @@ type Transcription struct {
 	// Conflito é o selo: a versão do texto que perdeu um conflito, como a
 	// nuvem a guarda (ADR-019, "Conflito"). Nulo sem selo.
 	Conflito *Conflito
+	// VirouNota esconde o ditado do histórico sem lixeira (ADR-022, "Ditado vira
+	// nota"; migration 0010): o id da nota em que ele virou ("Virar nota"), ou o
+	// "nova:<token>" do ditado feito dentro de uma nota que ainda não foi criada
+	// (PrefixoDaNotaNova). Só deste PC: não vai para o sync. Nulo, o ditado comum.
+	VirouNota *string
 }
 
 // Conflito é a versão que perdeu um conflito de texto, guardada no próprio

@@ -541,13 +541,97 @@ export function servidorFalso(
   let seqDasNotas = 0
   const agoraDasNotas = () => new Date((relogioDasNotas += 1000)).toISOString()
   const dobrar = (s: string) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase()
-  const camposDoPost = ['titulo', 'corpo', 'cor', 'fixada', 'arquivada', 'ditado_de_origem', 'marcadores']
+  const camposDoPost = ['titulo', 'corpo', 'cor', 'fixada', 'arquivada', 'ditado_de_origem', 'marcadores', 'token']
   const camposDoPatch = ['base_version', 'titulo', 'corpo', 'cor', 'fixada', 'arquivada']
   const corValida = (c: unknown) => c === null || c === '' || (typeof c === 'string' && (CORES as readonly string[]).includes(c))
   const ehTexto = (v: unknown) => v === undefined || typeof v === 'string'
 
+  // "Virar nota" (ADR-022, N3): o ditado que virou nota sai das listas do
+  // histórico (sem ir para a lixeira), e a coluna virou_nota guarda o id da nota.
+  const virouNota = new Map<string, string>()
+
+  // "Ditado feito dentro da nota" (ADR-022): o aviso de que o cursor está numa
+  // nota, só na memória como no Agent. O valor é o que o Agent gravaria em
+  // virou_nota: o id da nota ou "nova:<token>". dictadosDaCaixa guarda os ids
+  // dos ditados que a caixa (token) escondeu, para o vínculo e o descartar.
+  let foco: string | null = null
+  const ditadosDaCaixa = new Map<string, string[]>()
+
+  // rotaFoco é PUT e DELETE /api/notas/foco, com as recusas do Agent.
+  function rotaFoco(p: Pedido): Response {
+    const c = p.corpo ?? {}
+    const { nota, token, descartar } = c as { nota?: unknown; token?: unknown; descartar?: unknown }
+    if (Object.keys(c).some((k) => !['nota', 'token', 'descartar'].includes(k))) return erro(400, 'BAD_REQUEST', 'corpo JSON inválido')
+    const valorDe = () => (typeof nota === 'string' && nota ? nota : typeof token === 'string' && token ? `nova:${token}` : null)
+    if (p.metodo === 'PUT') {
+      if (descartar || (typeof nota === 'string' && nota ? 1 : 0) + (typeof token === 'string' && token ? 1 : 0) !== 1) {
+        return erro(400, 'BAD_REQUEST', 'informe a nota ou o token, um dos dois')
+      }
+      if (typeof nota === 'string' && nota) {
+        const n = bancoDeNotas.find((x) => x.id === nota)
+        if (!n) return erro(404, 'NOT_FOUND', 'registro não encontrado')
+        if (n.deleted_at) return erro(409, 'CONFLICT', 'a nota está na lixeira: restaure antes de mexer nela')
+      }
+      foco = valorDe()
+      return new Response(null, { status: 204 })
+    }
+    if (p.metodo === 'DELETE') {
+      const v = valorDe()
+      if (descartar === true && typeof token === 'string' && token) {
+        for (const d of ditadosDaCaixa.get(token) ?? []) virouNota.delete(d)
+        ditadosDaCaixa.delete(token)
+      }
+      if (v === null || v === foco) foco = null
+      return new Response(null, { status: 204 })
+    }
+    return erro(405, 'BAD_REQUEST', 'método')
+  }
+
+  // virarNota é POST /api/history/{id}/virar-nota, como o Agent: 404, 409
+  // IN_TRASH, 409 ALREADY_NOTE, e a nota nasce com o texto final (o bruto, se o
+  // final está vazio), sem título nem cor, com ditado_de_origem.
+  function rotaVirarNota(p: Pedido, id: string): Response {
+    if (p.metodo !== 'POST') return erro(405, 'BAD_REQUEST', 'método')
+    const d = itens.find((i) => i.id === id)
+    if (!d) return erro(404, 'NOT_FOUND', 'registro não encontrado')
+    if (d.deleted_at) return erro(409, 'IN_TRASH', 'o ditado está na lixeira: restaure antes de virar nota')
+    if (virouNota.has(id)) return erro(409, 'ALREADY_NOTE', 'este ditado já virou nota')
+    const corpo = d.final_text.trim() !== '' ? d.final_text : d.raw_text
+    if (corpo.trim() === '') return erro(400, 'BAD_REQUEST', 'a nota está vazia')
+    const quando = agoraDasNotas()
+    const nova: Nota = {
+      id: `nota-${++seqDasNotas}`,
+      titulo: '',
+      corpo,
+      cor: null,
+      fixada: false,
+      arquivada: false,
+      marcadores: [],
+      ditado_de_origem: id,
+      created_at: quando,
+      updated_at: quando,
+      version: 1,
+    }
+    bancoDeNotas.push(nova)
+    virouNota.set(id, nova.id)
+    return json({ ...nova }, 201)
+  }
+
+  // desfazerVirar é POST /api/notas/{id}/desfazer-virar: o ditado volta; a nota
+  // sai se está na versão 1 e fora da lixeira, e fica se foi editada.
+  function desfazerVirar(n: Nota): Response {
+    const ditado = n.ditado_de_origem
+    if (!ditado || virouNota.get(ditado) !== n.id) {
+      return erro(409, 'CONFLICT', 'a nota não está virada de um ditado, ou o ditado já voltou ao histórico')
+    }
+    virouNota.delete(ditado)
+    const apagada = n.version === 1 && !n.deleted_at
+    if (apagada) bancoDeNotas.splice(bancoDeNotas.indexOf(n), 1)
+    return json({ ditado_id: ditado, nota_apagada: apagada })
+  }
+
   function rotaNotas(p: Pedido): Response {
-    const m = p.caminho.match(/^\/api\/notas(?:\/([^/]+)(\/restaurar|\/definitivo)?)?$/)
+    const m = p.caminho.match(/^\/api\/notas(?:\/([^/]+)(\/restaurar|\/definitivo|\/desfazer-virar)?)?$/)
     if (!m) return erro(404, 'NOT_FOUND', 'rota')
     const [, idBruto, sufixo] = m
     if (!idBruto) {
@@ -587,6 +671,11 @@ export function servidorFalso(
         version: 1,
       }
       bancoDeNotas.push(nova)
+      // O token liga à nota os ditados feitos na caixa (virou_nota = id).
+      if (typeof c.token === 'string' && c.token) {
+        for (const d of ditadosDaCaixa.get(c.token) ?? []) virouNota.set(d, nova.id)
+        ditadosDaCaixa.delete(c.token)
+      }
       return json({ ...nova }, 201)
     }
 
@@ -601,6 +690,7 @@ export function servidorFalso(
       }
       return json({ ...n })
     }
+    if (sufixo === '/desfazer-virar' && p.metodo === 'POST') return desfazerVirar(n)
     if (sufixo === '/definitivo' && p.metodo === 'DELETE') {
       if (!n.deleted_at) return erro(409, 'CONFLICT', 'só se apaga de vez a nota que está na lixeira')
       bancoDeNotas.splice(bancoDeNotas.indexOf(n), 1)
@@ -666,6 +756,7 @@ export function servidorFalso(
     if (p.caminho === '/api/ia/testar' && p.metodo === 'POST') return rotaTestar(p)
     if (p.caminho === '/api/aprendizado' || p.caminho === '/api/aprendizado/desfazer') return rotaAprendizado(p)
     if (p.caminho.startsWith('/api/termos')) return rotaTermos(p)
+    if (p.caminho === '/api/notas/foco') return rotaFoco(p)
     if (p.caminho === '/api/notas' || p.caminho.startsWith('/api/notas/')) return rotaNotas(p)
     if (p.caminho === '/api/marcadores' && p.metodo === 'GET') return json({ items: bancoDeMarcadores.map((m) => ({ ...m })) })
     if (p.caminho === '/api/nuvem' || p.caminho.startsWith('/api/nuvem/')) return rotaNuvem(p)
@@ -675,6 +766,8 @@ export function servidorFalso(
       return abrirConfiguracoesFalha ? erro(500, 'INTERNAL', 'Não consegui abrir as configurações do Windows.') : new Response(null, { status: 204 })
     }
 
+    const viraNota = p.caminho.match(/^\/api\/history\/([^/]+)\/virar-nota$/)
+    if (viraNota) return rotaVirarNota(p, decodeURIComponent(viraNota[1] ?? ''))
     const rota = p.caminho.match(/^\/api\/history(?:\/([^/]+))?(\/restore)?$/)
     if (!rota) return erro(404, 'NOT_FOUND', 'rota')
     const [, id, restaurar] = rota
@@ -685,6 +778,7 @@ export function servidorFalso(
       const lista = ordenar(
         itens
           .filter((i) => Boolean(i.deleted_at) === lixeira)
+          .filter((i) => !virouNota.has(i.id))
           .filter((i) => !q || i.final_text.toLowerCase().includes(q) || i.raw_text.toLowerCase().includes(q)),
         lixeira ? 'deleted_at' : 'created_at',
       )
@@ -738,6 +832,17 @@ export function servidorFalso(
     itens,
     // notas e marcadores são o que o banco das notas tem agora.
     notas: bancoDeNotas,
+    // virouNota: ditado -> nota, dos ditados escondidos do histórico.
+    virouNota,
+    // foco: o que o Agent gravaria em virou_nota agora (o id da nota, ou
+    // "nova:<token>"); null, o ditado vai ao histórico.
+    foco: () => foco,
+    // ditarNaCaixa simula um ditado feito com o aviso da caixa ativo: o ditado
+    // sai do histórico (fica escondido sob o token) até a nota nascer.
+    ditarNaCaixa(token: string, id: string) {
+      ditadosDaCaixa.set(token, [...(ditadosDaCaixa.get(token) ?? []), id])
+      virouNota.set(id, `nova:${token}`)
+    },
     marcadores: bancoDeMarcadores,
     // notaPorFora simula outra aba mexendo na nota: a versão sobe, a data
     // também.

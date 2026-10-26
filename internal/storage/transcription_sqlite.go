@@ -54,7 +54,7 @@ const colunasTranscricao = `id, user_id, device_id, source_platform, raw_text, f
 	mode, language, asr_provider, asr_model, duration_ms, processing_ms, confidence,
 	target_app, status, created_at, updated_at, deleted_at, purge_at, version,
 	sync_state, server_version, last_sync_error,
-	conflito_texto, conflito_device_id, conflito_em`
+	conflito_texto, conflito_device_id, conflito_em, virou_nota`
 
 // AoEnfileirar liga o aviso de que uma gravação pôs um marcador na fila do
 // sync (ADR-019, F7a): no Agent, o "acorde" não bloqueante do laço de sync
@@ -130,14 +130,14 @@ func inserirLinha(ctx context.Context, tx *sql.Tx, verbo string, t Transcription
 		conflitoTexto, conflitoDevice, conflitoEm = t.Conflito.FinalText, textoNulo(t.Conflito.DeviceID), emTexto(t.Conflito.Em)
 	}
 	_, err := tx.ExecContext(ctx, verbo+` INTO local_transcriptions (`+colunasTranscricao+`)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		t.ID, t.UserID, textoNulo(t.DeviceID), t.SourcePlatform, t.RawText, t.FinalText,
 		t.Mode, textoNulo(t.Language), t.ASRProvider, textoNulo(t.ASRModel),
 		inteiroNulo(t.DurationMs), inteiroNulo(t.ProcessingMs), realNulo(t.Confidence),
 		textoNulo(t.TargetApp), t.Status, emTexto(t.CreatedAt), emTexto(t.UpdatedAt),
 		instanteNulo(t.DeletedAt), instanteNulo(t.PurgeAt), t.Version,
 		t.SyncState, inteiroNulo(t.ServerVersion), textoNulo(t.LastSyncError),
-		conflitoTexto, conflitoDevice, conflitoEm)
+		conflitoTexto, conflitoDevice, conflitoEm, textoNulo(t.VirouNota))
 	return err
 }
 
@@ -205,7 +205,10 @@ func (r *SQLiteTranscriptionRepository) List(ctx context.Context, filter Transcr
 	// índice idx_local_transcriptions_trash. As duas colunas são TEXT em
 	// formatoTempo, de largura fixa, então a ordem do texto é a do tempo.
 	// O nome vem daqui, nunca do filtro, e por isso pode ir no SQL.
-	onde := []string{"user_id = ?"}
+	// virou_nota IS NULL: o ditado que virou nota ("Virar nota", ADR-022) sai do
+	// histórico e da lixeira sem ir para a lixeira; fica no banco, achado pelo
+	// Get (o Aprender e a auditoria leem por id).
+	onde := []string{"user_id = ?", "virou_nota IS NULL"}
 	args := []any{filter.UserID}
 	ordem := "created_at"
 	if filter.Trash {
@@ -532,15 +535,16 @@ func lerTranscricao(s scanner) (Transcription, error) {
 	var durationMs, processingMs, serverVersion sql.NullInt64
 	var confidence sql.NullFloat64
 	var createdAt, updatedAt string
-	var conflitoTexto, conflitoDevice, conflitoEm sql.NullString
+	var conflitoTexto, conflitoDevice, conflitoEm, virouNota sql.NullString
 
 	if err := s.Scan(&t.ID, &t.UserID, &deviceID, &t.SourcePlatform, &t.RawText, &t.FinalText,
 		&t.Mode, &language, &t.ASRProvider, &asrModel, &durationMs, &processingMs, &confidence,
 		&targetApp, &t.Status, &createdAt, &updatedAt, &deletedAt, &purgeAt, &t.Version,
 		&t.SyncState, &serverVersion, &lastSyncError,
-		&conflitoTexto, &conflitoDevice, &conflitoEm); err != nil {
+		&conflitoTexto, &conflitoDevice, &conflitoEm, &virouNota); err != nil {
 		return Transcription{}, err
 	}
+	t.VirouNota = deTexto(virouNota)
 	if conflitoTexto.Valid {
 		em, err := deTempoNulo(conflitoEm)
 		if err != nil {

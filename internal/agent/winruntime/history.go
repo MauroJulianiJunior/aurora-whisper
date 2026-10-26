@@ -28,6 +28,33 @@ func (rt *Runtime) UsarHistorico(h historico, provedorASR, modeloASR, usuario st
 	rt.hist, rt.provedorASR, rt.modeloASR, rt.usuarioHist = h, provedorASR, modeloASR, usuario
 }
 
+// focoDaNota é o aviso, só em memória, de que a pessoa está com o cursor dentro
+// de uma nota (internal/agent/notafoco). ParaOHistorico devolve o que gravar em
+// virou_nota (o id da nota ou "nova:<token>") ou nil, quando não há aviso ou ele
+// venceu.
+type focoDaNota interface {
+	ParaOHistorico() *string
+}
+
+// UsarNotaEmFoco liga o aviso de nota em foco (ADR-022, "Ditado feito dentro da
+// nota"): o ditado feito com o cursor numa nota é gravado já escondido do
+// histórico, como um "Virar nota" automático. A inserção no campo não muda.
+// Deve ser chamado antes de Run. nil desliga.
+func (rt *Runtime) UsarNotaEmFoco(f focoDaNota) {
+	rt.notaEmFoco = f
+}
+
+// virouNotaDoDitado decide o virou_nota de um ditado que acaba de ser feito.
+// Só o ditado que deu certo some do histórico: o que falhou (a inserção não
+// aconteceu) fica à vista para a pessoa ver e recuperar o texto. O valor é
+// contexto efêmero: sai daqui direto para a linha, sem passar por log.
+func virouNotaDoDitado(f focoDaNota, desfecho dictation.Outcome) *string {
+	if f == nil || desfecho != dictation.OutcomeSuccess {
+		return nil
+	}
+	return f.ParaOHistorico()
+}
+
 // medicaoASR é o que a goroutine da transcrição mediu, a caminho do
 // histórico. Imutável depois de criada: é publicada por ponteiro atômico
 // (Runtime.asrMedido), e quem a lê nunca a altera.
@@ -108,6 +135,10 @@ func (rt *Runtime) recordHistory(e dictation.RecordHistoryEffect) {
 		status = "error"
 	}
 	t := rt.novaLinha(bruto, e.Text, modo, status, duracaoAudio, processamentoASR, time.Time{})
+	// Ditado feito dentro de uma nota não entra no histórico (a linha fica no
+	// banco, escondida, e o "Aprender" a lê). A linha tardia (tardio.go) NÃO
+	// passa por aqui: ela não foi inserida em campo nenhum e precisa aparecer.
+	t.VirouNota = virouNotaDoDitado(rt.notaEmFoco, e.Outcome)
 	if err := rt.hist.Put(t); err != nil {
 		// Não derruba o ditado: o texto já está no campo de quem usa, e
 		// perder a linha do histórico é menos grave que transformar uma

@@ -108,11 +108,32 @@ colunas de sync que o ditado já tem (`sync_state`, `server_version`, `last_sync
   ela não foi editada). Alternativa: mandar para a lixeira (mais simples, sem coluna nova).
 - Apagar a nota depois não devolve o ditado ao histórico.
 - A retenção de 6 meses do histórico não alcança o ditado que virou nota (o texto vive na nota).
+- **Feito na N3 (25-out-2026):** rota `POST /api/history/{id}/virar-nota` e `POST
+  /api/notas/{id}/desfazer-virar`; a coluna `virou_nota` (migration 0010), sem chave estrangeira; a lista e
+  a busca do histórico (e a lixeira) escondem o ditado marcado, o expurgo de 30 dias e os 6 meses o
+  pulam; o Desfazer apaga a nota só na versão 1, fora da lixeira. Nada vai para a fila do sync.
+
+**Ditado feito dentro da nota.** O ditado feito com o cursor no editor de uma nota **não aparece no
+histórico**, como se fosse um "Virar nota" automático (pedido do Mauro, 25-out-2026; o texto já está
+na nota, e o histórico fica só com o que não tem outro lugar). O Agent não vê o painel, então o painel
+o avisa: enquanto o título ou uma linha da nota tem o foco e a janela do navegador também, `PUT
+/api/notas/foco` (renovado a cada ~20 s) com `{nota}` ou, no "Criar uma nota", `{token}`; ao sair,
+`DELETE`. O Agent guarda o aviso **só na memória**, com validade de 60 s (é contexto: nada em disco, log
+nem sync), e, ao gravar um ditado que deu certo, escreve `virou_nota` com o id da nota ou `nova:<token>`.
+A inserção no campo não muda. Reusa a coluna e as regras do "Virar nota" (fora do histórico sem
+lixeira, fora dos 6 meses, sem evento de sync); não define `ditado_de_origem`. No "Criar uma nota", o
+`POST /api/notas` leva o `token` e liga os ditados à nota na mesma transação; a caixa que fecha vazia
+manda `descartar`, e os ditados voltam ao histórico (nada some calado); o resto volta em 24 h. Só
+**ditados novos** são escondidos: os que já estão no histórico não mudam. Alternativa descartada: o
+Agent descobrir o campo em foco pela UIA (contexto de outro app, mais frágil, e o painel já sabe).
+Risco aceito: um ditado feito no instante em que o foco sai da nota (ou com o aviso vencido por um
+painel travado) aparece no histórico, que é o comportamento de sempre.
 
 ### Ditar dentro da nota
 
 O editor da nota é um campo de texto do painel. O Agent já insere no campo com foco (ADR-011), então
-**ditar dentro da nota funciona sem código novo no Agent**: abrir a nota, segurar `Ctrl+Win`, falar.
+**ditar dentro da nota funciona sem código novo na inserção**: abrir a nota, segurar `Ctrl+Win`, falar
+(o que mudou é só o histórico: ver "Ditado feito dentro da nota", acima).
 O Polish (se ligado) entrega a lista já com `- `. Só a verificação manual confirma (o painel no
 navegador é um campo comum para o Agent; o caso a conferir é o editor por linhas, ver "Riscos").
 
@@ -258,6 +279,15 @@ Anexar imagem à nota (o ícone do Keep). Desenho prévio, a confirmar quando a 
   (ADR-011); se o editor tiver um campo por linha, o texto ditado com várias linhas cai num campo só.
   A N2 testa isso na verificação manual; a saída provável é o editor tratar a colagem de várias
   linhas (cada linha vira um bloco).
+- **"Virar nota" e o sync (N7), ponto aberto.** `virou_nota` é só deste PC e não gera evento: a nuvem
+  continua com o ditado no histórico dela, e nada diz a ela que ele "virou nota". Quando a N7 trouxer a
+  nota para a nuvem, decidir: (a) o ditado some também do histórico da nuvem e do celular (a coluna
+  sobe, como uma mudança de campo), ou (b) a nuvem mantém os dois. Hoje vale (b), por omissão.
+- **"Virar nota" guarda o texto bruto para sempre.** A retenção de 6 meses não alcança o ditado que
+  virou nota (a ADR, lida à letra), então o `raw_text` dele (e o `final_text`) fica no PC sem prazo,
+  mesmo que a pessoa apague a nota da lixeira depois (o ditado fica escondido, com o id solto). Se isso
+  incomodar na LGPD (o ditado é dado pessoal), a saída é limpar o `raw_text` do ditado quando a nota
+  for apagada de vez, ou deixá-lo voltar à regra dos 6 meses nesse caso. Não foi decidido.
 - **O segundo gatilho** pode colidir com atalho de outro programa (`Ctrl+Win+Alt` é pouco usado, mas
   não foi medido). O detector de conflito de atalho do Agent (`internal/agent/conflito`) passa a
   olhar os dois.

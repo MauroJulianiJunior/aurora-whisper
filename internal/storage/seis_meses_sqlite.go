@@ -35,6 +35,12 @@ import (
 // pararia cedo; um cursor pelo último apagado releria os mesmos para sempre.
 // Todos os lotes de uma rodada usam o mesmo agora.
 //
+// # O ditado que virou nota
+//
+// Fica fora da regra (virou_nota IS NULL no pré-filtro): o texto dele vive na
+// nota, que não tem a retenção de 6 meses (ADR-022, "Ditado vira nota"). Nem a
+// prévia o conta.
+//
 // # O que sai com o ditado, e o que fica
 //
 // Sai a linha, o marcador de ditado da sync_outbox e a sync_mudou_aqui; o
@@ -124,7 +130,7 @@ func foraDaJanela(ctx context.Context, q consulta, dono string, deOutroDono bool
 	}
 	args = append(args, LoteDosSeisMeses)
 	linhas, err := q.QueryContext(ctx, `SELECT id, created_at, deleted_at IS NOT NULL, conflito_texto IS NOT NULL
-		FROM local_transcriptions WHERE `+donoSQL+` AND created_at <= ?`+cursorSQL+`
+		FROM local_transcriptions WHERE `+donoSQL+` AND virou_nota IS NULL AND created_at <= ?`+cursorSQL+`
 		ORDER BY created_at, id LIMIT ?`, args...)
 	if err != nil {
 		return nil, 0, depois, fmt.Errorf("storage: lendo o que passou dos 6 meses: %w", err)

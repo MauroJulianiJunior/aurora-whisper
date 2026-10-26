@@ -302,7 +302,13 @@ export function DialogoDaNota({ nota, cliente, nomesDosMarcadores, avisar, aoPer
           <Icone nome="fixar" />
         </button>
 
-        <CamposDaNota titulo={titulo} aoMudarTitulo={setTitulo} editor={editor} rotulo="Texto da nota" />
+        <CamposDaNota
+          titulo={titulo}
+          aoMudarTitulo={setTitulo}
+          editor={editor}
+          rotulo="Texto da nota"
+          foco={{ cliente, nota: nota.id }}
+        />
 
         {etiquetas.length > 0 && (
           <div className="pe">

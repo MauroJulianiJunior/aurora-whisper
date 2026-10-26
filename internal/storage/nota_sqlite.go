@@ -209,27 +209,28 @@ func (r *SQLiteNotaRepository) Criar(ctx context.Context, p NovaNota) (Nota, err
 	if err := validarCor(p.Cor); err != nil {
 		return Nota{}, err
 	}
+	if p.Token != "" && !TokenDaNotaValido(p.Token) {
+		return Nota{}, ErrTokenInvalido
+	}
 	if strings.TrimSpace(p.Titulo) == "" && strings.TrimSpace(p.Corpo) == "" {
 		return Nota{}, ErrNotaVazia
 	}
 	agora := r.now()
 	id := NewID()
 	err := naTransacao(ctx, r.db, func(tx *sql.Tx) error {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO local_notes
-			(id, user_id, titulo, corpo, cor, fixada, arquivada, ditado_de_origem, created_at, updated_at, version, sync_state)
-			VALUES (?,?,?,?,?,?,?,?,?,?,1,'pending')`,
-			id, p.UserID, p.Titulo, p.Corpo, corNula(p.Cor), boolInt(p.Fixada), boolInt(p.Arquivada),
-			corNula(p.DitadoDeOrigem), emTexto(agora), emTexto(agora)); err != nil {
-			return fmt.Errorf("storage: gravando a nota: %w", err)
+		if err := inserirNota(ctx, tx, id, agora, p); err != nil {
+			return err
 		}
-		for _, m := range p.Marcadores {
-			if err := marcadorExiste(ctx, tx, p.UserID, m); err != nil {
-				return err
-			}
-			if _, err := tx.ExecContext(ctx,
-				`INSERT OR IGNORE INTO local_note_labels (note_id, label_id) VALUES (?, ?)`, id, m); err != nil {
-				return fmt.Errorf("storage: pondo o marcador na nota: %w", err)
-			}
+		if p.Token == "" {
+			return nil
+		}
+		// Os ditados feitos dentro desta caixa de "Criar uma nota" passam a ser
+		// os desta nota, na mesma transação em que ela nasce: ou a nota e o
+		// vínculo, ou nenhum. Não mexe na versão nem na fila do sync.
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE local_transcriptions SET virou_nota = ? WHERE user_id = ? AND virou_nota = ?`,
+			id, p.UserID, PrefixoDaNotaNova+p.Token); err != nil {
+			return fmt.Errorf("storage: ligando os ditados feitos na caixa à nota: %w", err)
 		}
 		return nil
 	})
@@ -237,6 +238,29 @@ func (r *SQLiteNotaRepository) Criar(ctx context.Context, p NovaNota) (Nota, err
 		return Nota{}, err
 	}
 	return r.Get(ctx, p.UserID, id)
+}
+
+// inserirNota grava a nota nova e os marcadores dela na transação tx. É o
+// miolo do Criar e do VirarNota (que a cria na mesma transação em que marca
+// o ditado).
+func inserirNota(ctx context.Context, tx *sql.Tx, id string, agora time.Time, p NovaNota) error {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO local_notes
+		(id, user_id, titulo, corpo, cor, fixada, arquivada, ditado_de_origem, created_at, updated_at, version, sync_state)
+		VALUES (?,?,?,?,?,?,?,?,?,?,1,'pending')`,
+		id, p.UserID, p.Titulo, p.Corpo, corNula(p.Cor), boolInt(p.Fixada), boolInt(p.Arquivada),
+		corNula(p.DitadoDeOrigem), emTexto(agora), emTexto(agora)); err != nil {
+		return fmt.Errorf("storage: gravando a nota: %w", err)
+	}
+	for _, m := range p.Marcadores {
+		if err := marcadorExiste(ctx, tx, p.UserID, m); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx,
+			`INSERT OR IGNORE INTO local_note_labels (note_id, label_id) VALUES (?, ?)`, id, m); err != nil {
+			return fmt.Errorf("storage: pondo o marcador na nota: %w", err)
+		}
+	}
+	return nil
 }
 
 func (r *SQLiteNotaRepository) Listar(ctx context.Context, f FiltroDeNotas) ([]Nota, error) {
@@ -488,6 +512,11 @@ func (r *SQLiteNotaRepository) PurgeExpired(ctx context.Context, now time.Time) 
 	if err != nil {
 		return 0, err
 	}
+	// Carona do mesmo ciclo: o ditado feito numa caixa "Criar uma nota" que
+	// nunca virou nota volta ao histórico depois da carência (nota_ditado_foco.go).
+	// Uma falha aqui não derruba o expurgo das notas: tenta de novo na rodada
+	// seguinte.
+	_, _ = r.LiberarDitadosDeNotasNovas(ctx, now.Add(-CarenciaDaNotaNova))
 	return apagadas, nil
 }
 
