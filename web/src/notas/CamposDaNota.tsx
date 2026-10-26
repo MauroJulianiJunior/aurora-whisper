@@ -7,9 +7,6 @@ interface Props {
   titulo: string
   aoMudarTitulo(titulo: string): void
   editor: EditorDeLinhasEstado
-  // focoInicial: onde o cursor começa: no título (nota nova) ou no fim do
-  // texto (nota que já tem o que ler).
-  focoInicial: 'titulo' | 'corpo'
   // rotulo: o nome do grupo do corpo, para o leitor de tela.
   rotulo: string
 }
@@ -21,12 +18,13 @@ const quebras = /\r\n?|\n/
 // corpo por linhas. O título é um campo de uma linha só: o texto de várias
 // linhas colado ali (um ditado que caiu no campo errado) não perde nada, a
 // primeira linha fica no título e o resto vai para o começo do corpo.
-export function CamposDaNota({ titulo, aoMudarTitulo, editor, focoInicial, rotulo }: Props) {
+export function CamposDaNota({ titulo, aoMudarTitulo, editor, rotulo }: Props) {
   const raiz = useRef<HTMLDivElement>(null)
   const campoTitulo = useRef<HTMLInputElement>(null)
 
+  // O cursor começa no corpo, também na nota nova, como no Keep (decisão do
+  // Mauro, 25-out-2026: o primeiro ditado ia para o título, que é opcional).
   useEffect(() => {
-    if (focoInicial === 'titulo') return campoTitulo.current?.focus()
     // O fim da última linha ainda aberta: o item marcado fica embaixo, mas quem
     // abre a lista quer continuar nela (um ditado ali cairia num item já feito).
     const abertos = raiz.current?.querySelectorAll('.linha-editada:not(.feita) textarea')
@@ -35,7 +33,7 @@ export function CamposDaNota({ titulo, aoMudarTitulo, editor, focoInicial, rotul
     if (!ultimo) return
     ultimo.focus()
     ultimo.setSelectionRange(ultimo.value.length, ultimo.value.length)
-  }, [focoInicial])
+  }, [])
 
   function focarCorpo() {
     const campo = raiz.current?.querySelector('textarea')

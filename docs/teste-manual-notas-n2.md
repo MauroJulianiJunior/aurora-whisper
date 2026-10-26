@@ -36,6 +36,12 @@ Aqui o Agent insere o texto no campo que tem o foco, como em qualquer programa.
    linha da nota; um `- ` ou `1. ` no começo vira lista.
 5. Logo depois de ditar, aperte Enter com o teclado: deve dividir a linha normalmente.
 6. Esc fecha a nota salvando; o foco volta ao cartão.
+7. **Ditado de enumeração numa lista** (correção de 25-out-2026): "Criar uma nota…" → o ícone da lista
+   de marcar → dite "arroz, feijão, batata, presunto, queijo, tomate e alface". Em menos de um segundo,
+   cada item deve virar uma caixinha, sem a vírgula e com maiúscula. Vale também numa linha com `•`.
+8. **Ditado de enumeração em texto comum:** numa nota sem lista, dite a mesma frase. O texto fica como
+   você falou, e no fim da linha aparece o botão **Virar lista**; clicar nele separa em caixinhas.
+9. **Nota nova começa no corpo:** "Criar uma nota…" e já dite; o texto entra no corpo, não no título.
 
 Se algo falhar (texto no lugar errado, linha duplicada, cursor que pula, Enter que não responde depois do
 ditado), anote a ordem exata dos passos: é o que a gente não consegue ver nos testes.

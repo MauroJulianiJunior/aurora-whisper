@@ -10,6 +10,7 @@ import {
   garantirUma,
   lerCorpo,
   normalizarMarcados,
+  separarEmItens,
 } from './corpo'
 
 // PedidoDeFoco é onde o foco vai no próximo render: a linha, a posição do
@@ -74,6 +75,20 @@ export function useEditorDeLinhas(corpoInicial: string) {
     aplicar(converter(linhas, alvo, tipo), primeira && { chave: primeira.chave, pos: primeira.texto.length })
   }
 
+  // separar troca a linha da chave pelos itens da enumeração dela (o ditado
+  // "arroz, feijão e batata" numa linha de lista, ou o botão "Virar lista"
+  // num parágrafo). Lê as linhas de agora, não as do render que pediu: o ditado
+  // que acabou de chegar já está nelas. Sem enumeração, não muda nada.
+  const separar = useCallback((chave: number, minimo: number, tipo?: TipoDaLinha) => {
+    setLinhas((agora) => {
+      const r = separarEmItens(agora, chave, minimo, tipo)
+      if (!r) return agora
+      pedido.current = r.foco
+      return garantirUma(r.linhas)
+    })
+    setSelecao(nenhuma)
+  }, [])
+
   const corpo = useMemo(() => escreverCorpo(linhas, { limpar: true }), [linhas])
   const marcados = linhas.filter((l) => l.tipo === 'tarefa' && l.feito).length
 
@@ -92,6 +107,7 @@ export function useEditorDeLinhas(corpoInicial: string) {
     consumirPedido,
     aplicar,
     formatar,
+    separar,
     desmarcarTudo: () => aplicar(desmarcarTudo(linhas)),
     apagarMarcados: () => aplicar(apagarMarcados(linhas)),
   }

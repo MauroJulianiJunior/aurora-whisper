@@ -269,6 +269,46 @@ export function converter(linhas: Linha[], chaves: ReadonlySet<number>, tipo: Ti
   return normalizarMarcados(linhas.map((l) => (chaves.has(l.chave) ? { ...l, tipo, feito: false } : l)))
 }
 
+// itensDaEnumeracao lê uma enumeração ditada ("Arroz, feijão, batata e
+// queijo.") e devolve os itens, sem a vírgula, o "e" final e o ponto, cada um
+// com a primeira letra maiúscula. É a conversão por regra da ADR-022
+// ("Formatar: converter trecho"): quebra na vírgula (nunca dentro de número,
+// "1,5 kg"), no ponto e vírgula e no último " e ". null quando o texto não é
+// uma enumeração: sem vírgula, com menos de `minimo` itens, com item de mais
+// de cinco palavras ou que começa por conjunção ("mas a padaria estava
+// fechada": uma frase com vírgulas não vira lista), ou com pergunta e
+// dois-pontos (que a pessoa usou para outra coisa).
+const conjuncao = /^(mas|porém|porque|pois|que|quando|se|então|depois|embora|enquanto)\b/i
+
+export function itensDaEnumeracao(texto: string, minimo: number): string[] | null {
+  const t = texto.trim().replace(/[.!]+$/, '')
+  if (!/[,;]/.test(t) || /[?:]/.test(t)) return null
+  const partes = t.split(/(?<!\d),|,(?!\d)|;/).map((p) => p.trim())
+  const ultima = /^(.*\S)\s+e\s+(\S.*)$/.exec(partes[partes.length - 1] ?? '')
+  if (ultima) partes.splice(partes.length - 1, 1, ultima[1]!, ultima[2]!)
+  if (partes.length < minimo || partes.some((p) => p === '' || p.split(/\s+/).length > 5 || conjuncao.test(p))) return null
+  return partes.map((p) => p.charAt(0).toLocaleUpperCase('pt-BR') + p.slice(1))
+}
+
+// separarEmItens troca a linha da chave pelos itens da enumeração dela, no
+// tipo dado (ou no da própria linha, se ela já é lista). O primeiro item fica
+// com a chave da linha; o foco vai para o fim do último. null: a linha não é
+// uma enumeração (itensDaEnumeracao).
+export function separarEmItens(linhas: Linha[], chave: number, minimo: number, tipo?: TipoDaLinha): Edicao | null {
+  const i = linhas.findIndex((l) => l.chave === chave)
+  const a = linhas[i]
+  if (!a) return null
+  const itens = itensDaEnumeracao(a.texto, minimo)
+  if (!itens) return null
+  const t: TipoDaLinha = tipo ?? (ehLista(a.tipo) ? a.tipo : 'tarefa')
+  const novas = itens.map((texto, k) => (k === 0 ? { ...a, tipo: t, texto, feito: false } : criarLinha(t, texto)))
+  const ultima = novas[novas.length - 1]!
+  return {
+    linhas: normalizarMarcados([...linhas.slice(0, i), ...novas, ...linhas.slice(i + 1)]),
+    foco: { chave: ultima.chave, pos: ultima.texto.length },
+  }
+}
+
 // garantirUma devolve as linhas, ou uma linha de parágrafo vazia se não há
 // nenhuma: o editor sempre tem onde digitar.
 export function garantirUma(linhas: Linha[]): Linha[] {

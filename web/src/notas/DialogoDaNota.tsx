@@ -68,8 +68,6 @@ export function DialogoDaNota({ nota, cliente, nomesDosMarcadores, avisar, aoPer
   const dialogo = useRef<HTMLDivElement>(null)
   // O nome da janela é o da nota quando ela abriu: não muda a cada tecla.
   const [nome] = useState(() => nomeDaNota(nota.titulo, lerCorpo(nota.corpo)))
-  // Nota nova, sem nada escrito, começa no título; a que já tem texto, no fim dele.
-  const [focoInicial] = useState<'titulo' | 'corpo'>(nota.titulo === '' && nota.corpo === '' ? 'titulo' : 'corpo')
 
   // Os campos de agora, lidos pela fila de gravação (que roda depois de
   // renders) sem ficar com o valor velho de um fechamento.
@@ -304,7 +302,7 @@ export function DialogoDaNota({ nota, cliente, nomesDosMarcadores, avisar, aoPer
           <Icone nome="fixar" />
         </button>
 
-        <CamposDaNota titulo={titulo} aoMudarTitulo={setTitulo} editor={editor} focoInicial={focoInicial} rotulo="Texto da nota" />
+        <CamposDaNota titulo={titulo} aoMudarTitulo={setTitulo} editor={editor} rotulo="Texto da nota" />
 
         {etiquetas.length > 0 && (
           <div className="pe">

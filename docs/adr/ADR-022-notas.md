@@ -205,6 +205,16 @@ itens acima.
   bolinha. Detalhes: uma tabela com título, marcadores, itens marcados ("2/6"), cor e quando foi
   editada. A forma escolhida também fica no navegador.
 
+**Depois do primeiro teste do Mauro (25-out-2026):**
+- **A nota nova começa no corpo**, como no Keep ("No corpo"): o primeiro ditado ia para o título.
+- **Enumeração ditada numa linha de lista vira itens** ("não gera lista automaticamente"): o painel
+  reconhece o ditado pela rajada de letras (o Agent insere tudo de uma vez, por teclas ou colando) e
+  aplica a conversão por regra desta ADR (vírgula, ponto e vírgula, último " e "; nunca "1,5").
+- **Enumeração ditada em texto comum fica texto, com o botão "Virar lista"** (escolha dele: "Fica
+  texto, com botão"), que separa em lista de marcar.
+- **A linha em edição tem um fundo leve, a linha inteira**, no lugar do traço verde à esquerda ("ficou
+  muito genérico").
+
 ### Sync
 
 - **[derivada]** Duas entidades novas no motor (`internal/sync`): `nota` e `marcador`, ao lado de

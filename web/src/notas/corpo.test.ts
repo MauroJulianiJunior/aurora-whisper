@@ -10,6 +10,7 @@ import {
   dividir,
   escreverCorpo,
   inicioDoCorpo,
+  itensDaEnumeracao,
   lerCorpo,
   marcarLinha,
   nomeDaNota,
@@ -17,6 +18,7 @@ import {
   numeroDaLinha,
   prefixoDigitado,
   puxar,
+  separarEmItens,
   voltar,
 } from './corpo'
 
@@ -349,5 +351,52 @@ describe('converter', () => {
     expect(escreverCorpo(converter(l, todas, 'marcador'))).toBe('- a\n- b')
     expect(escreverCorpo(converter(l, todas, 'tarefa'))).toBe('- [ ] a\n- [ ] b')
     expect(escreverCorpo(converter(l, todas, 'titulo'))).toBe('# a\n# b')
+  })
+})
+
+describe('itensDaEnumeracao', () => {
+  it.each([
+    ['Arroz, feijão, batata, presunto, queijo, tomate e alface.', ['Arroz', 'Feijão', 'Batata', 'Presunto', 'Queijo', 'Tomate', 'Alface']],
+    ['arroz, feijão e batata', ['Arroz', 'Feijão', 'Batata']],
+    ['leite; pão; café', ['Leite', 'Pão', 'Café']],
+    ['1,5 kg de carne, duas dúzias de ovos e pão', ['1,5 kg de carne', 'Duas dúzias de ovos', 'Pão']],
+    ['DCTFWeb, PGDAS e ECF', ['DCTFWeb', 'PGDAS', 'ECF']],
+  ])('%s', (texto, itens) => {
+    expect(itensDaEnumeracao(texto, 3)).toEqual(itens)
+  })
+
+  it.each([
+    ['sem vírgula', 'arroz e feijão'],
+    ['frase com vírgula', 'Ontem eu fui ao mercado, mas a padaria estava fechada e voltei para casa.'],
+    ['pergunta', 'Você comprou arroz, feijão e batata?'],
+    ['com dois-pontos', 'Preciso comprar: arroz, feijão e batata'],
+    ['número com vírgula só', 'O peso deu 1,5 kg'],
+  ])('não é enumeração: %s', (_, texto) => {
+    expect(itensDaEnumeracao(texto, 3)).toBeNull()
+  })
+
+  it('o mínimo de itens vale', () => {
+    expect(itensDaEnumeracao('arroz, feijão', 3)).toBeNull()
+    expect(itensDaEnumeracao('arroz, feijão', 2)).toEqual(['Arroz', 'Feijão'])
+  })
+})
+
+describe('separarEmItens', () => {
+  it('a linha de lista vira um item por linha, no tipo dela, com o foco no último', () => {
+    const [a, b] = [criarLinha('tarefa', 'Arroz, feijão e batata.'), criarLinha('tarefa', 'feito', true)]
+    const r = separarEmItens([a, b], a.chave, 2)!
+    expect(escreverCorpo(r.linhas)).toBe('- [ ] Arroz\n- [ ] Feijão\n- [ ] Batata\n- [x] feito')
+    expect(r.linhas[0]!.chave).toBe(a.chave)
+    expect(r.foco).toEqual({ chave: r.linhas[2]!.chave, pos: 'Batata'.length })
+  })
+
+  it('o parágrafo vira o tipo pedido', () => {
+    const a = criarLinha('paragrafo', 'leite, pão e café')
+    expect(escreverCorpo(separarEmItens([a], a.chave, 3, 'tarefa')!.linhas)).toBe('- [ ] Leite\n- [ ] Pão\n- [ ] Café')
+  })
+
+  it('sem enumeração, null', () => {
+    const a = criarLinha('tarefa', 'leite')
+    expect(separarEmItens([a], a.chave, 2)).toBeNull()
   })
 })

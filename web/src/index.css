@@ -2769,12 +2769,46 @@ a.botao {
   align-items: baseline;
   gap: 10px;
   min-height: 30px;
-  padding: 2px 0 2px 6px;
+  padding: 2px 6px;
   border-radius: var(--raio-sm);
+  transition: background-color 120ms var(--curva);
 }
 
+/* A linha em que o cursor está ganha um fundo bem leve, a linha inteira
+   (pedido do Mauro, 25-out-2026: o traço verde da borda "ficou muito
+   genérico"). Mistura do texto com transparente, para valer sobre qualquer
+   uma das oito cores da nota. */
 .linha-editada:focus-within {
-  box-shadow: inset 2px 0 0 var(--foco);
+  background: color-mix(in srgb, var(--texto) 7%, transparent);
+}
+
+/* "Virar lista": aparece no fim do parágrafo que é uma enumeração (o ditado
+   que caiu como texto). Pequeno, do tamanho de uma etiqueta. */
+.virar-lista {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  align-self: center;
+  height: 26px;
+  padding: 0 9px 0 7px;
+  border: 1px solid var(--linha-forte);
+  border-radius: var(--raio-pilula);
+  background: transparent;
+  color: var(--texto-2);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.virar-lista:hover {
+  border-color: var(--foco);
+  color: var(--texto);
+}
+
+.virar-lista svg {
+  width: 14px;
+  height: 14px;
 }
 
 .linha-editada.escolhida {

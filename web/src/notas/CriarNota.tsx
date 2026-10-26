@@ -127,7 +127,6 @@ function CaixaAberta({
         titulo={titulo}
         aoMudarTitulo={setTitulo}
         editor={editor}
-        focoInicial={corpoInicial === '' ? 'titulo' : 'corpo'}
         rotulo="Texto da nova nota"
       />
       {erro && (

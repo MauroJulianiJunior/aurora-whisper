@@ -1,5 +1,5 @@
-import { type ChangeEvent, type ClipboardEvent, Fragment, type KeyboardEvent, type MouseEvent, useLayoutEffect, useRef } from 'react'
-import { type Linha, colar, dividir, marcarLinha, normalizarMarcados, numeroDaLinha, prefixoDigitado, puxar, voltar } from './corpo'
+import { type ChangeEvent, type ClipboardEvent, Fragment, type KeyboardEvent, type MouseEvent, useEffect, useLayoutEffect, useRef } from 'react'
+import { type Linha, colar, dividir, ehLista, itensDaEnumeracao, marcarLinha, normalizarMarcados, numeroDaLinha, prefixoDigitado, puxar, voltar } from './corpo'
 import { Icone } from './Icone'
 import type { EditorDeLinhasEstado, PedidoDeFoco } from './useEditorDeLinhas'
 
@@ -18,6 +18,24 @@ const temQuebra = /[\r\n]/
 
 const marcada = (l: Linha) => l.tipo === 'tarefa' && l.feito
 
+// O ditado numa linha de lista (pedido do Mauro, 25-out-2026: "não gera lista
+// automaticamente"). O Agent insere o texto curto tecla a tecla (SendInput) e
+// o longo colando (ADR-011): as duas coisas chegam como uma rajada, as letras
+// com menos de RAJADA_MS entre uma e outra, coisa que ninguém digita. Quando a
+// rajada tem RAJADA_MIN letras ou mais e a linha é de lista, a enumeração dela
+// ("Arroz, feijão, batata e queijo.") vira um item por linha, SOSSEGO_MS
+// depois da última letra. No parágrafo, o texto fica como veio, e quem decide é
+// o botão "Virar lista" (decisão do Mauro, mesmo dia).
+const RAJADA_MS = 30
+const RAJADA_MIN = 12
+const SOSSEGO_MS = 200
+
+interface Rajada {
+  chave: number
+  letras: number
+  ultima: number
+}
+
 interface Props {
   editor: EditorDeLinhasEstado
   // rotulo: o nome do grupo, para o leitor de tela.
@@ -27,6 +45,28 @@ interface Props {
 export function EditorDeLinhas({ editor, rotulo }: Props) {
   const { linhas, recolhido, consumirPedido, aplicar, atual, setAtual, selecao, escolher, lerAncora, fixarAncora } = editor
   const raiz = useRef<HTMLDivElement>(null)
+  const rajada = useRef<Rajada | null>(null)
+  const espera = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const { separar } = editor
+
+  useEffect(() => () => clearTimeout(espera.current), [])
+
+  // contar soma as letras que chegaram juntas na linha e, quando elas param,
+  // separa a enumeração se a linha for de lista.
+  function contar(l: Linha, cresceu: number) {
+    if (cresceu <= 0) return
+    const agora = performance.now()
+    const r = rajada.current
+    rajada.current =
+      r && r.chave === l.chave && agora - r.ultima < RAJADA_MS ? { ...r, letras: r.letras + cresceu, ultima: agora } : { chave: l.chave, letras: cresceu, ultima: agora }
+    clearTimeout(espera.current)
+    if (!ehLista(l.tipo)) return
+    espera.current = setTimeout(() => {
+      const fim = rajada.current
+      rajada.current = null
+      if (fim && fim.chave === l.chave && fim.letras >= RAJADA_MIN) separar(l.chave, 2)
+    }, SOSSEGO_MS)
+  }
 
   // Cumpre o pedido de foco da operação que acabou de acontecer: a linha pode
   // ter mudado de lugar (marcar), nascido (Enter) ou se juntado a outra.
@@ -87,6 +127,7 @@ export function EditorDeLinhas({ editor, rotulo }: Props) {
       )
     }
     aplicar(linhas.map((x) => (x.chave === l.chave ? { ...x, texto: valor } : x)))
+    contar(l, valor.length - l.texto.length)
   }
 
   function aoColar(e: ClipboardEvent<HTMLTextAreaElement>, i: number) {
@@ -211,6 +252,18 @@ export function EditorDeLinhas({ editor, rotulo }: Props) {
                 onPaste={(e) => aoColar(e, i)}
                 onKeyDown={(e) => aoTeclar(e, i)}
               />
+              {l.tipo === 'paragrafo' && itensDaEnumeracao(l.texto, 3) && (
+                <button
+                  type="button"
+                  className="virar-lista"
+                  title="Um item por linha, de marcar"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => separar(l.chave, 3, 'tarefa')}
+                >
+                  <Icone nome="marcar" />
+                  Virar lista
+                </button>
+              )}
             </div>
           )}
         </Fragment>

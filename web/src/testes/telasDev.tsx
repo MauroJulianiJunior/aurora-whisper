@@ -119,6 +119,8 @@ const notasDeExemplo: Nota[] = [
   nota({ id: 'n8', titulo: 'Sem cor', corpo: 'Uma nota comum.', cor: 'cinza', updated_at: hora(5) }),
   nota({ id: 'n9', titulo: 'Arquivada', corpo: 'Já resolvido.', arquivada: true, updated_at: hora(4) }),
   nota({ id: 'n10', titulo: 'Na lixeira', corpo: 'Apagada ontem.', deleted_at: hora(3), updated_at: hora(3) }),
+  // Um ditado de enumeração que caiu como texto: mostra o botão "Virar lista".
+  nota({ id: 'n11', titulo: 'Feira', corpo: 'Arroz, feijão, batata, presunto e queijo.', updated_at: hora(2) }),
 ]
 
 const srv = servidorFalso(ditados, {

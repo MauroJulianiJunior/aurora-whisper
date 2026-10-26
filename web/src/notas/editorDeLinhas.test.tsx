@@ -7,7 +7,8 @@
 // teclas (o "\n" chega como Enter): os dois caminhos têm teste aqui.
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { act } from 'react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { CamposDaNota } from './CamposDaNota'
 import { useEditorDeLinhas } from './useEditorDeLinhas'
 import { useState } from 'react'
@@ -20,7 +21,7 @@ function Harness({ inicial = '', titulo: tituloInicial = '' }: { inicial?: strin
   const [titulo, setTitulo] = useState(tituloInicial)
   return (
     <>
-      <CamposDaNota titulo={titulo} aoMudarTitulo={setTitulo} editor={editor} focoInicial="corpo" rotulo="Texto da nota" />
+      <CamposDaNota titulo={titulo} aoMudarTitulo={setTitulo} editor={editor} rotulo="Texto da nota" />
       <output data-testid="corpo">{editor.corpo}</output>
       <output data-testid="titulo">{titulo}</output>
     </>
@@ -265,5 +266,65 @@ describe('a lista de marcar', () => {
     render(<Harness inicial="- [x] feito" />)
     const caixa = screen.getByRole('checkbox', { name: 'feito' })
     expect(caixa.getAttribute('aria-checked')).toBe('true')
+  })
+})
+
+// O ditado do Agent chega tecla a tecla (ou colado) numa rajada: escreve o texto
+// letra a letra, com o relógio parado, como o SendInput entrega.
+function ditar(campo: HTMLTextAreaElement, texto: string) {
+  let valor = campo.value
+  for (const letra of texto) {
+    valor += letra
+    fireEvent.change(campo, { target: { value: valor } })
+  }
+}
+
+describe('ditado numa linha de lista (25-out-2026)', () => {
+  afterEach(() => vi.useRealTimers())
+
+  it('a enumeração ditada vira um item por linha', () => {
+    vi.useFakeTimers()
+    render(<Harness inicial="- [ ] " />)
+    ditar(campos()[0]!, 'Arroz, feijão, batata, presunto, queijo, tomate e alface.')
+    act(() => vi.advanceTimersByTime(300))
+    expect(corpo()).toBe('- [ ] Arroz\n- [ ] Feijão\n- [ ] Batata\n- [ ] Presunto\n- [ ] Queijo\n- [ ] Tomate\n- [ ] Alface')
+    expect(document.activeElement).toBe(campos()[6])
+  })
+
+  it('a colagem de uma linha só também', () => {
+    vi.useFakeTimers()
+    render(<Harness inicial="- macarrão" />)
+    escrever(campos()[0]!, 'Leite, pão e queijo.')
+    act(() => vi.advanceTimersByTime(300))
+    expect(corpo()).toBe('- Leite\n- Pão\n- Queijo')
+  })
+
+  it('o que a pessoa digita devagar não é separado', () => {
+    vi.useFakeTimers()
+    render(<Harness inicial="- [ ] " />)
+    let valor = ''
+    for (const letra of 'pão, de preferência integral, e leite') {
+      valor += letra
+      escrever(campos()[0]!, valor)
+      act(() => vi.advanceTimersByTime(120))
+    }
+    act(() => vi.advanceTimersByTime(300))
+    expect(corpo()).toBe('- [ ] pão, de preferência integral, e leite')
+  })
+
+  it('no parágrafo o texto fica, e o botão "Virar lista" separa em itens de marcar', () => {
+    vi.useFakeTimers()
+    render(<Harness inicial="" />)
+    ditar(campos()[0]!, 'Arroz, feijão, batata e queijo.')
+    act(() => vi.advanceTimersByTime(300))
+    expect(corpo()).toBe('Arroz, feijão, batata e queijo.')
+    fireEvent.click(screen.getByRole('button', { name: 'Virar lista' }))
+    expect(corpo()).toBe('- [ ] Arroz\n- [ ] Feijão\n- [ ] Batata\n- [ ] Queijo')
+    expect(screen.queryByRole('button', { name: 'Virar lista' })).toBeNull()
+  })
+
+  it('o botão não aparece em frase comum', () => {
+    render(<Harness inicial="Ontem eu fui ao mercado, mas a padaria estava fechada." />)
+    expect(screen.queryByRole('button', { name: 'Virar lista' })).toBeNull()
   })
 })

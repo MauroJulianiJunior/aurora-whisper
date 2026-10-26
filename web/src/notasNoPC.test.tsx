@@ -292,11 +292,13 @@ describe('as formas de ver', () => {
 })
 
 describe('criar uma nota', () => {
-  it('abre num título e no corpo; fechar com texto grava (POST) e a nota aparece', async () => {
+  it('abre com o cursor no corpo (o título é opcional); fechar com texto grava (POST) e a nota aparece', async () => {
     const srv = await abrirNotas([])
     fireEvent.click(await screen.findByRole('button', { name: 'Criar uma nota…' }))
     const titulo = screen.getByRole('textbox', { name: 'Título' })
-    expect(document.activeElement).toBe(titulo)
+    // O ditado da nota nova cai no corpo, como no Keep (decisão do Mauro, 25-out-2026).
+    expect(document.activeElement?.tagName).toBe('TEXTAREA')
+    titulo.focus()
     fireEvent.change(titulo, { target: { value: 'Feira' } })
     fireEvent.keyDown(titulo, { key: 'Enter' })
     const corpo = screen.getAllByRole('textbox').find((e) => e.tagName === 'TEXTAREA')!
