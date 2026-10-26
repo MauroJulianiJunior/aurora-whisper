@@ -55,8 +55,19 @@
 // proteger (a do envio do histórico que não terminou). Um Agent de antes da
 // F10 responde 404 sem frase (agentSemRetencao).
 
+//
+// As notas e os marcadores (ADR-022, N1; internal/agent/localapi/notas.go) seguem
+// as regras do Agent que importam para o painel: GET /api/notas filtra por vista,
+// marcador e q (sem diferenciar maiúscula nem acento), com as fixadas primeiro e,
+// dentro de cada grupo, a última edição primeiro; o PATCH pede base_version e
+// devolve 409 para a versão velha e para a nota que está na lixeira; todo
+// POST/PATCH recusa campo desconhecido, nota vazia e cor fora das oito (400);
+// mover para a lixeira, restaurar e todo PATCH sobem a versão; o apagar de vez
+// só vale na lixeira (409 fora dela). notaPorFora faz o papel de outra aba.
+
 import type { Aprendida, Buscador, Configuracoes, Ditado, ListaDeTermos, Provedor, ResultadoTeste, Sugestao, TermoAdicionado } from '../api'
 import type { EstadoNuvem, EstadoRetencao } from '../clienteLocal'
+import { CORES, type Marcador, type Nota } from '../notas/tipos'
 
 export interface Pedido {
   metodo: string
@@ -115,8 +126,32 @@ export function configuracoesPadrao(parcial: Partial<Configuracoes> = {}): Confi
 const editaveis = ['hold_threshold_ms', 'beep_enabled', 'microphone_always_ready', 'text_mode', 'ai_provider', 'ai_model', 'autostart'] as const
 const provedores: readonly string[] = ['openai', 'anthropic']
 
+export function nota(parcial: Partial<Nota> & { id: string }): Nota {
+  const quando = parcial.updated_at ?? parcial.created_at ?? new Date(2026, 9, 25, 10).toISOString()
+  return {
+    titulo: '',
+    corpo: '',
+    cor: null,
+    fixada: false,
+    arquivada: false,
+    marcadores: [],
+    created_at: quando,
+    updated_at: quando,
+    version: 1,
+    ...parcial,
+  }
+}
+
+export function marcador(parcial: Partial<Marcador> & { id: string; nome: string }): Marcador {
+  const quando = new Date(2026, 9, 20, 10).toISOString()
+  return { created_at: quando, updated_at: quando, version: 1, ...parcial }
+}
+
 export interface OpcoesDoServidor {
   token?: string
+  // notas e marcadores: o que o banco das notas já tinha (ADR-022).
+  notas?: Nota[]
+  marcadores?: Marcador[]
   porPagina?: number
   config?: Partial<Configuracoes>
   chaves?: Partial<Record<Provedor, string>>
@@ -143,6 +178,8 @@ export function servidorFalso(
   inicial: Ditado[],
   {
     token = 'tok',
+    notas: notasIniciais = [],
+    marcadores: marcadoresIniciais = [],
     porPagina = 50,
     config: configInicial,
     chaves: chavesIniciais,
@@ -496,6 +533,112 @@ export function servidorFalso(
     return erro(404, 'NOT_FOUND', 'rota')
   }
 
+  // As notas e os marcadores. O relógio é um contador de milissegundos: duas
+  // gravações no mesmo instante ainda saem em ordem.
+  const bancoDeNotas = notasIniciais.map((n) => ({ ...n, marcadores: [...n.marcadores] }))
+  const bancoDeMarcadores = marcadoresIniciais.map((m) => ({ ...m }))
+  let relogioDasNotas = Date.UTC(2026, 9, 25, 12)
+  let seqDasNotas = 0
+  const agoraDasNotas = () => new Date((relogioDasNotas += 1000)).toISOString()
+  const dobrar = (s: string) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase()
+  const camposDoPost = ['titulo', 'corpo', 'cor', 'fixada', 'arquivada', 'ditado_de_origem', 'marcadores']
+  const camposDoPatch = ['base_version', 'titulo', 'corpo', 'cor', 'fixada', 'arquivada']
+  const corValida = (c: unknown) => c === null || c === '' || (typeof c === 'string' && (CORES as readonly string[]).includes(c))
+  const ehTexto = (v: unknown) => v === undefined || typeof v === 'string'
+
+  function rotaNotas(p: Pedido): Response {
+    const m = p.caminho.match(/^\/api\/notas(?:\/([^/]+)(\/restaurar|\/definitivo)?)?$/)
+    if (!m) return erro(404, 'NOT_FOUND', 'rota')
+    const [, idBruto, sufixo] = m
+    if (!idBruto) {
+      if (p.metodo === 'GET') {
+        const vista = p.busca.get('vista') ?? 'ativas'
+        if (!['ativas', 'arquivo', 'lixeira'].includes(vista)) return erro(400, 'BAD_REQUEST', 'parâmetro vista inválido: use ativas, arquivo ou lixeira')
+        const q = dobrar(p.busca.get('q') ?? '')
+        const marcadorId = p.busca.get('marcador') ?? ''
+        const itens = bancoDeNotas
+          .filter((n) => (vista === 'lixeira' ? Boolean(n.deleted_at) : !n.deleted_at && n.arquivada === (vista === 'arquivo')))
+          .filter((n) => !marcadorId || n.marcadores.includes(marcadorId))
+          .filter((n) => !q || dobrar(`${n.titulo}\n${n.corpo}`).includes(q))
+        const por = (n: Nota) => Date.parse(vista === 'lixeira' ? (n.deleted_at ?? n.updated_at) : n.updated_at)
+        itens.sort((a, b) => (vista === 'lixeira' ? 0 : Number(b.fixada) - Number(a.fixada)) || por(b) - por(a))
+        return json({ items: itens.map((n) => ({ ...n, marcadores: [...n.marcadores] })) })
+      }
+      if (p.metodo !== 'POST') return erro(405, 'BAD_REQUEST', 'método')
+      const c = p.corpo ?? {}
+      if (Object.keys(c).some((k) => !camposDoPost.includes(k))) return erro(400, 'BAD_REQUEST', 'corpo JSON inválido')
+      if (!ehTexto(c.titulo) || !ehTexto(c.corpo)) return erro(400, 'BAD_REQUEST', 'corpo JSON inválido')
+      if ('cor' in c && !corValida(c.cor)) return erro(400, 'BAD_REQUEST', 'cor inválida: use ' + CORES.join(', ') + ' ou null')
+      const titulo = (c.titulo as string | undefined) ?? ''
+      const corpo = (c.corpo as string | undefined) ?? ''
+      if (titulo === '' && corpo === '') return erro(400, 'BAD_REQUEST', 'a nota está vazia')
+      const quando = agoraDasNotas()
+      const nova: Nota = {
+        id: `nota-${++seqDasNotas}`,
+        titulo,
+        corpo,
+        cor: (c.cor || null) as Nota['cor'],
+        fixada: c.fixada === true,
+        arquivada: c.arquivada === true,
+        marcadores: [],
+        ...(typeof c.ditado_de_origem === 'string' && c.ditado_de_origem ? { ditado_de_origem: c.ditado_de_origem } : {}),
+        created_at: quando,
+        updated_at: quando,
+        version: 1,
+      }
+      bancoDeNotas.push(nova)
+      return json({ ...nova }, 201)
+    }
+
+    const id = decodeURIComponent(idBruto)
+    const n = bancoDeNotas.find((x) => x.id === id)
+    if (!n) return erro(404, 'NOT_FOUND', 'registro não encontrado')
+    if (sufixo === '/restaurar' && p.metodo === 'POST') {
+      if (n.deleted_at) {
+        delete n.deleted_at
+        n.version += 1
+        n.updated_at = agoraDasNotas()
+      }
+      return json({ ...n })
+    }
+    if (sufixo === '/definitivo' && p.metodo === 'DELETE') {
+      if (!n.deleted_at) return erro(409, 'CONFLICT', 'só se apaga de vez a nota que está na lixeira')
+      bancoDeNotas.splice(bancoDeNotas.indexOf(n), 1)
+      return new Response(null, { status: 204 })
+    }
+    if (sufixo) return erro(405, 'BAD_REQUEST', 'método')
+    switch (p.metodo) {
+      case 'GET':
+        return json({ ...n })
+      case 'DELETE':
+        if (!n.deleted_at) {
+          n.deleted_at = agoraDasNotas()
+          n.updated_at = n.deleted_at
+          n.version += 1
+        }
+        return new Response(null, { status: 204 })
+      case 'PATCH': {
+        const c = p.corpo ?? {}
+        if (Object.keys(c).some((k) => !camposDoPatch.includes(k))) return erro(400, 'BAD_REQUEST', 'corpo JSON inválido')
+        if (typeof c.base_version !== 'number') return erro(400, 'BAD_REQUEST', 'base_version é obrigatório')
+        if (Object.keys(c).length === 1) return erro(400, 'BAD_REQUEST', 'nada a mudar: mande titulo, corpo, cor, fixada ou arquivada')
+        if (!ehTexto(c.titulo) || !ehTexto(c.corpo)) return erro(400, 'BAD_REQUEST', 'corpo JSON inválido')
+        if ('cor' in c && !corValida(c.cor)) return erro(400, 'BAD_REQUEST', 'cor inválida: use ' + CORES.join(', ') + ' ou null')
+        if (n.deleted_at) return erro(409, 'CONFLICT', 'a nota está na lixeira: restaure antes de mexer nela')
+        if (c.base_version !== n.version) return erro(409, 'CONFLICT', 'versão desatualizada')
+        if (typeof c.titulo === 'string') n.titulo = c.titulo
+        if (typeof c.corpo === 'string') n.corpo = c.corpo
+        if ('cor' in c) n.cor = (c.cor || null) as Nota['cor']
+        if (typeof c.fixada === 'boolean') n.fixada = c.fixada
+        if (typeof c.arquivada === 'boolean') n.arquivada = c.arquivada
+        n.version += 1
+        n.updated_at = agoraDasNotas()
+        return json({ ...n })
+      }
+    }
+    return erro(405, 'BAD_REQUEST', 'método')
+  }
+
   const buscar: Buscador = async (entrada, init = {}) => {
     if (foraDoAr) throw new TypeError('Failed to fetch')
     const url = new URL(entrada, 'http://127.0.0.1:51234')
@@ -523,6 +666,8 @@ export function servidorFalso(
     if (p.caminho === '/api/ia/testar' && p.metodo === 'POST') return rotaTestar(p)
     if (p.caminho === '/api/aprendizado' || p.caminho === '/api/aprendizado/desfazer') return rotaAprendizado(p)
     if (p.caminho.startsWith('/api/termos')) return rotaTermos(p)
+    if (p.caminho === '/api/notas' || p.caminho.startsWith('/api/notas/')) return rotaNotas(p)
+    if (p.caminho === '/api/marcadores' && p.metodo === 'GET') return json({ items: bancoDeMarcadores.map((m) => ({ ...m })) })
     if (p.caminho === '/api/nuvem' || p.caminho.startsWith('/api/nuvem/')) return rotaNuvem(p)
     if (p.caminho === '/api/retencao' || p.caminho.startsWith('/api/retencao/')) return rotaRetencao(p)
     if (p.caminho === '/api/microfone' && p.metodo === 'GET') return json(microfone)
@@ -591,6 +736,25 @@ export function servidorFalso(
     buscar,
     pedidos,
     itens,
+    // notas e marcadores são o que o banco das notas tem agora.
+    notas: bancoDeNotas,
+    marcadores: bancoDeMarcadores,
+    // notaPorFora simula outra aba mexendo na nota: a versão sobe, a data
+    // também.
+    notaPorFora(id: string, parcial: Partial<Pick<Nota, 'titulo' | 'corpo' | 'cor' | 'fixada' | 'arquivada'>>) {
+      const n = bancoDeNotas.find((x) => x.id === id)
+      if (!n) throw new Error(id)
+      Object.assign(n, parcial)
+      n.version += 1
+      n.updated_at = agoraDasNotas()
+    },
+    // notaParaALixeiraPorFora simula outra aba movendo a nota para a lixeira.
+    notaParaALixeiraPorFora(id: string) {
+      const n = bancoDeNotas.find((x) => x.id === id)
+      if (!n) throw new Error(id)
+      n.deleted_at = agoraDasNotas()
+      n.version += 1
+    },
     config,
     chaves,
     // aprendidas é o que o dicionário do painel tem agora.

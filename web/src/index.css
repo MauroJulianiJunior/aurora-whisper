@@ -101,6 +101,20 @@
   --marca-traco: #070a09;
   --marca-moldura: #00e676;
   --sombra: 0 1px 2px rgb(7 10 9 / 0.05), 0 8px 24px rgb(7 10 9 / 0.08);
+  /* As notas (ADR-022): oito cores, um tom suave por tema, só de fundo
+     (o verde #00e676 continua sendo ação). Texto, etiqueta e foco passam em
+     4,5:1 e 3:1 sobre todos os oito (estilo.test.ts). --veu escurece a tela
+     atrás da nota aberta; --borda-cor é a borda do cartão colorido. */
+  --n-amarelo: #f8efc4;
+  --n-laranja: #f7e2cf;
+  --n-vermelho: #f7e1dd;
+  --n-rosa: #f5e1ea;
+  --n-roxo: #e9e5f6;
+  --n-azul: #d9e7f2;
+  --n-verde: #dcede2;
+  --n-cinza: #e6eae8;
+  --veu: rgb(7 10 9 / 0.32);
+  --borda-cor: rgb(7 10 9 / 0.07);
 }
 
 /* System. */
@@ -123,6 +137,16 @@
     --marca-traco: #f5f7f5;
     --marca-moldura: #00e676;
     --sombra: 0 1px 2px rgb(0 0 0 / 0.4), 0 18px 50px rgb(0 0 0 / 0.22);
+    --n-amarelo: #29261a;
+    --n-laranja: #2c2119;
+    --n-vermelho: #2c1b1a;
+    --n-rosa: #2a1c24;
+    --n-roxo: #211e2e;
+    --n-azul: #17212b;
+    --n-verde: #15241e;
+    --n-cinza: #1a201e;
+    --veu: rgb(0 0 0 / 0.55);
+    --borda-cor: rgb(255 255 255 / 0.06);
   }
 }
 
@@ -1089,6 +1113,7 @@ a.botao {
   left: 0;
   right: 0;
   bottom: 24px;
+  z-index: 30;
   display: flex;
   justify-content: center;
   padding: 0 16px;
@@ -2067,5 +2092,1037 @@ a.botao {
 
   .faixa-compactavel .faixa-acoes {
     flex-basis: auto;
+  }
+}
+
+/* ─── Notas (ADR-022, N2) ───────────────────────────────────────────── */
+
+/* A aba Notas usa a largura da janela (a grade quer colunas); as outras
+   continuam em 46 rem. A busca e o campo de criar ficam na largura de leitura. */
+.painel.larga {
+  max-width: 96rem;
+}
+
+.painel.larga .busca {
+  max-width: 46rem;
+  margin-inline: auto;
+}
+
+.icone-botao {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--raio-sm);
+  background: transparent;
+  color: var(--texto-2);
+  font-size: 18px;
+  line-height: 1;
+}
+
+.icone-botao:hover:not(:disabled) {
+  background: var(--realce);
+  color: var(--texto);
+}
+
+.icone-botao[aria-pressed='true'],
+.icone-botao[aria-expanded='true'] {
+  background: var(--realce);
+  color: var(--texto);
+}
+
+.icone-botao:disabled {
+  opacity: 0.4;
+}
+
+.icone-botao svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* Cores das notas: o nome na tag, o tom no tema. Vale para o cartão, a nota
+   aberta, a bolinha, a linha da lixeira e a amostra do menu. */
+[data-cor='amarelo'] {
+  --cor-nota: var(--n-amarelo);
+  background: var(--cor-nota);
+}
+
+[data-cor='laranja'] {
+  --cor-nota: var(--n-laranja);
+  background: var(--cor-nota);
+}
+
+[data-cor='vermelho'] {
+  --cor-nota: var(--n-vermelho);
+  background: var(--cor-nota);
+}
+
+[data-cor='rosa'] {
+  --cor-nota: var(--n-rosa);
+  background: var(--cor-nota);
+}
+
+[data-cor='roxo'] {
+  --cor-nota: var(--n-roxo);
+  background: var(--cor-nota);
+}
+
+[data-cor='azul'] {
+  --cor-nota: var(--n-azul);
+  background: var(--cor-nota);
+}
+
+[data-cor='verde'] {
+  --cor-nota: var(--n-verde);
+  background: var(--cor-nota);
+}
+
+[data-cor='cinza'] {
+  --cor-nota: var(--n-cinza);
+  background: var(--cor-nota);
+}
+
+/* A fileira de marcadores e as formas de ver, coladas embaixo do cabeçalho. */
+.barra-de-notas {
+  position: sticky;
+  top: var(--altura-topo, 8rem);
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  background: var(--fundo);
+}
+
+.filtros {
+  display: flex;
+  flex: 1;
+  gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.filtro {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--linha);
+  border-radius: var(--raio-pilula);
+  background: transparent;
+  color: var(--texto-2);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.filtro:hover {
+  background: var(--realce);
+  color: var(--texto);
+}
+
+.filtro[aria-pressed='true'] {
+  border-color: var(--texto);
+  background: var(--superficie);
+  color: var(--texto);
+}
+
+.filtro.separa {
+  margin-left: 6px;
+}
+
+.filtro-n {
+  color: var(--texto-3);
+  font-family: var(--fonte-mono);
+  font-size: 11px;
+}
+
+.formas {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+}
+
+.forma-de-ver,
+.colunas {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.forma-de-ver {
+  padding: 2px;
+  border: 1px solid var(--linha);
+  border-radius: var(--raio-md);
+}
+
+.colunas-n {
+  min-width: 1.2em;
+  color: var(--texto-3);
+  font-family: var(--fonte-mono);
+  font-size: 12px;
+  text-align: center;
+}
+
+/* Criar uma nota: fechado é uma linha só; aberto, o título e o corpo. */
+.criar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 46rem;
+  margin: 14px auto 6px;
+  padding: 0 8px 0 4px;
+  border: 1px solid var(--linha);
+  border-radius: var(--raio-md);
+  background: var(--superficie);
+  box-shadow: var(--sombra);
+}
+
+.criar-abrir {
+  flex: 1;
+  height: 46px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--raio-sm);
+  background: transparent;
+  color: var(--texto-3);
+  font-size: 14px;
+  text-align: left;
+}
+
+.criar.aberto {
+  display: block;
+  padding: 14px 16px 8px;
+}
+
+.criar.aberto .barra-nota {
+  margin-top: 6px;
+}
+
+.secao-notas {
+  margin: 22px 0 8px;
+  padding: 0 2px;
+  color: var(--texto-3);
+  font-family: var(--fonte-mono);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+/* A grade: colunas de verdade (os cartões têm alturas diferentes). O número
+   vem do atributo, e não de um style inline. */
+.grade {
+  column-count: 4;
+  column-gap: 12px;
+}
+
+.grade[data-colunas='1'] {
+  column-count: 1;
+}
+
+.grade[data-colunas='2'] {
+  column-count: 2;
+}
+
+.grade[data-colunas='3'] {
+  column-count: 3;
+}
+
+.grade[data-colunas='4'] {
+  column-count: 4;
+}
+
+.grade[data-colunas='5'] {
+  column-count: 5;
+}
+
+.grade[data-colunas='6'] {
+  column-count: 6;
+}
+
+.cartao {
+  position: relative;
+  margin: 0 0 12px;
+  border: 1px solid var(--linha);
+  border-radius: var(--raio-md);
+  background: var(--cor-nota, var(--superficie));
+  break-inside: avoid;
+  transition: box-shadow 120ms var(--curva);
+}
+
+.cartao[data-cor] {
+  border-color: var(--borda-cor);
+}
+
+.cartao:hover,
+.cartao:focus-within {
+  box-shadow: var(--sombra);
+}
+
+.cartao-abrir {
+  display: block;
+  padding: 12px 14px 4px;
+  border-radius: var(--raio-md);
+  cursor: pointer;
+}
+
+.cartao h3 {
+  margin: 0 28px 6px 0;
+  font-family: var(--fonte-titulo);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.cartao h4 {
+  margin: 0 0 4px;
+  font-family: var(--fonte-titulo);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.cartao p {
+  margin: 0 0 6px;
+  font-size: 13.5px;
+  overflow-wrap: anywhere;
+}
+
+.cartao ul,
+.cartao ol {
+  margin: 0 0 6px;
+  padding-left: 18px;
+  font-size: 13.5px;
+  overflow-wrap: anywhere;
+}
+
+.cartao li {
+  margin: 1px 0;
+}
+
+.cartao .cortado,
+.cartao .vazio {
+  color: var(--texto-3);
+}
+
+.marcar-lista {
+  list-style: none;
+  padding-left: 0 !important;
+}
+
+.marcar-lista li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.caixa {
+  position: relative;
+  top: 2px;
+  display: inline-block;
+  flex: none;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 1.5px solid var(--texto-2);
+  border-radius: 4px;
+  background: transparent;
+}
+
+.caixa.feita {
+  border-color: var(--foco);
+  background: var(--tinta);
+}
+
+.caixa.feita::after {
+  content: '';
+  position: absolute;
+  top: 0.5px;
+  left: 3.5px;
+  width: 4px;
+  height: 8px;
+  border: solid var(--tinta-texto);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.marcados {
+  margin: 2px 0 6px;
+  color: var(--texto-3);
+  font-family: var(--fonte-mono);
+  font-size: 11.5px;
+}
+
+.pe {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+[data-cor] .etiqueta {
+  border-color: color-mix(in srgb, var(--texto) 18%, transparent);
+}
+
+.origem {
+  color: var(--texto-3);
+  font-family: var(--fonte-mono);
+  font-size: 11px;
+}
+
+.fixar {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  opacity: 0;
+}
+
+.cartao:hover .fixar,
+.cartao:focus-within .fixar,
+.fixar[aria-pressed='true'],
+.fixar:focus-visible {
+  opacity: 1;
+}
+
+.fixar[aria-pressed='true'] svg path {
+  fill: currentColor;
+}
+
+.ferramentas {
+  display: flex;
+  gap: 2px;
+  padding: 2px 6px 6px;
+  opacity: 0;
+  transition: opacity 120ms var(--curva);
+}
+
+.cartao:hover .ferramentas,
+.cartao:focus-within .ferramentas,
+.nota-linha:hover .ferramentas,
+.nota-linha:focus-within .ferramentas {
+  opacity: 1;
+}
+
+.ferramentas .icone-botao {
+  width: 30px;
+  height: 30px;
+}
+
+.ferramentas .icone-botao svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* A lista: uma nota por linha, a cor numa bolinha. */
+.notas-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 60rem;
+  margin: 0 auto;
+  padding: 0;
+  list-style: none;
+}
+
+.nota-linha {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-right: 6px;
+  border: 1px solid var(--linha);
+  border-radius: var(--raio-md);
+  background: var(--cor-nota, var(--superficie));
+}
+
+.nota-linha-abrir {
+  display: flex;
+  flex: 1;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: var(--raio-md);
+  cursor: pointer;
+}
+
+.nota-linha-titulo {
+  flex: none;
+  max-width: 55%;
+  overflow: hidden;
+  font-family: var(--fonte-titulo);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nota-linha-inicio {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--texto-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nota-linha .fixar {
+  position: static;
+}
+
+.nota-linha .ferramentas {
+  padding: 0;
+}
+
+.nota-linha:hover .fixar,
+.nota-linha:focus-within .fixar {
+  opacity: 1;
+}
+
+.bolinha {
+  display: inline-block;
+  flex: none;
+  align-self: center;
+  width: 10px;
+  height: 10px;
+  border: 1px solid color-mix(in srgb, var(--texto) 25%, transparent);
+  border-radius: 50%;
+}
+
+.bolinha:not([data-cor]) {
+  background: transparent;
+}
+
+/* A tabela dos detalhes. */
+.detalhes-rolagem {
+  overflow-x: auto;
+}
+
+.detalhes {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.detalhes th {
+  padding: 6px 10px;
+  color: var(--texto-3);
+  font-family: var(--fonte-mono);
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.detalhes td {
+  padding: 8px 10px;
+  border-top: 1px solid var(--linha);
+  vertical-align: baseline;
+}
+
+.detalhes tbody tr {
+  cursor: pointer;
+}
+
+.detalhes tbody tr:hover {
+  background: var(--realce);
+}
+
+.detalhes .numero,
+.detalhes .hora {
+  color: var(--texto-2);
+  font-family: var(--fonte-mono);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.detalhes-abrir {
+  max-width: 28rem;
+  margin-right: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-family: var(--fonte-titulo);
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.detalhes td .etiqueta + .etiqueta {
+  margin-left: 4px;
+}
+
+.cor-na-tabela {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.nota-na-lixeira {
+  border-radius: var(--raio-md);
+}
+
+/* A nota aberta: uma janela sobre a grade, com os colchetes verdes do editor. */
+.veu {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 8vh 16px 24px;
+  overflow-y: auto;
+  background: var(--veu);
+}
+
+.dialogo {
+  position: relative;
+  width: min(34rem, 100%);
+  padding: 16px 16px 10px;
+  border: 1px solid var(--linha);
+  border-radius: var(--raio-lg);
+  background: var(--cor-nota, var(--superficie));
+  box-shadow: 0 24px 60px rgb(0 0 0 / 0.28);
+  animation: abrir 200ms var(--curva);
+}
+
+.dialogo[data-cor] {
+  border-color: var(--borda-cor);
+}
+
+.dialogo::before,
+.dialogo::after {
+  content: '';
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  border: 0 solid var(--moldura);
+  pointer-events: none;
+}
+
+.dialogo::before {
+  top: -1px;
+  left: -1px;
+  border-top-width: 2px;
+  border-left-width: 2px;
+  border-top-left-radius: var(--raio-lg);
+}
+
+.dialogo::after {
+  right: -1px;
+  bottom: -1px;
+  border-right-width: 2px;
+  border-bottom-width: 2px;
+  border-bottom-right-radius: var(--raio-lg);
+}
+
+.fixar-no-dialogo {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+}
+
+.fixar-no-dialogo[aria-pressed='true'] svg path {
+  fill: currentColor;
+}
+
+.titulo-campo {
+  display: block;
+  width: 100%;
+  margin: 0 0 8px;
+  padding: 2px 34px 2px 0;
+  border: 0;
+  background: transparent;
+  caret-color: var(--foco);
+  font-family: var(--fonte-titulo);
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.titulo-campo::placeholder,
+.campo-da-linha::placeholder {
+  color: var(--texto-3);
+  opacity: 1;
+}
+
+.titulo-campo:focus-visible {
+  outline: 2px solid transparent;
+  box-shadow: 0 1px 0 var(--foco);
+}
+
+/* O corpo por linhas: cada linha é um campo, com o prefixo do tipo dela. */
+.editor-de-linhas {
+  margin: 0;
+}
+
+.linha-editada {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-height: 30px;
+  padding: 2px 0 2px 6px;
+  border-radius: var(--raio-sm);
+}
+
+.linha-editada:focus-within {
+  box-shadow: inset 2px 0 0 var(--foco);
+}
+
+.linha-editada.escolhida {
+  background: var(--selecao);
+}
+
+.campo-da-linha {
+  flex: 1;
+  min-width: 0;
+  padding: 3px 0;
+  border: 0;
+  background: transparent;
+  caret-color: var(--foco);
+  field-sizing: content;
+  font-size: 15px;
+  line-height: 1.5;
+  overflow: hidden;
+  resize: none;
+}
+
+.campo-da-linha:focus-visible {
+  outline: 2px solid transparent;
+}
+
+.l-titulo .campo-da-linha {
+  font-family: var(--fonte-titulo);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.l-tarefa.feita .campo-da-linha {
+  color: var(--texto-3);
+  text-decoration: line-through;
+}
+
+.prefixo {
+  flex: none;
+  width: 1.2em;
+  color: var(--texto-2);
+  text-align: center;
+}
+
+.prefixo.numero {
+  width: auto;
+  min-width: 1.6em;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.linha-editada .caixa {
+  top: 5px;
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.linha-editada .caixa.feita::after {
+  top: 1px;
+  left: 4.5px;
+}
+
+/* Aumenta o alvo da caixa sem mudar o desenho dela. */
+.linha-editada .caixa::before {
+  content: '';
+  position: absolute;
+  inset: -8px;
+}
+
+.recolher {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin: 6px 0 2px;
+  padding: 6px 0 4px;
+  border: 0;
+  border-top: 1px solid color-mix(in srgb, var(--texto) 12%, transparent);
+  background: transparent;
+  color: var(--texto-3);
+  font-family: var(--fonte-mono);
+  font-size: 12px;
+  text-align: left;
+}
+
+.recolher .seta {
+  display: inline-grid;
+}
+
+.recolher .seta svg {
+  width: 14px;
+  height: 14px;
+}
+
+.recolher .seta.recolhida {
+  transform: rotate(-90deg);
+}
+
+.dialogo .meta,
+.criar .meta {
+  margin: 10px 0 0;
+  font-size: 11.5px;
+}
+
+.dialogo .nota p {
+  margin: 0 0 8px;
+}
+
+.barra-nota {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  margin: 8px -8px 0;
+}
+
+.botao.leve {
+  border-color: transparent;
+}
+
+/* Os menus (Formatar, Cor, Mais): um botão que abre e fecha, com o menu logo
+   depois dele. Na janela da nota abrem para cima, na barra de baixo. */
+.menu-caixa {
+  position: relative;
+  display: inline-flex;
+}
+
+.menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 3;
+  min-width: 15rem;
+  padding: 6px;
+  border: 1px solid var(--linha);
+  border-radius: var(--raio-md);
+  background: var(--superficie);
+  box-shadow: var(--sombra);
+}
+
+.barra-nota .menu {
+  top: auto;
+  bottom: calc(100% + 4px);
+}
+
+.menu button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--raio-sm);
+  background: transparent;
+  font-size: 13px;
+  text-align: left;
+}
+
+.menu button:hover:not(:disabled) {
+  background: var(--realce);
+}
+
+.menu button:disabled {
+  opacity: 0.45;
+}
+
+.menu button svg {
+  width: 16px;
+  height: 16px;
+  color: var(--texto-2);
+}
+
+.menu hr {
+  margin: 5px 4px;
+  border: 0;
+  border-top: 1px solid var(--linha);
+}
+
+.menu .risco {
+  color: var(--risco-texto);
+}
+
+.menu .risco svg {
+  color: currentColor;
+}
+
+.titulo-menu {
+  padding: 4px 10px 6px;
+  color: var(--texto-3);
+  font-family: var(--fonte-mono);
+  font-size: 11px;
+}
+
+.formatos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 2px;
+}
+
+.menu .formatos button {
+  width: auto;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--linha);
+}
+
+.cores {
+  display: flex;
+  gap: 6px;
+  padding: 4px;
+}
+
+.menu .cores .cor {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--texto) 20%, transparent);
+  border-radius: 50%;
+}
+
+.menu .cores .cor[data-cor],
+.menu .cores .cor[data-cor]:hover:not(:disabled) {
+  background: var(--cor-nota);
+}
+
+.menu .cores .cor[aria-pressed='true'] {
+  outline: 2px solid var(--foco);
+  outline-offset: 2px;
+}
+
+.cores .cor.nenhuma {
+  position: relative;
+  background: var(--superficie);
+}
+
+.cores .cor.nenhuma::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 50%;
+  width: 1.5px;
+  background: var(--texto-3);
+  transform: rotate(45deg);
+}
+
+/* Sem ponteiro que passe por cima (toque), as ferramentas ficam sempre à vista. */
+@media (hover: none) {
+  .fixar,
+  .ferramentas {
+    opacity: 1;
+  }
+}
+
+@media (pointer: coarse) {
+  .icone-botao {
+    width: 44px;
+    height: 44px;
+  }
+
+  .ferramentas .icone-botao {
+    width: 40px;
+    height: 40px;
+  }
+
+  .criar-abrir {
+    height: 52px;
+  }
+
+  .filtro {
+    height: 36px;
+  }
+
+  .menu button {
+    height: 44px;
+  }
+
+  .menu .formatos button {
+    height: 40px;
+  }
+
+  .menu .cores .cor {
+    width: 36px;
+    height: 36px;
+  }
+}
+
+@media (max-width: 640px) {
+  .veu {
+    padding: 12px 8px 16px;
+  }
+
+  .nota-linha-abrir {
+    flex-wrap: wrap;
+    gap: 2px 12px;
+  }
+
+  .nota-linha-titulo {
+    max-width: 100%;
+  }
+
+  .nota-linha-inicio {
+    flex-basis: 100%;
+  }
+}
+
+@media (max-width: 520px) {
+  .barra-de-notas {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .filtros {
+    flex-basis: 100%;
+  }
+
+  .formas {
+    margin-left: auto;
+  }
+
+  .menu {
+    min-width: 13rem;
+  }
+}
+
+/* Temas de Contraste: a caixa marcada é só fundo, e o navegador a pintaria
+   do fundo da página. */
+@media (forced-colors: active) {
+  .caixa.feita {
+    forced-color-adjust: none;
+    border-color: Highlight;
+    background: Highlight;
+  }
+
+  .caixa.feita::after {
+    border-color: HighlightText;
+  }
+
+  .filtro[aria-pressed='true'] {
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dialogo {
+    animation: none;
   }
 }

@@ -25,6 +25,7 @@ import {
   buscadorPadrao,
   pedir,
 } from './api'
+import type { ClienteDeNotas, Marcador, Nota } from './notas/tipos'
 
 // EstadoNuvem é o GET /api/nuvem (ADR-019, F6): se este PC está ligado à
 // nuvem. Nunca traz o token do aparelho, que fica no Gerenciador de
@@ -133,8 +134,9 @@ export interface CopiasApagadas extends EstadoRetencao {
   ficaram: number
 }
 
-// Cliente é o cliente local inteiro: o histórico e o que só o PC tem.
-export interface Cliente extends ClienteDoHistorico {
+// Cliente é o cliente local inteiro: o histórico, as notas (ADR-022) e o que só
+// o PC tem.
+export interface Cliente extends ClienteDoHistorico, ClienteDeNotas {
   configuracoes(): Promise<Configuracoes>
   // campos: só os que vão no PUT; o que fica de fora, o Agent mantém.
   salvarConfiguracoes(versao: number, campos: Partial<Editaveis>): Promise<Configuracoes>
@@ -244,6 +246,7 @@ export function criarCliente(token: string, buscar: Buscador = buscadorPadrao): 
     headers: { ...(init.headers as Record<string, string> | undefined), Authorization: `Bearer ${token}` },
   })
   const doItem = (id: string) => `/api/history/${encodeURIComponent(id)}`
+  const daNota = (id: string) => `/api/notas/${encodeURIComponent(id)}`
   const comJson = (method: string, corpo: unknown): RequestInit =>
     autorizado({ method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) })
   const daChave = (provedor: Provedor) => `/api/ia/chave?${new URLSearchParams({ provedor })}`
@@ -282,6 +285,45 @@ export function criarCliente(token: string, buscar: Buscador = buscadorPadrao): 
     },
     async restaurar(id) {
       await pedir(buscar, `${doItem(id)}/restore`, autorizado({ method: 'POST' }))
+    },
+    // As notas (ADR-022, N1; 06, "Notas e marcadores"). O texto da nota vai
+    // sempre no corpo do pedido; a busca é o parâmetro q, como no histórico.
+    async listarNotas({ vista, marcador, busca }, sinal) {
+      const q = new URLSearchParams({ vista })
+      if (marcador) q.set('marcador', marcador)
+      if (busca) q.set('q', busca)
+      const r = await pedir(buscar, `/api/notas?${q}`, autorizado({ signal: sinal }))
+      const { items } = (await r.json()) as { items?: Nota[] | null }
+      return items ?? []
+    },
+    async obterNota(id) {
+      const r = await pedir(buscar, daNota(id), autorizado())
+      return (await r.json()) as Nota
+    },
+    async criarNota(pedido) {
+      const r = await pedir(buscar, '/api/notas', comJson('POST', pedido), false)
+      return (await r.json()) as Nota
+    },
+    async editarNota(id, versao, mudanca) {
+      // O 409 é a versão velha, ou a nota que foi para a lixeira em outra aba:
+      // nos dois casos o painel lê a nota de novo (Conflito).
+      const r = await pedir(buscar, daNota(id), comJson('PATCH', { ...mudanca, base_version: versao }))
+      return (await r.json()) as Nota
+    },
+    async moverNotaParaLixeira(id) {
+      await pedir(buscar, daNota(id), autorizado({ method: 'DELETE' }), false)
+    },
+    async restaurarNota(id) {
+      const r = await pedir(buscar, `${daNota(id)}/restaurar`, autorizado({ method: 'POST' }), false)
+      return (await r.json()) as Nota
+    },
+    async apagarNotaDeVez(id) {
+      await pedir(buscar, `${daNota(id)}/definitivo`, autorizado({ method: 'DELETE' }), false)
+    },
+    async listarMarcadores(sinal) {
+      const r = await pedir(buscar, '/api/marcadores', autorizado({ signal: sinal }), false)
+      const { items } = (await r.json()) as { items?: Marcador[] | null }
+      return items ?? []
     },
     async configuracoes() {
       const r = await pedir(buscar, '/api/settings', autorizado())

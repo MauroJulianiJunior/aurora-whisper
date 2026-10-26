@@ -1241,6 +1241,73 @@ onda (hoje -48 a -14 dBFS) e o bitrate (hoje 32 kbit/s), que partem dos valores 
 - No Android: o menu do Chrome, **Instalar app**. Sem prompt próprio na v1.
 - No iPhone: **depois do MVP** (Compartilhar, depois "Adicionar à Tela de Início").
 
+## Aba Notas (ADR-022, N2)
+Só no painel do PC (a Local API). O componente entra pelo `Ambiente` (`Ambiente.Notas`); o painel da nuvem
+não importa nada dele, e o `bundle.test.ts` confere nos dois sentidos. A fonte da verdade é o código
+(`web/src/notas/`); a prévia aprovada pelo Mauro é `docs/notas-previa-n2.html`. O que não é desta fase:
+"Virar nota" (N3), criar/renomear/atribuir marcador (N4), converter trecho (N5), copiar para WhatsApp e
+busca única (N6), sync (N7), celular (N8), gatilho de voz (N9), imagens (N10).
+
+**Onde fica e a largura.** Entre **Histórico** e **Lixeira**. Com a aba aberta o painel usa a largura da
+janela (até 96 rem); as outras telas seguem em 46 rem. O título vira "Notas" e a busca do topo passa a ser
+"Buscar nas notas" (o histórico não lê essa busca enquanto a aba está à vista).
+
+**Fileira de marcadores**, embaixo da busca: **Notas** (as ativas), um chip por marcador (com a conta de
+notas), **Arquivo** e **Lixeira**. Sem edição de marcador (N4). O filtro por marcador usa `?marcador=`.
+
+**Formas de ver:** quadradinhos (padrão), lista e detalhes. Colunas dos quadradinhos: de 1 a 6, **4 no PC**;
+em tela estreita (até 640 px), de 1 a 3, **2**. A escolha fica no `localStorage`, por aparelho
+(`aurora.notas.forma`, `aurora.notas.colunas.pc` e `.celular`); todo acesso vai em `try/catch`, e a tela
+funciona igual com o armazenamento recusando.
+
+**Criar uma nota…** é uma barra recolhida que abre no lugar (título e corpo). Fechar com texto grava
+(`POST /api/notas`); vazio não grava nada; se o servidor recusar, a caixa fica aberta com o texto.
+
+**Grade.** Duas seções, **FIXADAS** e **OUTRAS** (só aparece a primeira se houver fixada), em colunas CSS.
+O cartão mostra o título (Space Grotesk), o corpo desenhado pelo prefixo (título, marcador, número, caixa de
+marcar), os itens marcados escondidos atrás de "+ N marcados", as etiquetas dos marcadores e a cor só como
+fundo suave. Ao passar o mouse ou focar: o alfinete de fixar e a fileira de ferramentas (cor, arquivar,
+lixeira); com ponteiro de toque ela fica sempre à vista. Ações de cartão avisam com **Desfazer**.
+
+**A nota aberta** é uma janela (`role="dialog"`, `aria-modal`) sobre a grade, com véu e colchetes verdes nos
+cantos. O foco fica preso nela; **Esc** salva e fecha; ao fechar o foco volta ao cartão. Ao abrir, o foco
+vai para o fim do corpo. Barra: **Formatar** (só prefixo: título, marcador, número, caixa de marcar),
+**Cor** (oito cores e "sem cor"), **Imagem** (desligada, com o título "Imagens chegam depois"), **Arquivar**,
+**Fixar**, **Mais** (Copiar texto, Desmarcar tudo, Apagar marcados, Mover para a lixeira) e **Fechar**. O
+rodapé diz "editada às HH:MM" e, se veio de ditado, "veio de um ditado".
+
+**Salvar.** Sozinho, depois de uma pausa de 800 ms sem digitar, e ao fechar; `PATCH` com `base_version`,
+uma gravação por vez. Se der `409` (outra versão, ou a nota foi para a lixeira em outro lugar) a mensagem
+vermelha (`.nota`) aparece na janela **sem perder o texto**; a pessoa escolhe **Salvar por cima** ou fecha de
+novo. Nota já existente que ficou vazia é gravada vazia (não vai sozinha para a lixeira).
+
+**Editor por linhas.** O corpo é um campo por linha; o texto guardado é um bloco por linha, com prefixo
+(`# `, `- `, `1. `, `- [ ] `, `- [x] `, ou parágrafo). **Enter** divide a linha e continua a lista (Enter em
+item vazio sai da lista); **Backspace** no começo tira o prefixo e, sem prefixo, junta com a linha de cima
+(**Delete** no fim junta com a de baixo); **colar** várias linhas vira várias linhas, lendo os prefixos
+(aceita `\n` e `\r\n`); digitar `- `, `1. ` ou `[] ` no começo converte a linha. O texto que o Agent insere
+(colagem) e o Enter digitado dão o mesmo resultado. Na lista de marcar, o marcado desce para baixo da
+divisória recolhível "N marcados"; a ordem guardada é a ordem da tela. Shift+clique ou Shift+setas
+seleciona várias linhas para o **Formatar**.
+
+**Arquivo e Lixeira.** O Arquivo mostra as arquivadas (com Desarquivar). A Lixeira mostra as apagadas com
+**Restaurar** e **Excluir para sempre**, que pergunta na própria linha, sem janela: "Excluir para sempre? Não
+dá para desfazer.", com **Excluir** (risco) e **Cancelar**, o foco já no Cancelar e Esc cancelando.
+
+**Vazios.** Sem nota alguma, a `Aurora` com a frase de apoio; filtro, Arquivo ou Lixeira sem nada têm a
+sua frase.
+
+**Cores.** Oito tons de nota (amarelo, laranja, vermelho, rosa, roxo, azul, verde, cinza), um suave por
+tema (claro e escuro, pelo `prefers-color-scheme`). A cor é só fundo; o **verde `#00E676` continua só de ação
+e validade** (os colchetes da janela, a caixa marcada); o vermelho só no risco, sempre com a palavra. O
+`estilo.test.ts` confere o contraste de texto, texto-2, texto-3 e foco sobre os oito tons, nos dois temas.
+
+**Acessibilidade.** Tudo por teclado; foco visível; a grade e as listas têm rótulos; avisos pelo
+`aria-live` que o painel já tem; `forced-colors` e `prefers-reduced-motion` tratados.
+
+**Verificação manual (do Mauro):** `docs/teste-manual-notas-n2.md` (ditar dentro da nota e o Enter
+digitado, no Agent de verdade, e o olhar no navegador).
+
 ## Local x cloud
 Local: Agent runtime, mic, hotkey, modelos, logs locais.
 Cloud: histórico consolidado, dictionary, corrections, devices, syncable settings.

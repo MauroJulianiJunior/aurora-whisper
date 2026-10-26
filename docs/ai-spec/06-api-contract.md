@@ -1653,7 +1653,7 @@ Tira da lixeira. `204`.
 
 ### Notas e marcadores (ADR-022, N1)
 Acrescentado com a fase N1 da ADR-022: o banco local e a API local das notas e dos marcadores.
-**Ainda não há tela (N2), "Virar nota" (N3) nem sync (N7).** Fonte da verdade:
+A tela chegou na N2 (aba Notas do painel do PC, `08-ui-ux-spec.md`). **Ainda não há "Virar nota" (N3) nem sync (N7).** Fonte da verdade:
 `internal/agent/localapi/notas.go`. O modelo está em `05-data-model.md`, "Notas e marcadores".
 
 Convenções, como no histórico: JSON em `snake_case`, datas RFC3339, erros no envelope da cloud com

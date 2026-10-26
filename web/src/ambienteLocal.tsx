@@ -9,6 +9,7 @@ import type { Cliente } from './clienteLocal'
 import { Configuracoes } from './Configuracoes'
 import { AvisoDoMicrofone } from './AvisoDoMicrofone'
 import { FaixaLocal } from './FaixaLocal'
+import { Notas } from './notas/Notas'
 
 export function ambienteLocal(cliente: Cliente): Ambiente {
   return {
@@ -20,6 +21,8 @@ export function ambienteLocal(cliente: Cliente): Ambiente {
     // pessoa mudou e não salvou) fica entre um render e outro.
     Configuracoes: (props) => <Configuracoes cliente={cliente} {...props} />,
     Faixa: FaixaLocal,
+    // As notas moram no Agent (ADR-022): a aba só existe no PC.
+    Notas: (props) => <Notas cliente={cliente} {...props} />,
     textos: {
       // O primeiro uso: o ditado funciona sem chave nenhuma, e a chave (a da IA,
       // nas Configurações) só serve ao Polish, que é opcional. A tecla é a de

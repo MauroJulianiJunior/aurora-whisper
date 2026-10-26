@@ -118,6 +118,12 @@ describe('o bundle local (bin\\painel)', () => {
     expect(local.js).toContain('/api/microfone')
     expect(local.js).toContain('O Windows está bloqueando o microfone.')
     expect(local.js).toContain('Abrir as configurações do microfone')
+    // ADR-022, N2: a aba Notas fala com a Local API (/api/notas, /api/marcadores) e
+    // guarda a forma de ver no aparelho.
+    expect(local.js).toContain('/api/notas')
+    expect(local.js).toContain('/api/marcadores')
+    expect(local.js).toContain('Criar uma nota…')
+    expect(local.js).toContain('aurora.notas.forma')
   })
 
   // A orientação das chaves (lançamento, garantia 1): o campo da chave da IA diz onde
@@ -329,6 +335,13 @@ describe('o bundle da nuvem (dist-nuvem)', () => {
     'O Windows está bloqueando o microfone.',
     'Abrir as configurações do microfone',
     'Microfone liberado',
+    // ADR-022, N2: as notas moram no Agent. A aba, o campo de criar e a forma de ver
+    // são só do PC (o celular ganha a dele na N8, com o cliente da nuvem).
+    '/api/notas',
+    '/api/marcadores',
+    'Criar uma nota',
+    'aurora.notas',
+    'Imagens chegam depois',
     // O primeiro uso do PC (a tecla do ditado do PC, sem chave) e a introdução da IA
     // das Configurações do PC não são do app do celular.
     'Segure Ctrl+Win',

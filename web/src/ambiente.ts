@@ -110,8 +110,21 @@ export interface PropsDoAvisoDoMicrofone {
   avisar(texto: ReactNode): void
 }
 
+// PropsDasNotas é o que o Painel passa à aba Notas (ADR-022, N2). A aba só
+// existe onde há a Local API (o PC): o componente vem do ambiente, e o Painel
+// não importa nada dela.
+export interface PropsDasNotas {
+  // busca: o campo de busca do Painel (já com a espera da digitação).
+  busca: string
+  aoPerderLigacao(e: unknown): void
+  // avisar: a pílula de baixo da tela; com desfazer, ela oferece o Desfazer.
+  avisar(texto: ReactNode, desfazer?: () => void): void
+}
+
 export interface Ambiente {
   cliente: ClienteDoHistorico
+  // Notas é a aba Notas. Só o PC a tem; sem ela, o Painel não mostra o botão.
+  Notas?: ComponentType<PropsDasNotas>
   // AvisoDoMicrofone é o aviso do topo quando o Windows bloqueia o microfone, com
   // o botão que abre a tela certa. Só o PC o tem (o Agent lê o registro do
   // Windows); é o componente, e não só a consulta, para o texto e as rotas não

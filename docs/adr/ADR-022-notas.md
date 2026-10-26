@@ -191,6 +191,20 @@ perguntar ao modelo do Polish. Ver E2.
 - Discreto como o resto do painel (`PRODUCT.md`): sem animação de vitrine, a cor do card só como
   fundo suave.
 
+**Decisões do Mauro sobre a prévia da tela (25-out-2026, "Está SENSACIONAL"):** valem por cima dos
+itens acima.
+- **Marcadores numa fileira embaixo da busca**, não na lateral: Notas, cada marcador, Arquivo,
+  Lixeira e "Editar marcadores". No celular, a fileira rola para o lado.
+- **A nota abre numa janela sobre a grade**, com os colchetes do editor do histórico.
+- **A lixeira das notas fica dentro da aba Notas.** A aba Lixeira de cima continua só dos ditados.
+- **Colunas:** 4 no PC por padrão, de 1 a 6; 2 no celular por padrão, de 1 a 3. **[derivada]** Com
+  4 colunas o painel de 46rem não cabe: a aba Notas usa a largura da janela (até ~96rem), e as
+  outras abas ficam como estão. A escolha fica no navegador (`localStorage`), por aparelho.
+- **Três formas de ver:** quadradinhos (a grade de cartões, com as colunas acima), lista e
+  detalhes. **[derivada]** Lista: uma nota por linha, título e o começo do corpo, a cor numa
+  bolinha. Detalhes: uma tabela com título, marcadores, itens marcados ("2/6"), cor e quando foi
+  editada. A forma escolhida também fica no navegador.
+
 ### Sync
 
 - **[derivada]** Duas entidades novas no motor (`internal/sync`): `nota` e `marcador`, ao lado de
