@@ -1,0 +1,24 @@
+{
+  "aviso": "Casos da conversão POR REGRA de texto corrido em itens (ADR-022, \"Formatar: converter trecho\"). Os dois lados rodam este arquivo: o Agent (internal/resolver, ItensPorRegra, a regra que a API local usa quando a IA não vale) e o painel (web/src/notas/corpo.ts, itensDaEnumeracao, a regra do botão Virar lista e do ditado numa linha de lista). itens null: a regra não separa.",
+  "casos": [
+    {"texto": "Arroz, feijão, batata, presunto, queijo, tomate e alface.", "minimo": 3, "itens": ["Arroz", "Feijão", "Batata", "Presunto", "Queijo", "Tomate", "Alface"]},
+    {"texto": "arroz, feijão e batata", "minimo": 3, "itens": ["Arroz", "Feijão", "Batata"]},
+    {"texto": "leite; pão; café", "minimo": 3, "itens": ["Leite", "Pão", "Café"]},
+    {"texto": "1,5 kg de carne, duas dúzias de ovos e pão", "minimo": 3, "itens": ["1,5 kg de carne", "Duas dúzias de ovos", "Pão"]},
+    {"texto": "DCTFWeb, PGDAS e ECF", "minimo": 3, "itens": ["DCTFWeb", "PGDAS", "ECF"]},
+    {"texto": "eSocial, DCTFWeb e a guia do FGTS", "minimo": 2, "itens": ["eSocial", "DCTFWeb", "A guia do FGTS"]},
+    {"texto": "R$ 1.500,00 de aluguel, R$ 80 de luz e água", "minimo": 2, "itens": ["R$ 1.500,00 de aluguel", "R$ 80 de luz", "Água"]},
+    {"texto": "arroz, feijão", "minimo": 2, "itens": ["Arroz", "Feijão"]},
+    {"texto": "arroz, feijão", "minimo": 3, "itens": null},
+    {"texto": "arroz e feijão", "minimo": 2, "itens": null},
+    {"texto": "leite pão café e duas dúzias de ovos", "minimo": 2, "itens": null},
+    {"texto": "Ontem eu fui ao mercado, mas a padaria estava fechada e voltei para casa.", "minimo": 2, "itens": null},
+    {"texto": "Você comprou arroz, feijão e batata?", "minimo": 2, "itens": null},
+    {"texto": "Preciso comprar: arroz, feijão e batata", "minimo": 2, "itens": null},
+    {"texto": "O peso deu 1,5 kg", "minimo": 2, "itens": null},
+    {"texto": "arroz,, feijão", "minimo": 2, "itens": null},
+    {"texto": "ligar para o contador da padaria amanhã cedo, mandar o boleto", "minimo": 2, "itens": null},
+    {"texto": "pão, manteiga e queijo e presunto", "minimo": 2, "itens": ["Pão", "Manteiga e queijo", "Presunto"]},
+    {"texto": "Leite, pão!", "minimo": 2, "itens": ["Leite", "Pão"]}
+  ]
+}
