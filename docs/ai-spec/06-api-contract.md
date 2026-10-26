@@ -1834,6 +1834,8 @@ Sempre `200`. Antes da primeira gravação devolve o padrão, com `version: 0` �
 ```json
 {
   "hotkey": "ctrl+win",
+  "note_hotkey": "ctrl+win+alt",
+  "note_trigger_enabled": true,
   "hold_threshold_ms": 700,
   "beep_enabled": true,
   "microphone_always_ready": false,
@@ -1852,6 +1854,8 @@ Sempre `200`. Antes da primeira gravação devolve o padrão, com `version: 0` �
 | Campo | Edita no PUT | O que é |
 |---|---|---|
 | `hotkey` | não | O gatilho do ditado. Só leitura nesta etapa: um PUT com valor diferente recebe `400`. |
+| `note_hotkey` | não | O gatilho "ditar para nota" (ADR-022, N9), no mesmo formato: `"ctrl+win+alt"`. Só leitura: não é gravado nem lido do PUT (um PUT com o campo é ignorado). Um Agent sem o gatilho não manda o campo, e o painel não mostra a opção. |
+| `note_trigger_enabled` | sim | Liga o "ditar para nota" (ADR-022, N9); padrão `true`. Desligado, `note_hotkey` é um ditado comum (o conjunto contém o `hotkey`). Booleano; ausente no PUT mantém. Vale a partir do próximo ditado. |
 | `hold_threshold_ms` | sim | Quanto tempo segurar até gravar: **300 a 2000**, inclusive. Vale a partir do próximo ditado. |
 | `beep_enabled` | sim | Beep ao começar a gravar. Vale a partir do próximo ditado. |
 | `microphone_always_ready` | sim | "Microfone sempre pronto" (ADR-015); padrão `false`. Ligado, o microfone fica aberto o tempo todo e a captura leva 300 ms de antes das teclas; desligado, ele só abre durante o ditado. Booleano; ausente no PUT mantém. A API só grava e devolve: se entra em `reinicio_pendente`, quem diz é o Agent. |

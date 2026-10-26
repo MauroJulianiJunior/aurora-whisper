@@ -41,13 +41,16 @@ func CorPilula() (b, g, r byte) { return corCorpo.bgr() }
 type FrameState struct {
 	Phase dictation.OverlayPhase
 	Amps  []float64
+	// Texto troca o Label da fase na mensagem (FaseNaNota: "Lista de compras
+	// +3"). Vazio é o Label.
+	Texto string
 }
 
 // Quadro devolve o frame de state num canvas do tamanho exato da pílula
 // da fase (DimensoesPara) — é o que a janela apresenta, e o tamanho que
 // ela assume (ver Overlay.redraw).
 func Quadro(state FrameState) *Canvas {
-	d := DimensoesPara(state.Phase)
+	d := dimensoesCom(state.Phase, state.Texto)
 	c := NewCanvas(d.W, d.H)
 	Render(c, state)
 	return c
@@ -65,7 +68,7 @@ func Quadro(state FrameState) *Canvas {
 func Render(c *Canvas, state FrameState) {
 	c.Clear()
 
-	if d := DimensoesPara(state.Phase); d.ComOnda {
+	if d := dimensoesCom(state.Phase, state.Texto); d.ComOnda {
 		px, py := (c.W-d.W)/2, (c.H-d.H)/2
 		desenhaPilula(c, px, py, d)
 		// Gravação e processamento não têm texto nenhum. O rótulo
@@ -78,7 +81,7 @@ func Render(c *Canvas, state FrameState) {
 		return
 	}
 
-	m := ComporMensagem(state.Phase)
+	m := ComporMensagemComTexto(state.Phase, state.Texto)
 	px, py := (c.W-m.Dim.W)/2, (c.H-m.Dim.H)/2
 	desenhaPilula(c, px, py, m.Dim)
 	desenhaMensagem(c, px, py, m)

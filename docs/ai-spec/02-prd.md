@@ -81,6 +81,7 @@ Entregar ditado rápido, contextual, local-first e cloud-connected, com ASR subs
 | REQ-052 | O ditado do celular só começa depois de um aceite específico, em destaque e separado das outras finalidades, de quem dita: o que vai (a voz; com a dica, os termos do aprendido; com o Polish, o texto), para quem (o provedor escolhido e o do Polish), para onde e por quanto tempo fica lá. O aceite é gravado no servidor, por conta, e pode ser revogado a qualquer momento (ADR-021, decisão H) | Must |
 | REQ-053 | A chave de API da pessoa para ditar no celular fica **cifrada** no servidor (a chave do PC continua só no PC); o app só vê "configurada" e o fim dela; nunca em resposta, log, erro ou URL; a recomendação na tela é uma chave só para o celular, com limite de gasto no provedor (ADR-021, decisão G) | Must |
 | REQ-054 | A chegada ao PC mais rápida (ADR-021, decisão P e subfatia S): com o painel do PC aberto e na frente, o Agent busca a nuvem a cada 10 s (60 s fechado), e o painel relê a lista quando um pull traz mudança | Should |
+| REQ-055 | Ditar para nota no PC (ADR-022, N9): um segundo gatilho (Ctrl+Win+Alt, que pode ser desligado nas Configurações) grava e transcreve como o ditado, mas **não insere** no campo em foco: o texto vai para a nota cujo título abre o ditado (o resto entra no fim, como item se ela é lista) ou para uma nota nova; a pílula diz para onde foi; se a nota não grava, o ditado fica à vista no histórico. O Ctrl+Win não muda | Should |
 
 ## 5. Regras
 - Smart é default.

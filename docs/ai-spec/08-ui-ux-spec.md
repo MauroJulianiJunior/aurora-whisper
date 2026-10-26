@@ -113,6 +113,17 @@ o texto do ASR como chegou, com as cópias, fica no histórico como `raw_text`, 
 mostra a diferença entre ele e o texto final; o `final_text` e o que foi inserido saem sem as
 cópias.
 
+### Ditar para nota (ADR-022, N9)
+- "Lista de compras +3" — o resto do ditado entrou na nota com esse título, N linhas;
+- "Nota nova" — nenhum título casou, e o ditado virou uma nota nova;
+- "Não salvou na nota: está no histórico." — a nota não foi gravada, e o ditado ficou à vista no
+  histórico.
+
+A gravação e o processamento são os de sempre (a mesma cápsula, o mesmo bipe). Só o desfecho diz para
+onde o texto foi, porque ele **não** entra no campo em foco. Ponto verde nas duas primeiras, cinza na
+terceira (não se perdeu, mas não está onde a pessoa mandou). O título longo é cortado com "…" antes de
+40 letras, para o "+N" ficar sempre à vista.
+
 ### Aparência (29-set-2026)
 Identidade da paleta do projeto (cores, contorno e ponto de estado: ver ADR-014, "Atualização
 de 29-set-2026").
@@ -292,6 +303,12 @@ lista "Aprendido no painel".
 
 #### Ditado
 - tecla;
+- **Ditar para nota** (ADR-022, N9): logo depois da tecla, uma caixa de marcar "Ditar para nota" (padrão
+  ligada), as teclas dele só para leitura (Ctrl + Win + Alt, de `note_hotkey`) e a ajuda: "O texto vai
+  para uma nota, não para o campo. Comece pelo nome da nota (“Lista de compras: leite e pão”) para
+  acrescentar nela; sem um nome que case, nasce uma nota nova. Desligado, estas teclas ditam no campo,
+  como as do ditado." Anda no rascunho e no Salvar como o microfone sempre pronto; sem `note_hotkey`
+  (um Agent sem o gatilho), a opção não aparece;
 - threshold 300–2000 ms;
 - beep;
 - microfone;

@@ -166,7 +166,7 @@ func (h *Hook) callback(nCode int32, wParam uintptr, info *win32.KBDLLHOOKSTRUCT
 		return win32.CallNextHookEx(h.handle, nCode, wParam, lParam)
 	}
 
-	decision := h.decider.Decide(ev)
+	decision, ev := h.decidir(ev)
 	if decision.Notify {
 		select {
 		case h.events <- ev:

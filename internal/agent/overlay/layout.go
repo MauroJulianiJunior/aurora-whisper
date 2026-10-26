@@ -94,11 +94,17 @@ type Dimensoes struct {
 // pílula só muda no desfecho, para caber a mensagem — que é quando há o
 // que ler —, e aí com o tamanho do texto dela (ComporMensagem).
 func DimensoesPara(phase dictation.OverlayPhase) Dimensoes {
+	return dimensoesCom(phase, "")
+}
+
+// dimensoesCom é DimensoesPara com o texto da mensagem (ver
+// ComporMensagemComTexto); vazio é o Label da fase.
+func dimensoesCom(phase dictation.OverlayPhase, texto string) Dimensoes {
 	switch phase {
 	case dictation.OverlayRecording, dictation.OverlayProcessing:
 		return Dimensoes{W: CompactWidth, H: CompactHeight, Radius: CompactRadius, ComOnda: true}
 	default:
-		return ComporMensagem(phase).Dim
+		return ComporMensagemComTexto(phase, texto).Dim
 	}
 }
 

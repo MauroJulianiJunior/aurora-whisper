@@ -408,6 +408,11 @@ func aparaSeparadores(s string) string {
 	return strings.TrimRight(s, " \t,;.!")
 }
 
+// InicialDoItem é inicialDoItem para quem está fora do pacote: o item que o
+// "ditar para nota" (ADR-022, N9) acrescenta sozinho ganha a mesma inicial dos
+// que ItensPorRegra separa.
+func InicialDoItem(s string) string { return inicialDoItem(s) }
+
 // inicialDoItem põe a primeira letra do item em maiúscula, como a regra
 // (itensDaEnumeracao no painel). Não mexe quando a primeira palavra é sigla
 // ("eSocial", "iPhone") nem quando o item não começa por letra minúscula.

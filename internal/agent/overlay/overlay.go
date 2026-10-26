@@ -110,8 +110,11 @@ type Overlay struct {
 	win  window
 	done chan struct{}
 
-	mu        sync.Mutex
-	phase     dictation.OverlayPhase
+	mu    sync.Mutex
+	phase dictation.OverlayPhase
+	// texto é o da mensagem no lugar do Label da fase (SetPhaseComTexto).
+	// SetPhase o limpa: só a fase que veio com ele o mostra.
+	texto     string
 	amps      []amostraOnda
 	hideTimer *time.Timer
 
@@ -283,7 +286,7 @@ func (o *Overlay) wndProc(hwnd win32.HWND, msg uint32, wParam, lParam uintptr) u
 func (o *Overlay) redraw() {
 	o.mu.Lock()
 	agora := o.relogio()
-	state := FrameState{Phase: o.phase, Amps: o.recentes(agora)}
+	state := FrameState{Phase: o.phase, Amps: o.recentes(agora), Texto: o.texto}
 	o.mu.Unlock()
 
 	if !Visible(state.Phase) {
@@ -322,8 +325,16 @@ func (o *Overlay) redraw() {
 // terminais) ou cancela (recording/hidden) o timer de auto-esconder —
 // ver autoHideDelay.
 func (o *Overlay) SetPhase(phase dictation.OverlayPhase) {
+	o.SetPhaseComTexto(phase, "")
+}
+
+// SetPhaseComTexto é SetPhase com o texto da mensagem no lugar do Label da
+// fase: "Lista de compras +3" no ditar para nota (FaseNaNota). Texto vazio é o
+// Label. O texto vale até a próxima fase.
+func (o *Overlay) SetPhaseComTexto(phase dictation.OverlayPhase, texto string) {
 	o.mu.Lock()
 	o.phase = phase
+	o.texto = texto
 	if phase == dictation.OverlayRecording {
 		o.amps = o.amps[:0]
 	}

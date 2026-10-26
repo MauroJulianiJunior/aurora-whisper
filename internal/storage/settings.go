@@ -39,7 +39,11 @@ type Settings struct {
 	// aberto o tempo todo, com 300 ms de captura antes das teclas.
 	// Padrão false: o microfone só abre durante o ditado.
 	MicrophoneAlwaysReady bool
-	UpdatedAt             time.Time
+	// NoteTriggerEnabled liga o gatilho "ditar para nota" (ADR-022, N9:
+	// Ctrl+Win+Alt manda o ditado para uma nota). Padrão true (a coluna nasce
+	// com 1); desligado, Ctrl+Win+Alt é um ditado comum.
+	NoteTriggerEnabled bool
+	UpdatedAt          time.Time
 	Version               int64
 }
 

@@ -37,10 +37,18 @@ const tamanhoMaximoDoModelo = 200
 // API passa de poucas centenas de bytes.
 const limiteDoCorpo = 16 << 10
 
+// TeclaDaNota é como a tela mostra o gatilho "ditar para nota" (ADR-022, N9),
+// no formato de hotkey. Só leitura, como a tecla de ditado: o que se muda é
+// ligar e desligar (note_trigger_enabled). cmd/agent confere que o conjunto
+// que ele dá ao hook é este.
+const TeclaDaNota = "ctrl+win+alt"
+
 // settingsDTO é o que GET e PUT /api/settings devolvem
 // (06-api-contract.md, "API local", "Settings").
 type settingsDTO struct {
 	Hotkey                string   `json:"hotkey"`
+	NoteHotkey            string   `json:"note_hotkey"`
+	NoteTriggerEnabled    bool     `json:"note_trigger_enabled"`
 	HoldThresholdMs       int64    `json:"hold_threshold_ms"`
 	BeepEnabled           bool     `json:"beep_enabled"`
 	MicrophoneAlwaysReady bool     `json:"microphone_always_ready"`
@@ -64,6 +72,7 @@ type settingsPutDTO struct {
 	HoldThresholdMs       *int64  `json:"hold_threshold_ms"`
 	BeepEnabled           *bool   `json:"beep_enabled"`
 	MicrophoneAlwaysReady *bool   `json:"microphone_always_ready"`
+	NoteTriggerEnabled    *bool   `json:"note_trigger_enabled"`
 	TextMode              *string `json:"text_mode"`
 	AIProvider            *string `json:"ai_provider"`
 	AIModel               *string `json:"ai_model"`
@@ -92,6 +101,8 @@ func (s *Server) toDTO(cur storage.Settings) settingsDTO {
 	}
 	return settingsDTO{
 		Hotkey:                cur.Hotkey,
+		NoteHotkey:            TeclaDaNota,
+		NoteTriggerEnabled:    cur.NoteTriggerEnabled,
 		HoldThresholdMs:       cur.HoldThresholdMs,
 		BeepEnabled:           cur.BeepEnabled,
 		MicrophoneAlwaysReady: cur.MicrophoneAlwaysReady,
@@ -251,6 +262,9 @@ func mesclar(cur storage.Settings, b settingsPutDTO) storage.Settings {
 	}
 	if b.MicrophoneAlwaysReady != nil {
 		novo.MicrophoneAlwaysReady = *b.MicrophoneAlwaysReady
+	}
+	if b.NoteTriggerEnabled != nil {
+		novo.NoteTriggerEnabled = *b.NoteTriggerEnabled
 	}
 	if b.TextMode != nil {
 		novo.TextMode = *b.TextMode

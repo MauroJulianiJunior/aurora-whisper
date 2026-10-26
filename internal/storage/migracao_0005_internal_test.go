@@ -101,6 +101,11 @@ func linhasDe(t *testing.T, db *sql.DB, tabela string) []map[string]any {
 		if v, ok := m["virou_nota"]; ok && v == nil && tabela == "local_transcriptions" {
 			delete(m, "virou_nota")
 		}
+		// A note_trigger_enabled (0011, "Ditar para nota") nasce com o padrão
+		// ligado em toda linha de preferências, pelo mesmo motivo.
+		if v, ok := m["note_trigger_enabled"]; ok && v == int64(1) && tabela == "local_settings" {
+			delete(m, "note_trigger_enabled")
+		}
 		out = append(out, m)
 	}
 	if err := rows.Err(); err != nil {

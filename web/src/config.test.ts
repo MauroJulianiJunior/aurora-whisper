@@ -8,7 +8,16 @@ const base: Editaveis = editaveis(configuracoesPadrao())
 describe('editaveis', () => {
   it('leva só o que o PUT aceita: nem a tecla, nem a versão, nem o que o Agent informa', () => {
     const c = configuracoesPadrao({ autostart_indisponivel: 'motivo', reinicio_pendente: ['beep_enabled'], polish_disponivel: true, version: 7 })
-    expect(Object.keys(editaveis(c)).sort()).toEqual(['ai_model', 'ai_provider', 'autostart', 'beep_enabled', 'hold_threshold_ms', 'microphone_always_ready', 'text_mode'])
+    expect(Object.keys(editaveis(c)).sort()).toEqual([
+      'ai_model',
+      'ai_provider',
+      'autostart',
+      'beep_enabled',
+      'hold_threshold_ms',
+      'microphone_always_ready',
+      'note_trigger_enabled',
+      'text_mode',
+    ])
   })
 })
 
@@ -76,6 +85,7 @@ describe('paraEnviar', () => {
       hold_threshold_ms: 700,
       beep_enabled: false,
       microphone_always_ready: false,
+      note_trigger_enabled: true,
       text_mode: 'smart',
       ai_provider: '',
       ai_model: '',
@@ -86,6 +96,11 @@ describe('paraEnviar', () => {
   it('o microfone sempre pronto vai com o rascunho, ligado ou desligado', () => {
     expect(paraEnviar(base, { ...base, microphone_always_ready: true }).microphone_always_ready).toBe(true)
     expect(paraEnviar({ ...base, microphone_always_ready: true }, base).microphone_always_ready).toBe(false)
+  })
+
+  it('o ditar para nota vai com o rascunho, ligado ou desligado', () => {
+    expect(paraEnviar(base, { ...base, note_trigger_enabled: false }).note_trigger_enabled).toBe(false)
+    expect(paraEnviar({ ...base, note_trigger_enabled: false }, base).note_trigger_enabled).toBe(true)
   })
 
   it('o autostart que a pessoa mudou vai, ligando ou desligando', () => {

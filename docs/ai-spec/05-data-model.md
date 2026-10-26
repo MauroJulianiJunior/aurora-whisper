@@ -639,6 +639,10 @@ continua no histórico.
   (`UPDATE ... WHERE virou_nota = 'nova:'||token`); a caixa que fecha vazia volta a nulo
   (`SoltarDitadosDaNotaNova`); o resto volta a nulo depois de 24 h (`LiberarDitadosDeNotasNovas`, no
   expurgo das notas). O aviso de onde está o cursor **não** é gravado: vive só na memória do Agent.
+- **Ditar para nota (ADR-022, N9).** O ditado do gatilho Ctrl+Win+Alt que foi gravado numa nota tem a
+  linha com `virou_nota` = o id dessa nota (escondida, como acima). Quando ele criou uma nota nova, a
+  nota guarda `ditado_de_origem` = o id da linha (o Agent escolhe o id antes de gravar a nota). Se a
+  nota não foi gravada, a linha fica **sem** `virou_nota` e com `status = 'error'`: à vista, com o texto.
 
 ### local_dictionary_entries / aliases / corrections
 Espelhos sincronizáveis.
@@ -684,6 +688,9 @@ modo portátil, ADR-018), e o que o painel
 - microphone_always_ready — `0`/`1`, padrão `0` (false): "microfone sempre pronto", aberto o tempo todo
   com 300 ms de captura antes das teclas; desligado, o microfone só abre durante o ditado. Migration
   `0004`, ADR-015, 29-set-2026. É só a escolha de quem usa: nenhum áudio é guardado.
+- note_trigger_enabled — `0`/`1`, padrão `1` (true): o gatilho "ditar para nota" (Ctrl+Win+Alt) manda o
+  ditado para uma nota; `0`, as mesmas teclas são um ditado comum. Migration `0011`, ADR-022 (N9),
+  26-out-2026; só `ADD COLUMN`, e a linha que já existia sai com o padrão ligado.
 
 Linha única (`id = 1`), com `version` para concorrência otimista. A coluna `autostart` não é a
 fonte da verdade: o início automático é lido e gravado no registro do Windows (pacote

@@ -38,6 +38,13 @@ type Config struct {
 	// Modifiers é o conjunto exigido quando Key == KeyUnknown.
 	Modifiers dictation.Modifiers
 
+	// Nota é o conjunto do gatilho "ditar para nota" (ADR-022; padrão
+	// Ctrl+Win+Alt). Zero desliga: o hook é o de antes, evento por evento. A
+	// sessão do gatilho da nota chega ao runtime com RawKeyEvent.ParaNota
+	// (dictation.Gatilhos). Deve ter passado por
+	// dictation.ValidarGatilhoDaNota; Hook não revalida.
+	Nota dictation.Modifiers
+
 	// EventBuffer é a capacidade do canal devolvido por Events(). Zero
 	// usa defaultEventBuffer.
 	EventBuffer int
@@ -52,7 +59,7 @@ type Config struct {
 // de qualquer goroutine depois que Start() retorna com sucesso.
 type Hook struct {
 	cfg        Config
-	decider    *dictation.Decider
+	decider    *dictation.Gatilhos
 	translator *Translator
 	events     chan dictation.RawKeyEvent
 
@@ -124,15 +131,30 @@ func (h *Hook) deveIgnorar() bool {
 	return h.pausado.Load() && !h.decider.Armado()
 }
 
+// decidir consulta o decisor e devolve, junto com a decisão, o evento como ele
+// vai ao runtime: com a marca do gatilho da nota (RawKeyEvent.ParaNota), que o
+// runtime não tem como saber sozinho — ele não conhece o decisor. Fora da build
+// tag do Windows para ser testável: é a única coisa que o callback faz com o
+// evento além de mandá-lo.
+func (h *Hook) decidir(ev dictation.RawKeyEvent) (dictation.Decision, dictation.RawKeyEvent) {
+	d := h.decider.Decide(ev)
+	ev.ParaNota = d.Notify && d.ParaNota
+	return d, ev
+}
+
 // novoDecider escolhe o modo do gatilho a partir da Config.
 //
 // Key == KeyUnknown significa gatilho por COMBINAÇÃO de modificadores
 // (ADR-013): não há tecla principal, nada é suprimido, e a classe de
 // defeito da tecla de letra — engolir o caractere e devolver depois, fora
 // de ordem — deixa de existir.
-func novoDecider(cfg Config) *dictation.Decider {
+//
+// O decisor do ditado vai dentro do dos dois gatilhos (dictation.Gatilhos),
+// que acrescenta só a marca do "ditar para nota": as decisões de suprimir e
+// notificar continuam as do ditado.
+func novoDecider(cfg Config) *dictation.Gatilhos {
 	if cfg.Key == dictation.KeyUnknown {
-		return dictation.NewDeciderModificadores(cfg.Modifiers)
+		return dictation.NovosGatilhos(dictation.NewDeciderModificadores(cfg.Modifiers), cfg.Nota)
 	}
-	return dictation.NewDecider(cfg.Key)
+	return dictation.NovosGatilhos(dictation.NewDecider(cfg.Key), cfg.Nota)
 }

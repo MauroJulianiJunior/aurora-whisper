@@ -11,6 +11,10 @@ type Decision struct {
 	// Notify: true faz o runtime traduzir e encaminhar este evento ao
 	// Machine (fora da thread do hook).
 	Notify bool
+	// ParaNota: a sessão notificada é do gatilho "ditar para nota" (ver
+	// Gatilhos). Só o decisor dos dois gatilhos a preenche; o Decider sozinho
+	// a deixa falsa.
+	ParaNota bool
 }
 
 // passThrough é a decisão "não faça nada com este evento".

@@ -806,7 +806,16 @@ próprio para "ditar para nota" e a lista marcável sem rede no celular. Fases (
   N8);
 - **N7:** sync das notas e marcadores (migrations do Postgres; **deploy é ponto de parada**);
 - **N8:** aba Notas no celular, "Ditar para nota" e a fila offline;
-- **N9:** gatilho "ditar para nota" no PC;
+- **N9:** gatilho "ditar para nota" no PC. **Feita nos dublês (26-out-2026):** o decisor dos dois gatilhos
+  (`dictation.Gatilhos`: envolve o Decider do Ctrl+Win sem mudar nenhuma decisão de suprimir ou notificar, e
+  marca a sessão pelo pico, Ctrl+Win+Alt inteiro em algum momento), a marca no evento do hook, o destino e o
+  acréscimo (`internal/agent/paranota`: o título no começo do ditado, só notas ativas, o mais longo vence, o
+  empate vai para a editada por último; lista de marcar antes dos marcados, marcadores, numerada, parágrafo;
+  senão, nota nova), o runtime (no InsertEffect da sessão marcada, grava na nota em vez de inserir; a linha
+  escondida com `virou_nota`, ou à vista se a nota falhou), a pílula ("Título +N", "Nota nova", "Não salvou
+  na nota: está no histórico.") e o liga-desliga nas Configurações (`note_trigger_enabled`, migration `0011`,
+  só `ADD COLUMN`; `note_hotkey` só leitura) (AC-089, REQ-055). **Falta o teste no PC, que é do Mauro:**
+  `docs/teste-manual-notas-n9.md`;
 - **N10:** imagens (**ponto de parada antes**: disco do servidor e LGPD).
 
 Os documentos da spec (`02`, `03`, `05`, `06`, `07`, `08`, `09`, `20`) são emendados por fase, junto

@@ -118,6 +118,8 @@ export function configuracoesPadrao(parcial: Partial<Configuracoes> = {}): Confi
     hold_threshold_ms: 700,
     beep_enabled: true,
     microphone_always_ready: false,
+    note_hotkey: 'ctrl+win+alt',
+    note_trigger_enabled: true,
     text_mode: 'smart',
     ai_provider: '',
     ai_model: '',
@@ -131,7 +133,16 @@ export function configuracoesPadrao(parcial: Partial<Configuracoes> = {}): Confi
   }
 }
 
-const editaveis = ['hold_threshold_ms', 'beep_enabled', 'microphone_always_ready', 'text_mode', 'ai_provider', 'ai_model', 'autostart'] as const
+const editaveis = [
+  'hold_threshold_ms',
+  'beep_enabled',
+  'microphone_always_ready',
+  'note_trigger_enabled',
+  'text_mode',
+  'ai_provider',
+  'ai_model',
+  'autostart',
+] as const
 const provedores: readonly string[] = ['openai', 'anthropic']
 
 export function nota(parcial: Partial<Nota> & { id: string }): Nota {

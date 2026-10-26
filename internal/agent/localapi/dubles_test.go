@@ -65,6 +65,7 @@ func padraoDeTeste() storage.Settings {
 		TextMode:             "smart",
 		ASRPolicy:            "local_only",
 		ProtectedFieldPolicy: "block",
+		NoteTriggerEnabled:   true,
 	}
 }
 

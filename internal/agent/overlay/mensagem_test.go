@@ -230,6 +230,9 @@ func TestComporMensagem_QuebrasDasMensagens(t *testing.T) {
 		FaseTextoNoHistorico:          {"O texto demorou e", "ficou no histórico."},
 		FaseRepeticaoRemovida:         {"Removi uma repetição.", "Confira o texto."},
 		FaseMicrofoneBloqueado:        {"O Windows bloqueou o", "microfone. Veja o painel."},
+		FaseNaNota:                    {"Na nota"},
+		FaseNotaNova:                  {"Nota nova"},
+		FaseNotaNaoSalvou:             {"Não salvou na nota:", "está no histórico."},
 	} {
 		if got := ComporMensagem(p).Linhas; strings.Join(got, "|") != strings.Join(want, "|") {
 			t.Errorf("%s: %q, want %q", nomeDaFase(p), got, want)

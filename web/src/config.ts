@@ -14,6 +14,7 @@ export const camposEditaveis = [
   'hold_threshold_ms',
   'beep_enabled',
   'microphone_always_ready',
+  'note_trigger_enabled',
   'text_mode',
   'ai_provider',
   'ai_model',
@@ -24,13 +25,14 @@ export type Campo = (typeof camposEditaveis)[number]
 
 export const nomeDoProvedor: Record<Provedor, string> = { openai: 'OpenAI', anthropic: 'Anthropic' }
 
-// editaveis tira do GET só o que o PUT leva. hotkey fica de fora: nesta
-// etapa ela é só leitura.
+// editaveis tira do GET só o que o PUT leva. hotkey e note_hotkey ficam de
+// fora: nesta etapa elas são só leitura.
 export function editaveis(c: Configuracoes): Editaveis {
   return {
     hold_threshold_ms: c.hold_threshold_ms,
     beep_enabled: c.beep_enabled,
     microphone_always_ready: c.microphone_always_ready,
+    note_trigger_enabled: c.note_trigger_enabled,
     text_mode: c.text_mode,
     ai_provider: c.ai_provider,
     ai_model: c.ai_model,
