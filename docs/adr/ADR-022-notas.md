@@ -423,6 +423,14 @@ deploy e release só com a autorização do Mauro.
 
 Ordem sugerida: L e N1 em paralelo; depois N2, N3, N6, N4, N5, N9; e N7, N8, N10.
 
+**Pedido do Mauro, 26-out-2026 (durante o teste da N9), ainda sem fase:** "Assim como no keep eu quero
+poder arrastar as notas na tela e reorganizá-las conforme eu achar melhor." Pede uma ordem manual
+gravada na nota (um campo de posição, que também entra no sync da N7) e arrastar e soltar na grade,
+com alternativa pelo teclado. A desenhar com ele antes do código: a nota nova entra no topo? Editar
+uma nota a leva para o topo (como hoje) ou ela fica onde ele a pôs? Fixadas e outras se arrastam
+cada uma no seu grupo? E no celular, segurar e arrastar? Deve vir antes da N7, para o sync já nascer
+com a posição.
+
 ## Escolhas menores (aprovadas em 25-out-2026: todas no padrão, menos a E4)
 
 - **E1. Acrescentar por voz:** segundo gatilho `Ctrl+Win+Alt` (padrão) ou frase-comando no ditado
