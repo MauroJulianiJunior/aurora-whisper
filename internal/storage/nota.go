@@ -39,6 +39,8 @@ var (
 	// ErrNotaForaDaLixeira: apagar de vez uma nota que não está na lixeira.
 	// Apagar de vez é só do que já foi para a lixeira.
 	ErrNotaForaDaLixeira = errors.New("storage: a nota não está na lixeira")
+	// ErrTokenInvalido: o token do "Criar uma nota" fora de TokenDaNotaValido.
+	ErrTokenInvalido = errors.New("storage: token da nota inválido")
 	// ErrDitadoNaLixeira: "Virar nota" num ditado que está na lixeira.
 	ErrDitadoNaLixeira = errors.New("storage: o ditado está na lixeira")
 	// ErrDitadoJaVirouNota: "Virar nota" num ditado que já virou nota. Dois
@@ -55,6 +57,27 @@ var (
 	// diferenciar maiúscula nem acento) entre os não apagados.
 	ErrMarcadorDuplicado = errors.New("storage: já existe um marcador com esse nome")
 )
+
+// PrefixoDaNotaNova marca, em local_transcriptions.virou_nota, o ditado feito
+// dentro de uma nota que ainda não existe (o "Criar uma nota" aberto): o que vem
+// depois é o token que o painel inventou para aquela caixa.
+const PrefixoDaNotaNova = "nova:"
+
+// TokenDaNotaValido diz se s serve de token do "Criar uma nota": de 1 a 64
+// caracteres de [A-Za-z0-9_-] (um UUID cabe). Nada de espaço, dois-pontos nem
+// curinga: o token entra numa comparação de texto no banco.
+func TokenDaNotaValido(s string) bool {
+	if s == "" || len(s) > 64 {
+		return false
+	}
+	for _, r := range s {
+		ok := r == '-' || r == '_' || (r >= '0' && r <= '9') || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z')
+		if !ok {
+			return false
+		}
+	}
+	return true
+}
 
 // Os tetos de texto. O corpo tem o mesmo teto do texto do ditado (e da
 // nuvem, MaxTextoBytes): o PC não aceita o que a nuvem recusaria. O título e
@@ -139,6 +162,12 @@ type NovaNota struct {
 	DitadoDeOrigem string
 	// Marcadores são ids de marcadores do mesmo usuário, não apagados.
 	Marcadores []string
+	// Token é o do "Criar uma nota" que estava aberto enquanto a pessoa ditava
+	// dentro dele (ADR-022, "Ditado feito dentro da nota"): na mesma transação em
+	// que a nota nasce, os ditados marcados com "nova:<token>" passam a apontar
+	// para ela. Vazio, nenhum. Não é a origem da nota (DitadoDeOrigem é só do
+	// "Virar nota").
+	Token string
 }
 
 // MudancaDaNota é o PATCH de uma nota: só muda o que está preenchido.
@@ -253,6 +282,12 @@ type NotaRepository interface {
 	// inexistente (ErrNotFound), na lixeira (ErrDitadoNaLixeira) e o que já
 	// virou nota (ErrDitadoJaVirouNota). Não põe nada na sync_outbox.
 	VirarNota(ctx context.Context, userID, ditadoID string) (Nota, error)
+
+	// SoltarDitadosDaNotaNova devolve ao histórico os ditados feitos dentro de um
+	// "Criar uma nota" que fechou sem criar a nota (virou_nota = "nova:<token>"
+	// volta a nulo) e devolve quantos. Nada se perde calado: o texto que a pessoa
+	// ditou e apagou continua no histórico.
+	SoltarDitadosDaNotaNova(ctx context.Context, userID, token string) (int, error)
 
 	// DesfazerVirarNota é o Desfazer do aviso: devolve o ditado ao histórico e
 	// apaga a nota SE ela não foi editada desde que nasceu (versão 1, fora da

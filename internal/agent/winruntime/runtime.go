@@ -246,6 +246,10 @@ type Runtime struct {
 	provedorASR string
 	modeloASR   string
 	usuarioHist string
+	// notaEmFoco diz se o painel avisou que o cursor está dentro de uma nota
+	// (ADR-022, "Ditado feito dentro da nota"); nil, o ditado é sempre comum.
+	// Ver UsarNotaEmFoco.
+	notaEmFoco focoDaNota
 
 	// resolucao é a política de resolução real (internal/resolver). Nil
 	// mantém o comportamento histórico: devolver o texto do ASR intocado.

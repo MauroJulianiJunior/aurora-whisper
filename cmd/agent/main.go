@@ -72,6 +72,7 @@ import (
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/agent/hook"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/agent/instancia"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/agent/localapi"
+	"github.com/MauroJulianiJunior/aurora-whisper/internal/agent/notafoco"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/agent/overlay"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/agent/painel"
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/agent/pastas"
@@ -485,6 +486,11 @@ func run(pp pastas.Pastas) error {
 		hist, prefs, dono, fecharHist := h.hist, h.prefs, h.dono, h.fechar
 		defer fecharHist()
 		rt.UsarHistorico(hist, asrProvider.ID(), model.SmallQ4_0.Nome, dono)
+		// O aviso "o cursor está dentro de uma nota" (ADR-022, "Ditado feito
+		// dentro da nota"): o painel o manda pela API local e o Runtime o
+		// consulta ao gravar o ditado. O mesmo objeto nos dois lados; só memória.
+		focoDaNota := notafoco.Novo(nil)
+		rt.UsarNotaEmFoco(focoDaNota)
 		aplicar := aplicarPreferencias(rt.Ajustar, sess, slog.Default())
 		carregarPreferencias(prefs, aplicar, slog.Default(), time.Sleep)
 
@@ -531,6 +537,7 @@ func run(pp pastas.Pastas) error {
 			Retencao: h.retencao,
 			// As notas e os marcadores (ADR-022, N1): /api/notas e /api/marcadores.
 			Notas:     h.notas,
+			Foco:      focoDaNota,
 			Microfone: novoMicrofoneDoAgent(),
 			Log:       slog.Default(),
 		}, hist, dono, aprendizado), laco))

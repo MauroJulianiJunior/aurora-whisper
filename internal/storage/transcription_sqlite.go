@@ -54,7 +54,7 @@ const colunasTranscricao = `id, user_id, device_id, source_platform, raw_text, f
 	mode, language, asr_provider, asr_model, duration_ms, processing_ms, confidence,
 	target_app, status, created_at, updated_at, deleted_at, purge_at, version,
 	sync_state, server_version, last_sync_error,
-	conflito_texto, conflito_device_id, conflito_em`
+	conflito_texto, conflito_device_id, conflito_em, virou_nota`
 
 // AoEnfileirar liga o aviso de que uma gravação pôs um marcador na fila do
 // sync (ADR-019, F7a): no Agent, o "acorde" não bloqueante do laço de sync
@@ -130,14 +130,14 @@ func inserirLinha(ctx context.Context, tx *sql.Tx, verbo string, t Transcription
 		conflitoTexto, conflitoDevice, conflitoEm = t.Conflito.FinalText, textoNulo(t.Conflito.DeviceID), emTexto(t.Conflito.Em)
 	}
 	_, err := tx.ExecContext(ctx, verbo+` INTO local_transcriptions (`+colunasTranscricao+`)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		t.ID, t.UserID, textoNulo(t.DeviceID), t.SourcePlatform, t.RawText, t.FinalText,
 		t.Mode, textoNulo(t.Language), t.ASRProvider, textoNulo(t.ASRModel),
 		inteiroNulo(t.DurationMs), inteiroNulo(t.ProcessingMs), realNulo(t.Confidence),
 		textoNulo(t.TargetApp), t.Status, emTexto(t.CreatedAt), emTexto(t.UpdatedAt),
 		instanteNulo(t.DeletedAt), instanteNulo(t.PurgeAt), t.Version,
 		t.SyncState, inteiroNulo(t.ServerVersion), textoNulo(t.LastSyncError),
-		conflitoTexto, conflitoDevice, conflitoEm)
+		conflitoTexto, conflitoDevice, conflitoEm, textoNulo(t.VirouNota))
 	return err
 }
 
@@ -535,15 +535,16 @@ func lerTranscricao(s scanner) (Transcription, error) {
 	var durationMs, processingMs, serverVersion sql.NullInt64
 	var confidence sql.NullFloat64
 	var createdAt, updatedAt string
-	var conflitoTexto, conflitoDevice, conflitoEm sql.NullString
+	var conflitoTexto, conflitoDevice, conflitoEm, virouNota sql.NullString
 
 	if err := s.Scan(&t.ID, &t.UserID, &deviceID, &t.SourcePlatform, &t.RawText, &t.FinalText,
 		&t.Mode, &language, &t.ASRProvider, &asrModel, &durationMs, &processingMs, &confidence,
 		&targetApp, &t.Status, &createdAt, &updatedAt, &deletedAt, &purgeAt, &t.Version,
 		&t.SyncState, &serverVersion, &lastSyncError,
-		&conflitoTexto, &conflitoDevice, &conflitoEm); err != nil {
+		&conflitoTexto, &conflitoDevice, &conflitoEm, &virouNota); err != nil {
 		return Transcription{}, err
 	}
+	t.VirouNota = deTexto(virouNota)
 	if conflitoTexto.Valid {
 		em, err := deTempoNulo(conflitoEm)
 		if err != nil {

@@ -209,13 +209,30 @@ func (r *SQLiteNotaRepository) Criar(ctx context.Context, p NovaNota) (Nota, err
 	if err := validarCor(p.Cor); err != nil {
 		return Nota{}, err
 	}
+	if p.Token != "" && !TokenDaNotaValido(p.Token) {
+		return Nota{}, ErrTokenInvalido
+	}
 	if strings.TrimSpace(p.Titulo) == "" && strings.TrimSpace(p.Corpo) == "" {
 		return Nota{}, ErrNotaVazia
 	}
 	agora := r.now()
 	id := NewID()
 	err := naTransacao(ctx, r.db, func(tx *sql.Tx) error {
-		return inserirNota(ctx, tx, id, agora, p)
+		if err := inserirNota(ctx, tx, id, agora, p); err != nil {
+			return err
+		}
+		if p.Token == "" {
+			return nil
+		}
+		// Os ditados feitos dentro desta caixa de "Criar uma nota" passam a ser
+		// os desta nota, na mesma transação em que ela nasce: ou a nota e o
+		// vínculo, ou nenhum. Não mexe na versão nem na fila do sync.
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE local_transcriptions SET virou_nota = ? WHERE user_id = ? AND virou_nota = ?`,
+			id, p.UserID, PrefixoDaNotaNova+p.Token); err != nil {
+			return fmt.Errorf("storage: ligando os ditados feitos na caixa à nota: %w", err)
+		}
+		return nil
 	})
 	if err != nil {
 		return Nota{}, err
@@ -495,6 +512,11 @@ func (r *SQLiteNotaRepository) PurgeExpired(ctx context.Context, now time.Time) 
 	if err != nil {
 		return 0, err
 	}
+	// Carona do mesmo ciclo: o ditado feito numa caixa "Criar uma nota" que
+	// nunca virou nota volta ao histórico depois da carência (nota_ditado_foco.go).
+	// Uma falha aqui não derruba o expurgo das notas: tenta de novo na rodada
+	// seguinte.
+	_, _ = r.LiberarDitadosDeNotasNovas(ctx, now.Add(-CarenciaDaNotaNova))
 	return apagadas, nil
 }
 

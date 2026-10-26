@@ -33,6 +33,8 @@ import (
 //	DELETE /api/marcadores/{id}                        apaga e tira das notas (204)
 //	POST   /api/history/{id}/virar-nota                "Virar nota" do ditado (201, a nota)
 //	POST   /api/notas/{id}/desfazer-virar              o Desfazer do aviso (200)
+//	PUT    /api/notas/foco                             o cursor está dentro da nota (204; notas_foco.go)
+//	DELETE /api/notas/foco                             o cursor saiu (204; corpo opcional)
 //
 // Sem o repositório montado (Preferencias.Notas nil), 503.
 //
@@ -145,6 +147,8 @@ func writeNotaError(w http.ResponseWriter, err error) {
 	case errors.Is(err, storage.ErrCorInvalida):
 		writeError(w, http.StatusBadRequest, codeBadRequest,
 			"cor inválida: use "+strings.Join(storage.CoresDaNota, ", ")+" ou null")
+	case errors.Is(err, storage.ErrTokenInvalido):
+		writeError(w, http.StatusBadRequest, codeBadRequest, "token inválido")
 	case errors.Is(err, storage.ErrNotaVazia):
 		writeError(w, http.StatusBadRequest, codeBadRequest, "a nota está vazia")
 	case errors.Is(err, storage.ErrTituloGrande):
@@ -198,6 +202,9 @@ type criarNotaRequest struct {
 	Arquivada      bool     `json:"arquivada"`
 	DitadoDeOrigem string   `json:"ditado_de_origem"`
 	Marcadores     []string `json:"marcadores"`
+	// Token é o do "Criar uma nota" aberto (PUT /api/notas/foco): os ditados
+	// feitos dentro da caixa passam a ser os desta nota, na mesma transação.
+	Token string `json:"token"`
 }
 
 // handleCriarNota atende POST /api/notas.
@@ -217,6 +224,7 @@ func (s *Server) handleCriarNota(w http.ResponseWriter, r *http.Request) {
 	n, err := repo.Criar(r.Context(), storage.NovaNota{
 		UserID: s.userID, Titulo: body.Titulo, Corpo: body.Corpo, Cor: cor, Fixada: body.Fixada,
 		Arquivada: body.Arquivada, DitadoDeOrigem: body.DitadoDeOrigem, Marcadores: body.Marcadores,
+		Token: body.Token,
 	})
 	if errors.Is(err, storage.ErrNotFound) {
 		// Aqui o 404 não é da nota (ela nem existe ainda): é um marcador do
