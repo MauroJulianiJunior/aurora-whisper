@@ -39,6 +39,15 @@ var (
 	// ErrNotaForaDaLixeira: apagar de vez uma nota que não está na lixeira.
 	// Apagar de vez é só do que já foi para a lixeira.
 	ErrNotaForaDaLixeira = errors.New("storage: a nota não está na lixeira")
+	// ErrDitadoNaLixeira: "Virar nota" num ditado que está na lixeira.
+	ErrDitadoNaLixeira = errors.New("storage: o ditado está na lixeira")
+	// ErrDitadoJaVirouNota: "Virar nota" num ditado que já virou nota. Dois
+	// cliques, ou duas abas: a segunda não cria uma segunda nota.
+	ErrDitadoJaVirouNota = errors.New("storage: o ditado já virou nota")
+	// ErrNotaNaoVeioDeDitado: desfazer o "Virar nota" de uma nota que não
+	// nasceu de um ditado, ou cujo ditado já voltou ao histórico (o Desfazer
+	// repetido).
+	ErrNotaNaoVeioDeDitado = errors.New("storage: a nota não está virada de um ditado")
 	// ErrNomeDeMarcadorInvalido: nome vazio, grande demais ou com quebra de
 	// linha.
 	ErrNomeDeMarcadorInvalido = errors.New("storage: nome de marcador inválido")
@@ -235,6 +244,32 @@ type NotaRepository interface {
 
 	// ListarMarcadores devolve os marcadores não apagados, por nome. Nunca nil.
 	ListarMarcadores(ctx context.Context, userID string) ([]MarcadorDeNota, error)
+
+	// VirarNota é a ação "Virar nota" do histórico (ADR-022, "Ditado vira
+	// nota"): cria uma nota com o texto final do ditado (o bruto, se o final
+	// está vazio) no corpo, sem título nem cor, com DitadoDeOrigem = ditadoID,
+	// e marca o ditado (virou_nota = id da nota), numa transação só. Marcado,
+	// o ditado sai do histórico SEM ir para a lixeira. Recusa o ditado
+	// inexistente (ErrNotFound), na lixeira (ErrDitadoNaLixeira) e o que já
+	// virou nota (ErrDitadoJaVirouNota). Não põe nada na sync_outbox.
+	VirarNota(ctx context.Context, userID, ditadoID string) (Nota, error)
+
+	// DesfazerVirarNota é o Desfazer do aviso: devolve o ditado ao histórico e
+	// apaga a nota SE ela não foi editada desde que nasceu (versão 1, fora da
+	// lixeira); editada, a nota fica (a pessoa já mexeu nela) e só o ditado
+	// volta. Numa transação só. A nota inexistente é ErrNotFound (apagada de
+	// vez, o ditado não volta); a que não nasceu de um ditado, ou cujo ditado
+	// já voltou, é ErrNotaNaoVeioDeDitado.
+	DesfazerVirarNota(ctx context.Context, userID, notaID string) (DesfeitoOVirarNota, error)
+}
+
+// DesfeitoOVirarNota é o resultado do DesfazerVirarNota.
+type DesfeitoOVirarNota struct {
+	// DitadoID é o ditado que voltou ao histórico.
+	DitadoID string
+	// NotaApagada: a nota não tinha sido editada e foi apagada de vez. Falso:
+	// ela tinha sido editada e continua nas notas.
+	NotaApagada bool
 }
 
 // validarTextoDaNota confere título e corpo contra os tetos e o caractere

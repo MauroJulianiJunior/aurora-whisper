@@ -215,28 +215,35 @@ func (r *SQLiteNotaRepository) Criar(ctx context.Context, p NovaNota) (Nota, err
 	agora := r.now()
 	id := NewID()
 	err := naTransacao(ctx, r.db, func(tx *sql.Tx) error {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO local_notes
-			(id, user_id, titulo, corpo, cor, fixada, arquivada, ditado_de_origem, created_at, updated_at, version, sync_state)
-			VALUES (?,?,?,?,?,?,?,?,?,?,1,'pending')`,
-			id, p.UserID, p.Titulo, p.Corpo, corNula(p.Cor), boolInt(p.Fixada), boolInt(p.Arquivada),
-			corNula(p.DitadoDeOrigem), emTexto(agora), emTexto(agora)); err != nil {
-			return fmt.Errorf("storage: gravando a nota: %w", err)
-		}
-		for _, m := range p.Marcadores {
-			if err := marcadorExiste(ctx, tx, p.UserID, m); err != nil {
-				return err
-			}
-			if _, err := tx.ExecContext(ctx,
-				`INSERT OR IGNORE INTO local_note_labels (note_id, label_id) VALUES (?, ?)`, id, m); err != nil {
-				return fmt.Errorf("storage: pondo o marcador na nota: %w", err)
-			}
-		}
-		return nil
+		return inserirNota(ctx, tx, id, agora, p)
 	})
 	if err != nil {
 		return Nota{}, err
 	}
 	return r.Get(ctx, p.UserID, id)
+}
+
+// inserirNota grava a nota nova e os marcadores dela na transação tx. É o
+// miolo do Criar e do VirarNota (que a cria na mesma transação em que marca
+// o ditado).
+func inserirNota(ctx context.Context, tx *sql.Tx, id string, agora time.Time, p NovaNota) error {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO local_notes
+		(id, user_id, titulo, corpo, cor, fixada, arquivada, ditado_de_origem, created_at, updated_at, version, sync_state)
+		VALUES (?,?,?,?,?,?,?,?,?,?,1,'pending')`,
+		id, p.UserID, p.Titulo, p.Corpo, corNula(p.Cor), boolInt(p.Fixada), boolInt(p.Arquivada),
+		corNula(p.DitadoDeOrigem), emTexto(agora), emTexto(agora)); err != nil {
+		return fmt.Errorf("storage: gravando a nota: %w", err)
+	}
+	for _, m := range p.Marcadores {
+		if err := marcadorExiste(ctx, tx, p.UserID, m); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx,
+			`INSERT OR IGNORE INTO local_note_labels (note_id, label_id) VALUES (?, ?)`, id, m); err != nil {
+			return fmt.Errorf("storage: pondo o marcador na nota: %w", err)
+		}
+	}
+	return nil
 }
 
 func (r *SQLiteNotaRepository) Listar(ctx context.Context, f FiltroDeNotas) ([]Nota, error) {

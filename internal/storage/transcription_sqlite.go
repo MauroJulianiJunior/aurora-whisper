@@ -205,7 +205,10 @@ func (r *SQLiteTranscriptionRepository) List(ctx context.Context, filter Transcr
 	// índice idx_local_transcriptions_trash. As duas colunas são TEXT em
 	// formatoTempo, de largura fixa, então a ordem do texto é a do tempo.
 	// O nome vem daqui, nunca do filtro, e por isso pode ir no SQL.
-	onde := []string{"user_id = ?"}
+	// virou_nota IS NULL: o ditado que virou nota ("Virar nota", ADR-022) sai do
+	// histórico e da lixeira sem ir para a lixeira; fica no banco, achado pelo
+	// Get (o Aprender e a auditoria leem por id).
+	onde := []string{"user_id = ?", "virou_nota IS NULL"}
 	args := []any{filter.UserID}
 	ordem := "created_at"
 	if filter.Trash {

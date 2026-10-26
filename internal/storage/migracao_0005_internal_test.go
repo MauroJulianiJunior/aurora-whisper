@@ -95,6 +95,12 @@ func linhasDe(t *testing.T, db *sql.DB, tabela string) []map[string]any {
 			}
 			m[c] = vals[i]
 		}
+		// A coluna virou_nota (0010, "Virar nota") nasce nula em todo ditado: as
+		// provas das migrations antigas comparam as linhas de antes e de
+		// depois, e a coluna nula não é "mudança". Preenchida, ela fica.
+		if v, ok := m["virou_nota"]; ok && v == nil && tabela == "local_transcriptions" {
+			delete(m, "virou_nota")
+		}
 		out = append(out, m)
 	}
 	if err := rows.Err(); err != nil {
@@ -215,7 +221,13 @@ func TestMigracao0005_NaoPerdeNemMudaNada(t *testing.T) {
 		t.Errorf("o índice velho está em %q (%v); quero na sync_outbox_0001", tabelaDoIndice, err)
 	}
 
-	// E o repositório lê o banco migrado: os seis ditados, sem selo.
+	// E o repositório lê o banco migrado: os seis ditados, sem selo. O
+	// repositório de hoje lê colunas das migrations seguintes (a virou_nota, da
+	// 0010), então o banco sobe até a última antes; no Agent o Migrator sempre
+	// roda antes de abrir o repositório.
+	if err := NewMigrator().Migrate(ctx, db); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
 	repo := NewSQLiteTranscriptionRepository(db)
 	for _, lixeira := range []bool{false, true} {
 		p, err := repo.List(ctx, TranscriptionListFilter{UserID: dono, Trash: lixeira})
