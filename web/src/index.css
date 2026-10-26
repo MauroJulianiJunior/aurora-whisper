@@ -2811,6 +2811,38 @@ a.botao {
   height: 14px;
 }
 
+/* A linha que o Agent está separando em itens (N5): o texto continua editável;
+   só o tom baixa um pouco, e a nota de espera aparece embaixo. */
+.linha-editada.separando .campo-da-linha {
+  color: var(--texto-2);
+}
+
+/* Embaixo dos itens que vieram de uma linha: "separado com IA, as mesmas
+   palavras · Desfazer" (a prévia aprovada, cena 3), em mono, discreto. */
+.desfazer-ia {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin: 4px 0 6px;
+  padding: 0 6px;
+  color: var(--texto-3);
+  font-family: var(--fonte-mono);
+  font-size: 11.5px;
+}
+
+.desfazer-ia button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--texto);
+  font-family: var(--fonte);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .linha-editada.escolhida {
   background: var(--selecao);
 }

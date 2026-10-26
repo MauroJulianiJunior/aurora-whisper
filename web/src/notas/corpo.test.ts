@@ -19,8 +19,12 @@ import {
   prefixoDigitado,
   puxar,
   separarEmItens,
+  trocarPorItens,
   voltar,
 } from './corpo'
+// Os casos da regra que o Agent também roda (ItensPorRegra, internal/resolver):
+// as duas regras não podem divergir.
+import casosDaRegra from '../../../testdata/notas-lista/regra.json'
 
 // O que importa de uma linha, sem a chave (que só existe para a tela).
 const forma = (ls: Linha[]) => ls.map(({ tipo, texto, feito }) => ({ tipo, texto, feito }))
@@ -378,6 +382,32 @@ describe('itensDaEnumeracao', () => {
   it('o mínimo de itens vale', () => {
     expect(itensDaEnumeracao('arroz, feijão', 3)).toBeNull()
     expect(itensDaEnumeracao('arroz, feijão', 2)).toEqual(['Arroz', 'Feijão'])
+  })
+})
+
+describe('a regra é a mesma do Agent (testdata/notas-lista/regra.json)', () => {
+  it.each(casosDaRegra.casos.map((c) => [c.texto, c.minimo, c.itens] as const))('%s (mínimo %i)', (texto, minimo, itens) => {
+    expect(itensDaEnumeracao(texto, minimo)).toEqual(itens)
+  })
+
+  it('a sigla do começo do item não ganha maiúscula', () => {
+    expect(itensDaEnumeracao('eSocial, iPhone e pão', 2)).toEqual(['eSocial', 'iPhone', 'Pão'])
+  })
+})
+
+describe('trocarPorItens', () => {
+  it('troca a linha pelos itens dados, no tipo pedido, e o primeiro fica com a chave', () => {
+    const [a, b] = [criarLinha('paragrafo', 'leite pão café'), criarLinha('paragrafo', 'depois')]
+    const r = trocarPorItens([a, b], a.chave, ['Leite', 'Pão', 'Café'], 'numerada')!
+    expect(escreverCorpo(r.linhas)).toBe('1. Leite\n2. Pão\n3. Café\ndepois')
+    expect(r.linhas[0]!.chave).toBe(a.chave)
+    expect(r.foco).toEqual({ chave: r.linhas[2]!.chave, pos: 'Café'.length })
+  })
+
+  it('sem itens, ou sem a linha, null', () => {
+    const a = criarLinha('paragrafo', 'x')
+    expect(trocarPorItens([a], a.chave, [])).toBeNull()
+    expect(trocarPorItens([a], a.chave + 999, ['a', 'b'])).toBeNull()
   })
 })
 

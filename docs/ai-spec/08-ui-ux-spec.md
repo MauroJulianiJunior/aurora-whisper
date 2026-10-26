@@ -1273,7 +1273,7 @@ nuvem não os tem, e o `bundle.test.ts` confere nos dois sentidos. Prévia: `doc
 Só no painel do PC (a Local API). O componente entra pelo `Ambiente` (`Ambiente.Notas`); o painel da nuvem
 não importa nada dele, e o `bundle.test.ts` confere nos dois sentidos. A fonte da verdade é o código
 (`web/src/notas/`); a prévia aprovada pelo Mauro é `docs/notas-previa-n2.html`. O que não é desta fase:
-converter trecho (N5), sync (N7), celular (N8), gatilho de voz (N9), imagens (N10).
+sync (N7), celular (N8), gatilho de voz (N9), imagens (N10); converter trecho chegou na N5.
 
 **Onde fica e a largura.** Entre **Histórico** e **Lixeira**. Com a aba aberta o painel usa a largura da
 janela (até 96 rem); as outras telas seguem em 46 rem. O título vira "Notas". A busca do topo é a busca
@@ -1299,7 +1299,7 @@ lixeira); com ponteiro de toque ela fica sempre à vista. Ações de cartão avi
 
 **A nota aberta** é uma janela (`role="dialog"`, `aria-modal`) sobre a grade, com véu e colchetes verdes nos
 cantos. O foco fica preso nela; **Esc** salva e fecha; ao fechar o foco volta ao cartão. Ao abrir, o foco
-vai para o fim do corpo. Barra: **Formatar** (só prefixo: título, marcador, número, caixa de marcar),
+vai para o fim do corpo. Barra: **Formatar** (título, marcador, número, caixa de marcar; numa linha de texto corrido, a lista separa os itens: N5, abaixo),
 **Cor** (oito cores e "sem cor"), **Imagem** (desligada, com o título "Imagens chegam depois"), **Arquivar**,
 **Fixar**, **Mais** (Copiar texto, Desmarcar tudo, Apagar marcados, Mover para a lixeira) e **Fechar**. O
 rodapé diz "editada às HH:MM" e, se veio de ditado, "veio de um ditado".
@@ -1317,6 +1317,30 @@ item vazio sai da lista); **Backspace** no começo tira o prefixo e, sem prefixo
 (colagem) e o Enter digitado dão o mesmo resultado. Na lista de marcar, o marcado desce para baixo da
 divisória recolhível "N marcados"; a ordem guardada é a ordem da tela. Shift+clique ou Shift+setas
 seleciona várias linhas para o **Formatar**.
+
+**Formatar → lista numa linha de texto corrido (N5; prévia aprovada em `docs/notas-previa-n2.html`, cena 3).**
+**Lista**, **Lista de marcar** e **Numerada** numa linha só (a do cursor, ou a única escolhida) que não é
+título e tem duas palavras ou mais mandam a linha ao Agent (`POST /api/notas/separar-itens`), que separa os
+itens com a IA da pessoa (se o Polish está ligado) ou pela regra.
+- **Esperando:** o texto da linha fica um tom mais claro e, embaixo dela, em mono, "separando em itens…"
+  (`role="status"`, a linha com `aria-busy`). A linha continua editável: nada trava a digitação.
+- **Separou:** a linha vira um item por linha, no tipo escolhido (o primeiro item fica no lugar dela, o cursor
+  vai para o fim do último), e embaixo dos itens aparece, em mono e discreto, **"separado com IA, as mesmas
+  palavras · Desfazer"** (ou **"separado por regra · Desfazer"**). **Desfazer** devolve exatamente as linhas de
+  antes, com o cursor no fim da linha separada. A nota some na primeira mudança das linhas depois disso (uma
+  tecla, marcar um item), e o Desfazer nunca leva junto uma edição feita depois.
+- **Não achou itens:** a linha só ganha o tipo pedido (vira um item), e o aviso de baixo diz "Não achei itens
+  para separar: a linha virou um item só."
+- **A linha mudou enquanto o Agent respondia:** nada é trocado, e o aviso diz "A linha mudou enquanto eu
+  separava os itens; nada foi trocado."
+- **Erro (Agent fora do ar, recusa):** o aviso diz "Não consegui separar em itens: … O texto ficou como estava."
+  O texto nunca some.
+- Várias linhas escolhidas, título, linha vazia ou de uma palavra: só o prefixo muda, sem ir ao Agent, como
+  na N2.
+- O botão **Virar lista** (N2) segue só com a regra e só aparece quando a regra separa (com vírgula). O ditado
+  numa linha de lista também segue só com a regra: sem vírgula ("leite pão café"), fica numa linha, e quem a
+  separa é o Formatar (sem chamada paga a cada ditado, e sem trocar a linha segundos depois, enquanto a
+  pessoa já digita a próxima).
 
 **Marcadores (N4; prévia aprovada em `docs/notas-previa-n4.html`).** Uma nota pode ter vários.
 - **Editar marcadores** abre uma janela pequena (`role="dialog"`, `aria-modal`, foco preso, Esc fecha, o foco

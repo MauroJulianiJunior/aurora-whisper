@@ -173,6 +173,39 @@ ou **parágrafo**.
     vírgula ("leite pão café").
 - O ditado que caiu no histórico com lista também pode ser convertido ao virar nota.
 
+**Decisões da N5 (26-out-2026), na implementação.** As marcadas **[desvio]** mudam algo escrito acima.
+- **O modelo só decide onde cortar.** O texto de cada item que volta à nota é recortado da própria linha,
+  entre a primeira e a última palavra que a guarda casou com aquele item (sem a vírgula, o ponto e vírgula e o
+  ponto das bordas, com a inicial maiúscula, menos sigla). Nada que o modelo escreveu chega à nota. Por isso
+  as guardas são as de **lista**, em `resolver.GuardarItens`, e não o `Polir` inteiro: JSON; dois itens ou
+  mais (um item só é o modelo dizendo "não é lista", motivo `um_item`); item com palavra e sem quebra; sem
+  marcador, markdown nem símbolo novo (a parte da guarda de formato que vale aqui); números iguais **item a
+  item**; as palavras da linha na mesma ordem, uma a uma, com a única folga de UM "e" logo antes de um item
+  que não é o primeiro e da inicial de cada item; e a grafia de cada palavra (sigla e nome com outra caixa,
+  `siglas_termos`; palavra comum, `caixa`). **[desvio]** A guarda de "sentido" e a consulta ao dicionário
+  não entram: sem palavra trocada nem acrescentada, e com o texto recortado da linha, não há como mudar
+  sentido nem termo. As guardas do Polish (`polish_guardas.go`) não mudaram; a ADR-016 não ganha emenda.
+- **A IA só com o Polish ligado** (modo polish, provedor e modelo escolhidos), o mesmo opt-in do ditado; fora
+  disso, a regra, e nada sai do PC.
+- **Que linhas vão ao Agent:** uma linha só (a do cursor, ou a única escolhida), que não é título, com duas
+  palavras ou mais. **[desvio]** Inclui a linha que já é item de lista: é como o ditado sem vírgula numa
+  lista ("leite pão café", que a regra não separa) vira itens. Várias linhas escolhidas, título e linha de
+  uma palavra seguem só trocando o prefixo.
+- **Sem itens** (nem a IA nem a regra), a linha só ganha o tipo pedido, com o aviso "Não achei itens para
+  separar: a linha virou um item só." O texto não muda.
+- **O ditado numa linha de lista continua só com a regra; a IA não é chamada ali.** Por quê: quase todo
+  ditado numa lista é um item só, e cada um viraria uma chamada paga sem a pessoa pedir; a resposta chega
+  segundos depois e trocaria a linha enquanto a pessoa já dita ou digita a próxima; e, com o Polish ligado, a
+  enumeração ditada já chega em linhas "- ", que a colagem separa. O Formatar cobre o caso sem vírgula, a
+  pedido. O botão "Virar lista" também segue só com a regra (e só aparece quando ela separa).
+- A regra do painel e a do Agent (`ItensPorRegra`) são a mesma e rodam os mesmos casos
+  (`testdata/notas-lista/regra.json`). Ela parte na vírgula (nunca entre dois dígitos), no ponto e vírgula e
+  no último " e "; o ponto só sai do fim, como já era desde a N2. Ganhou um ajuste nos dois lados: o item que
+  começa por sigla não ganha maiúscula ("eSocial" não vira "ESocial").
+- **[desvio]** A categoria `notas-lista` do `polishbench` mora num arquivo próprio
+  (`testdata/polish-dataset/notas-lista.json`) e roda com `-notas-lista`: outro prompt, outra saída, outras
+  métricas, e o hash do dataset do Polish, que os relatórios antigos citam, não muda (`19-eval-plan.md`).
+
 ### Lista de marcar
 
 - Marcar um item o leva para o fim da lista, abaixo de uma linha "N marcados", recolhível (como no

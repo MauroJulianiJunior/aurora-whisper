@@ -1790,6 +1790,33 @@ a linha nasce com `virou_nota` = o id da nota ou `nova:<token>`. O ditado que fa
 não mudam; só os novos nascem escondidos. O que sobrar de `nova:<token>` (painel fechado de repente, Agent
 reiniciado no meio) volta ao histórico 24 h depois, no expurgo das notas.
 
+#### POST `/api/notas/separar-itens` (ADR-022, N5, "Formatar: converter trecho")
+Separa UMA linha de texto corrido de uma nota em itens de lista. **Não grava nada**: quem troca a linha
+pelos itens é o painel, que guarda a de antes para o Desfazer. Fonte: `internal/agent/localapi/notas_lista.go`
+e `internal/resolver/notas_lista.go`.
+```json
+{ "trecho": "leite pão café e duas dúzias de ovos" }
+```
+→ `200`:
+```json
+{ "itens": ["Leite", "Pão", "Café", "Duas dúzias de ovos"], "como": "ia" }
+```
+- `como`: `"ia"` (a resposta do modelo passou pelas guardas), `"regra"` (a conversão por regra: vírgula,
+  ponto e vírgula e o último " e ", nunca dentro de "1,5") ou `"nenhum"` (nem uma nem outra separou;
+  `itens` é `[]`, nunca `null`, e o texto fica como está).
+- **Quando vai à IA:** só com o Polish ligado nas preferências (`text_mode` `polish`, `ai_provider` e
+  `ai_model` preenchidos), pelo mesmo provedor, modelo e chave do Polish (a chave lida do Gerenciador de
+  Credenciais a cada pedido), com o prompt `notas-lista@1` (`17-prompt-spec.md`) e o prazo do Polish para
+  o tamanho do trecho (3,5 s a 8 s). Fora disso, sem chave, sem rede, no prazo estourado, com erro do
+  provedor ou com a resposta recusada pelas guardas, vale a regra. Uma palavra só nem vai ao provedor.
+- **Os itens são pedaços do trecho**, com a inicial maiúscula (menos sigla): o modelo só decide onde
+  cortar, e o texto de cada item é recortado do trecho.
+- `400 BAD_REQUEST`: corpo inválido ou com campo desconhecido, acima de 16 KiB, trecho vazio, com quebra
+  de linha (uma linha por vez) ou com mais de 2.000 caracteres. Não depende do repositório das notas (sem
+  `503`).
+- O log leva só `como`, o motivo (o enum: `palavras`, `numeros`, `um_item`, `prazo`...) e a versão do
+  prompt; nunca o trecho nem a resposta.
+
 ### Configurações
 Acrescentado em 29-set-2026 (tela de Configurações do painel). Fonte da verdade:
 `internal/agent/localapi/settings.go` e `ia.go`.

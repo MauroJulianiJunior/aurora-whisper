@@ -35,6 +35,7 @@ import (
 //	POST   /api/notas/{id}/desfazer-virar              o Desfazer do aviso (200)
 //	PUT    /api/notas/foco                             o cursor está dentro da nota (204; notas_foco.go)
 //	DELETE /api/notas/foco                             o cursor saiu (204; corpo opcional)
+//	POST   /api/notas/separar-itens                    uma linha em itens, com IA ou por regra (notas_lista.go)
 //
 // Sem o repositório montado (Preferencias.Notas nil), 503.
 //

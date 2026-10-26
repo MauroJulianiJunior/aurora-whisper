@@ -167,6 +167,10 @@ func pedidoPolish(ch Chamada, req resolver.PolishRequest) map[string]any {
 			},
 		}
 	}
+	nomeDoSchema := req.SchemaNome
+	if nomeDoSchema == "" {
+		nomeDoSchema = resolver.PolishSchemaNome
+	}
 	corpo := map[string]any{
 		"model":        ch.Modelo,
 		"instructions": req.Instrucoes,
@@ -174,7 +178,7 @@ func pedidoPolish(ch Chamada, req resolver.PolishRequest) map[string]any {
 		"text": map[string]any{
 			"format": map[string]any{
 				"type":   "json_schema",
-				"name":   resolver.PolishSchemaNome,
+				"name":   nomeDoSchema,
 				"strict": true,
 				"schema": req.Schema,
 			},

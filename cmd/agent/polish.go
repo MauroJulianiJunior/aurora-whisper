@@ -70,6 +70,20 @@ func (a *polishDoAgent) abrir(provedor, modelo string, contar func(entrada, said
 	}.Abrir()
 }
 
+// clienteDaLista implementa localapi.ClienteDaLista: o cliente do Polish para
+// a separação em itens das notas (ADR-022, N5), no provedor e no modelo das
+// preferências de agora. A chave é lida do cofre a cada chamada, como no
+// ditado; sem provedor válido, nil (e a API local fica na regra).
+func (a *polishDoAgent) clienteDaLista(provedor, modelo string) resolver.PolishClient {
+	return polish.Montagem{
+		Cliente:  a.cliente,
+		Esforco:  a.esforco,
+		Provedor: provedor,
+		Modelo:   modelo,
+		Chave:    func(context.Context) (string, error) { return a.cofre.Ler(provedor) },
+	}.ClienteDaLista()
+}
+
 // ultimoPolishParaATela traduz o último Polish do runtime para a API local
 // (polish_ultimo_motivo, fatia S5): o motivo, o provedor do keydown e a
 // hora. Nenhum Polish ainda: false, e a tela não mostra nada. Só o enum

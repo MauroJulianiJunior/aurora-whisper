@@ -71,6 +71,10 @@ type PolishRequest struct {
 	Mensagem string `json:"-"`
 	// Schema é PolishSchemaSaida(), com PolishSchemaNome como nome.
 	Schema map[string]any `json:"-"`
+	// SchemaNome é o nome do schema no provedor (OpenAI). Vazio usa
+	// PolishSchemaNome; a separação em itens das notas (notas_lista.go) passa
+	// NotasListaSchemaNome.
+	SchemaNome string `json:"-"`
 	// PromptRef é PolishPromptRef, para o log do cliente ("polish-ptbr@1.0.2").
 	PromptRef string `json:"-"`
 }

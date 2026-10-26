@@ -96,6 +96,12 @@ type Preferencias struct {
 	// Em produção é o mesmo *notafoco.Marcador que o Runtime consulta ao gravar
 	// um ditado. Nil: as duas rotas respondem 503 e todo ditado vai ao histórico.
 	Foco *notafoco.Marcador
+	// ClienteDaLista é a IA da separação em itens das notas (ADR-022, N5): POST
+	// /api/notas/separar-itens chama com o provedor e o modelo das
+	// preferências, só quando o modo de texto é "polish". Em produção, o
+	// cliente do Polish do Agent (a chave lida do cofre a cada chamada). Nil:
+	// a separação é sempre pela regra, e nada sai da máquina.
+	ClienteDaLista ClienteDaLista
 	// Microfone é o aviso de microfone bloqueado pelo Windows e o botão que
 	// abre a tela certa: /api/microfone*. Nil: as rotas respondem 503.
 	Microfone Microfone
@@ -214,6 +220,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /api/notas/{id}/definitivo", s.handleApagarNotaDeVez)
 	mux.HandleFunc("PUT /api/notas/{id}/marcadores/{marcador}", s.handleMarcarNota)
 	mux.HandleFunc("DELETE /api/notas/{id}/marcadores/{marcador}", s.handleDesmarcarNota)
+
+	mux.HandleFunc("POST /api/notas/separar-itens", s.handleSepararItens)
 
 	mux.HandleFunc("PUT /api/notas/foco", s.handlePutFoco)
 	mux.HandleFunc("DELETE /api/notas/foco", s.handleDeleteFoco)

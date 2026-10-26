@@ -49,8 +49,29 @@ func (m Montagem) Abrir() (*resolver.PolishResolver, string) {
 	if !ia.Valido(m.Provedor) {
 		return pr, ""
 	}
+	cliente, esforco := m.cliente()
+	pr.Client = cliente
+	return pr, RotuloDoEsforco(m.Provedor, esforco)
+}
+
+// ClienteDaLista devolve só o resolver.PolishClient da Montagem, sem o
+// PolishResolver: é o que a separação em itens das notas usa (ADR-022, N5;
+// resolver.SepararItens), com o mesmo provedor, modelo, chave e política de
+// esforço do Polish. Smart não é lido. Sem provedor válido, nil (sem
+// cliente: a separação fica na regra, sem ler a chave).
+func (m Montagem) ClienteDaLista() resolver.PolishClient {
+	if !ia.Valido(m.Provedor) {
+		return nil
+	}
+	cliente, _ := m.cliente()
+	return cliente
+}
+
+// cliente monta o clienteDoDitado e devolve o esforço que ele manda. Só com
+// provedor válido.
+func (m Montagem) cliente() (*clienteDoDitado, string) {
 	esforco := m.Esforco.Atual(m.Provedor, m.Modelo)
-	pr.Client = &clienteDoDitado{
+	return &clienteDoDitado{
 		polidor: ia.Polidor{
 			Cliente: m.Cliente,
 			Chamada: ia.Chamada{Provedor: m.Provedor, Modelo: m.Modelo, Esforco: esforco},
@@ -65,8 +86,7 @@ func (m Montagem) Abrir() (*resolver.PolishResolver, string) {
 		provedor: m.Provedor,
 		modelo:   m.Modelo,
 		esforco:  esforco,
-	}
-	return pr, RotuloDoEsforco(m.Provedor, esforco)
+	}, esforco
 }
 
 // clienteDoDitado é o resolver.PolishClient de um ditado: o ia.Polidor, e
