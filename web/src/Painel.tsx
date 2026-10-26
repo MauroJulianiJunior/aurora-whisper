@@ -179,6 +179,9 @@ export function Painel({ ambiente, focarNoTitulo = false }: Props) {
   }, [texto])
 
   useEffect(() => {
+    // Nas Notas a busca do topo é delas: o histórico não a lê (e lê de novo,
+    // sem a busca, ao voltar).
+    if (emNotas) return
     const ctrl = new AbortController()
     ultimaCarga.current = Date.now()
     const consulta = { chave, vista, busca }
@@ -225,7 +228,7 @@ export function Painel({ ambiente, focarNoTitulo = false }: Props) {
       },
     )
     return () => ctrl.abort()
-  }, [cliente, vista, busca, chave, avisar, acender, textos])
+  }, [cliente, vista, busca, chave, avisar, acender, textos, emNotas])
 
   // Voltar para a aba recarrega a lista: quem dita com o painel aberto ao
   // lado precisa ver o ditado novo sem apertar F5 — que, por segurança,

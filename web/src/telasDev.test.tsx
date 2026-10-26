@@ -70,6 +70,28 @@ describe('os cenários do Histórico em /telas-dev.html', () => {
   })
 })
 
+// A aba Notas (ADR-022, N2), para ver a grade e os oito tons sem Agent.
+describe('os cenários das Notas em /telas-dev.html', () => {
+  it('notas: a aba abre sozinha com as oito cores, a fixada em cima e os três marcadores', async () => {
+    window.history.replaceState(null, '', '/telas-dev.html?cenario=notas')
+    vi.resetModules()
+    await import('./testes/telasDev')
+    await screen.findByText('Compras da semana', { selector: 'h3' }, { timeout: 4000 })
+    const cores = Array.from(document.querySelectorAll('.grade [data-cor]')).map((c) => c.getAttribute('data-cor'))
+    expect(new Set(cores).size).toBe(8)
+    expect(within(screen.getByRole('region', { name: 'Fixadas' })).getByText('Compras da semana', { selector: 'h3' })).toBeTruthy()
+    const fila = screen.getByRole('group', { name: 'Marcadores' })
+    await waitFor(() => expect(within(fila).getByRole('button', { name: 'Escritório 1' })).toBeTruthy())
+  })
+
+  it('notas-vazio: a aba abre sozinha e diz que não há nota', async () => {
+    window.history.replaceState(null, '', '/telas-dev.html?cenario=notas-vazio')
+    vi.resetModules()
+    await import('./testes/telasDev')
+    await screen.findByText('Nenhuma nota ainda.', undefined, { timeout: 4000 })
+  })
+})
+
 // A orientação das chaves (lançamento): o primeiro uso e a seção IA sem chave,
 // para ver e renderizar sem Agent.
 describe('os cenários das chaves em /telas-dev.html', () => {
