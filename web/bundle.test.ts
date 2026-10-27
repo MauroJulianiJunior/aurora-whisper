@@ -197,6 +197,13 @@ describe('o bundle local (bin\\painel)', () => {
     'Groq',
     // A chave do app é "só para o celular" (REQ-053); a do PC, "só para o Aurora Whisper".
     'o celular',
+    // ADR-022, N8: a aba Notas é a mesma, mas o cliente da nuvem, o ditado para a nota
+    // pelo celular, o Desfazer dele e o banco do aparelho são só do app.
+    '/api/v1/notes',
+    '/undo-note',
+    'Ditado-Nota',
+    'indexedDB',
+    'aurora-notas',
   ])('não tem %s', (texto) => {
     expect(local.js).not.toContain(texto)
   })

@@ -79,7 +79,9 @@ export interface ChegadaNaNota {
   nota: Nota
   nova: boolean
   linhas: number
-  desfazer(): Promise<{ nota_apagada: boolean }>
+  // desfazer: nota_voltou diz se a nota voltou ao que era (sem ela, a nota
+  // mudou depois do ditado e ficou).
+  desfazer(): Promise<{ nota_voltou: boolean }>
 }
 
 // PropsDoDitarParaNota é o que a aba Notas passa ao botão "Ditar para nota" do

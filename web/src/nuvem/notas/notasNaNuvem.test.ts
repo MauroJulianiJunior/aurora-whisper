@@ -88,6 +88,19 @@ describe('sem rede: marcar, desmarcar e acrescentar item', () => {
     expect(depois.notas.cliente).toBeTruthy()
   })
 
+  it('a janela que ficou aberta enquanto a fila subia continua da versão nova, sem conflito com ela mesma', async () => {
+    const m = montar()
+    await m.notas.cliente.listarNotas({ vista: 'ativas' })
+    m.nuvem.cair()
+    const naFila = await m.notas.cliente.editarNota('n1', 1, { corpo: marcado })
+    expect(naFila.version).toBe(1)
+    m.nuvem.voltar()
+    await m.notas.subir()
+    // A janela ainda acha que está na versão 1; a próxima gravação parte da 2.
+    await m.notas.cliente.editarNota('n1', naFila.version, { titulo: 'Lista do domingo' })
+    expect(m.nuvem.patches().at(-1)).toEqual({ titulo: 'Lista do domingo', base_version: 2, corpo: marcado, corpo_base: marcado })
+  })
+
   it('acrescentar item vale; mudar o texto de um item, o título, a cor ou criar nota esperam a rede', async () => {
     const m = montar()
     await m.notas.cliente.listarNotas({ vista: 'ativas' })

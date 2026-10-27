@@ -104,6 +104,7 @@ export function ambienteNuvem(
     // A aba Notas (ADR-022, N8): o componente do PC, com o cliente da nuvem.
     Notas: (props) => <Notas cliente={notas.cliente} celular={celular} {...props} />,
     aoSemSessao,
+    encerrar: () => notas.encerrar(),
     excluirDeVez: (id) => cliente.excluirDeVez(id),
     resolverConflito: (id, versao, escolha) => cliente.resolverConflito(id, versao, escolha),
     textos: {

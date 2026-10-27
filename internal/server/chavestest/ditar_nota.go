@@ -139,9 +139,10 @@ func testDitarParaNotaAcrescenta(t *testing.T, m *mundo) {
 		Ditado struct {
 			VirouNota *string `json:"virou_nota"`
 		} `json:"ditado"`
+		NotaVoltou  bool `json:"nota_voltou"`
 		NotaApagada bool `json:"nota_apagada"`
 	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &u); err != nil || u.NotaApagada || u.Ditado.VirouNota != nil {
+	if err := json.Unmarshal(rec.Body.Bytes(), &u); err != nil || u.NotaApagada || !u.NotaVoltou || u.Ditado.VirouNota != nil {
 		t.Fatalf("o Desfazer = %s", rec.Body.String())
 	}
 	n, err := m.b.Store.GetNote(context.Background(), m.userA, lista.ID)
@@ -179,7 +180,7 @@ func testDitarParaNotaNotaNova(t *testing.T, m *mundo) {
 	}
 	rec = m.pedir(celA, http.MethodPost, "/api/v1/transcriptions/"+id+"/undo-note", jsonDe(t, map[string]any{"versao": 1}))
 	m.exigirStatus(rec, http.StatusOK, "o Desfazer")
-	if !strings.Contains(rec.Body.String(), `"nota_apagada":true`) {
+	if !strings.Contains(rec.Body.String(), `"nota_voltou":true,"nota_apagada":true`) {
 		t.Fatalf("o Desfazer não apagou a nota nova: %s", rec.Body.String())
 	}
 	if _, err := m.b.Store.GetNote(context.Background(), m.userA, d.Nota.ID); err == nil {
@@ -198,7 +199,7 @@ func testDitarParaNotaNotaNova(t *testing.T, m *mundo) {
 		http.StatusOK, "editar a nota nova")
 	rec = m.pedir(celA, http.MethodPost, "/api/v1/transcriptions/"+id2+"/undo-note", jsonDe(t, map[string]any{"versao": 1}))
 	m.exigirStatus(rec, http.StatusOK, "o Desfazer da nota editada")
-	if !strings.Contains(rec.Body.String(), `"nota_apagada":false`) {
+	if !strings.Contains(rec.Body.String(), `"nota_voltou":false,"nota_apagada":false`) {
 		t.Fatalf("o Desfazer apagou a nota editada: %s", rec.Body.String())
 	}
 	if n, err := m.b.Store.GetNote(context.Background(), m.userA, d2.Nota.ID); err != nil || n.Corpo != "editada" {

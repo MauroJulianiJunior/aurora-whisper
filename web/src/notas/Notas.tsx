@@ -512,7 +512,7 @@ export function Notas({
         c.desfazer().then(
           (r) => {
             recarregar()
-            avisar(r.nota_apagada ? 'Ditado de volta ao histórico.' : 'Ditado de volta ao histórico. A nota ficou, porque mudou depois do ditado.')
+            avisar(r.nota_voltou ? 'Ditado de volta ao histórico.' : 'Ditado de volta ao histórico. A nota ficou, porque mudou depois do ditado.')
           },
           (e: unknown) => falhar(e),
         )

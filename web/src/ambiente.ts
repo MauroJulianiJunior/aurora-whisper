@@ -240,6 +240,10 @@ export interface Ambiente {
   // na nuvem, a lista é relida só ao voltar à aba. A leitura que falha é
   // ignorada; o 404 de um Agent de antes da S faz o Painel parar de perguntar.
   mudancasDoSync?(sinal: AbortSignal): Promise<number>
+  // encerrar: a tela deste ambiente saiu (a sessão acabou, outra entrada o
+  // trocou): ele solta o que ouve (a rede, os temporizadores). Só a nuvem o tem
+  // (as notas do celular, N8).
+  encerrar?(): void
   // ditar é o microfone do celular (ADR-021, C6a): o botão ao lado da busca, a
   // faixa da onda e o envio. Só a nuvem o tem, e o código do gravador só entra
   // no build dela (bundle.test.ts). Um componente por ambiente: o gravador, e o

@@ -327,10 +327,12 @@ type undoNoteRequest struct {
 	CorpoAntes *string `json:"corpo_antes"`
 }
 
-// undoNoteDTO é a resposta do Desfazer: o ditado de volta ao histórico e se a
-// nota saiu (a nota nova intacta).
+// undoNoteDTO é a resposta do Desfazer: o ditado de volta ao histórico, se a
+// nota voltou ao que era (nota_voltou) e se ela saiu (nota_apagada: a nota
+// nova intacta). Sem nota_voltou, a nota mudou depois do ditado e ficou.
 type undoNoteDTO struct {
 	Ditado      itemDTO `json:"ditado"`
+	NotaVoltou  bool    `json:"nota_voltou"`
 	NotaApagada bool    `json:"nota_apagada"`
 }
 
@@ -345,12 +347,12 @@ func handleDictationUndoNote(store cloudstore.Store, now func() time.Time) http.
 		if !ok {
 			return
 		}
-		t, apagada, err := store.UndoParaNota(r.Context(), actorOf(principal), r.PathValue("id"),
+		d, err := store.UndoParaNota(r.Context(), actorOf(principal), r.PathValue("id"),
 			cloudstore.PedidoDeDesfazer{Versao: body.Versao, CorpoAntes: body.CorpoAntes}, now())
 		if err != nil {
 			writeNoteError(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, undoNoteDTO{Ditado: toItemDTO(t), NotaApagada: apagada})
+		writeJSON(w, http.StatusOK, undoNoteDTO{Ditado: toItemDTO(d.Ditado), NotaVoltou: d.NotaVoltou, NotaApagada: d.NotaApagada})
 	}
 }

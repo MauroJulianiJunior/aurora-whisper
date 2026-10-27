@@ -321,19 +321,16 @@ func DecidirParaNota(ativas []Note, t Transcription, topo string, a Actor, now t
 	return plano, o, nil
 }
 
-func (s *MemoryStore) UndoParaNota(_ context.Context, a Actor, id string, p PedidoDeDesfazer, now time.Time) (Transcription, bool, error) {
+func (s *MemoryStore) UndoParaNota(_ context.Context, a Actor, id string, p PedidoDeDesfazer, now time.Time) (Desfeito, error) {
 	if a.DeviceID != "" {
-		return Transcription{}, false, ErrDeviceNotAllowed
+		return Desfeito{}, ErrDeviceNotAllowed
 	}
 	now = Normalize(now)
 	canon, ok := CanonicalUUID(id)
 	if !ok {
-		return Transcription{}, false, ErrNotFound
+		return Desfeito{}, ErrNotFound
 	}
-	var (
-		out     Transcription
-		apagada bool
-	)
+	var out Desfeito
 	err := s.writeVarios(a.UserID, func(u *memUser, proximo func() int64) error {
 		t, ok := u.items[canon]
 		if !ok {
@@ -348,10 +345,10 @@ func (s *MemoryStore) UndoParaNota(_ context.Context, a Actor, id string, p Pedi
 			u.gravarNota(*nota, n.ID, proximo(), a, now)
 		}
 		u.put(ditado.Next, proximo(), a, now)
-		out, apagada = u.items[canon], notaApagada
+		out = Desfeito{Ditado: u.items[canon], NotaVoltou: nota != nil, NotaApagada: notaApagada}
 		return nil
 	})
-	return out, apagada, err
+	return out, err
 }
 
 // DecidirDesfazer decide o Desfazer inteiro antes de gravar: a nota (nil: fica

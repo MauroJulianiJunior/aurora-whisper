@@ -423,19 +423,16 @@ func (s *Store) CreateParaNota(ctx context.Context, a cloudstore.Actor, epoch, i
 	return out, created, destino, nil
 }
 
-func (s *Store) UndoParaNota(ctx context.Context, a cloudstore.Actor, id string, p cloudstore.PedidoDeDesfazer, now time.Time) (cloudstore.Transcription, bool, error) {
+func (s *Store) UndoParaNota(ctx context.Context, a cloudstore.Actor, id string, p cloudstore.PedidoDeDesfazer, now time.Time) (cloudstore.Desfeito, error) {
 	if a.DeviceID != "" {
-		return cloudstore.Transcription{}, false, cloudstore.ErrDeviceNotAllowed
+		return cloudstore.Desfeito{}, cloudstore.ErrDeviceNotAllowed
 	}
 	now = cloudstore.Normalize(now)
 	canon, ok := cloudstore.CanonicalUUID(id)
 	if !ok {
-		return cloudstore.Transcription{}, false, cloudstore.ErrNotFound
+		return cloudstore.Desfeito{}, cloudstore.ErrNotFound
 	}
-	var (
-		out     cloudstore.Transcription
-		apagada bool
-	)
+	var out cloudstore.Desfeito
 	err := s.gravar(ctx, a.UserID, func(tx pgx.Tx, seq int64, _ string) (bool, error) {
 		t, err := readForUpdate(ctx, tx, a.UserID, canon)
 		if err != nil {
@@ -467,10 +464,9 @@ func (s *Store) UndoParaNota(ctx context.Context, a cloudstore.Actor, id string,
 		if err := gravarVirouNota(ctx, tx, a.UserID, t.ID, t.VirouNota, ditado.Next.VirouNota); err != nil {
 			return false, err
 		}
-		out = ditado.Next
-		out.LastSeq = seqDoDitado
-		apagada = notaApagada
+		out = cloudstore.Desfeito{Ditado: ditado.Next, NotaVoltou: nota != nil, NotaApagada: notaApagada}
+		out.Ditado.LastSeq = seqDoDitado
 		return true, nil
 	})
-	return out, apagada, err
+	return out, err
 }

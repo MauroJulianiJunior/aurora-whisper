@@ -658,7 +658,7 @@ type Store interface {
 	CreateParaNota(ctx context.Context, a Actor, epoch, id string, n NewDictation, now time.Time) (Transcription, bool, DestinoDoDitado, error)
 	// UndoParaNota é o Desfazer do aviso (PlanejarDesfazer): o ditado volta ao
 	// histórico e a nota volta ao que era, se ninguém mexeu nela. Devolve o
-	// ditado e se a nota saiu. ErrNotFound sem o ditado; ErrNotLinked se ele
-	// não está numa nota.
-	UndoParaNota(ctx context.Context, a Actor, id string, p PedidoDeDesfazer, now time.Time) (Transcription, bool, error)
+	// ditado e o que houve com a nota. ErrNotFound sem o ditado; ErrNotLinked se
+	// ele não está numa nota.
+	UndoParaNota(ctx context.Context, a Actor, id string, p PedidoDeDesfazer, now time.Time) (Desfeito, error)
 }

@@ -32,7 +32,7 @@ const ditado = {
 function montar(resposta: DitadoGravado) {
   const p = plataformaFalsa()
   const ditar = vi.fn<(pedido: PedidoDeDitado, sinal?: AbortSignal) => Promise<DitadoGravado>>(async () => resposta)
-  const desfazerDitadoNaNota = vi.fn(async () => ({ nota_apagada: false }))
+  const desfazerDitadoNaNota = vi.fn(async () => ({ nota_voltou: true }))
   const cliente = { ditar, desfazerDitadoNaNota } as unknown as ClienteNuvem
   const receber = vi.fn()
   const notas = { receber } as unknown as NotasNaNuvem

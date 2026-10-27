@@ -22,7 +22,7 @@
 // sessão, a aprovação no lugar do Painel; sem ela, Entrar, que volta ao
 // mesmo endereço depois do login.
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { type Buscador, ForaDoAr, SemSessao, buscadorPadrao } from '../api'
 import type { Ambiente } from '../ambiente'
 import { Painel } from '../Painel'
@@ -195,6 +195,17 @@ function AppDaConta({
       )
       .finally(() => setTentando(false))
   }
+
+  // O ambiente que sai de cena (a sessão acabou, uma entrada nova o trocou) solta
+  // o que ouve: as notas do celular param de olhar a rede e de tentar subir.
+  // (Pela troca, e não pela limpeza do efeito: o StrictMode do dev roda a limpeza
+  // uma vez de mentira.)
+  const ambienteAtual = tela.tipo === 'pronto' ? tela.ambiente : null
+  const ambienteAnterior = useRef<Ambiente | null>(null)
+  useEffect(() => {
+    if (ambienteAnterior.current && ambienteAnterior.current !== ambienteAtual) ambienteAnterior.current.encerrar?.()
+    ambienteAnterior.current = ambienteAtual
+  }, [ambienteAtual])
 
   // A volta do login: a página de aprovação, quando é ela (um caminho
   // desta origem, que o servidor confere com o ValidarVolta).

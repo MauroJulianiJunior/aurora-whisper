@@ -160,8 +160,9 @@ export interface ClienteNuvem extends ClienteDoHistorico {
   // desfazerDitadoNaNota é o Desfazer do aviso do "Ditar para nota" (N8; POST
   // /transcriptions/{id}/undo-note): o ditado volta ao histórico, e a nota ao que
   // era, se ninguém mexeu nela desde o ditado (a versão e o corpo de antes vieram
-  // na resposta do ditado). nota_apagada: a nota nova saiu.
-  desfazerDitadoNaNota(ditadoId: string, versao: number, corpoAntes?: string): Promise<{ nota_apagada: boolean }>
+  // na resposta do ditado). nota_voltou: a nota voltou ao que era (a nova saiu,
+  // ou o corpo de antes voltou); sem ela, a nota mudou depois e ficou.
+  desfazerDitadoNaNota(ditadoId: string, versao: number, corpoAntes?: string): Promise<{ nota_voltou: boolean }>
   // O ditado pelo celular na conta (ADR-021, "O aceite e as preferências" e "As
   // chaves"; o contrato é o do 06-api-contract.md, fixado pela C3a e pela C3b).
   // Os erros chegam em ErroDaApi.codigo (SEM_ACEITE, AVISO_DESATUALIZADO...). A
@@ -410,8 +411,8 @@ export function criarClienteNuvem(buscar: Buscador = buscadorPadrao): ClienteNuv
       // O 409 aqui é "o ditado já não está numa nota" (outro aparelho desfez):
       // chega como ErroDaApi, com a frase.
       const r = await pedir(buscar, `${doItem(ditadoId)}/undo-note`, comJson('POST', corpo), false)
-      const { nota_apagada } = (await r.json()) as { nota_apagada?: unknown }
-      return { nota_apagada: nota_apagada === true }
+      const { nota_voltou } = (await r.json()) as { nota_voltou?: unknown }
+      return { nota_voltou: nota_voltou === true }
     },
     async estadoDoDitado() {
       const r = await pedir(buscar, '/api/v1/dictation', daOrigem(), false)

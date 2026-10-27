@@ -104,6 +104,11 @@ export class NotasNaNuvem {
   private versoes = new Map<string, Map<number, { titulo: string; corpo: string }>>()
   private marcadores: Marcador[] = []
   private fila = new Map<string, MudancaEsperando>()
+  // equivalente: a versão que a fila deu à janela (a base da entrada) e a versão
+  // em que a nuvem gravou exatamente aquele conteúdo, quando a entrada subiu. A
+  // janela ainda aberta continua com a de antes; a próxima gravação dela parte
+  // da nova, e não vira um conflito com ela mesma.
+  private equivalente = new Map<string, { de: number; para: number }>()
   private atual: EstadoDaRede
   private ouvintes = new Set<() => void>()
   private avisos = new Set<(texto: string) => void>()
@@ -285,6 +290,13 @@ export class NotasNaNuvem {
     return e ? { ...n, titulo: e.titulo, corpo: e.corpo, esperando: true } : n
   }
 
+  // versaoDe troca a versão que a janela tem pela que a nuvem deu ao mesmo
+  // conteúdo quando a fila subiu (equivalente).
+  private versaoDe(id: string, versaoDaJanela: number): number {
+    const eq = this.equivalente.get(id)
+    return eq && eq.de === versaoDaJanela && !this.fila.has(id) ? eq.para : versaoDaJanela
+  }
+
   private conteudoNaVersao(id: string, versao: number): { titulo: string; corpo: string } | undefined {
     return this.versoes.get(id)?.get(versao)
   }
@@ -408,6 +420,7 @@ export class NotasNaNuvem {
     this.guardar(s)
     const agora = this.fila.get(id)
     if (!agora || (agora.titulo === enviado.titulo && agora.corpo === enviado.corpo)) {
+      if (s.titulo === enviado.titulo && s.corpo === enviado.corpo) this.equivalente.set(id, { de: e.baseVersion, para: s.version })
       this.tirarDaFila(id)
     } else {
       // Mudou enquanto subia: o resto fica na fila. Se a nuvem gravou o que foi
@@ -511,8 +524,9 @@ export class NotasNaNuvem {
         if (p.arquivada !== undefined) corpo.arquivada = p.arquivada
         return this.lerNota(await this.pedido('/api/v1/notes', this.comJson('POST', corpo)))
       },
-      editarNota: async (id, versao, mudanca: MudancaDaNota) => {
+      editarNota: async (id, versaoDaJanela, mudanca: MudancaDaNota) => {
         await this.pronto
+        const versao = this.versaoDe(id, versaoDaJanela)
         const soConteudo = Object.keys(mudanca).every((k) => k === 'titulo' || k === 'corpo')
         if (this.fila.has(id) || this.atual.semRede) {
           if (!soConteudo) throw new SoComRede()
@@ -565,7 +579,7 @@ export class NotasNaNuvem {
       },
       resolverConflitoDaNota: async (id, versao, escolha) => {
         this.exigirRede()
-        return this.lerNota(await this.pedido(daNota(id), this.comJson('PATCH', { base_version: versao, resolver_conflito: escolha })))
+        return this.lerNota(await this.pedido(daNota(id), this.comJson('PATCH', { base_version: this.versaoDe(id, versao), resolver_conflito: escolha })))
       },
       listarMarcadores: async (sinal) => {
         await this.pronto

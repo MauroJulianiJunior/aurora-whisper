@@ -558,6 +558,15 @@ type PedidoDeDesfazer struct {
 	CorpoAntes *string
 }
 
+// Desfeito é o que o Desfazer fez: o ditado de volta ao histórico e, com a
+// nota, NotaVoltou (ela voltou ao que era: apagada, se nasceu do ditado, ou
+// com o corpo de antes) e NotaApagada (a nota nova saiu).
+type Desfeito struct {
+	Ditado      Transcription
+	NotaVoltou  bool
+	NotaApagada bool
+}
+
 // PlanoDoDesfazer é o que o Desfazer grava: a mutação da nota (nil: a nota
 // fica como está) e a do ditado, que volta ao histórico.
 type PlanoDoDesfazer struct {
