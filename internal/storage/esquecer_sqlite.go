@@ -13,14 +13,15 @@ import (
 // dono fixo (que nem passa por ChaveDaNuvem).
 var chavesDaConexao = []string{
 	"nuvem_url", ChaveNuvemConta, "nuvem_email", "nuvem_nome", ChaveNuvemAparelho, ChaveNuvemConectadoEm,
-	ChaveNuvemEnvioAceitoEm, ChaveNuvemEnvioTotal, ChaveNuvemCopia,
+	ChaveNuvemEnvioAceitoEm, ChaveNuvemEnvioTotal, ChaveNuvemCopia, ChaveNuvemNotas,
 }
 
 // EsquecerNuvem é o "Esquecer esta nuvem" (ADR-019, "Decisões da F7c"), numa
 // transação. Esquece tudo o que liga este PC à nuvem e à conta: as chaves da
 // conexão e do envio (chavesDaConexao), o cursor e o epoch (sync_state), a
 // fila inteira (sync_outbox) e, nas linhas, só o que é do sync
-// (server_version, a situação e o erro). Nenhum ditado muda de conteúdo: o
+// (server_version, a situação e o erro; nas notas, também o corpo_nuvem).
+// Nenhum ditado nem nota muda de conteúdo: o
 // texto, a lixeira, o aparelho de origem e o selo ficam; ficam também o dono
 // fixo, o install_id, as preferências e as cópias.
 //
@@ -78,6 +79,12 @@ func (f *Fila) EsquecerNuvem(ctx context.Context, agora time.Time) error {
 			 WHERE user_id = ? AND (server_version IS NOT NULL OR sync_state <> ? OR last_sync_error IS NOT NULL)`,
 			SituacaoNormal, f.dono, SituacaoNormal); err != nil {
 			return fmt.Errorf("storage: esquecendo as versões da nuvem: %w", err)
+		}
+		// As notas e os marcadores de nota (N7), como os ditados: as versões,
+		// a situação e o corpo_nuvem saem (a nuvem seguinte não tem nada
+		// disso); o selo e o "marcador que espera" ficam.
+		if err := f.esquecerNotas(ctx, tx); err != nil {
+			return err
 		}
 		anotar := map[string]string{ChaveNuvemEsquecidaEm: emTexto(agora)}
 		if recebeu == 1 {

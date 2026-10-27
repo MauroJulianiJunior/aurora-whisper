@@ -434,10 +434,12 @@ func TestVirarNota_SeisMesesNaoAlcancaODitado(t *testing.T) {
 	}
 }
 
-// Nada vai para a fila do sync: nem marcador de nota, nem marcador do ditado,
-// mesmo com a nuvem conectada e o ditado que ela já tem. O controle: editar o
-// texto do mesmo ditado enfileira, o que prova que o cenário emitiria.
-func TestVirarNota_NaoPoeNadaNaFilaDoSync(t *testing.T) {
+// A fila do sync (N7): com a nuvem conectada e o ditado que ela já tem, o
+// "Virar nota" põe a nota nova (campos 0) e o virou_nota do ditado
+// (CampoVirouNota) na mesma transação; o Desfazer põe o virou_nota de novo e,
+// como a nota intacta sai de vez sem nunca ter subido, a lápide dela não fica.
+// O ditado não sobe a versão local nem a hora (a base do sync não mexe).
+func TestVirarNota_PoeANotaEOVirouNotaNaFila(t *testing.T) {
 	v := novoVirarDeTeste(t)
 	ctx := context.Background()
 	executar(t, v.db, `INSERT INTO instalacao (nome, valor) VALUES (?, 'aparelho-1')`, storage.ChaveNuvemAparelho)
@@ -455,14 +457,21 @@ func TestVirarNota_NaoPoeNadaNaFilaDoSync(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c := v.contar(t, `SELECT COUNT(*) FROM sync_outbox`); c != 0 {
-		t.Fatalf("Virar nota deixou %d marcador(es) na sync_outbox", c)
+	if c := v.contar(t, `SELECT COUNT(*) FROM sync_outbox WHERE entity_type = 'note' AND entity_id = '`+n.ID+`' AND campos = 0`); c != 1 {
+		t.Errorf("a nota nova na fila: %d", c)
 	}
+	if c := v.contar(t, `SELECT COUNT(*) FROM sync_outbox WHERE entity_type = 'transcription' AND entity_id = 'd1' AND campos = 4`); c != 1 {
+		t.Errorf("o virou_nota do ditado na fila: %d", c)
+	}
+	executar(t, v.db, `DELETE FROM sync_outbox WHERE entity_type = 'transcription'`)
 	if _, err := v.notas.DesfazerVirarNota(ctx, v.dono, n.ID); err != nil {
 		t.Fatal(err)
 	}
-	if c := v.contar(t, `SELECT COUNT(*) FROM sync_outbox`); c != 0 {
-		t.Fatalf("o Desfazer deixou %d marcador(es) na sync_outbox", c)
+	if c := v.contar(t, `SELECT COUNT(*) FROM sync_outbox WHERE entity_type = 'note'`); c != 0 {
+		t.Errorf("a nota que nunca subiu deixou %d marcador(es) depois de sair de vez", c)
+	}
+	if c := v.contar(t, `SELECT COUNT(*) FROM sync_outbox WHERE entity_type = 'transcription' AND entity_id = 'd1' AND campos = 4`); c != 1 {
+		t.Errorf("o Desfazer não pôs o virou_nota do ditado na fila: %d", c)
 	}
 	var versaoDepois int64
 	var atualizadoDepois string
@@ -471,14 +480,6 @@ func TestVirarNota_NaoPoeNadaNaFilaDoSync(t *testing.T) {
 	}
 	if versaoDepois != versaoAntes || atualizadoDepois != atualizadoAntes {
 		t.Errorf("o ditado mudou de versão (%d -> %d) ou de hora: a base do sync não pode mexer", versaoAntes, versaoDepois)
-	}
-
-	// Controle.
-	if _, err := v.hist.UpdateFinalText(ctx, v.dono, "d1", versaoAntes, "editado"); err != nil {
-		t.Fatal(err)
-	}
-	if c := v.contar(t, `SELECT COUNT(*) FROM sync_outbox`); c != 1 {
-		t.Fatalf("o controle (editar o texto) deixou %d marcador(es); o cenário não emitiria, e o teste não prova nada", c)
 	}
 }
 

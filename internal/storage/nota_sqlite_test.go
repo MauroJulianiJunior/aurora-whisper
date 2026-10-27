@@ -741,10 +741,12 @@ func TestMarcadores_ApagarTiraDasNotasENaoApagaNota(t *testing.T) {
 	}
 }
 
-// TestNotas_NaoMexemNaFilaDoSync prova a regra da N1: o motor de sync ainda
-// não conhece nota nem marcador, e nenhuma operação deste repositório põe
-// marcador em sync_outbox.
-func TestNotas_NaoMexemNaFilaDoSync(t *testing.T) {
+// TestNotas_DesconectadoNaoMexemNaFilaDoSync prova a regra da emissão (N7)
+// do lado desconectado: sem a nuvem conectada e sem a versão dela, nenhuma
+// operação deste repositório põe marcador em sync_outbox (o que nunca subiu
+// sobe pela completação, depois do aceite). O lado conectado está em
+// nota_sync_test.go.
+func TestNotas_DesconectadoNaoMexemNaFilaDoSync(t *testing.T) {
 	db := openTestDB(t)
 	ctx := context.Background()
 	if err := storage.NewMigrator().Migrate(ctx, db); err != nil {
@@ -772,7 +774,7 @@ func TestNotas_NaoMexemNaFilaDoSync(t *testing.T) {
 		t.Fatal(err)
 	}
 	if fila != 0 {
-		t.Errorf("sync_outbox tem %d marcador(es); as notas não podem escrever nela na N1", fila)
+		t.Errorf("sync_outbox tem %d marcador(es); desconectado, nada que a nuvem não tem entra", fila)
 	}
 	var fora int
 	if err := db.QueryRowContext(ctx, `SELECT COUNT(1) FROM local_labels WHERE sync_state <> 'pending'`).Scan(&fora); err != nil || fora != 0 {
@@ -827,9 +829,10 @@ func TestSchema_VarreduraVeAsColunasDa0009(t *testing.T) {
 	if err := storage.NewMigrator().Migrate(ctx, db); err != nil {
 		t.Fatal(err)
 	}
-	// As colunas das tabelas das notas vêm da 0009 e da 0012 (a posicao).
+	// As colunas das tabelas das notas vêm da 0009, da 0012 (a posicao) e da
+	// 0013 (o selo e o corpo_nuvem).
 	vistas := map[string]bool{}
-	for _, arquivo := range []string{"0009_notas.sql", "0012_notas_posicao.sql"} {
+	for _, arquivo := range []string{"0009_notas.sql", "0012_notas_posicao.sql", "0013_notas_sync.sql"} {
 		conteudo, err := os.ReadFile(filepath.Join("migrations", arquivo))
 		if err != nil {
 			t.Fatal(err)
@@ -858,7 +861,7 @@ func TestSchema_VarreduraVeAsColunasDa0009(t *testing.T) {
 		}
 		cols.Close()
 	}
-	if total != 17+10+2 {
-		t.Errorf("as tabelas das notas têm %d colunas, esperava 29", total)
+	if total != 22+10+2 {
+		t.Errorf("as tabelas das notas têm %d colunas, esperava 34", total)
 	}
 }

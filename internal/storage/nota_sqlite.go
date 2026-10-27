@@ -17,12 +17,49 @@ const DiasDaLixeiraDasNotas = 30
 // SQLiteNotaRepository persiste as notas e os marcadores nas tabelas
 // local_notes, local_labels e local_note_labels (migration 0009).
 //
-// Nada daqui toca a sync_outbox: o motor de sync ainda não conhece notas nem
-// marcadores (ver nota.go); as linhas ficam com sync_state 'pending' até a N7.
+// Cada gravação põe o marcador da nota ou do marcador na sync_outbox na
+// mesma transação (N7, nota_sync.go), e avisa o laço do sync depois do
+// commit (AoEnfileirar).
 type SQLiteNotaRepository struct {
 	db *sql.DB
 	// agora é o relógio das gravações; os testes trocam por UsarRelogio.
 	agora atomic.Pointer[func() time.Time]
+	// aviso é chamado depois do commit de uma gravação que pôs (ou mudou) um
+	// marcador na fila do sync. Nunca dentro da transação, e não pode
+	// bloquear (o mesmo contrato do SQLiteTranscriptionRepository).
+	aviso atomic.Pointer[func()]
+}
+
+// AoEnfileirar liga o aviso de que uma gravação pôs um marcador de nota, de
+// marcador de nota ou de ditado (o virou_nota) na fila do sync (N7): no
+// Agent, o "acorde" não bloqueante do laço (syncengine.Laco.Avisar). nil
+// desliga.
+func (r *SQLiteNotaRepository) AoEnfileirar(f func()) {
+	if f == nil {
+		r.aviso.Store(nil)
+		return
+	}
+	r.aviso.Store(&f)
+}
+
+func (r *SQLiteNotaRepository) avisar() {
+	if f := r.aviso.Load(); f != nil {
+		(*f)()
+	}
+}
+
+// gravar roda fn numa transação, com o anotador do que entrou na fila, e
+// avisa depois do commit se algo entrou.
+func (r *SQLiteNotaRepository) gravar(ctx context.Context, fn func(tx *sql.Tx, fila *naFila) error) error {
+	var fila naFila
+	err := naTransacao(ctx, r.db, func(tx *sql.Tx) error {
+		fila = naFila{}
+		return fn(tx, &fila)
+	})
+	if err == nil && fila.emitiu {
+		r.avisar()
+	}
+	return err
 }
 
 var _ NotaRepository = (*SQLiteNotaRepository)(nil)
@@ -54,7 +91,8 @@ func (r *SQLiteNotaRepository) now() time.Time {
 }
 
 const colunasNota = `id, user_id, titulo, corpo, cor, fixada, arquivada, ditado_de_origem,
-	created_at, updated_at, deleted_at, purge_at, version, sync_state, server_version, last_sync_error, posicao`
+	created_at, updated_at, deleted_at, purge_at, version, sync_state, server_version, last_sync_error, posicao,
+	conflito_titulo, conflito_corpo, conflito_device_id, conflito_em, corpo_nuvem`
 
 const colunasMarcador = `id, user_id, nome, created_at, updated_at, deleted_at, version, sync_state, server_version`
 
@@ -65,11 +103,26 @@ func lerNota(s scanner) (Nota, error) {
 	var fixada, arquivada int
 	var serverVersion sql.NullInt64
 	var criada, atualizada string
+	var seloTitulo, seloCorpo, seloDevice, seloEm, corpoNuvem sql.NullString
 	if err := s.Scan(&n.ID, &n.UserID, &n.Titulo, &n.Corpo, &cor, &fixada, &arquivada, &origem,
-		&criada, &atualizada, &deletedAt, &purgeAt, &n.Version, &n.SyncState, &serverVersion, &lastErr, &n.Posicao); err != nil {
+		&criada, &atualizada, &deletedAt, &purgeAt, &n.Version, &n.SyncState, &serverVersion, &lastErr, &n.Posicao,
+		&seloTitulo, &seloCorpo, &seloDevice, &seloEm, &corpoNuvem); err != nil {
 		return Nota{}, err
 	}
 	var err error
+	// O selo: os quatro juntos (a escrita grava sempre os quatro); o título é
+	// o que diz que há selo.
+	if seloTitulo.Valid {
+		n.Conflito = &ConflitoDaNota{Titulo: seloTitulo.String, Corpo: seloCorpo.String, DeviceID: deTexto(seloDevice)}
+		em, err := deTempoNulo(seloEm)
+		if err != nil {
+			return Nota{}, err
+		}
+		if em != nil {
+			n.Conflito.Em = *em
+		}
+	}
+	n.CorpoNuvem = deTexto(corpoNuvem)
 	if n.CreatedAt, err = deTempo(criada); err != nil {
 		return Nota{}, err
 	}
@@ -217,8 +270,11 @@ func (r *SQLiteNotaRepository) Criar(ctx context.Context, p NovaNota) (Nota, err
 	}
 	agora := r.now()
 	id := NewID()
-	err := naTransacao(ctx, r.db, func(tx *sql.Tx) error {
+	err := r.gravar(ctx, func(tx *sql.Tx, fila *naFila) error {
 		if err := inserirNota(ctx, tx, id, agora, p); err != nil {
+			return err
+		}
+		if err := fila.anotar(emitirNota(ctx, tx, id, 0, agora)); err != nil {
 			return err
 		}
 		if p.Token == "" {
@@ -226,11 +282,23 @@ func (r *SQLiteNotaRepository) Criar(ctx context.Context, p NovaNota) (Nota, err
 		}
 		// Os ditados feitos dentro desta caixa de "Criar uma nota" passam a ser
 		// os desta nota, na mesma transação em que ela nasce: ou a nota e o
-		// vínculo, ou nenhum. Não mexe na versão nem na fila do sync.
+		// vínculo, ou nenhum. Não mexe na versão do ditado; o virou_nota de cada
+		// um entra na fila (CampoVirouNota) se a nuvem já tem o ditado (o que
+		// ela ainda não tem sobe inteiro, com o virou_nota lido na hora).
+		ligados, err := lerIDs(ctx, tx,
+			`SELECT id FROM local_transcriptions WHERE user_id = ? AND virou_nota = ?`, p.UserID, PrefixoDaNotaNova+p.Token)
+		if err != nil {
+			return err
+		}
 		if _, err := tx.ExecContext(ctx,
 			`UPDATE local_transcriptions SET virou_nota = ? WHERE user_id = ? AND virou_nota = ?`,
 			id, p.UserID, PrefixoDaNotaNova+p.Token); err != nil {
 			return fmt.Errorf("storage: ligando os ditados feitos na caixa à nota: %w", err)
+		}
+		for _, d := range ligados {
+			if err := fila.anotar(emitir(ctx, tx, d, CampoVirouNota, agora)); err != nil {
+				return err
+			}
 		}
 		return nil
 	})
@@ -391,19 +459,24 @@ func (r *SQLiteNotaRepository) Atualizar(ctx context.Context, userID, id string,
 		}
 	}
 	agora := r.now()
-	err := naTransacao(ctx, r.db, func(tx *sql.Tx) error {
+	err := r.gravar(ctx, func(tx *sql.Tx, fila *naFila) error {
 		if err := conferirNotaEditavel(ctx, tx, userID, id, baseVersion); err != nil {
 			return err
 		}
+		antes, err := lerNota(tx.QueryRowContext(ctx,
+			`SELECT `+colunasNota+` FROM local_notes WHERE id = ? AND user_id = ?`, id, userID))
+		if err != nil {
+			return fmt.Errorf("storage: lendo a nota: %w", err)
+		}
+		// Os bits do sync são do que MUDOU de fato: o painel manda o título e o
+		// corpo juntos a cada salvar, e um bit à toa vira um conflito à toa.
+		campos := camposDaMudanca(antes, m)
 		sets := []string{"version = version + 1", "updated_at = ?"}
 		args := []any{emTexto(agora)}
 		// Fixar, desafixar, arquivar e desarquivar levam a nota para o topo do
 		// grupo de destino. Editar o resto (texto, cor) não mexe na posição.
 		if m.Fixada != nil || m.Arquivada != nil {
-			arquivada, fixada, err := grupoDaNota(ctx, tx, userID, id)
-			if err != nil {
-				return err
-			}
+			arquivada, fixada := antes.Arquivada, antes.Fixada
 			destArquivada, destFixada := arquivada, fixada
 			if m.Arquivada != nil {
 				destArquivada = *m.Arquivada
@@ -417,6 +490,7 @@ func (r *SQLiteNotaRepository) Atualizar(ctx context.Context, userID, id string,
 					return err
 				}
 				sets, args = append(sets, "posicao = ?"), append(args, posicao)
+				campos |= CampoNotaPosicao
 			}
 		}
 		if m.Titulo != nil {
@@ -444,12 +518,40 @@ func (r *SQLiteNotaRepository) Atualizar(ctx context.Context, userID, id string,
 		if n, _ := res.RowsAffected(); n == 0 {
 			return ErrVersionConflict
 		}
-		return nil
+		if campos == 0 {
+			return nil // nada mudou de verdade: nada a subir
+		}
+		return fila.anotar(emitirNota(ctx, tx, id, campos, agora))
 	})
 	if err != nil {
 		return Nota{}, err
 	}
 	return r.Get(ctx, userID, id)
+}
+
+// camposDaMudanca devolve os bits do sync do que m muda de fato em antes (a
+// posição, que depende do grupo, fica com quem chama).
+func camposDaMudanca(antes Nota, m MudancaDaNota) int {
+	campos := 0
+	if (m.Titulo != nil && *m.Titulo != antes.Titulo) || (m.Corpo != nil && *m.Corpo != antes.Corpo) {
+		campos |= CampoNotaConteudo
+	}
+	if m.MudarCor {
+		atual := ""
+		if antes.Cor != nil {
+			atual = *antes.Cor
+		}
+		if m.Cor != atual {
+			campos |= CampoNotaCor
+		}
+	}
+	if m.Fixada != nil && *m.Fixada != antes.Fixada {
+		campos |= CampoNotaFixada
+	}
+	if m.Arquivada != nil && *m.Arquivada != antes.Arquivada {
+		campos |= CampoNotaArquivada
+	}
+	return campos
 }
 
 // conferirNotaEditavel confere, na transação, que a nota existe, é do usuário,
@@ -477,7 +579,7 @@ func conferirNotaEditavel(ctx context.Context, tx *sql.Tx, userID, id string, ba
 func (r *SQLiteNotaRepository) SoftDelete(ctx context.Context, userID, id string, now time.Time) error {
 	agora := now.UTC()
 	purga := agora.AddDate(0, 0, DiasDaLixeiraDasNotas)
-	return naTransacao(ctx, r.db, func(tx *sql.Tx) error {
+	return r.gravar(ctx, func(tx *sql.Tx, fila *naFila) error {
 		// "deleted_at IS NULL": a nota que já está na lixeira não é tocada;
 		// reapagar não reinicia o prazo (como no histórico).
 		res, err := tx.ExecContext(ctx,
@@ -490,7 +592,7 @@ func (r *SQLiteNotaRepository) SoftDelete(ctx context.Context, userID, id string
 		if n, _ := res.RowsAffected(); n == 0 {
 			return notaExiste(ctx, tx, userID, id)
 		}
-		return nil
+		return fila.anotar(lixeiraDaNotaNaFila(ctx, tx, id, agora))
 	})
 }
 
@@ -509,7 +611,7 @@ func notaExiste(ctx context.Context, tx *sql.Tx, userID, id string) error {
 
 func (r *SQLiteNotaRepository) Restaurar(ctx context.Context, userID, id string) (Nota, error) {
 	agora := r.now()
-	err := naTransacao(ctx, r.db, func(tx *sql.Tx) error {
+	err := r.gravar(ctx, func(tx *sql.Tx, fila *naFila) error {
 		// A nota que volta da lixeira vai para o topo do grupo dela (a ordem de
 		// quando foi apagada não vale mais: o grupo pode ter mudado de tamanho).
 		arquivada, fixada, err := grupoDaNota(ctx, tx, userID, id)
@@ -530,7 +632,7 @@ func (r *SQLiteNotaRepository) Restaurar(ctx context.Context, userID, id string)
 		if n, _ := res.RowsAffected(); n == 0 {
 			return notaExiste(ctx, tx, userID, id)
 		}
-		return nil
+		return fila.anotar(emitirNota(ctx, tx, id, CampoNotaLixeira|CampoNotaPosicao, agora))
 	})
 	if err != nil {
 		return Nota{}, err
@@ -539,10 +641,12 @@ func (r *SQLiteNotaRepository) Restaurar(ctx context.Context, userID, id string)
 }
 
 func (r *SQLiteNotaRepository) ApagarDeVez(ctx context.Context, userID, id string) error {
-	return naTransacao(ctx, r.db, func(tx *sql.Tx) error {
+	agora := r.now()
+	return r.gravar(ctx, func(tx *sql.Tx, fila *naFila) error {
 		var deletedAt sql.NullString
+		var versao sql.NullInt64
 		err := tx.QueryRowContext(ctx,
-			`SELECT deleted_at FROM local_notes WHERE id = ? AND user_id = ?`, id, userID).Scan(&deletedAt)
+			`SELECT deleted_at, server_version FROM local_notes WHERE id = ? AND user_id = ?`, id, userID).Scan(&deletedAt, &versao)
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrNotFound
 		}
@@ -552,33 +656,65 @@ func (r *SQLiteNotaRepository) ApagarDeVez(ctx context.Context, userID, id strin
 		if !deletedAt.Valid {
 			return ErrNotaForaDaLixeira
 		}
-		if _, err := tx.ExecContext(ctx, `DELETE FROM local_note_labels WHERE note_id = ?`, id); err != nil {
-			return fmt.Errorf("storage: apagando os marcadores da nota: %w", err)
+		if err := apagarNotaDaTabela(ctx, tx, id); err != nil {
+			return err
 		}
-		if _, err := tx.ExecContext(ctx, `DELETE FROM local_notes WHERE id = ? AND user_id = ?`, id, userID); err != nil {
-			return fmt.Errorf("storage: apagando a nota: %w", err)
-		}
-		return nil
+		return fila.anotar(lapideLocal(ctx, tx, EntidadeNota, id, versao.Valid, agora))
 	})
+}
+
+// apagarNotaDaTabela apaga a nota e as ligações dela com os marcadores, na
+// transação. A fila fica com quem chama (a lápide, ou a resposta da nuvem).
+func apagarNotaDaTabela(ctx context.Context, tx *sql.Tx, id string) error {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM local_note_labels WHERE note_id = ?`, id); err != nil {
+		return fmt.Errorf("storage: apagando os marcadores da nota: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM local_notes WHERE id = ?`, id); err != nil {
+		return fmt.Errorf("storage: apagando a nota: %w", err)
+	}
+	return nil
 }
 
 func (r *SQLiteNotaRepository) PurgeExpired(ctx context.Context, now time.Time) (int, error) {
 	apagadas := 0
-	err := naTransacao(ctx, r.db, func(tx *sql.Tx) error {
-		vencidas := `FROM local_notes WHERE deleted_at IS NOT NULL AND purge_at IS NOT NULL AND purge_at <= ?`
-		if _, err := tx.ExecContext(ctx,
-			`DELETE FROM local_note_labels WHERE note_id IN (SELECT id `+vencidas+`)`, emTexto(now.UTC())); err != nil {
-			return fmt.Errorf("storage: expurgando os marcadores das notas: %w", err)
-		}
-		res, err := tx.ExecContext(ctx, `DELETE `+vencidas, emTexto(now.UTC()))
+	agora := now.UTC()
+	err := r.gravar(ctx, func(tx *sql.Tx, fila *naFila) error {
+		apagadas = 0
+		linhas, err := tx.QueryContext(ctx,
+			`SELECT id, server_version IS NOT NULL FROM local_notes
+			 WHERE deleted_at IS NOT NULL AND purge_at IS NOT NULL AND purge_at <= ?`, emTexto(agora))
 		if err != nil {
-			return fmt.Errorf("storage: expurgando as notas: %w", err)
+			return fmt.Errorf("storage: lendo as notas vencidas: %w", err)
 		}
-		n, err := res.RowsAffected()
-		if err != nil {
-			return fmt.Errorf("storage: expurgando as notas: %w", err)
+		type vencida struct {
+			id        string
+			comVersao bool
 		}
-		apagadas = int(n)
+		var vencidas []vencida
+		for linhas.Next() {
+			var v vencida
+			if err := linhas.Scan(&v.id, &v.comVersao); err != nil {
+				linhas.Close()
+				return fmt.Errorf("storage: lendo as notas vencidas: %w", err)
+			}
+			vencidas = append(vencidas, v)
+		}
+		if err := linhas.Err(); err != nil {
+			linhas.Close()
+			return fmt.Errorf("storage: lendo as notas vencidas: %w", err)
+		}
+		linhas.Close()
+		// Cada nota expurgada vira a lápide local dela (a nuvem que a tem fica
+		// sabendo; a que nunca a teve não ouve nada), na mesma transação.
+		for _, v := range vencidas {
+			if err := apagarNotaDaTabela(ctx, tx, v.id); err != nil {
+				return fmt.Errorf("storage: expurgando as notas: %w", err)
+			}
+			if err := fila.anotar(lapideLocal(ctx, tx, EntidadeNota, v.id, v.comVersao, agora)); err != nil {
+				return err
+			}
+			apagadas++
+		}
 		return nil
 	})
 	if err != nil {
@@ -594,7 +730,7 @@ func (r *SQLiteNotaRepository) PurgeExpired(ctx context.Context, now time.Time) 
 
 func (r *SQLiteNotaRepository) Marcar(ctx context.Context, userID, notaID, marcadorID string) (Nota, error) {
 	agora := r.now()
-	err := naTransacao(ctx, r.db, func(tx *sql.Tx) error {
+	err := r.gravar(ctx, func(tx *sql.Tx, fila *naFila) error {
 		if err := conferirNotaEditavel(ctx, tx, userID, notaID, -1); err != nil {
 			return err
 		}
@@ -609,7 +745,10 @@ func (r *SQLiteNotaRepository) Marcar(ctx context.Context, userID, notaID, marca
 		if n, _ := res.RowsAffected(); n == 0 {
 			return nil // já tinha: nada mudou, a versão fica
 		}
-		return subirANota(ctx, tx, userID, notaID, agora)
+		if err := subirANota(ctx, tx, userID, notaID, agora); err != nil {
+			return err
+		}
+		return fila.anotar(emitirNota(ctx, tx, notaID, CampoNotaMarcadores, agora))
 	})
 	if err != nil {
 		return Nota{}, err
@@ -619,7 +758,7 @@ func (r *SQLiteNotaRepository) Marcar(ctx context.Context, userID, notaID, marca
 
 func (r *SQLiteNotaRepository) Desmarcar(ctx context.Context, userID, notaID, marcadorID string) (Nota, error) {
 	agora := r.now()
-	err := naTransacao(ctx, r.db, func(tx *sql.Tx) error {
+	err := r.gravar(ctx, func(tx *sql.Tx, fila *naFila) error {
 		if err := conferirNotaEditavel(ctx, tx, userID, notaID, -1); err != nil {
 			return err
 		}
@@ -631,7 +770,10 @@ func (r *SQLiteNotaRepository) Desmarcar(ctx context.Context, userID, notaID, ma
 		if n, _ := res.RowsAffected(); n == 0 {
 			return nil
 		}
-		return subirANota(ctx, tx, userID, notaID, agora)
+		if err := subirANota(ctx, tx, userID, notaID, agora); err != nil {
+			return err
+		}
+		return fila.anotar(emitirNota(ctx, tx, notaID, CampoNotaMarcadores, agora))
 	})
 	if err != nil {
 		return Nota{}, err
@@ -679,7 +821,7 @@ func (r *SQLiteNotaRepository) CriarMarcador(ctx context.Context, userID, nome s
 	}
 	agora := r.now()
 	id := NewID()
-	err = naTransacao(ctx, r.db, func(tx *sql.Tx) error {
+	err = r.gravar(ctx, func(tx *sql.Tx, fila *naFila) error {
 		if usado, err := nomeEmUso(ctx, tx, userID, chave, ""); err != nil {
 			return err
 		} else if usado {
@@ -694,7 +836,7 @@ func (r *SQLiteNotaRepository) CriarMarcador(ctx context.Context, userID, nome s
 			}
 			return fmt.Errorf("storage: gravando o marcador: %w", err)
 		}
-		return nil
+		return fila.anotar(emitirMarcadorDeNota(ctx, tx, id, 0, agora))
 	})
 	if err != nil {
 		return MarcadorDeNota{}, err
@@ -720,10 +862,11 @@ func (r *SQLiteNotaRepository) RenomearMarcador(ctx context.Context, userID, id 
 		return MarcadorDeNota{}, err
 	}
 	agora := r.now()
-	err = naTransacao(ctx, r.db, func(tx *sql.Tx) error {
+	err = r.gravar(ctx, func(tx *sql.Tx, fila *naFila) error {
 		var versao int64
+		var nomeAntes string
 		err := tx.QueryRowContext(ctx,
-			`SELECT version FROM local_labels WHERE id = ? AND user_id = ? AND deleted_at IS NULL`, id, userID).Scan(&versao)
+			`SELECT version, nome FROM local_labels WHERE id = ? AND user_id = ? AND deleted_at IS NULL`, id, userID).Scan(&versao, &nomeAntes)
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrNotFound
 		}
@@ -751,7 +894,10 @@ func (r *SQLiteNotaRepository) RenomearMarcador(ctx context.Context, userID, id 
 		if n, _ := res.RowsAffected(); n == 0 {
 			return ErrVersionConflict
 		}
-		return nil
+		if limpo == nomeAntes {
+			return nil // o mesmo nome: nada a subir
+		}
+		return fila.anotar(emitirMarcadorDeNota(ctx, tx, id, CampoMarcadorNome, agora))
 	})
 	if err != nil {
 		return MarcadorDeNota{}, err
@@ -761,7 +907,13 @@ func (r *SQLiteNotaRepository) RenomearMarcador(ctx context.Context, userID, id 
 
 func (r *SQLiteNotaRepository) ApagarMarcador(ctx context.Context, userID, id string) error {
 	agora := r.now()
-	return naTransacao(ctx, r.db, func(tx *sql.Tx) error {
+	return r.gravar(ctx, func(tx *sql.Tx, fila *naFila) error {
+		var versao sql.NullInt64
+		err := tx.QueryRowContext(ctx,
+			`SELECT server_version FROM local_labels WHERE id = ? AND user_id = ? AND deleted_at IS NULL`, id, userID).Scan(&versao)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("storage: lendo o marcador: %w", err)
+		}
 		res, err := tx.ExecContext(ctx,
 			`UPDATE local_labels SET deleted_at = ?, updated_at = ?, version = version + 1
 			 WHERE id = ? AND user_id = ? AND deleted_at IS NULL`,
@@ -781,9 +933,16 @@ func (r *SQLiteNotaRepository) ApagarMarcador(ctx context.Context, userID, id st
 			}
 			return nil
 		}
-		// Tira o marcador das notas (a mudança de cada uma sobe a versão, para
-		// o sync da N7 vê-la; a hora de edição não muda, para a nota não pular
-		// para o topo da lista só porque um marcador sumiu).
+		// Tira o marcador das notas (a mudança de cada uma sobe a versão e
+		// entra na fila com CampoNotaMarcadores: a nuvem não sobe a versão das
+		// notas ao apagar o marcador, e quem manda as notas mudadas é o PC que
+		// apagou; a hora de edição não muda, para a nota não pular para o topo
+		// da lista só porque um marcador sumiu).
+		notas, err := lerIDs(ctx, tx,
+			`SELECT note_id FROM local_note_labels WHERE label_id = ? ORDER BY note_id`, id)
+		if err != nil {
+			return err
+		}
 		if _, err := tx.ExecContext(ctx,
 			`UPDATE local_notes SET version = version + 1
 			 WHERE user_id = ? AND id IN (SELECT note_id FROM local_note_labels WHERE label_id = ?)`,
@@ -793,7 +952,14 @@ func (r *SQLiteNotaRepository) ApagarMarcador(ctx context.Context, userID, id st
 		if _, err := tx.ExecContext(ctx, `DELETE FROM local_note_labels WHERE label_id = ?`, id); err != nil {
 			return fmt.Errorf("storage: tirando o marcador das notas: %w", err)
 		}
-		return nil
+		for _, n := range notas {
+			if err := fila.anotar(emitirNota(ctx, tx, n, CampoNotaMarcadores, agora)); err != nil {
+				return err
+			}
+		}
+		// O marcador fica na tabela (soft, como sempre), e a fila leva a
+		// lápide dele (lapideLocal).
+		return fila.anotar(lapideLocal(ctx, tx, EntidadeMarcadorDeNota, id, versao.Valid, agora))
 	})
 }
 

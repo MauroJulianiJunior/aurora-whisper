@@ -526,6 +526,8 @@ func run(pp pastas.Pastas) error {
 			aprendizado.semConferir = true
 		}
 		laco := montarSync(hist, dono, nuvemDoPC, aprendizado, slog.Default())
+		// As notas e os marcadores (ADR-022, N7) acordam o laço como o ditado.
+		h.notas.AoEnfileirar(laco.Avisar)
 		defer iniciarSync(laco, slog.Default())()
 		resumoDaNuvem = laco.Resumo
 
