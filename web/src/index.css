@@ -2341,6 +2341,13 @@ a.botao {
     box-shadow 120ms var(--curva);
 }
 
+/* O cartão com um menu aberto (Cor, Marcadores, Mais) sobe: o transform de cada
+   cartão faz dele uma camada própria, e sem isto o cartão seguinte (o de baixo,
+   na grade) pinta por cima do menu. Abaixo do cartão arrastado (20). */
+.ordenada > :has(.menu) {
+  z-index: 10;
+}
+
 /* O cartão levantado: segue o ponteiro (sem transição, senão ficaria para trás),
    com sombra e uma escala leve; não recebe o ponteiro, que é de quem arrasta. */
 .ordenada > [data-arrastando] {
