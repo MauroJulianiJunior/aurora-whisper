@@ -93,24 +93,37 @@ func (s *MemoryStore) Reter(ctx context.Context, userID string, now time.Time) (
 // arrumar apaga o sync_event órfão vencido (PrazoDosEventos) e a resposta
 // guardada vencida (PrazoDasMutacoes). O evento que é o last_seq de um ditado
 // ou de um aprendido vivo (o desfeito inclusive) fica: o pull tira dele o
-// aparelho de origem. Os de lápide e os de entidade apagada são órfãos.
+// aparelho de origem. Os de lápide e os de entidade apagada são órfãos. Os
+// eventos das notas e dos marcadores (N7) seguem a mesma regra, com a nota e
+// o marcador vivos no lugar do ditado e do aprendido. As lápides das notas e
+// dos marcadores nunca vencem.
 func (u *memUser) arrumar(now time.Time) (eventos, mutacoes int64) {
-	vivos := make(map[int64]bool, len(u.items)+len(u.learned))
+	vivos := make(map[int64]bool, len(u.items)+len(u.learned)+len(u.notes)+len(u.labels))
 	for _, t := range u.items {
 		vivos[t.LastSeq] = true
 	}
 	for _, l := range u.learned {
 		vivos[l.LastSeq] = true
 	}
-	kept := make([]Event, 0, len(u.events))
-	for _, e := range u.events {
-		if !vivos[e.Seq] && EventoVencido(e.ChangedAt, now) {
-			eventos++
-			continue
-		}
-		kept = append(kept, e)
+	for _, n := range u.notes {
+		vivos[n.LastSeq] = true
 	}
-	u.events = kept
+	for _, l := range u.labels {
+		vivos[l.LastSeq] = true
+	}
+	limpar := func(lista []Event) []Event {
+		kept := make([]Event, 0, len(lista))
+		for _, e := range lista {
+			if !vivos[e.Seq] && EventoVencido(e.ChangedAt, now) {
+				eventos++
+				continue
+			}
+			kept = append(kept, e)
+		}
+		return kept
+	}
+	u.events = limpar(u.events)
+	u.noteEvents = limpar(u.noteEvents)
 	for id, a := range u.applied {
 		if MutacaoVencida(a.at, now) {
 			delete(u.applied, id)

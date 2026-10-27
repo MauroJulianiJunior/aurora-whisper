@@ -72,6 +72,12 @@ type Relatorio struct {
 	// Completados conta os ditados que a rodada pôs na fila para completar o
 	// envio inicial (Fila.CompletarEnvio: o ditado novo feito desconectado).
 	Completados int
+	// NotasCompletadas conta as notas e os marcadores de nota que a rodada pôs
+	// na fila no envio inicial das notas (Fila.CompletarNotas, N7).
+	NotasCompletadas int
+	// CapacidadeNova: a rodada viu pela primeira vez que a nuvem sincroniza
+	// notas (N7), e o cursor voltou a 0 para ler tudo de novo uma vez.
+	CapacidadeNova bool
 	// Push e Pull contam as decisões por tipo (Tipo*); o Push conta também
 	// as do aprendido (DecidirResultadoDoAprendido). O Pull é só do ditado
 	// (e, sem o Dicionario, a mudança learned como "não aplicada", como na
@@ -114,7 +120,7 @@ func novoRelatorio() Relatorio {
 // gravar, não conta: o PC parado não escreve no banco a cada busca).
 func (r Relatorio) Teve() bool {
 	return r.Enviados > 0 || r.Recebidos > 0 || r.Recomecos > 0 || r.Releituras > 0 || r.Reconexoes > 0 ||
-		r.Completados > 0 || soma(r.Varredura) > 0 || soma(r.Reaplicados) > 0
+		r.Completados > 0 || r.NotasCompletadas > 0 || r.CapacidadeNova || soma(r.Varredura) > 0 || soma(r.Reaplicados) > 0
 }
 
 // AplicouDaNuvem conta o que a rodada gravou no histórico deste PC e veio da
@@ -237,7 +243,12 @@ func (m *Motor) Rodada(ctx context.Context) (Relatorio, error) {
 	if rel.Completados, err = m.Fila.CompletarEnvio(ctx, m.agora(), trocas); err != nil {
 		return rel, err
 	}
-	releu, recomecou, reconciliou := false, false, false
+	// O envio inicial das notas e dos marcadores (N7): depois do aceite e com
+	// a nuvem que sabe de notas, o que ainda não subiu entra na fila.
+	if rel.NotasCompletadas, err = m.Fila.CompletarNotas(ctx, m.agora()); err != nil {
+		return rel, err
+	}
+	releu, recomecou, reconciliou, capacidade := false, false, false, false
 	for {
 		antes := rel.Pull[TipoReconciliado]
 		err := m.Enviar(ctx, &rel)
@@ -249,6 +260,22 @@ func (m *Motor) Rodada(ctx context.Context) (Relatorio, error) {
 			// O pull pôs na fila ditados a reconciliar (D3): eles sobem já,
 			// numa volta a mais, e não na rodada seguinte.
 			reconciliou = true
+		case errors.Is(err, errCapacidadeNova) && !capacidade:
+			// A nuvem passou a sincronizar notas (N7): o cursor volta a 0 e a
+			// rodada lê tudo de novo uma vez, porque um binário de antes da N7
+			// pode ter passado pelas notas e pelo virou_nota sem os gravar. As
+			// versões continuam valendo (o ditado volta como eco), e o envio
+			// inicial das notas entra antes da volta seguinte.
+			if err := m.Fila.ZerarCursor(ctx, m.Aparelho); err != nil {
+				return rel, err
+			}
+			n, err := m.Fila.CompletarNotas(ctx, m.agora())
+			if err != nil {
+				return rel, err
+			}
+			rel.NotasCompletadas += n
+			capacidade = true
+			rel.CapacidadeNova = true
 		case errors.Is(err, ErrRecomeco) && !releu:
 			if err := m.Fila.ZerarCursor(ctx, m.Aparelho); err != nil {
 				return rel, err
@@ -272,6 +299,11 @@ func (m *Motor) Rodada(ctx context.Context) (Relatorio, error) {
 	}
 }
 
+// errCapacidadeNova: o pull viu pela primeira vez que a nuvem sincroniza notas
+// (Fila.VerCapacidade). Nada da página foi aplicado; a rodada zera o cursor e
+// lê de novo (Rodada).
+var errCapacidadeNova = errors.New("sync: a nuvem passou a sincronizar notas")
+
 // Enviar sobe a fila em lotes até ela esvaziar (ou até MaxLotesPorRodada).
 // Um push com erro para tudo: o lote fica em voo, e nada de pull.
 //
@@ -280,7 +312,18 @@ func (m *Motor) Rodada(ctx context.Context) (Relatorio, error) {
 // antes dos ditados, com a mutação montada do espelho (MutacaoDoAprendido) e
 // a resposta decidida por DecidirResultadoDoAprendido, na mesma transação dos
 // ditados do lote.
+//
+// Com a nuvem que sabe de notas (N7), os marcadores de nota e as notas vêm
+// logo depois do aprendido e antes dos ditados (MutacaoDoMarcadorDeNota,
+// MutacaoDaNota), com as respostas decididas por DecidirResultadoDoMarcadorDeNota
+// e DecidirResultadoDaNota, na mesma transação (storage.Fila.AplicarTudo).
 func (m *Motor) Enviar(ctx context.Context, rel *Relatorio) error {
+	// A nuvem que sabe de notas (N7): sem ela, nem nota nem marcador de nota
+	// sobem (a fila nem os devolve), e o virou_nota do ditado fica de fora.
+	comNotas, err := m.Fila.TemCapacidadeDeNotas(ctx)
+	if err != nil {
+		return err
+	}
 	for lote := 0; lote < MaxLotesPorRodada; lote++ {
 		var aprendidos []storage.EstadoDoAprendido
 		if m.Dicionario != nil {
@@ -289,16 +332,30 @@ func (m *Motor) Enviar(ctx context.Context, rel *Relatorio) error {
 				return err
 			}
 		}
-		itens, err := m.Fila.Pendentes(ctx, MaxMutacoesPorLote-len(aprendidos))
+		// Os marcadores de nota antes das notas (a nota que cita um marcador
+		// novo chega à nuvem depois dele), e os dois antes dos ditados.
+		var marcadores []storage.ItemDeMarcadorNaFila
+		var notas []storage.ItemDeNotaNaFila
+		if comNotas {
+			var err error
+			if marcadores, err = m.Fila.PendentesDeMarcadoresDeNota(ctx, MaxMutacoesPorLote-len(aprendidos)); err != nil {
+				return err
+			}
+			if notas, err = m.Fila.PendentesDeNotas(ctx, MaxMutacoesPorLote-len(aprendidos)-len(marcadores)); err != nil {
+				return err
+			}
+		}
+		itens, err := m.Fila.Pendentes(ctx, MaxMutacoesPorLote-len(aprendidos)-len(marcadores)-len(notas))
 		if err != nil {
 			return err
 		}
-		if len(itens) == 0 && len(aprendidos) == 0 {
+		if len(itens) == 0 && len(aprendidos) == 0 && len(marcadores) == 0 && len(notas) == 0 {
 			return nil
 		}
 		// O texto acima do teto da nuvem (uma linha de antes do teto no
 		// painel) nem sai: a nuvem o recusaria (campo_invalido), e um texto
-		// enorme passaria do corpo do push e travaria a fila inteira.
+		// enorme passaria do corpo do push e travaria a fila inteira. (A nota
+		// não passa do teto: o storage recusa antes de gravar.)
 		var grandes []string
 		cabem := itens[:0]
 		for _, it := range itens {
@@ -316,40 +373,58 @@ func (m *Motor) Enviar(ctx context.Context, rel *Relatorio) error {
 			rel.Recusados[CodigoTextoGrande] += len(grandes)
 		}
 		itens = cabem
-		if len(itens) == 0 && len(aprendidos) == 0 {
+		if len(itens) == 0 && len(aprendidos) == 0 && len(marcadores) == 0 && len(notas) == 0 {
 			continue
 		}
-		muts := make([]Mutation, 0, len(aprendidos)+len(itens))
-		for _, e := range aprendidos {
-			id := e.Marcador.MutationID
-			if id == "" {
-				id = m.NovoID()
+		muts := make([]Mutation, 0, len(aprendidos)+len(marcadores)+len(notas)+len(itens))
+		idDoEnvio := func(emVoo string) string {
+			if emVoo != "" {
+				return emVoo
 			}
-			mut, err := MutacaoDoAprendido(e, id)
+			return m.NovoID()
+		}
+		for _, e := range aprendidos {
+			mut, err := MutacaoDoAprendido(e, idDoEnvio(e.Marcador.MutationID))
+			if err != nil {
+				return err
+			}
+			muts = append(muts, mut)
+		}
+		for _, it := range marcadores {
+			mut, err := MutacaoDoMarcadorDeNota(it, idDoEnvio(it.Marcador.MutationID))
+			if err != nil {
+				return err
+			}
+			muts = append(muts, mut)
+		}
+		for _, it := range notas {
+			mut, err := MutacaoDaNota(it, idDoEnvio(it.Marcador.MutationID))
 			if err != nil {
 				return err
 			}
 			muts = append(muts, mut)
 		}
 		for _, it := range itens {
-			id := it.Marcador.MutationID
-			if id == "" {
-				id = m.NovoID()
-			}
-			mut, err := MutacaoDe(it, id)
+			mut, err := MutacaoDoDitado(it, idDoEnvio(it.Marcador.MutationID), comNotas)
 			if err != nil {
 				return err
 			}
 			muts = append(muts, mut)
 		}
+		// O corte vale na ordem do lote: o aprendido, os marcadores de nota,
+		// as notas, e os ditados no fim.
 		n := CortarLote(muts)
 		na := min(n, len(aprendidos))
-		muts, aprendidos, itens = muts[:n], aprendidos[:na], itens[:n-na]
+		nm := min(n-na, len(marcadores))
+		nn := min(n-na-nm, len(notas))
+		base := na + nm + nn
+		muts, aprendidos, marcadores, notas, itens = muts[:n], aprendidos[:na], marcadores[:nm], notas[:nn], itens[:n-base]
 
 		// Antes da rede, numa transação curta: o id e a versão lida de cada
 		// envio que ainda não estava em voo (a do aprendido é a versão local
 		// do espelho; o envio a repetir depois de uma reconexão fica com a
-		// versão enviada de antes, storage.Fila.MarcarEnvio).
+		// versão enviada de antes, storage.Fila.MarcarEnvio). A lápide de nota
+		// não tem linha: a versão é 0.
 		var envios []storage.Envio
 		for i, e := range aprendidos {
 			if !e.Marcador.EmVoo() {
@@ -359,11 +434,35 @@ func (m *Motor) Enviar(ctx context.Context, rel *Relatorio) error {
 				})
 			}
 		}
+		for i, it := range marcadores {
+			if !it.Marcador.EmVoo() {
+				var v int64
+				if it.Linha != nil {
+					v = it.Linha.Version
+				}
+				envios = append(envios, storage.Envio{
+					EntityType: storage.EntidadeMarcadorDeNota, EntityID: it.Marcador.EntityID,
+					MutationID: muts[na+i].MutationID, Versao: v,
+				})
+			}
+		}
+		for i, it := range notas {
+			if !it.Marcador.EmVoo() {
+				var v int64
+				if it.Linha != nil {
+					v = it.Linha.Version
+				}
+				envios = append(envios, storage.Envio{
+					EntityType: storage.EntidadeNota, EntityID: it.Marcador.EntityID,
+					MutationID: muts[na+nm+i].MutationID, Versao: v,
+				})
+			}
+		}
 		for i, it := range itens {
 			if !it.Marcador.EmVoo() {
 				envios = append(envios, storage.Envio{
 					EntityType: it.Marcador.EntityType, EntityID: it.Marcador.EntityID,
-					MutationID: muts[na+i].MutationID, Versao: it.Linha.Version,
+					MutationID: muts[base+i].MutationID, Versao: it.Linha.Version,
 				})
 			}
 		}
@@ -376,23 +475,36 @@ func (m *Motor) Enviar(ctx context.Context, rel *Relatorio) error {
 			return err
 		}
 
-		porID := make(map[string]MutationResult, n-na)
-		ids := make([]string, 0, n-na)
+		porID := make(map[string]MutationResult, len(itens))
+		ids := make([]string, 0, len(itens))
 		doAprendido := make(map[string]MutationResult, na)
 		idsDoAprendido := make([]string, 0, na)
+		doMarcador := make(map[string]MutationResult, nm)
+		idsDosMarcadores := make([]string, 0, nm)
+		daNota := make(map[string]MutationResult, nn)
+		idsDasNotas := make([]string, 0, nn)
 		for i, r := range res.Results {
-			if i < na {
+			switch {
+			case i < na:
 				id := aprendidos[i].ID
 				doAprendido[id] = r
 				idsDoAprendido = append(idsDoAprendido, id)
-				continue
+			case i < na+nm:
+				id := marcadores[i-na].Marcador.EntityID
+				doMarcador[id] = r
+				idsDosMarcadores = append(idsDosMarcadores, id)
+			case i < base:
+				id := notas[i-na-nm].Marcador.EntityID
+				daNota[id] = r
+				idsDasNotas = append(idsDasNotas, id)
+			default:
+				id := itens[i-base].Marcador.EntityID
+				porID[id] = r
+				ids = append(ids, id)
 			}
-			id := itens[i-na].Marcador.EntityID
-			porID[id] = r
-			ids = append(ids, id)
 		}
 		parcial := novoRelatorio()
-		err = m.Fila.AplicarComAprendido(ctx, m.Aparelho, res.Epoch, ids, nil, func(e storage.EstadoDoItem) storage.AcaoLocal {
+		err = m.Fila.AplicarTudo(ctx, m.Aparelho, res.Epoch, ids, nil, func(e storage.EstadoDoItem) storage.AcaoLocal {
 			r := porID[e.ID]
 			d := DecidirResultado(e, r)
 			parcial.Push[d.Tipo]++
@@ -410,6 +522,25 @@ func (m *Motor) Enviar(ctx context.Context, rel *Relatorio) error {
 				}
 				return d.Acao
 			},
+		}, storage.RespostaDasNotas{
+			Marcadores: idsDosMarcadores,
+			DecidirMarcador: func(e storage.EstadoDoMarcadorDeNota) storage.AcaoDoMarcadorDeNota {
+				d := DecidirResultadoDoMarcadorDeNota(e, doMarcador[e.ID])
+				parcial.Push[d.Tipo]++
+				if d.Tipo == TipoRecusado {
+					parcial.Recusados[codigoDaRecusa(d.Acao.Erro)]++
+				}
+				return d.Acao
+			},
+			Notas: idsDasNotas,
+			DecidirNota: func(e storage.EstadoDaNota) storage.AcaoDaNota {
+				d := DecidirResultadoDaNota(e, daNota[e.ID])
+				parcial.Push[d.Tipo]++
+				if d.Tipo == TipoRecusado {
+					parcial.Recusados[codigoDaRecusa(d.Acao.Erro)]++
+				}
+				return d.Acao
+			},
 		})
 		if err != nil {
 			return err
@@ -420,8 +551,23 @@ func (m *Motor) Enviar(ctx context.Context, rel *Relatorio) error {
 		if m.AoLote != nil {
 			m.AoLote()
 		}
+		if parcial.Push[TipoAdiado] > 0 {
+			// A nuvem recusou o tipo (uma nuvem de antes da N7): as notas e os
+			// marcadores ficam na fila, e o resto desta rodada sobe sem eles.
+			// Sem isso, o mesmo lote voltaria até MaxLotesPorRodada.
+			comNotas = false
+		}
 	}
 	return nil
+}
+
+// codigoDaRecusa é o código para a contagem das recusas: a lápide recusada
+// não grava código (a linha já saiu), e conta como resposta desconhecida.
+func codigoDaRecusa(c string) string {
+	if c == "" {
+		return CodigoRespostaDesconhecida
+	}
+	return c
 }
 
 // Receber puxa as páginas depois do cursor até não ter mais (ou até
@@ -452,15 +598,41 @@ func (m *Motor) Receber(ctx context.Context, rel *Relatorio) error {
 			// Um cursor que não anda prenderia o laço: é falha.
 			return contrato(CodigoCursor)
 		}
+		if pagina == 0 {
+			// A capacidade da nuvem (N7), conferida na primeira página de cada
+			// pull: a nuvem que passou a saber de notas faz a rodada ler tudo
+			// de novo (errCapacidadeNova), antes de aplicar esta página; a que
+			// deixou de saber (voltou a uma versão antiga) para o envio delas.
+			primeira, err := m.Fila.VerCapacidade(ctx, p.TemNotas(), m.agora())
+			if err != nil {
+				return err
+			}
+			if primeira {
+				return errCapacidadeNova
+			}
+		}
 		porID := make(map[string]Change, len(p.Changes))
 		ids := make([]string, 0, len(p.Changes))
 		var doAprendido []Change
+		daNota := map[string]Change{}
+		doMarcador := map[string]Change{}
+		var idsDasNotas, idsDosMarcadores []string
 		for _, c := range p.Changes {
 			if m.Dicionario != nil && c.EntityType == storage.EntidadeAprendido {
 				doAprendido = append(doAprendido, c)
 				continue
 			}
 			id := strings.ToLower(c.EntityID)
+			switch c.EntityType {
+			case storage.EntidadeNota:
+				daNota[id] = c
+				idsDasNotas = append(idsDasNotas, id)
+				continue
+			case storage.EntidadeMarcadorDeNota:
+				doMarcador[id] = c
+				idsDosMarcadores = append(idsDosMarcadores, id)
+				continue
+			}
 			porID[id] = c
 			ids = append(ids, id)
 		}
@@ -472,11 +644,27 @@ func (m *Motor) Receber(ctx context.Context, rel *Relatorio) error {
 				return err
 			}
 		}
-		err = m.Fila.AplicarComAprendido(ctx, m.Aparelho, p.Epoch, ids, &novo, func(e storage.EstadoDoItem) storage.AcaoLocal {
+		// Os marcadores de nota são aplicados antes das notas da mesma página
+		// (storage.Fila.AplicarTudo): a nota que cita um marcador da página o
+		// acha pronto, e o que ainda não chegou vira um "marcador que espera".
+		err = m.Fila.AplicarTudo(ctx, m.Aparelho, p.Epoch, ids, &novo, func(e storage.EstadoDoItem) storage.AcaoLocal {
 			d := DecidirMudanca(e, porID[e.ID])
 			parcial.Pull[d.Tipo]++
 			return d.Acao
-		}, aprendido)
+		}, aprendido, storage.RespostaDasNotas{
+			Marcadores: idsDosMarcadores,
+			DecidirMarcador: func(e storage.EstadoDoMarcadorDeNota) storage.AcaoDoMarcadorDeNota {
+				d := DecidirMudancaDoMarcadorDeNota(e, doMarcador[e.ID])
+				parcial.Pull[d.Tipo]++
+				return d.Acao
+			},
+			Notas: idsDasNotas,
+			DecidirNota: func(e storage.EstadoDaNota) storage.AcaoDaNota {
+				d := DecidirMudancaDaNota(e, daNota[e.ID])
+				parcial.Pull[d.Tipo]++
+				return d.Acao
+			},
+		})
 		if err != nil {
 			return err
 		}

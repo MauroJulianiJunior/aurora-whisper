@@ -124,6 +124,13 @@ func TestMigracao0012_PreencheAPosicaoNaOrdemDeHoje(t *testing.T) {
 	linhasDepois := linhasDe(t, db, "local_notes")
 	for i := range linhasDepois {
 		delete(linhasDepois[i], "posicao")
+		// As colunas da 0013 (o Migrate roda até a última), nulas.
+		for _, c := range []string{"conflito_titulo", "conflito_corpo", "conflito_device_id", "conflito_em", "corpo_nuvem"} {
+			if v := linhasDepois[i][c]; v != nil {
+				t.Errorf("a coluna %s da 0013 = %v; quero nula", c, v)
+			}
+			delete(linhasDepois[i], c)
+		}
 	}
 	if !reflect.DeepEqual(linhasAntes, linhasDepois) {
 		t.Error("a migration mexeu em outra coluna das notas")

@@ -13,12 +13,14 @@ import (
 // fase N1; docs/ai-spec/05-data-model.md, tabelas local_notes, local_labels
 // e local_note_labels).
 //
-// # O que NÃO acontece nesta fase
+// # O sync (N7)
 //
-// O sync. As linhas ficam com SyncState "pending" e nenhum marcador de nota
-// ou de marcador entra na sync_outbox: o motor (internal/sync) ainda não
-// conhece estas entidades, e um marcador de tipo desconhecido poderia travar
-// o sync do histórico que já roda. A fase N7 faz o envio inicial.
+// Toda gravação local de nota ou marcador põe o marcador da entidade na
+// sync_outbox na MESMA transação (nota_sync.go: emitirNota,
+// emitirMarcadorDeNota e a lápide do apagar de vez), e o motor
+// (internal/sync) só os lê depois de a nuvem dizer que conhece notas
+// (ChaveNuvemNotas). O que vem da nuvem é gravado por Fila.AplicarTudo, que
+// nunca põe marcador.
 
 // Erros sentinela das notas e dos marcadores (além de ErrNotFound e
 // ErrVersionConflict, de transcription.go). Chamadores comparam com
@@ -140,11 +142,29 @@ type Nota struct {
 	DeletedAt *time.Time
 	PurgeAt   *time.Time
 	Version   int64
-	// SyncState, ServerVersion e LastSyncError são do sync (N7); na N1 a
-	// nota fica "pending" e sem versão da nuvem.
+	// SyncState, ServerVersion e LastSyncError são do sync (N7): a situação
+	// (SituacaoNormal, SituacaoRecusado), a versão da nuvem que o PC conhece
+	// (nil: a nuvem não tem a nota, ou o PC não sabe a versão) e o código da
+	// recusa.
 	SyncState     string
 	ServerVersion *int64
 	LastSyncError *string
+	// Conflito é o selo (N7): o título e o corpo que perderam um conflito de
+	// conteúdo na nuvem. nil sem selo.
+	Conflito *ConflitoDaNota
+	// CorpoNuvem é o corpo da última versão que a nuvem confirmou (o
+	// corpo_base do envio do conteúdo); nil quando o PC não sabe.
+	CorpoNuvem *string
+}
+
+// ConflitoDaNota é o selo da nota: a versão do título e do corpo que perdeu
+// um conflito na nuvem, quem a escreveu (nil: o aparelho saiu da conta) e
+// quando (o conflict_at, que a escolha devolve à nuvem).
+type ConflitoDaNota struct {
+	Titulo   string
+	Corpo    string
+	DeviceID *string
+	Em       time.Time
 }
 
 // MarcadorDeNota é o marcador (rótulo) das notas: entidade própria, com nome único
@@ -275,7 +295,8 @@ type NotaRepository interface {
 	// lixeira, ErrNotaNaLixeira. Grava só a posição desta nota (a versão sobe, a
 	// hora de edição não); se ela já está entre as duas, não faz nada. Sem
 	// base_version: mover não é editar o texto, e a posição sobrevive a quem
-	// estava com a nota aberta. Não põe nada na sync_outbox.
+	// estava com a nota aberta. A posição entra na fila do sync
+	// (CampoNotaPosicao).
 	Mover(ctx context.Context, userID, id, antesID, depoisID string) (Nota, error)
 
 	// Marcar põe o marcador na nota; Desmarcar tira. Os dois são
@@ -304,7 +325,8 @@ type NotaRepository interface {
 	// e marca o ditado (virou_nota = id da nota), numa transação só. Marcado,
 	// o ditado sai do histórico SEM ir para a lixeira. Recusa o ditado
 	// inexistente (ErrNotFound), na lixeira (ErrDitadoNaLixeira) e o que já
-	// virou nota (ErrDitadoJaVirouNota). Não põe nada na sync_outbox.
+	// virou nota (ErrDitadoJaVirouNota). Na fila do sync, a nota nova e o
+	// virou_nota do ditado (CampoVirouNota, num ditado que a nuvem tem).
 	VirarNota(ctx context.Context, userID, ditadoID string) (Nota, error)
 
 	// SoltarDitadosDaNotaNova devolve ao histórico os ditados feitos dentro de um
@@ -320,6 +342,14 @@ type NotaRepository interface {
 	// vez, o ditado não volta); a que não nasceu de um ditado, ou cujo ditado
 	// já voltou, é ErrNotaNaoVeioDeDitado.
 	DesfazerVirarNota(ctx context.Context, userID, notaID string) (DesfeitoOVirarNota, error)
+
+	// ResolverConflitoDaNota é a escolha do selo da nota (N7, como a do
+	// ditado): só sobre a versão atual e só numa nota com selo (senão
+	// ErrVersionConflict). EscolhaManter fica com o título e o corpo atuais;
+	// EscolhaTrocar põe os do selo. As duas limpam o selo e sobem a versão, e
+	// a escolha entra na fila do sync (selo_escolha, selo_em) numa nota que a
+	// nuvem tem. Escolha fora das duas é ErrEscolhaInvalida.
+	ResolverConflitoDaNota(ctx context.Context, userID, id string, baseVersion int64, escolha string) (Nota, error)
 }
 
 // DesfeitoOVirarNota é o resultado do DesfazerVirarNota.

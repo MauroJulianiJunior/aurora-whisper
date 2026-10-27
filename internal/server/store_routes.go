@@ -55,6 +55,9 @@ type itemDTO struct {
 	DeletedAt        *time.Time   `json:"deleted_at"`
 	Version          int64        `json:"version"`
 	VersaoEmConflito *conflictDTO `json:"versao_em_conflito"`
+	// VirouNota é o id da nota que o ditado virou (ADR-022, N7), sempre
+	// presente (null sem ligação), para o PC saber que a ligação saiu.
+	VirouNota *string `json:"virou_nota"`
 }
 
 func toItemDTO(t cloudstore.Transcription) itemDTO {
@@ -64,6 +67,7 @@ func toItemDTO(t cloudstore.Transcription) itemDTO {
 		ASRProvider: t.ASRProvider, ASRModel: t.ASRModel, DurationMs: t.DurationMs,
 		ProcessingMs: t.ProcessingMs, Confidence: t.Confidence, Status: t.Status,
 		CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt, DeletedAt: t.DeletedAt, Version: t.Version,
+		VirouNota: t.VirouNota,
 	}
 	if t.Conflict != nil {
 		d.VersaoEmConflito = &conflictDTO{FinalText: t.Conflict.FinalText, DeviceID: t.Conflict.DeviceID, ConflictAt: t.Conflict.At}
@@ -330,8 +334,8 @@ type storePushRequest struct {
 }
 
 // storeResultDTO é a resposta a uma mutação. State é por tipo: o itemDTO no
-// conflict de um ditado, o learnedDTO no de um aprendido (F8); nil (omitido)
-// fora do conflict.
+// conflict de um ditado, o learnedDTO no de um aprendido (F8), o noteDTO no de
+// uma nota (N7); nil (omitido) fora do conflict.
 type storeResultDTO struct {
 	MutationID    string `json:"mutation_id"`
 	Status        string `json:"status"`
@@ -399,6 +403,9 @@ func pushWith(w http.ResponseWriter, r *http.Request, store cloudstore.Store, no
 		case res.LearnedState != nil:
 			st := toLearnedDTO(*res.LearnedState)
 			d.State = &st
+		case res.NoteState != nil:
+			st := toNoteDTO(*res.NoteState)
+			d.State = &st
 		}
 		results = append(results, d)
 	}
@@ -410,8 +417,8 @@ func pushWith(w http.ResponseWriter, r *http.Request, store cloudstore.Store, no
 }
 
 // storeChangeDTO é uma linha do pull. Payload é por tipo (entity_type): o
-// itemDTO de um ditado, o learnedDTO de um aprendido (F8); nil (omitido) na
-// lápide.
+// itemDTO de um ditado, o learnedDTO de um aprendido (F8), o noteDTO de uma
+// nota e o labelDTO de um marcador de nota (N7); nil (omitido) na lápide.
 type storeChangeDTO struct {
 	Seq           int64   `json:"seq"`
 	EntityType    string  `json:"entity_type"`
@@ -466,11 +473,24 @@ func handleStorePull(store cloudstore.Store) http.HandlerFunc {
 			case c.Learned != nil:
 				pair := toLearnedDTO(*c.Learned)
 				d.Payload = &pair
+			case c.Note != nil:
+				note := toNoteDTO(*c.Note)
+				d.Payload = &note
+			case c.Label != nil:
+				label := toLabelDTO(*c.Label)
+				d.Payload = &label
 			}
 			changes = append(changes, d)
 		}
+		// entidades é a capacidade (N7): os tipos que esta nuvem sincroniza.
+		// Sempre presente; o PC antigo ignora.
+		entidades := resp.Entidades
+		if entidades == nil {
+			entidades = cloudstore.EntidadesDoSync()
+		}
 		writeJSON(w, http.StatusOK, map[string]any{
 			"changes": changes, "last_seq": resp.LastSeq, "has_more": resp.HasMore, "sync_epoch": resp.Epoch,
+			"entidades": entidades,
 		})
 	}
 }

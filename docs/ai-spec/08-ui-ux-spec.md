@@ -1290,7 +1290,9 @@ nuvem não os tem, e o `bundle.test.ts` confere nos dois sentidos. Prévia: `doc
 Só no painel do PC (a Local API). O componente entra pelo `Ambiente` (`Ambiente.Notas`); o painel da nuvem
 não importa nada dele, e o `bundle.test.ts` confere nos dois sentidos. A fonte da verdade é o código
 (`web/src/notas/`); a prévia aprovada pelo Mauro é `docs/notas-previa-n2.html`. O que não é desta fase:
-sync (N7), celular (N8), gatilho de voz (N9), imagens (N10); converter trecho chegou na N5.
+celular (N8), imagens (N10); converter trecho chegou na N5, o gatilho de voz na N9 e o sync na N7 (a
+nota com selo de conflito mostra "Versão em conflito" no cartão e, na janela, a outra versão com "Manter
+esta" e "Usar a outra"; ADR-022, "Decisões da N7").
 
 **Onde fica e a largura.** Entre **Histórico** e **Lixeira**. Com a aba aberta o painel usa a largura da
 janela (até 96 rem); as outras telas seguem em 46 rem. O título vira "Notas". A busca do topo é a busca

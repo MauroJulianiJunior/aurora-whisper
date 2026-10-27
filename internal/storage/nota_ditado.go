@@ -13,13 +13,16 @@ import (
 // (local_transcriptions e local_notes) do mesmo banco, cada uma numa
 // transação só: ou as duas mudanças, ou nenhuma.
 //
+// # O sync (N7)
+//
+// Na mesma transação: a nota nova (ou a lápide da nota apagada pelo Desfazer)
+// e o virou_nota do ditado (CampoVirouNota, só num ditado que a nuvem tem:
+// o que ela não tem sobe inteiro, com o virou_nota lido na hora). O ditado
+// não sobe a versão local, e a nuvem esconde do histórico dela o ditado com
+// ligação.
+//
 // # O que NÃO acontece
 //
-//   - O sync. O motor ainda não conhece notas (N7), então nenhum marcador
-//     entra na sync_outbox, nem o da nota nem o do ditado: a coluna
-//     virou_nota é só deste PC, não passa por emitir, e o ditado não sobe a
-//     versão (a base do próximo envio à nuvem fica a mesma). A nuvem
-//     continua mostrando o ditado no histórico dela. Ponto em aberto da N7.
 //   - A lixeira. O ditado marcado não ganha deleted_at nem purge_at: não é
 //     expurgado em 30 dias e não aparece como apagado. Ele sai das listas
 //     do histórico (List) e fica fora da regra dos 6 meses (seis_meses_sqlite.go).
@@ -32,7 +35,7 @@ func (r *SQLiteNotaRepository) VirarNota(ctx context.Context, userID, ditadoID s
 	}
 	agora := r.now()
 	id := NewID()
-	err := naTransacao(ctx, r.db, func(tx *sql.Tx) error {
+	err := r.gravar(ctx, func(tx *sql.Tx, fila *naFila) error {
 		var bruto, final string
 		var apagado, virou sql.NullString
 		err := tx.QueryRowContext(ctx,
@@ -65,9 +68,9 @@ func (r *SQLiteNotaRepository) VirarNota(ctx context.Context, userID, ditadoID s
 		if err := inserirNota(ctx, tx, id, agora, NovaNota{UserID: userID, Corpo: corpo, DitadoDeOrigem: ditadoID}); err != nil {
 			return err
 		}
-		// Só a coluna virou_nota: nem versão, nem updated_at, nem fila do sync.
-		// O WHERE repete as guardas (a leitura acima e este UPDATE estão na
-		// mesma transação, mas a guarda no SQL é a que vale).
+		// Só a coluna virou_nota: nem versão, nem updated_at. O WHERE repete as
+		// guardas (a leitura acima e este UPDATE estão na mesma transação, mas a
+		// guarda no SQL é a que vale).
 		res, err := tx.ExecContext(ctx,
 			`UPDATE local_transcriptions SET virou_nota = ?
 			 WHERE id = ? AND user_id = ? AND deleted_at IS NULL AND virou_nota IS NULL`, id, ditadoID, userID)
@@ -77,7 +80,10 @@ func (r *SQLiteNotaRepository) VirarNota(ctx context.Context, userID, ditadoID s
 		if n, _ := res.RowsAffected(); n == 0 {
 			return ErrDitadoJaVirouNota
 		}
-		return nil
+		if err := fila.anotar(emitirNota(ctx, tx, id, 0, agora)); err != nil {
+			return err
+		}
+		return fila.anotar(emitir(ctx, tx, ditadoID, CampoVirouNota, agora))
 	})
 	if err != nil {
 		return Nota{}, err
@@ -87,12 +93,15 @@ func (r *SQLiteNotaRepository) VirarNota(ctx context.Context, userID, ditadoID s
 
 func (r *SQLiteNotaRepository) DesfazerVirarNota(ctx context.Context, userID, notaID string) (DesfeitoOVirarNota, error) {
 	var out DesfeitoOVirarNota
-	err := naTransacao(ctx, r.db, func(tx *sql.Tx) error {
+	agora := r.now()
+	err := r.gravar(ctx, func(tx *sql.Tx, fila *naFila) error {
+		out = DesfeitoOVirarNota{}
 		var origem, apagada sql.NullString
 		var versao int64
+		var naNuvem sql.NullInt64
 		err := tx.QueryRowContext(ctx,
-			`SELECT ditado_de_origem, deleted_at, version FROM local_notes WHERE id = ? AND user_id = ?`,
-			notaID, userID).Scan(&origem, &apagada, &versao)
+			`SELECT ditado_de_origem, deleted_at, version, server_version FROM local_notes WHERE id = ? AND user_id = ?`,
+			notaID, userID).Scan(&origem, &apagada, &versao, &naNuvem)
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrNotFound
 		}
@@ -114,17 +123,20 @@ func (r *SQLiteNotaRepository) DesfazerVirarNota(ctx context.Context, userID, no
 			return ErrNotaNaoVeioDeDitado
 		}
 		out.DitadoID = origem.String
+		if err := fila.anotar(emitir(ctx, tx, origem.String, CampoVirouNota, agora)); err != nil {
+			return err
+		}
 		// Nota que ninguém mexeu (versão 1) e que não foi para a lixeira: sai.
 		// Qualquer edição (texto, cor, fixar, arquivar, marcador, lixeira) sobe
 		// a versão, e a nota editada fica.
 		if versao == 1 && !apagada.Valid {
-			if _, err := tx.ExecContext(ctx, `DELETE FROM local_note_labels WHERE note_id = ?`, notaID); err != nil {
-				return fmt.Errorf("storage: apagando os marcadores da nota: %w", err)
-			}
-			if _, err := tx.ExecContext(ctx, `DELETE FROM local_notes WHERE id = ? AND user_id = ?`, notaID, userID); err != nil {
-				return fmt.Errorf("storage: apagando a nota: %w", err)
+			if err := apagarNotaDaTabela(ctx, tx, notaID); err != nil {
+				return err
 			}
 			out.NotaApagada = true
+			// A nota sai de vez: a lápide local (nada sobe se a nuvem nunca a
+			// teve e o envio dela não está no voo).
+			return fila.anotar(lapideLocal(ctx, tx, EntidadeNota, notaID, naNuvem.Valid, agora))
 		}
 		return nil
 	})

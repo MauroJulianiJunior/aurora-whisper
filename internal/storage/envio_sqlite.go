@@ -517,6 +517,21 @@ func (f *Fila) Resumo(ctx context.Context, agora time.Time) (ResumoDoEnvio, erro
 			return fmt.Errorf("storage: contando as trocas na fila do sync: %w", err)
 		}
 		r.Mudancas += trocas
+		// As notas e os marcadores de nota (N7): o marcador de uma entidade que
+		// a nuvem tem (a versão dela) e a lápide local (a nuvem tem, ou pode
+		// ter, o que foi apagado de vez). A nota nova, que ainda não subiu,
+		// não conta, como o ditado novo.
+		var notas int
+		if err := tx.QueryRowContext(ctx,
+			`SELECT COUNT(*) FROM sync_outbox o
+			 WHERE (o.entity_type = ? AND (o.campos & ? <> 0 OR EXISTS (SELECT 1 FROM local_notes n
+			         WHERE n.id = o.entity_id AND n.user_id = ? AND n.server_version IS NOT NULL)))
+			    OR (o.entity_type = ? AND (o.campos & ? <> 0 OR EXISTS (SELECT 1 FROM local_labels l
+			         WHERE l.id = o.entity_id AND l.user_id = ? AND l.server_version IS NOT NULL)))`,
+			EntidadeNota, CampoApagado, f.dono, EntidadeMarcadorDeNota, CampoApagado, f.dono).Scan(&notas); err != nil {
+			return fmt.Errorf("storage: contando as notas na fila do sync: %w", err)
+		}
+		r.Mudancas += notas
 		if err := tx.QueryRowContext(ctx,
 			`SELECT COUNT(*) FROM local_transcriptions WHERE user_id = ? AND server_version IS NULL AND sync_state <> ?`,
 			f.dono, SituacaoNormal).Scan(&r.NaoSubiram); err != nil {

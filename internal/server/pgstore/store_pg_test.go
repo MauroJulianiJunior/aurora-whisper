@@ -91,8 +91,19 @@ func (e *pgEnv) newDevice(t *testing.T, userID string) string {
 
 func (e *pgEnv) events(t *testing.T, userID string) []cloudstore.Event {
 	t.Helper()
+	return e.eventsOf(t, "sync_events", userID)
+}
+
+// noteEvents são os eventos das notas e dos marcadores (a 0024, N7).
+func (e *pgEnv) noteEvents(t *testing.T, userID string) []cloudstore.Event {
+	t.Helper()
+	return e.eventsOf(t, "note_sync_events", userID)
+}
+
+func (e *pgEnv) eventsOf(t *testing.T, table, userID string) []cloudstore.Event {
+	t.Helper()
 	rows, err := e.pool.Query(e.ctx, `SELECT seq, entity_type, entity_id, operation, entity_version, device_id, changed_at
-		FROM sync_events WHERE user_id = $1 ORDER BY seq`, userID)
+		FROM `+table+` WHERE user_id = $1 ORDER BY seq`, userID)
 	if err != nil {
 		t.Fatalf("ler sync_events: %v", err)
 	}
@@ -128,10 +139,11 @@ func TestContrato_Postgres(t *testing.T) {
 	e := newPG(t)
 	s := New(e.pool)
 	contracttest.Run(t, contracttest.Backend{
-		Store:     s,
-		Accounts:  s,
-		NewDevice: e.newDeviceWithToken,
-		Events:    e.events,
+		Store:      s,
+		Accounts:   s,
+		NewDevice:  e.newDeviceWithToken,
+		Events:     e.events,
+		NoteEvents: e.noteEvents,
 		AntesDaTrava: func(t *testing.T, f func(id string)) {
 			antesDaTravaDaRetencao = f
 			t.Cleanup(func() { antesDaTravaDaRetencao = nil })

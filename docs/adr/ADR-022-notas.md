@@ -111,7 +111,7 @@ colunas de sync que o ditado já tem (`sync_state`, `server_version`, `last_sync
 - **Feito na N3 (25-out-2026):** rota `POST /api/history/{id}/virar-nota` e `POST
   /api/notas/{id}/desfazer-virar`; a coluna `virou_nota` (migration 0010), sem chave estrangeira; a lista e
   a busca do histórico (e a lixeira) escondem o ditado marcado, o expurgo de 30 dias e os 6 meses o
-  pulam; o Desfazer apaga a nota só na versão 1, fora da lixeira. Nada vai para a fila do sync.
+  pulam; o Desfazer apaga a nota só na versão 1, fora da lixeira. Nada vai para a fila do sync (até a N7; ver Decisões da N7: a marca passou a subir).
 
 **Ditado feito dentro da nota.** O ditado feito com o cursor no editor de uma nota **não aparece no
 histórico**, como se fosse um "Virar nota" automático (pedido do Mauro, 25-out-2026; o texto já está
@@ -121,7 +121,7 @@ o avisa: enquanto o título ou uma linha da nota tem o foco e a janela do navega
 `DELETE`. O Agent guarda o aviso **só na memória**, com validade de 60 s (é contexto: nada em disco, log
 nem sync), e, ao gravar um ditado que deu certo, escreve `virou_nota` com o id da nota ou `nova:<token>`.
 A inserção no campo não muda. Reusa a coluna e as regras do "Virar nota" (fora do histórico sem
-lixeira, fora dos 6 meses, sem evento de sync); não define `ditado_de_origem`. No "Criar uma nota", o
+lixeira, fora dos 6 meses, sem evento de sync até a N7; ver Decisões da N7); não define `ditado_de_origem`. No "Criar uma nota", o
 `POST /api/notas` leva o `token` e liga os ditados à nota na mesma transação; a caixa que fecha vazia
 manda `descartar`, e os ditados voltam ao histórico (nada some calado); o resto volta em 24 h. Só
 **ditados novos** são escondidos: os que já estão no histórico não mudam. Alternativa descartada: o
@@ -194,7 +194,8 @@ navegador é um campo comum para o Agent; o caso a conferir é o editor por linh
   para nota (só o desfecho); se fizer falta, é uma marca pequena na cápsula, a decidir com o Mauro.
 - **Configurações**: "Ditar para nota" liga e desliga (padrão ligado; `note_trigger_enabled`, migration
   `0011`); as teclas são só leitura, como as do ditado. Desligado, Ctrl+Win+Alt é um ditado comum.
-- Sem evento de sync (N7), como N1 e N3. O painel na aba Notas relê a lista (e as contas dos marcadores) ao
+- Sem evento de sync, como N1 e N3 (até a N7; o ditar para nota chegou à nuvem junto com o resto das
+  notas, ver Decisões da N7). O painel na aba Notas relê a lista (e as contas dos marcadores) ao
   voltar à frente, como já fazia.
 - O que só a máquina real mostra: se Ctrl+Win+Alt colide com atalho de outro programa (não medido), e se o
   menu Iniciar ou a barra de menus de algum app reage ao Alt solto por último (o Ctrl já quebra o "Win
@@ -380,10 +381,10 @@ versão que cada `mover` devolveu e a usa no PATCH seguinte (e ao abrir a nota);
 a nota que se edita não é a que se arrasta. O caso que sobra (outra aba mexeu) cai no caminho do 409
 que já existia.
 
-**[derivada] Sem `sync_outbox`.** A N7 ainda não existe e `mover` não gera evento. Quando as notas
-subirem, a `posicao` viaja **com a entidade nota**, como qualquer outro campo. **A decidir na N7:** o
-conflito de posição entre dois aparelhos (sugestão: o último vence, sem selo, porque ordem não é
-conteúdo). Dois aparelhos que arrastem para a mesma fresta podem gerar chaves iguais; no Agent o
+**[derivada] Sem `sync_outbox` (até a N7).** Na N2b a N7 ainda não existia e `mover` não gerava evento.
+Com a N7, a `posicao` viaja **com a entidade nota**, como qualquer outro campo (o bit `CampoNotaPosicao`
+da fila). **Decidido na N7:** o conflito de posição entre dois aparelhos é o último que escreve vence, sem
+selo, porque ordem não é conteúdo (ver Decisões da N7). Dois aparelhos que arrastem para a mesma fresta podem gerar chaves iguais; no Agent o
 desempate de leitura é o `rowid` (estável) e o próximo arrasto desfaz o empate.
 
 **A grade.** Em vez de colunas de CSS, o painel monta a grade em JS, **na ordem de leitura**: cada
@@ -423,19 +424,103 @@ do navegador; o painel as toma só quando o foco está num cartão.
 - **[derivada] Ordem manual:** a `posicao` (N2b) é um campo da nota e **viaja com a entidade nota**, junto
   com o resto; mover não tem evento próprio (a gravação da nota que mudou de lugar é que sobe, com a
   versão nova). A migration do Postgres da N7 traz a coluna `posicao`, e a nota que sobe pela primeira
-  vez leva a posição que tem. O conflito de posição entre dois aparelhos fica para esta fase decidir.
+  vez leva a posição que tem. O conflito de posição entre dois aparelhos ficava para esta fase decidir;
+  decidido: o último que escreve vence, sem selo (ver Decisões da N7).
 - **Conflito:** a regra da ADR-019 vale igual. A versão que perdeu fica no item, com o selo, e a
   pessoa escolhe. **[derivada]** Para a lista de marcar há uma mescla a mais, porque o caso típico
   é o mercado (marcando no celular) com uma edição no PC: se os dois lados só mudaram o estado de
   marcado de itens diferentes (o texto de cada linha igual), o servidor mescla sem selo.
 - Servidor: tabelas `notes`, `labels`, `note_labels` (migrations novas, só criação; nenhuma
-  destrutiva). As rotas da nuvem seguem o padrão das de ditado.
+  destrutiva). As rotas da nuvem seguem o padrão das de ditado. (Na implementação foram seis tabelas, as
+  migrations `0020` a `0025`; ver Decisões da N7.)
 - **Celular sem rede (E4, decisão do Mauro: "Marcar sem rede"):** no mercado sem sinal, a lista abre
   do cache do service worker e **marcar e desmarcar funcionam offline**. As mudanças vão para uma fila
   no navegador (IndexedDB), com o mesmo marcador por entidade do sync do PC, e sobem quando a rede
   volta; a mescla da lista de marcar acima resolve o caso de o PC ter mudado a nota nesse meio-tempo.
   [derivada] Offline, só marcar, desmarcar e acrescentar item; criar, apagar nota e mexer em marcador
   pedem rede (a tela diz isso). O app mostra "Sem rede: N mudanças esperando".
+
+### Decisões da N7 (26-out-2026), na implementação
+
+As marcadas **[desvio]** mudam algo escrito acima. O deploy é ponto de parada: o roteiro do Mauro é o
+`docs/deploy-notas-n7.md`, e o teste depois dele, o `docs/teste-manual-notas-n7.md`.
+
+- **Os nomes no fio:** `note` e `label` (o servidor fala inglês, como `transcription` e `learned`). O
+  PC chama de `storage.EntidadeNota` e `storage.EntidadeMarcadorDeNota`. Operações: `upsert` e `delete`
+  (apagar de vez), nas duas.
+- **[desvio] Seis tabelas, e não três.** `notes`, `labels` e `note_labels` (`0020` a `0022`), mais
+  `note_tombstones` (`0023`), `note_sync_events` (`0024`) e `transcription_note_links` (`0025`). Por quê:
+  a convenção das migrations (só `CREATE TABLE` e `CREATE INDEX`, uma tabela por arquivo; o
+  `migrations/schema_test.go` recusa `ALTER`) não deixa alargar o `CHECK` de `entity_type` do
+  `sync_events` e do `tombstones`, nem pôr coluna no `transcriptions`. Uma tabela a mais por necessidade é
+  o caminho aditivo. Alternativa: um `ALTER` (mudar a convenção, que congela as migrations desde o deploy).
+- **`note_labels` sem chave estrangeira para `labels`.** A nota pode chegar à nuvem antes do marcador
+  (outro PC, a ordem do pull é por estado, não por criação): o id fica guardado e vale quando o marcador
+  chegar. O marcador com lápide sai do conjunto da nota na hora de gravar, e o "apagar" do marcador tira
+  as ligações dele (sem subir a versão das notas: o PC que apagou manda as notas mudadas).
+- **Conflito, campo a campo.** Título e corpo são um campo só (o **conteúdo**), com a regra da ADR-019:
+  vale o que chegou primeiro, e o do PC vai para o selo (`versao_em_conflito`: título, corpo, aparelho e
+  hora), com a escolha "manter" ou "trocar" como no ditado. A lixeira é a do ditado (apagar vence;
+  restaurar contra uma lixeira mais nova não vale; a edição antiga contra a lixeira vai para o selo).
+  **Cor, fixar, arquivar, marcadores e posição: o último que escreve vence, sem selo.** Por quê: não são
+  conteúdo, e um selo por cor trocada seria barulho; o pior caso é a cor (ou a ordem) de um aparelho
+  vencer a do outro, sem texto perdido.
+- **Posição (o ponto aberto da N2b): o último que escreve vence, sem selo**, como a sugestão da N2b. Duas
+  chaves iguais (dois aparelhos na mesma fresta) desempatam pelo `rowid` no PC; o próximo arrasto desfaz.
+- **A mescla da lista de marcar** (`cloudstore.MesclarListaDeMarcar`, pura) é de três vias: precisa da
+  base, e o PC a manda (`corpo_base`, o corpo da última versão que a nuvem confirmou, guardado em
+  `local_notes.corpo_nuvem`). Sem a base, sem mescla: conflito com selo (nada se perde). Com ela, e com o
+  mesmo título dos dois lados: as linhas que não são de marcar têm de ser iguais e na mesma ordem nos
+  três, e os itens de marcar têm os mesmos textos nos três, **contados no corpo inteiro** (o painel leva
+  o item marcado para o fim do corpo, passando por parágrafos; a posição do item não conta), e o estado de
+  cada item é o do lado que mudou. Qualquer diferença de texto (item editado, acrescentado ou tirado,
+  parágrafo mudado) é conflito normal, com selo. **"O mesmo item marcado de jeitos diferentes" não
+  existe numa mescla de três vias de um sim/não**: se os dois lados mudaram o item, os dois o puseram no
+  mesmo estado (o contrário da base), e isso mescla. Com textos repetidos ("leite" duas vezes), conta o
+  número de marcados de cada texto: os dois lados mudando esse número para valores diferentes é conflito
+  normal. Só os trechos de itens que mudaram são reescritos (os abertos na ordem da nuvem, depois os
+  marcados); sem mudança, o corpo da nuvem volta igual. Um reordenar feito só de um lado perde para a
+  ordem da nuvem (nenhum texto se perde). A resposta é `applied` com `mesclado: true`, e o PC recebe o
+  corpo mesclado pelo pull.
+- **Lápides.** Apagar de vez (a lixeira, o expurgo de 30 dias, o Desfazer do "Virar nota" que apaga a nota
+  e o "apagar" do marcador) sobe como `delete`. No PC, o marcador da fila com o bit `CampoApagado` é a
+  lápide até a nuvem responder (a linha já saiu); a nota que a nuvem nunca teve sai sem deixar nada. Na
+  nuvem, a lápide (`note_tombstones`, só os ids) **não vence**: a nota não tem janela de 6 meses, e um
+  PC parado por um ano não pode ressuscitar a nota. O `delete` de uma nota que a nuvem nem tem grava a
+  lápide do mesmo jeito (um `upsert` atrasado do mesmo id recebe `gone`).
+- **[desvio] O expurgo da lixeira das notas fica no PC.** A nuvem não expurga nota (não há job novo):
+  toda lixeira de nota hoje vem de um PC, e o expurgo dele sobe como `delete`. Quando o celular puder pôr
+  nota na lixeira (N8), a nuvem ganha o expurgo dela.
+- **O "Virar nota" chega à nuvem (o ponto aberto da N3): opção (a).** O ditado ganha `virou_nota` no fio
+  (o bit `CampoVirouNota` do marcador do ditado; a chave no payload de criar), a nuvem guarda a ligação em
+  `transcription_note_links` e esconde o ditado do histórico do celular (a lista e a busca), como o PC já
+  fazia. Sem conflito: o último que escreve vence. O `nova:<token>` (a caixa "Criar uma nota" ainda
+  aberta) é só do PC e nunca sobe; quando a nota nasce, os ditados ligados a ela ganham o bit. O ditado
+  feito dentro de uma nota sobe já com o `virou_nota`.
+- **A retenção de 6 meses na nuvem continua valendo para o ditado que virou nota** (a ligação sai junto,
+  em cascata). No PC continua como a N3 deixou (fora dos 6 meses). Por quê: a nuvem guarda o mínimo, e o
+  texto vive na nota. **A nota de privacidade da N3 ("Virar nota" guarda o texto bruto para sempre no PC)
+  continua em aberto**: a N7 não muda o PC.
+- **`ditado_de_origem` sobe** no criar da nota (só o id), e nunca muda depois.
+- **O envio inicial das notas.** Nada de clique novo: o "Enviar o histórico" (F7c) já é o aceite da pessoa
+  para mandar o que é dela à nuvem. Com o aceite e com a nuvem que sabe de notas, toda rodada põe na fila
+  os marcadores vivos e as notas fora da lixeira que a nuvem ainda não tem (`Fila.CompletarNotas`), sem
+  cópia nova. A nota criada ou mudada com a nuvem conectada entra na fila na hora, como o ditado novo.
+- **[desvio] A capacidade da nuvem.** O pull ganha `entidades` (`["transcription", "learned", "note",
+  "label"]`). O PC só manda nota, marcador e o `virou_nota` do ditado depois de ver `note` ali (a chave
+  `nuvem_notas` da tabela `instalacao`). Por quê: o Agent novo instalado antes do servidor novo teria toda
+  nota recusada (`tipo_desconhecido`) e o ditado com `virou_nota` recusado (`campo_desconhecido`), e a
+  recusa fica. Na primeira vez que vê a capacidade, o PC zera o cursor (lê tudo de novo uma vez: um
+  binário antigo pode ter passado pelas notas sem as aplicar) e marca com `CampoVirouNota` todo ditado que
+  virou nota e que a nuvem já tem. A nuvem que deixa de dizer `note` (uma volta de versão) faz o PC parar
+  de mandar notas.
+- **O marcador que a nota cita antes de ele chegar** vira, no PC, uma linha "que espera"
+  (`sync_state = 'aguardando'`, na lixeira dos marcadores, invisível): a ligação fica guardada, e o
+  marcador aparece quando chega. Dois marcadores com o mesmo nome (criados em dois PCs sem rede) não são
+  recusados pela nuvem; o PC que recebe o segundo o grava com " (2)" no nome, só nele.
+- **O que a N7 não faz:** a tela das notas no celular (N8), o expurgo das notas na nuvem (N8), e o painel
+  da nuvem não mostra notas. No painel do PC, a nota com selo ganha um aviso no cartão e, na janela da
+  nota, a outra versão com "Manter esta" e "Usar a outra".
 
 ### Imagens (fase N10, por último)
 
@@ -462,10 +547,11 @@ Anexar imagem à nota (o ícone do Keep). Desenho prévio, a confirmar quando a 
   (ADR-011); se o editor tiver um campo por linha, o texto ditado com várias linhas cai num campo só.
   A N2 testa isso na verificação manual; a saída provável é o editor tratar a colagem de várias
   linhas (cada linha vira um bloco).
-- **"Virar nota" e o sync (N7), ponto aberto.** `virou_nota` é só deste PC e não gera evento: a nuvem
-  continua com o ditado no histórico dela, e nada diz a ela que ele "virou nota". Quando a N7 trouxer a
-  nota para a nuvem, decidir: (a) o ditado some também do histórico da nuvem e do celular (a coluna
-  sobe, como uma mudança de campo), ou (b) a nuvem mantém os dois. Hoje vale (b), por omissão.
+- **"Virar nota" e o sync (N7): decidido, opção (a).** Até a N7, `virou_nota` era só deste PC e não gerava
+  evento: a nuvem continuava com o ditado no histórico dela (a opção (b), por omissão). A N7 escolheu
+  (a): o ditado some também do histórico da nuvem e do celular, e a marca sobe como uma mudança de campo
+  do ditado, com a ligação numa tabela à parte. Ver "Decisões da N7", item "O 'Virar nota' chega à
+  nuvem". O que a N7 não resolve é o item seguinte (o texto bruto que fica no PC).
 - **"Virar nota" guarda o texto bruto para sempre.** A retenção de 6 meses não alcança o ditado que
   virou nota (a ADR, lida à letra), então o `raw_text` dele (e o `final_text`) fica no PC sem prazo,
   mesmo que a pessoa apague a nota da lixeira depois (o ditado fica escondido, com o id solto). Se isso
@@ -475,7 +561,8 @@ Anexar imagem à nota (o ícone do Keep). Desenho prévio, a confirmar quando a 
   não foi medido). O detector de conflito de atalho do Agent (`internal/agent/conflito`) passa a
   olhar os dois.
 - **Mescla da lista de marcar no servidor** é código novo no lugar mais delicado (o sync). Vai com
-  testes de propriedade e revisão adversarial.
+  testes de propriedade e revisão adversarial. (N7: a mescla é pura e tem tabela de casos e teste de
+  propriedade, `cloudstore/lista_de_marcar_test.go`; ver Decisões da N7.)
 - **Texto da nota no servidor:** mesmo tratamento dos ditados (ADR-019); a política de privacidade
   ganha uma linha.
 - **Custo da IA na conversão:** uma chamada por conversão de texto corrido, na chave da pessoa
@@ -496,7 +583,7 @@ deploy e release só com a autorização do Mauro.
 | N4 | Marcadores: criar, renomear, apagar, filtro na lateral, sugestão de marcador | N2 |
 | N5 | Converter trecho: por prefixo, por regra e com IA (prompt `notas-lista@1` com as guardas; benchmark próprio no `polishbench`) | N2, L |
 | N6 | Lista de marcar (marcados descem, desmarcar tudo), copiar para WhatsApp, busca única | N2 |
-| N7 | Sync das notas e marcadores: migrations do Postgres, entidades no motor, mescla da lista de marcar, rotas da nuvem (a `posicao` da N2b viaja com a nota). **Deploy: ponto de parada** | N1-N6, N2b |
+| N7 | Sync das notas e marcadores: migrations do Postgres, entidades no motor, mescla da lista de marcar, rotas da nuvem (a `posicao` da N2b viaja com a nota). **Deploy: ponto de parada.** **Feita localmente (26-out-2026), nos dublês, em quatro commits na branch `notas/n7`; o deploy espera o Mauro** (`docs/deploy-notas-n7.md`, depois `docs/teste-manual-notas-n7.md`). Ver "Decisões da N7" | N1-N6, N2b |
 | N8 | Aba Notas no celular (PWA), com "Ditar para nota" e a fila offline (marcar, desmarcar e acrescentar item sem rede) | N7 |
 | N9 | Gatilho "ditar para nota" no PC, com o destino pelo nome | N2 |
 | N10 | Imagens. **Ponto de parada antes** (servidor, disco, LGPD) | N7 |

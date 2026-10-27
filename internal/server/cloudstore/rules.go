@@ -44,6 +44,10 @@ const (
 	WriteNone Write = iota
 	WriteInsert
 	WriteUpdate
+	// WriteTombstone é o apagar de vez de uma nota ou de um marcador de nota
+	// (N7): a linha sai (se existe), e ficam a lápide e o evento tombstone,
+	// com a versão de Result.EntityVersion. Só de DecideNote e DecideLabel.
+	WriteTombstone
 )
 
 // Outcome é a decisão sobre uma mutação do push.
@@ -56,6 +60,11 @@ type Outcome struct {
 	// NextLearned é a linha do aprendido a gravar, do mesmo jeito. Só de
 	// DecideLearned.
 	NextLearned Learned
+	// NextNote e NextLabel são a linha da nota e a do marcador de nota, do
+	// mesmo jeito (N7). Só de DecideNote e de DecideLabel, e vazias no
+	// WriteTombstone.
+	NextNote  Note
+	NextLabel Label
 }
 
 // Record é o que fica em applied_mutations para esta decisão, mandada pelo
@@ -95,10 +104,11 @@ func RecordedOperation(op string) string {
 // applied_mutations (mutation_id ou entity_id que não é UUID), e o Store
 // responde sem abrir transação.
 //
-// O tipo é transcription ou learned (F8). O delete só vale para o learned (o
-// desfazer), e ele não olha a base: nunca é base_invalida (ADR-019, "Decisões
-// da F8"). O payload do learned é conferido por DecideLearned, antes de
-// qualquer gravação.
+// O tipo é transcription, learned (F8), note ou label (N7). O delete vale para
+// o learned (o desfazer) e para a nota e o marcador de nota (apagar de vez), e
+// não olha a base: nunca é base_invalida (ADR-019, "Decisões da F8"). Os
+// payloads do learned, da nota e do marcador são conferidos pelas regras de
+// cada um, antes de qualquer gravação.
 func CheckMutation(m Mutation) (code string, recordable bool) {
 	if _, ok := CanonicalUUID(m.MutationID); !ok {
 		return CodeInvalidMutation, false
@@ -110,19 +120,19 @@ func CheckMutation(m Mutation) (code string, recordable bool) {
 		return CodeInvalidMutation, false
 	}
 	switch m.EntityType {
-	case EntityTranscription, EntityLearned:
+	case EntityTranscription, EntityLearned, EntityNote, EntityLabel:
 	default:
 		return CodeUnknownType, true
 	}
 	switch m.Operation {
 	case OpUpsert:
 	case OpDelete:
-		if m.EntityType != EntityLearned {
+		if m.EntityType == EntityTranscription {
 			// A lixeira é o deleted_at do upsert; apagar de vez é só da
 			// nuvem ("excluir definitivamente" e a retenção).
 			return CodeInvalidOperation, true
 		}
-		// O desfazer é idempotente e não olha a base.
+		// O desfazer e o apagar de vez são idempotentes e não olham a base.
 		return "", true
 	default:
 		return CodeInvalidOperation, true
@@ -226,11 +236,12 @@ func DecidePush(m Mutation, cur *Transcription, tombstoned bool, a Actor, now ti
 		// recomeço manda tudo de novo com a base vazia). Ele não conhece
 		// versão nenhuma: o que ele tem de texto e de lixeira é comparado com
 		// tudo o que o servidor mudou.
-		full, code := parseCreate(m.Payload)
+		full, temVirou, code := parseCreateVirou(m.Payload)
 		if code != "" {
 			return Rejected(m, code)
 		}
-		p = patch{hasText: true, text: full.FinalText, hasTrash: true, trash: full.DeletedAt}
+		p = patch{hasText: true, text: full.FinalText, hasTrash: true, trash: full.DeletedAt,
+			hasVirouNota: temVirou, virouNota: full.VirouNota}
 	} else {
 		var code string
 		if p, code = parsePatch(m.Payload); code != "" {
@@ -368,7 +379,24 @@ func mergePatch(cur Transcription, base int64, p patch, device *string, now time
 			changed = true
 		}
 	}
+
+	// A ligação com a nota (N7): o último que escreve vence, sem conflito e
+	// sem mexer na versão do texto nem na da lixeira. Só a versão da linha
+	// sobe (bump), e o evento leva a mudança ao pull.
+	if p.hasVirouNota && !sameID(cur.VirouNota, p.virouNota) {
+		next.VirouNota = p.virouNota
+		changed = true
+	}
 	return next, lostText, changed
+}
+
+// sameID diz se dois ids opcionais são o mesmo (os dois nulos, ou o mesmo
+// UUID; os dois já em minúsculas).
+func sameID(a, b *string) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return *a == *b
 }
 
 // sameDevice diz se a última mudança de um campo (field) veio do aparelho que

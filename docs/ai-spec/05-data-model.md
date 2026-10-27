@@ -491,6 +491,104 @@ e nenhuma guarda áudio (o `schema_test.go` confere).
   (`pgstore.apagarDaConta`; um teste lê as migrations e falha se uma tabela com `user_id` ficar fora do
   apagar). Nenhuma das duas guarda áudio, texto ditado nem chave (`schema_test.go` confere).
 
+### Notas e marcadores: o que entra no Postgres (ADR-022, N7; migrations `0020` a `0025`)
+Seis tabelas novas, **só `CREATE TABLE` e `CREATE INDEX`**, uma tabela por arquivo (nenhuma tabela
+anterior muda, nenhuma linha é apagada). Por que seis, e não as três da ADR (`notes`, `labels`,
+`note_labels`): o `CHECK` de `entity_type` do `sync_events` (0008) e do `tombstones` (0015) não aceita
+`note` nem `label`, e a `transcriptions` (0003) não tem onde pôr o `virou_nota`; alargar `CHECK` ou
+somar coluna pede `ALTER`, que as migrations depois do deploy não usam (`migrations/schema_test.go` o
+recusa). Cada tabela é então nova. Todas têm `user_id` (o "apagar meus dados" as apaga, e um teste lê as
+migrations e falha se uma tabela com `user_id` ficar fora do apagar) e nenhuma guarda áudio nem contexto
+de janela (`schema_test.go` confere).
+
+| Migration | Tabela | O que é |
+|---|---|---|
+| `0020` | `labels` | o marcador de nota |
+| `0021` | `notes` | a nota |
+| `0022` | `note_labels` | os marcadores de cada nota |
+| `0023` | `note_tombstones` | a lápide da nota e a do marcador (só ids) |
+| `0024` | `note_sync_events` | o log de eventos das notas e dos marcadores |
+| `0025` | `transcription_note_links` | o ditado que virou nota |
+
+#### labels (0020)
+PK `(user_id, id)`; `UNIQUE (user_id, last_seq)`.
+| Coluna | Tipo | Notas |
+|---|---|---|
+| `id` | UUID | o UUID v7 que o PC gerou |
+| `user_id` | UUID | `REFERENCES users` |
+| `nome` | TEXT | `CHECK (char_length(nome) BETWEEN 1 AND 50)`, já limpo pelo servidor (bordas sem espaço, cada sequência de espaços vira um; `cloudstore.NomeDoMarcador`, a mesma regra do PC) |
+| `created_at`, `updated_at` | TIMESTAMPTZ | sem `DEFAULT`: as datas vêm de quem grava (`created_at` é a do PC) |
+| `version` | BIGINT | `CHECK (version >= 1)` |
+| `last_seq` | BIGINT | `CHECK (last_seq > 0)`; o `seq` da última mudança |
+
+- **A nuvem não impõe nome único.** Dois PCs podem criar "Mercado" sem rede; quem resolve é o PC, que
+  grava o segundo com " (2)" no nome, só nele.
+- O nome do PC vence, sem selo (não há conflito de marcador).
+
+#### notes (0021)
+PK `(user_id, id)`; `UNIQUE (user_id, last_seq)`. O desenho de versões é o do ditado (0003).
+| Coluna | Tipo | Notas |
+|---|---|---|
+| `id`, `user_id` | UUID | como acima |
+| `titulo` | TEXT | `CHECK (octet_length(titulo) <= 1024)`; vazio é `''` |
+| `corpo` | TEXT | `CHECK (octet_length(corpo) <= 65536)`; uma linha por bloco, com o prefixo do tipo; **a nuvem não interpreta**, só a mescla da lista de marcar lê os `- [ ] `/`- [x] ` |
+| `cor` | TEXT nulo | `CHECK (cor IN ('amarelo','laranja','vermelho','rosa','roxo','azul','verde','cinza'))` |
+| `fixada`, `arquivada` | BOOLEAN | o último que escreve vence, sem selo |
+| `posicao` | TEXT `COLLATE "C"` | `CHECK (posicao ~ '^[0-9A-Za-z]{1,128}$' AND right(posicao, 1) <> '0')`; a ordem manual da N2b. O `COLLATE "C"` é a ordem dos bytes, a mesma do Go e do PC (com o collation do banco, "a" e "B" sairiam trocados). A lista sai por `fixada DESC, posicao, id` |
+| `ditado_de_origem` | UUID nulo | o ditado de que a nota nasceu; **sem chave estrangeira** (o ditado sai com os 6 meses, e a nota fica); só se grava na criação |
+| `created_at`, `updated_at` | TIMESTAMPTZ | `updated_at` muda quando o conteúdo muda |
+| `deleted_at`, `purge_at` | TIMESTAMPTZ nulos | a lixeira de 30 dias; `CHECK (purge_at IS NULL OR deleted_at IS NOT NULL)` |
+| `version` | BIGINT | `CHECK (version >= 1)` |
+| `content_version`, `trash_version` | BIGINT | a versão em que o conteúdo (título e corpo juntos) e a lixeira mudaram por último; `CHECK (... BETWEEN 1 AND version)` |
+| `content_device_id`, `trash_device_id` | UUID nulos | o aparelho dessas mudanças; chave estrangeira composta para `devices (user_id, id)` (o banco recusa o aparelho de outro usuário) |
+| `last_seq` | BIGINT | `CHECK (last_seq > 0)` |
+| `conflict_titulo`, `conflict_corpo`, `conflict_at`, `conflict_device_id` | nulos | o selo: a versão do conteúdo que perdeu um conflito. Título, corpo e data vêm juntos ou nenhum (`CHECK`); o aparelho só com eles |
+
+Índices: `idx_notes_list` (`user_id, arquivada, fixada DESC, posicao, id`, só fora da lixeira) e
+`idx_notes_trash` (`user_id, deleted_at DESC`, só na lixeira).
+
+- **Sem a retenção de 6 meses.** A nota fica até a pessoa apagar. A lixeira de 30 dias é a do PC: o
+  expurgo é do PC e sobe como `delete`; a nuvem não expurga nota (quando o celular puder pôr nota na
+  lixeira, N8, ela ganha o expurgo dela).
+- **O conteúdo é um campo só** (título e corpo): o que chegou primeiro fica e o do PC que perdeu vai
+  para o selo, salvo a mescla de três vias da lista de marcar (`cloudstore.MesclarListaDeMarcar`, que
+  precisa do `corpo_base` do payload).
+
+#### note_labels (0022)
+PK `(user_id, note_id, label_id)`. `(user_id, note_id)` é chave estrangeira para `notes` com `ON DELETE
+CASCADE` (apagar a nota de vez leva as ligações). **`label_id` não tem chave estrangeira para `labels`:**
+a nota pode chegar antes do marcador (outro PC o criou e a nota subiu primeiro), e o id fica guardado e
+vale quando o marcador chegar. O conjunto viaja inteiro com a nota (o último que escreve vence, sem selo)
+e tem no máximo 100 marcadores (`MaxNoteLabels`, [ASSUMPTION]: o PC não tem teto). Apagar de vez um
+marcador tira as ligações dele em todas as notas pelo índice `idx_note_labels_label (user_id, label_id)`,
+na mesma transação, **sem subir a versão das notas** (o PC que apagou manda as notas mudadas). O marcador
+com lápide sai do conjunto da nota na hora de gravar.
+
+#### note_tombstones (0023)
+PK `(user_id, entity_type, entity_id)`; `UNIQUE (user_id, seq)`; `entity_type IN ('note','label')`;
+`seq` com `CHECK (seq > 0)`. **Só ids**, sem texto nem data do item. O pull entrega as lápides em ordem
+de `seq`, e o PC apaga a cópia dele; uma mudança para uma entidade com lápide recebe `gone`. **A lápide
+nunca vence**: a do ditado vence com a janela de 6 meses, mas a nota não tem janela, e uma lápide que
+saísse deixaria um PC parado por um ano ressuscitar a nota. O job de retenção não toca esta tabela.
+
+#### note_sync_events (0024)
+PK `(user_id, seq)`; `entity_type IN ('note','label')`; `operation IN ('upsert','tombstone')`;
+`entity_version >= 1`; `device_id` nulo (chave estrangeira composta para `devices`); `changed_at` sem
+`DEFAULT`. Índice `idx_note_sync_events_changed_at (user_id, changed_at)`. É a `sync_events` (0008) das
+notas: o `seq` vem do **mesmo contador do usuário** (`user_sync_counters`), então um `seq` é de uma
+mudança só, numa das duas tabelas, e o pull junta as listas por `seq`. **Sem payload:** o pull lê o
+estado atual das entidades e as lápides. A arrumação dos 90 dias apaga só o evento órfão (cujo `seq`
+nenhuma nota nem marcador vivo guarda como `last_seq`).
+
+#### transcription_note_links (0025)
+PK `(user_id, transcription_id)` (no máximo uma nota por ditado); `note_id UUID NOT NULL`.
+`(user_id, transcription_id)` é chave estrangeira para `transcriptions` com `ON DELETE CASCADE`: a
+retenção de 6 meses do ditado continua valendo e a ligação sai com ele. `note_id` **não** tem chave
+estrangeira (a nota pode chegar depois do ditado, ou ter sido apagada de vez). É o campo `virou_nota` do
+ditado no sync: o `create` e o `patch` do push gravam ou tiram a linha, sem conflito (o último que
+escreve vence), e o pull e o `GET` do ditado o levam. A lista do histórico na nuvem (`GET
+/transcriptions` e a busca) **esconde** o ditado ligado.
+
 ## SQLite
 
 ### local_transcriptions
@@ -559,6 +657,10 @@ não conhece as entidades, e um marcador de tipo desconhecido poderia travar o s
 N7 faz o envio inicial a partir destas linhas. O `user_id` de `local_notes` e de `local_labels` é
 migrado pelo dono fixo como o das outras tabelas (a migração lê as tabelas do schema).
 
+> **Emendado pela N7 (26-out-2026; migration `0013_notas_sync`).** O sync das notas e dos marcadores
+> entrou: o parágrafo acima descreve o estado da N1 ao N9. O que a N7 acrescenta ao banco local está em
+> "Sync das notas e dos marcadores no PC (ADR-022, N7)", abaixo, depois de "local_transcriptions.virou_nota".
+
 #### local_notes
 | Coluna | Tipo | Notas |
 |---|---|---|
@@ -573,8 +675,10 @@ migrado pelo dono fixo como o das outras tabelas (a migração lê as tabelas do
 | `deleted_at`, `purge_at` | TEXT nulo | a lixeira de 30 dias, a mesma dos ditados |
 | `version` | INTEGER | 1 na criação; sobe em toda mudança |
 | `posicao` | TEXT | a ordem manual (ADR-022, N2b; migration `0012`): um índice fracionário, ver abaixo |
-| `sync_state` | TEXT | `pending` (padrão; a N7 define o resto) |
-| `server_version`, `last_sync_error` | nulos | da N7 |
+| `sync_state` | TEXT | `pending` (padrão); a N7 definiu o resto (ver "Sync das notas e dos marcadores no PC") |
+| `server_version`, `last_sync_error` | nulos | `server_version` é a versão da nuvem que o PC conhece (nulo: a nuvem não tem a nota, e ela sobe inteira); `last_sync_error`, o código da recusa. Da N7 |
+| `conflito_titulo`, `conflito_corpo`, `conflito_device_id`, `conflito_em` | TEXT nulos | o selo do conflito (N7, migration `0013`) |
+| `corpo_nuvem` | TEXT nulo | o corpo da última versão que a nuvem confirmou (N7, migration `0013`) |
 
 Índices: `idx_local_notes_lista` (`user_id, arquivada, fixada DESC, updated_at DESC`, só não
 apagadas; da 0009, mantido), `idx_local_notes_ordem` (`user_id, arquivada, fixada DESC, posicao`, só não
@@ -642,9 +746,14 @@ continua no histórico.
   nulo, e a prévia não o conta): o texto dele vive na nota, e a ADR diz que a regra "não alcança o
   ditado que virou nota". `Get` por id não filtra: o "Aprender" e a auditoria continuam achando o
   `raw_text`.
-- **Local, sem sync.** Marcar ou desmarcar não passa por `emitir`: nada entra na `sync_outbox`, e o
-  ditado **não sobe a `version` nem o `updated_at`** (a base do próximo envio à nuvem fica a mesma). A
-  nuvem continua mostrando o ditado. O que a nuvem deve fazer com "virou nota" é ponto aberto da N7.
+- **Local, sem sync (até a N7).** Marcar ou desmarcar não passava por `emitir`: nada entrava na
+  `sync_outbox`, e o ditado **não sobe a `version` nem o `updated_at`** (a base do próximo envio à nuvem
+  fica a mesma; isso continua). A nuvem continuava mostrando o ditado. **Decidido na N7 (opção (a),
+  ADR-022):** a marca sobe, como o bit `CampoVirouNota` (= 4) do marcador do ditado na `sync_outbox`, e a
+  nuvem esconde o ditado do histórico dela. O bit só entra num ditado que a nuvem já tem
+  (`server_version`); o que ela não tem sobe inteiro, com o `virou_nota` lido na hora. Nada disso sobe antes
+  de a nuvem dizer que conhece notas; o `nova:<token>` nunca sobe. Ver "Sync das notas e dos marcadores no
+  PC".
 - **Tudo ou nada.** "Virar nota" cria a nota (`corpo` = `final_text`, ou `raw_text` se o final está
   vazio; sem título nem cor; `ditado_de_origem` = o ditado) e marca o ditado na mesma transação
   (`SQLiteNotaRepository.VirarNota`). Recusa o ditado inexistente (ou de outro dono), na lixeira e o que
@@ -663,6 +772,68 @@ continua no histórico.
   linha com `virou_nota` = o id dessa nota (escondida, como acima). Quando ele criou uma nota nova, a
   nota guarda `ditado_de_origem` = o id da linha (o Agent escolhe o id antes de gravar a nota). Se a
   nota não foi gravada, a linha fica **sem** `virou_nota` e com `status = 'error'`: à vista, com o texto.
+
+#### Sync das notas e dos marcadores no PC (ADR-022, N7; migration `0013_notas_sync`)
+**Não destrutiva.** Só nascem cinco colunas nulas em `local_notes`; nenhuma coluna, índice ou tabela
+existente é tirado ou recriado, e nenhuma linha muda (toda nota de hoje fica sem selo e sem
+`corpo_nuvem`: o PC ainda não sabe nada da nuvem dela). `local_labels` **não ganha coluna**.
+
+- **O selo** (`conflito_titulo`, `conflito_corpo`, `conflito_device_id`, `conflito_em`): o título e o
+  corpo que perderam um conflito de conteúdo na nuvem (`versao_em_conflito`), o aparelho que os escreveu
+  e a hora. Os quatro vêm juntos ou nenhum, como o selo do ditado (0005). A escolha do PC ("manter" ou
+  "trocar", `ResolverConflitoDaNota`) sobe pela `sync_outbox` (`selo_escolha`, `selo_em`) e é conferida
+  contra a `version` que a pessoa viu.
+- **`corpo_nuvem`**: o corpo da última versão que a nuvem confirmou. Vai no envio da mudança de conteúdo
+  como `corpo_base`, e é com ele que a nuvem mescla a lista de marcar quando os dois lados mexeram. Nulo
+  quando o PC não sabe (a nota nunca subiu, ou o envio dela teve mudança no voo). O push aplicado sem
+  mudança no voo grava o corpo atual; o mesclado e o aplicado com mudança no voo o esquecem (o pull traz o
+  de verdade). O recomeço e o "Esquecer esta nuvem" o zeram.
+- **O marcador que espera** (`local_labels.sync_state = 'aguardando'`, `SituacaoAguardando`): o id que uma
+  nota da nuvem cita e que o PC ainda não recebeu. É uma linha com `deleted_at` preenchido e `nome` vazio,
+  então nenhuma lista a vê (cai na lixeira dos marcadores, invisível); a ligação em `local_note_labels`
+  fica guardada, e o marcador de verdade a ocupa quando chega. **Nunca entra na fila.** Dois marcadores
+  com o mesmo nome (criados em dois PCs sem rede) não são recusados pela nuvem, e o PC que recebe o
+  segundo o grava com " (2)" no nome, só nele.
+- **Os bits da `sync_outbox` para a nota** (`entity_type = 'note'`; o marcador por entidade é o mesmo
+  desenho da F7a, sem texto): `CampoNotaConteudo` = 1 (título e corpo juntos), `CampoNotaLixeira` = 2,
+  `CampoNotaCor` = 4, `CampoNotaFixada` = 8, `CampoNotaArquivada` = 16, `CampoNotaMarcadores` = 32,
+  `CampoNotaPosicao` = 64 e **`CampoApagado` = 128**. Criar não é bit: a nota com `server_version` nulo
+  sobe inteira. Duas gravações juntam os bits (`campos | novos`). `CampoApagado` é a **lápide local** do
+  apagar de vez (a lixeira, o expurgo de 30 dias e o Desfazer do "Virar nota" que apaga a nota): fica
+  **sozinho** no marcador, substitui os outros bits e vale até a nuvem responder, porque a linha já saiu
+  daqui. Uma nota que a nuvem nunca teve sai sem deixar nada (nem marcador), a menos que o envio dela
+  esteja no voo.
+- **Os bits para o marcador de nota** (`entity_type = 'label'`): `CampoMarcadorNome` = 1, o único campo.
+  O apagar do marcador também deixa `CampoApagado` (a linha vai para o soft delete e some quando a nuvem
+  responde).
+- **`CampoVirouNota` = 4 no marcador do ditado** (`entity_type = 'transcription'`, ao lado de `CampoTexto`
+  = 1 e `CampoLixeira` = 2): o `virou_nota` do ditado mudou (virar nota, desfazer, a nota criada com os
+  ditados da caixa "Criar uma nota"). Só sobe depois de a nuvem dizer que conhece notas; antes, o bit
+  fica parado na fila (`Pendentes` não devolve o marcador que só tem esse bit, e um deploy na ordem errada
+  não estraga nada).
+- **A regra do `emitir` para notas:** a nota tem `server_version` (a nuvem a tem: conectado ou não), **ou**
+  a nuvem está conectada (o aparelho na `instalacao`); conectado, tudo entra; desconectado, só o que a
+  nuvem já tem (o resto sobe pela completação depois do aceite). Diferente do ditado, os bits valem também
+  numa nota que a nuvem ainda não tem: com o envio de criar no voo, é por eles que a mudança feita no meio
+  sobe depois da resposta. O "marcador que espera" nunca entra.
+- **A capacidade da nuvem** (`instalacao.nuvem_notas`, `ChaveNuvemNotas`): a hora em que o PC viu `note`
+  nas `entidades` do pull. Sem ela, nada de nota nem de marcador sobe, e o bit `CampoVirouNota` espera. Na
+  **primeira vez** (a chave não existe), a mesma transação grava a chave, põe `CampoVirouNota` em todo
+  ditado que a nuvem tem (`server_version`) e que virou nota de verdade (o id, e não `nova:<token>`; fora
+  os `fora_da_janela`), e o motor zera o cursor (uma leitura completa, uma vez). Se a nuvem deixa de dizer
+  `note`, a chave sai e nada de nota sobe até ela voltar (e voltar é outra "primeira vez"). O "Esquecer
+  esta nuvem" a apaga.
+- **O envio inicial** (`Fila.CompletarNotas`, em toda rodada): com o aceite (`nuvem_envio_aceito_em`) e a
+  capacidade, põe um marcador de criar (`campos` 0) em todo marcador de nota vivo e em toda nota fora da
+  lixeira que a nuvem não tem (`server_version` nulo, `sync_state = 'pending'`, sem marcador). A lixeira
+  fica de fora (como no histórico). Não há cópia nova do banco nem pergunta nova.
+- **O recomeço** (epoch novo): cada nota e cada marcador que a nuvem tinha e que estão fora da lixeira
+  ganham um marcador de criar, e `server_version` e `corpo_nuvem` voltam a nulo; a lápide local sobe como
+  `delete`. **O "Esquecer esta nuvem"** tira as versões, a situação, o erro e o `corpo_nuvem`; o selo, o
+  conteúdo e o "marcador que espera" ficam.
+- **Aplicar o que vem da nuvem não ecoa:** o estado da nuvem entra por `Fila.AplicarTudo`, na mesma
+  transação dos ditados, do aprendido e do cursor, sobe a `version` local em 1 e **nunca** põe marcador na
+  fila. O conjunto de marcadores da nota é trocado inteiro.
 
 ### local_dictionary_entries / aliases / corrections
 Espelhos sincronizáveis.
@@ -807,6 +978,15 @@ Gerenciador de Credenciais (`storage.TestSchema_NenhumaColunaDeSegredo` trava is
 > `learned`. A pergunta do esquecer (`ResumoDoEnvio.Mudancas`) soma o marcador `learned` de uma
 > mudança feita aqui (a linha do espelho com `versao_local > versao_base`); o que o epoch novo põe
 > num par que a nuvem já tinha confirmado não conta, como no ditado (revisão da F8f, 07-out-2026).
+>
+> **N7 (26-out-2026; ADR-022), sem mudar a tabela:** entram os marcadores `note` e `label`, um por id,
+> sem texto, com os bits de cada um e a lápide local `CampoApagado` = 128 (ver "Sync das notas e dos
+> marcadores no PC", em "Notas e marcadores"); e o ditado ganha o bit `CampoVirouNota` = 4 ao lado de
+> `CampoTexto` = 1 e `CampoLixeira` = 2. `Pendentes` (o ditado) não devolve o marcador que só tem esse bit
+> antes de a nuvem dizer que conhece notas; as notas e os marcadores têm leitores próprios
+> (`PendentesDeNotas`, `PendentesDeMarcadoresDeNota`), que também esperam a capacidade. Os `entity_type`
+> `note` e `label` não entram em `Contar` nem em `Progresso` do envio inicial dos ditados. O esquecer
+> continua apagando a tabela inteira.
 
 ### sync_mudou_aqui
 - entity_type

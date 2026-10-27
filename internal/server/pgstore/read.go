@@ -30,7 +30,7 @@ const (
 // a leitura para no orçamento de texto, e não só a resposta.
 var rowsRead func(where string, n int)
 
-var sqlPullEntities = "SELECT " + colsWith("t") + `, e.device_id
+var sqlPullEntities = "SELECT " + readColsWith("t") + `, e.device_id
 	FROM transcriptions t
 	LEFT JOIN sync_events e ON e.user_id = t.user_id AND e.seq = t.last_seq
 	WHERE t.user_id = $1 AND t.last_seq > $2
@@ -162,8 +162,15 @@ func (s *Store) Pull(ctx context.Context, userID string, afterSeq int64, limit i
 		return cloudstore.PullResponse{}, sanitize("ler o aprendido", err)
 	}
 
-	changes, more := mergePage(limit, entities, tombs, learned)
+	// As notas, os marcadores e as lápides deles (N7), no mesmo snapshot.
+	notes, labels, noteTombs, err := pullNotes(ctx, tx, userID, afterSeq, limit+1)
+	if err != nil {
+		return cloudstore.PullResponse{}, err
+	}
+
+	changes, more := mergePage(limit, entities, tombs, learned, notes, labels, noteTombs)
 	resp.Changes, resp.HasMore = changes, more
+	resp.Entidades = cloudstore.EntidadesDoSync()
 	if len(changes) > 0 {
 		resp.LastSeq = changes[len(changes)-1].Seq
 	}
@@ -186,6 +193,11 @@ func (s *Store) Pull(ctx context.Context, userID string, afterSeq int64, limit i
 // junta, o texto acumulado até o ditado que chegou ao orçamento é pelo menos
 // o dos ditados até ele (a lápide não tem texto, e o aprendido só soma), então
 // CutPage para nele ou antes, e a linha lida a mais diz que há mais.
+//
+// Desde a N7, as notas também param no orçamento (pullNotes), e o argumento é
+// o mesmo para cada lista parada: o corte da junta fica antes da primeira
+// linha que fez QUALQUER uma delas chegar ao orçamento, e o que falta de cada
+// lista está depois dessa linha.
 func mergePage(limit int, lists ...[]cloudstore.Change) ([]cloudstore.Change, bool) {
 	total := 0
 	for _, l := range lists {
@@ -215,7 +227,9 @@ func (s *Store) List(ctx context.Context, f cloudstore.ListFilter) (cloudstore.P
 		limit = cloudstore.MaxListLimit
 	}
 	sortCol := "created_at"
-	where := []string{"user_id = $1", "deleted_at IS NULL"}
+	where := []string{"user_id = $1", "deleted_at IS NULL",
+		// O ditado que virou nota sai da listagem do histórico (N7).
+		"NOT EXISTS (SELECT 1 FROM transcription_note_links vl WHERE vl.user_id = transcriptions.user_id AND vl.transcription_id = transcriptions.id)"}
 	if f.Trash {
 		sortCol = "deleted_at"
 		where[1] = "deleted_at IS NOT NULL"
@@ -252,7 +266,7 @@ func (s *Store) List(ctx context.Context, f cloudstore.ListFilter) (cloudstore.P
 		}
 		where = append(where, "("+sortCol+", id) < ("+arg(at)+", "+arg(id)+")")
 	}
-	sql := "SELECT " + colsWith("") + " FROM transcriptions WHERE " + strings.Join(where, " AND ") +
+	sql := "SELECT " + readColsWith("") + " FROM transcriptions WHERE " + strings.Join(where, " AND ") +
 		" ORDER BY " + sortCol + " DESC, id DESC LIMIT " + arg(limit+1)
 
 	rows, err := s.pool.Query(ctx, sql, args...)

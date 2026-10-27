@@ -40,6 +40,10 @@ type Backend struct {
 	NewDevice func(t *testing.T, userID string, tokenHMAC []byte) string
 	// Events devolve os eventos de sync do usuário, em ordem de seq.
 	Events func(t *testing.T, userID string) []cloudstore.Event
+	// NoteEvents devolve os eventos das notas e dos marcadores de nota (a
+	// note_sync_events, N7), em ordem de seq. Nil: o caso da arrumação deles
+	// pula.
+	NoteEvents func(t *testing.T, userID string) []cloudstore.Event
 	// AntesDaTrava liga f para rodar antes de cada candidato do Reter ser
 	// decidido de novo sob a trava (o gancho de teste do Store), até o fim do
 	// teste; f pode chamar o Store. Nil: os casos que precisam dele pulam

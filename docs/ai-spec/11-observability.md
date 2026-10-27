@@ -104,6 +104,32 @@ Quando a política de esforço desce um degrau (`modelo_incompativel`), sai uma 
   usuário do dicionário.** O servidor não loga o aprendido além da linha de acesso de sempre (a rota
   e o status). As linhas e os campos estão no `06-api-contract.md`.
 - `sync_mutations_total{status}` passa a ter também `gone`.
+- **Notas e marcadores no sync (ADR-022, N7; 26-out-2026):** só contagens, nada textual. No Agent, as
+  decisões do push e do pull sobre notas e marcadores de nota são contadas **com os mesmos tipos** do
+  ditado (`aplicado`, `mesclado`, `conflito`, `recusado`, `reenviar`, `apagado`, `recebido`, `pulado`, `eco`,
+  `nao_aplicado`, `reconciliado`), nas mesmas maps do `Relatorio` (`Push` e `Pull`): por isso os campos
+  que a linha `sync: rodada` já tinha (`enviados`, `aplicados`, `mesclados`, `conflitos`, `recusados`,
+  `reenviar`, `gone_apagados`, `recebidos`, `aplicados_do_pull`, `pulados`, `ecos`, `reconciliados`,
+  `nao_aplicados`) **passam a somar notas e marcadores**; não há campo por tipo de entidade. Entram no
+  `Relatorio` e fazem a rodada contar como "fez algo" (a linha sai):
+  - **`adiado`** (`TipoAdiado`), no `Push`: a nuvem recusou a nota ou o marcador por não conhecer o tipo
+    (`tipo_desconhecido` ou `operacao_invalida`: uma nuvem de antes da N7, ou que voltou a uma versão
+    anterior). O marcador fica na fila, o push das notas para nesta rodada e a capacidade é conferida de
+    novo no pull. Hoje só o `Relatorio` o conta; a linha de log ainda não tem campo próprio para ele;
+  - **`NotasCompletadas`**: quantas notas e marcadores a rodada pôs na fila no envio inicial das notas
+    (`Fila.CompletarNotas`);
+  - **`CapacidadeNova`**: a rodada viu pela primeira vez que a nuvem sincroniza notas (`note` em
+    `entidades`), e o cursor voltou a 0 para ler tudo de novo uma vez. Aparece junto com um `recebidos`
+    alto e muitos `ecos` na rodada: é esperado, uma vez, depois do deploy da N7.
+  `NotasCompletadas` e `CapacidadeNova` fazem a linha `sync: rodada` sair, mas ainda não têm campo próprio
+  nela (`completados` continua sendo só os ditados). Acrescentar os dois campos à linha é uma melhoria
+  possível, ainda não feita.
+  No **servidor**, o log de acesso do push e do pull tem as contagens de sempre (`mutacoes`, `mudancas`),
+  que agora incluem notas e marcadores, e o `GET /notes` e o `GET /labels` têm a contagem `itens`. Nunca o
+  título, o corpo, o nome do marcador nem o id (`09-security-privacy.md`, "Logging proibido"). Para
+  conferir sem texto, no deploy: as contagens de `notes`, `labels` e `transcription_note_links`
+  (`docs/deploy-notas-n7.md`, passos 5 e 6). Sem métrica nova no servidor (ele não tem infraestrutura de
+  métricas; as da lista abaixo são alvo).
 - **O job de retenção da nuvem (F9, 08-out-2026; ADR-019, "Decisões da F9"):** uma linha `INFO`
   `retenção` por rodada (na subida e de hora em hora), **só com contagens, mesmo com zero**:
   `usuarios` (os percorridos), `ativos` (apagados sem lápide), `lixeira` (apagados da lixeira),

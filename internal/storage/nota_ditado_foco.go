@@ -11,8 +11,11 @@ import (
 // o Agent grava virou_nota com o id da nota em foco ou, se a nota ainda não
 // existe (o "Criar uma nota" aberto), com "nova:<token>" (PrefixoDaNotaNova).
 // Aqui ficam os dois destinos do "nova:<token>": virar a nota (NovaNota.Token,
-// em Criar) ou voltar ao histórico (abaixo). Nenhum dos dois toca a versão, a
-// lixeira nem a fila do sync, e nenhum define ditado_de_origem da nota.
+// em Criar) ou voltar ao histórico (abaixo). Nenhum dos dois toca a versão nem
+// a lixeira, e nenhum define ditado_de_origem da nota. Virar a nota põe o
+// virou_nota de cada ditado na fila do sync (CampoVirouNota, N7); voltar ao
+// histórico não põe nada: a nuvem nunca recebe o "nova:<token>" (o ditado sobe
+// com virou_nota nulo), então para ela nada mudou.
 
 func (r *SQLiteNotaRepository) SoltarDitadosDaNotaNova(ctx context.Context, userID, token string) (int, error) {
 	if userID == "" {

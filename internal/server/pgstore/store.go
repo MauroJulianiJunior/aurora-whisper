@@ -136,6 +136,20 @@ func colsWith(prefix string) string {
 	return joinCols(transcriptionCols, prefix)
 }
 
+// readColsWith são as colunas que scanTranscription lê: as de
+// transcriptionCols e, no fim, o virou_nota (N7), a ligação da
+// transcription_note_links por uma subconsulta (no máximo uma linha: a PK é
+// (user_id, transcription_id)). table é a alias da tabela transcriptions na
+// consulta, ou o próprio nome dela.
+func readColsWith(prefix string) string {
+	table := prefix
+	if table == "" {
+		table = "transcriptions"
+	}
+	return colsWith(prefix) + ", (SELECT vn.note_id FROM transcription_note_links vn WHERE vn.user_id = " +
+		table + ".user_id AND vn.transcription_id = " + table + ".id)"
+}
+
 // joinCols junta as colunas, cada uma com o prefixo da tabela ("t.id"), ou
 // sem ele.
 func joinCols(cols []string, prefix string) string {
@@ -157,7 +171,7 @@ var learnedCols = []string{
 }
 
 var (
-	sqlSelectOne = "SELECT " + colsWith("") + " FROM transcriptions WHERE user_id = $1 AND id = $2"
+	sqlSelectOne = "SELECT " + readColsWith("") + " FROM transcriptions WHERE user_id = $1 AND id = $2"
 	sqlInsert    = "INSERT INTO transcriptions (" + colsWith("") + ") VALUES (" + placeholders(len(transcriptionCols)) + ")"
 
 	sqlSelectLearned = "SELECT " + joinCols(learnedCols, "") + " FROM learned_pairs WHERE user_id = $1 AND id = $2"
@@ -229,8 +243,8 @@ func placeholders(n int) string {
 	return strings.Join(p, ", ")
 }
 
-// scanTranscription lê uma linha com as colunas de transcriptionCols, mais
-// os destinos extras no fim.
+// scanTranscription lê uma linha com as colunas de readColsWith (as de
+// transcriptionCols e o virou_nota), mais os destinos extras no fim.
 func scanTranscription(row pgx.Row, extra ...any) (cloudstore.Transcription, error) {
 	var t cloudstore.Transcription
 	var cText, cDevice *string
@@ -241,6 +255,7 @@ func scanTranscription(row pgx.Row, extra ...any) (cloudstore.Transcription, err
 		&t.CreatedAt, &t.UpdatedAt, &t.DeletedAt, &t.PurgeAt,
 		&t.Version, &t.TextVersion, &t.TrashVersion, &t.TextDeviceID, &t.TrashDeviceID, &t.LastSeq,
 		&cText, &cDevice, &cAt,
+		&t.VirouNota,
 	}
 	if err := row.Scan(append(dest, extra...)...); err != nil {
 		return cloudstore.Transcription{}, err
@@ -317,7 +332,9 @@ func (s *Store) gravar(ctx context.Context, userID string, fn func(tx pgx.Tx, se
 
 // readForUpdate lê o ditado e trava a linha. nil quando não existe.
 func readForUpdate(ctx context.Context, tx pgx.Tx, userID, id string) (*cloudstore.Transcription, error) {
-	t, err := scanTranscription(tx.QueryRow(ctx, sqlSelectOne+" FOR UPDATE", userID, id))
+	// FOR UPDATE OF: trava só a linha do ditado (o virou_nota é uma
+	// subconsulta de outra tabela, que não se trava).
+	t, err := scanTranscription(tx.QueryRow(ctx, sqlSelectOne+" FOR UPDATE OF transcriptions", userID, id))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -620,6 +637,10 @@ func (s *Store) pushOne(ctx context.Context, a cloudstore.Actor, m cloudstore.Mu
 			out = cloudstore.Rejected(m, code)
 		case m.EntityType == cloudstore.EntityLearned:
 			out, wrote, err = pushLearned(ctx, tx, a, m, entityID, seq, now)
+		case m.EntityType == cloudstore.EntityNote:
+			out, wrote, err = pushNote(ctx, tx, a, m, entityID, seq, now)
+		case m.EntityType == cloudstore.EntityLabel:
+			out, wrote, err = pushLabel(ctx, tx, a, m, entityID, seq, now)
 		default:
 			out, wrote, err = pushTranscription(ctx, tx, a, m, entityID, seq, now)
 		}
@@ -653,10 +674,14 @@ func pushTranscription(ctx context.Context, tx pgx.Tx, a cloudstore.Actor, m clo
 		return out, false, nil
 	}
 	var prevVersion int64
+	var prevVirou *string
 	if cur != nil {
-		prevVersion = cur.Version
+		prevVersion, prevVirou = cur.Version, cur.VirouNota
 	}
 	if err := put(ctx, tx, out.Next, out.Write == cloudstore.WriteInsert, prevVersion, seq, a, now); err != nil {
+		return cloudstore.Outcome{}, false, err
+	}
+	if err := gravarVirouNota(ctx, tx, a.UserID, out.Next.ID, prevVirou, out.Next.VirouNota); err != nil {
 		return cloudstore.Outcome{}, false, err
 	}
 	if out.Result.State != nil {
@@ -665,6 +690,31 @@ func pushTranscription(ctx context.Context, tx pgx.Tx, a cloudstore.Actor, m clo
 		out.Result.State = &st
 	}
 	return out, true, nil
+}
+
+const (
+	sqlApagarVirouNota = `DELETE FROM transcription_note_links WHERE user_id = $1 AND transcription_id = $2`
+	sqlGravarVirouNota = `INSERT INTO transcription_note_links (user_id, transcription_id, note_id) VALUES ($1, $2, $3)`
+)
+
+// gravarVirouNota grava a ligação do ditado com a nota (N7; a 0025) quando ela
+// mudou de prev para next: tira a de antes e põe a nova. Na mesma transação da
+// linha do ditado, depois dela (a chave estrangeira aponta para o ditado).
+func gravarVirouNota(ctx context.Context, tx pgx.Tx, userID, id string, prev, next *string) error {
+	if prev == nil && next == nil || prev != nil && next != nil && *prev == *next {
+		return nil
+	}
+	if prev != nil {
+		if _, err := tx.Exec(ctx, sqlApagarVirouNota, userID, id); err != nil {
+			return sanitize("tirar a ligação com a nota", err)
+		}
+	}
+	if next != nil {
+		if _, err := tx.Exec(ctx, sqlGravarVirouNota, userID, id, *next); err != nil {
+			return sanitize("gravar a ligação com a nota", err)
+		}
+	}
+	return nil
 }
 
 // pushLearned decide e grava, na transação do push, uma mutação do aprendido

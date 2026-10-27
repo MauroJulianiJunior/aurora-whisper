@@ -104,6 +104,17 @@ func Run(t *testing.T, b Backend) {
 		{"Criar_OPCMudaOQueNasceuNoApp", testCriarOPCMudaOQueONascimentoDoApp},
 		{"Criar_Concorrente", testCriarConcorrente},
 		{"Situacao_DitadoLapideOuNada", testSituacao},
+		// As notas e os marcadores de nota (ADR-022, N7; notas.go).
+		{"Notas_CriaEPullComACapacidade", testNotasCriaEPull},
+		{"Notas_ConflitoComSeloEMesclaDaListaDeMarcar", testNotasConflitoEMescla},
+		{"Notas_ApagarDeVezDeixaALapide", testNotasApagarDeVez},
+		{"Notas_MarcadoresRenomearEApagar", testNotasMarcadores},
+		{"Notas_VirouNotaDoDitado", testNotasVirouNota},
+		{"Notas_ListagensDoCelular", testNotasListagens},
+		{"Notas_PullCortaNoOrcamentoDeTexto", testNotasOrcamentoDoPull},
+		{"Notas_ApagarMeusDadosLevaAsNotas", testNotasApagarMeusDados},
+		{"Notas_ArrumacaoDosEventos", testNotasArrumacao},
+		{"Notas_NadaDeTextoEmLog", testNotasNadaDeTextoEmLog},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) { c.fn(t, newWorld(t, b)) })

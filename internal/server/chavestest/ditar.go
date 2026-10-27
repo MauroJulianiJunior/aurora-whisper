@@ -137,7 +137,9 @@ type ditadoResp struct {
 	DeletedAt        *time.Time `json:"deleted_at"`
 	Version          int64      `json:"version"`
 	VersaoEmConflito any        `json:"versao_em_conflito"`
-	Aviso            string     `json:"aviso"`
+	// VirouNota (ADR-022, N7): o ditado do celular nasce sem nota.
+	VirouNota *string `json:"virou_nota"`
+	Aviso     string  `json:"aviso"`
 }
 
 // ditadoOk exige o status e lê o ditado.
@@ -232,7 +234,7 @@ func testDitarCria(t *testing.T, m *mundo) {
 		t.Fatalf("o provedor e o modelo: %+v", d)
 	case d.DurationMs == nil || *d.DurationMs != 4000 || d.ProcessingMs == nil || d.Language == nil || *d.Language != "pt-BR":
 		t.Fatalf("as medidas: %+v", d)
-	case d.Version != 1 || d.DeletedAt != nil || d.VersaoEmConflito != nil || d.Confidence != nil:
+	case d.Version != 1 || d.DeletedAt != nil || d.VersaoEmConflito != nil || d.Confidence != nil || d.VirouNota != nil:
 		t.Fatalf("a linha: %+v", d)
 	case !d.CreatedAt.Equal(agora0):
 		t.Fatalf("created_at %v, quero o relógio do servidor (%v)", d.CreatedAt, agora0)

@@ -813,7 +813,27 @@ próprio para "ditar para nota" e a lista marcável sem rede no celular. Fases (
   a busca do histórico passou a ignorar acento, como a das notas (`storage.dobrar`). **Falta o teste no PC,
   que é do Mauro:** `docs/teste-manual-notas-n6.md` (colar no WhatsApp Web de verdade; o celular fica para a
   N8);
-- **N7:** sync das notas e marcadores (migrations do Postgres; **deploy é ponto de parada**);
+- **N7:** sync das notas e marcadores (migrations do Postgres; **deploy é ponto de parada**). **Feita
+  localmente, nos dublês (26-out-2026), em quatro commits na branch `notas/n7`; o deploy espera o Mauro.**
+  O que entrou: no PC, a migration `0013_notas_sync` (o selo, o `corpo_nuvem`), a fila do sync de notas e
+  marcadores na mesma transação da gravação (`internal/storage/nota_sync.go`, com a lápide local
+  `CampoApagado` e o bit `CampoVirouNota` no ditado), a capacidade da nuvem (`nuvem_notas`) e o envio inicial
+  (`Fila.CompletarNotas`); no motor, as entidades `note` e `label` (`internal/sync`: `payload_nota.go`,
+  `decisao_nota.go`, o lote na ordem aprendido, marcadores, notas, ditados, a recusa `adiado`); na nuvem,
+  as migrations `0020` a `0025` (só aditivas: `labels`, `notes`, `note_labels`, `note_tombstones`,
+  `note_sync_events`, `transcription_note_links`), as regras puras `DecideNote` e `DecideLabel`, a mescla da
+  lista de marcar de três vias (`cloudstore.MesclarListaDeMarcar`, com teste de propriedade), o apagar de
+  vez com a lápide que não vence, o `virou_nota` escondendo o ditado do histórico da nuvem, `entidades` no
+  pull e `GET /api/v1/notes` e `GET /api/v1/labels`; no painel do PC, o selo "Versão em conflito" com
+  "Manter esta" e "Usar a outra" (`POST /api/notas/{id}/resolver-conflito`). Testes: `storage`, `sync`,
+  `cloudstore`, `contracttest` nos dois Stores, a ponta a ponta com dois PCs e o celular
+  (`internal/server/integration/sync_notas_e2e_test.go`) e o painel (`notasSeloNoPC.test.tsx`); AC e rastreio
+  em `20-traceability.md`. **Não rodou:** os testes contra o Postgres de verdade (compilam e pulam sem
+  `AURORA_TEST_POSTGRES_URL`; o Docker estava parado), que o Mauro roda em `docs/deploy-notas-n7.md`, passo
+  2. **Falta, e é do Mauro:** o backup, o `deploy-teste.ps1`, a imagem para a VPS e o `subir.sh` com as seis
+  migrations (`docs/deploy-notas-n7.md`), e depois o teste no PC com dois aparelhos
+  (`docs/teste-manual-notas-n7.md`). Ainda não feitos: a revisão de LGPD das notas no servidor (política de
+  privacidade e dossiê), a tela das notas no celular (N8) e o expurgo das notas na nuvem (N8);
 - **N8:** aba Notas no celular, "Ditar para nota" e a fila offline;
 - **N9:** gatilho "ditar para nota" no PC. **Feita nos dublês (26-out-2026):** o decisor dos dois gatilhos
   (`dictation.Gatilhos`: envolve o Decider do Ctrl+Win sem mudar nenhuma decisão de suprimir ou notificar, e

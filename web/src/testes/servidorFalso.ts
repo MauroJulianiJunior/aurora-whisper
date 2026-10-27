@@ -71,6 +71,11 @@
 // mover para a lixeira, restaurar e todo PATCH sobem a versão; o apagar de vez
 // só vale na lixeira (409 fora dela). notaPorFora faz o papel de outra aba.
 //
+// O selo da nota (N7): POST /api/notas/{id}/resolver-conflito {base_version, escolha}
+// devolve a nota sem o selo e com a versão nova (manter fica com o texto, trocar põe
+// o do selo); 400 sem base_version ou com escolha fora das duas; 409 com a versão
+// velha ou sem selo.
+//
 // Os marcadores (N4) seguem o Agent: nome único sem diferenciar maiúscula nem acento
 // (409 NAME_IN_USE, no POST e no PATCH), PATCH com base_version (409 CONFLICT para a
 // versão velha), apagar tira o marcador das notas (a versão delas sobe, a hora não),
@@ -799,8 +804,28 @@ export function servidorFalso(
     return json(comPosicao(n))
   }
 
+  // resolverConflitoDaNota é POST /api/notas/{id}/resolver-conflito, como o Agent:
+  // 400 sem base_version ou com escolha fora de manter/trocar; 409 com a versão velha
+  // ou sem selo. Devolve a nota sem o selo e com a versão nova.
+  function resolverConflitoDaNota(p: Pedido, n: Nota): Response {
+    if (p.metodo !== 'POST') return erro(405, 'BAD_REQUEST', 'método')
+    const c = p.corpo ?? {}
+    if (Object.keys(c).some((k) => k !== 'base_version' && k !== 'escolha')) return erro(400, 'BAD_REQUEST', 'corpo JSON inválido')
+    if (typeof c.base_version !== 'number') return erro(400, 'BAD_REQUEST', 'base_version é obrigatório')
+    if (c.escolha !== 'manter' && c.escolha !== 'trocar') return erro(400, 'BAD_REQUEST', 'escolha do selo inválida: use manter ou trocar')
+    if (c.base_version !== n.version || !n.conflito) return erro(409, 'CONFLICT', 'versão desatualizada')
+    if (c.escolha === 'trocar') {
+      n.titulo = n.conflito.titulo
+      n.corpo = n.conflito.corpo
+    }
+    delete n.conflito
+    n.version += 1
+    n.updated_at = agoraDasNotas()
+    return json(comPosicao(n))
+  }
+
   function rotaNotas(p: Pedido): Response {
-    const m = p.caminho.match(/^\/api\/notas(?:\/([^/]+)(\/restaurar|\/mover|\/definitivo|\/desfazer-virar|\/marcadores\/[^/]+)?)?$/)
+    const m = p.caminho.match(/^\/api\/notas(?:\/([^/]+)(\/restaurar|\/mover|\/resolver-conflito|\/definitivo|\/desfazer-virar|\/marcadores\/[^/]+)?)?$/)
     if (!m) return erro(404, 'NOT_FOUND', 'rota')
     const [, idBruto, sufixo] = m
     if (!idBruto) {
@@ -865,6 +890,7 @@ export function servidorFalso(
       return json(comPosicao(n))
     }
     if (sufixo === '/mover') return moverNota(p, n)
+    if (sufixo === '/resolver-conflito') return resolverConflitoDaNota(p, n)
     if (sufixo === '/desfazer-virar' && p.metodo === 'POST') return desfazerVirar(n)
     if (sufixo === '/definitivo' && p.metodo === 'DELETE') {
       if (!n.deleted_at) return erro(409, 'CONFLICT', 'só se apaga de vez a nota que está na lixeira')
@@ -1028,7 +1054,7 @@ export function servidorFalso(
     marcadores: bancoDeMarcadores,
     // notaPorFora simula outra aba mexendo na nota: a versão sobe, a data
     // também.
-    notaPorFora(id: string, parcial: Partial<Pick<Nota, 'titulo' | 'corpo' | 'cor' | 'fixada' | 'arquivada'>>) {
+    notaPorFora(id: string, parcial: Partial<Pick<Nota, 'titulo' | 'corpo' | 'cor' | 'fixada' | 'arquivada' | 'conflito'>>) {
       const n = bancoDeNotas.find((x) => x.id === id)
       if (!n) throw new Error(id)
       Object.assign(n, parcial)

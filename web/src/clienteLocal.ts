@@ -341,6 +341,11 @@ export function criarCliente(token: string, buscar: Buscador = buscadorPadrao): 
       const r = await pedir(buscar, `${daNota(id)}/mover`, comJson('POST', { antes, depois }))
       return (await r.json()) as Nota
     },
+    async resolverConflitoDaNota(id, versao, escolha) {
+      // O 409 é a versão velha, ou a nota sem selo: nos dois casos o painel lê a nota de novo.
+      const r = await pedir(buscar, `${daNota(id)}/resolver-conflito`, comJson('POST', { base_version: versao, escolha }))
+      return (await r.json()) as Nota
+    },
     async apagarNotaDeVez(id) {
       await pedir(buscar, `${daNota(id)}/definitivo`, autorizado({ method: 'DELETE' }), false)
     },

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/MauroJulianiJunior/aurora-whisper/internal/retention"
@@ -28,6 +29,10 @@ const EntidadeDitado = "transcription"
 const (
 	CampoTexto   = 1
 	CampoLixeira = 2
+	// CampoVirouNota (N7): o virou_nota do ditado mudou (virar nota, desfazer,
+	// a nota criada com os ditados da caixa). Só sobe depois de a nuvem dizer
+	// que conhece notas (ChaveNuvemNotas); antes, fica parado na fila.
+	CampoVirouNota = 4
 )
 
 // As chaves da nuvem na tabela instalacao que o sync lê (as mesmas do
@@ -190,6 +195,13 @@ type AcaoLocal struct {
 	Erro     string
 	// Marcador é MarcadorFica, MarcadorSai ou MarcadorReenviar.
 	Marcador int
+	// MudarVirouNota grava só o virou_nota do ditado (VirouNota; nil é o
+	// ditado comum): o eco de uma versão que o PC já tem, em que só a ligação
+	// com a nota mudou (N7). Vale a guarda do "nova:" (gravarRemoto), e só
+	// com a capacidade das notas (antes dela, a nuvem não sabe do virou_nota,
+	// e o nulo que ela manda não quer dizer nada).
+	MudarVirouNota bool
+	VirouNota      *string
 }
 
 // Fila é a fila do sync de um dono, sobre o historico.db.
@@ -384,6 +396,10 @@ func (f *Fila) recomecar(ctx context.Context, tx *sql.Tx, aparelho, pareadoEm st
 		f.dono); err != nil {
 		return fmt.Errorf("storage: esquecendo as versões da nuvem: %w", err)
 	}
+	// As notas e os marcadores de nota (N7), no mesmo molde dos ditados.
+	if err := f.recomecarNotas(ctx, tx, agora); err != nil {
+		return err
+	}
 	// O aprendido, no mesmo molde (F8e): todo par do espelho marcado de novo,
 	// as versões esquecidas e o recusado liberado.
 	return f.recomecarAprendido(ctx, tx, agora)
@@ -464,6 +480,10 @@ func (f *Fila) RegistrarRodada(ctx context.Context, aparelho string, agora time.
 // o envio de 800 sai no lote seguinte, e não depois deles. Um marcador sem
 // linha (o ditado sumiu: expurgado) ou de um ditado que a nuvem pôs fora da
 // janela sai da fila aqui mesmo.
+//
+// Antes da capacidade das notas (ChaveNuvemNotas, N7), o marcador que só tem
+// o CampoVirouNota (sem escolha do selo e fora do voo) não é devolvido: fica
+// parado na fila até a nuvem saber do virou_nota.
 func (f *Fila) Pendentes(ctx context.Context, limite int) ([]ItemDaFila, error) {
 	if limite <= 0 {
 		return nil, nil
@@ -471,8 +491,15 @@ func (f *Fila) Pendentes(ctx context.Context, limite int) ([]ItemDaFila, error) 
 	var itens []ItemDaFila
 	err := naTransacao(ctx, f.db, func(tx *sql.Tx) error {
 		itens = nil
+		comNotas, err := temCapacidadeDeNotas(ctx, tx)
+		if err != nil {
+			return err
+		}
 		marcadores, err := lerMarcadores(ctx, tx,
-			`WHERE entity_type = ? ORDER BY mutation_id IS NULL, inicial, criado_em, entity_id LIMIT ?`, EntidadeDitado, limite)
+			`WHERE entity_type = ?
+			   AND NOT (? = 0 AND campos = ? AND selo_escolha IS NULL AND mutation_id IS NULL)
+			 ORDER BY mutation_id IS NULL, inicial, criado_em, entity_id LIMIT ?`,
+			EntidadeDitado, boolInt(comNotas), CampoVirouNota, limite)
 		if err != nil {
 			return err
 		}
@@ -589,14 +616,30 @@ type RespostaDoAprendido struct {
 
 // AplicarComAprendido é Aplicar com o aprendido junto: depois dos ditados e
 // antes do cursor, na mesma transação, o que aprendido.Decidir manda fazer
-// com cada id de aprendido.IDs (executarAprendido). Um erro desfaz tudo.
+// com cada id de aprendido.IDs (executarAprendido). Um erro desfaz tudo. É
+// AplicarTudo sem as notas.
 func (f *Fila) AplicarComAprendido(ctx context.Context, aparelho, epoch string, ids []string, cursor *int64,
 	decidir func(EstadoDoItem) AcaoLocal, aprendido RespostaDoAprendido) error {
+	return f.AplicarTudo(ctx, aparelho, epoch, ids, cursor, decidir, aprendido, RespostaDasNotas{})
+}
+
+// AplicarTudo é AplicarComAprendido com as notas (N7): numa transação só, os
+// ditados, o aprendido, os marcadores de nota, as notas (os marcadores antes:
+// a nota que cita um marcador que chega na mesma página o acha) e o cursor.
+// Um erro desfaz tudo.
+func (f *Fila) AplicarTudo(ctx context.Context, aparelho, epoch string, ids []string, cursor *int64,
+	decidir func(EstadoDoItem) AcaoLocal, aprendido RespostaDoAprendido, notas RespostaDasNotas) error {
 	if epoch == "" {
 		return ErrEpochDiferente
 	}
 	if len(aprendido.IDs) > 0 && aprendido.Decidir == nil {
 		return acaoInvalida("ids do aprendido sem a decisão")
+	}
+	if len(notas.Marcadores) > 0 && notas.DecidirMarcador == nil {
+		return acaoInvalida("ids de marcadores de nota sem a decisão")
+	}
+	if len(notas.Notas) > 0 && notas.DecidirNota == nil {
+		return acaoInvalida("ids de notas sem a decisão")
 	}
 	return naTransacao(ctx, f.db, func(tx *sql.Tx) error {
 		var guardado sql.NullString
@@ -621,12 +664,16 @@ func (f *Fila) AplicarComAprendido(ctx context.Context, aparelho, epoch string, 
 		if err != nil {
 			return err
 		}
+		comNotas, err := temCapacidadeDeNotas(ctx, tx)
+		if err != nil {
+			return err
+		}
 		for _, id := range ids {
 			e, err := f.estado(ctx, tx, id, esquecidaEm)
 			if err != nil {
 				return err
 			}
-			if err := f.executar(ctx, tx, e, decidir(e)); err != nil {
+			if err := f.executar(ctx, tx, e, decidir(e), comNotas); err != nil {
 				return err
 			}
 		}
@@ -634,6 +681,9 @@ func (f *Fila) AplicarComAprendido(ctx context.Context, aparelho, epoch string, 
 			if err := f.mudarAprendido(ctx, tx, aprendido.Agora, aprendido.IDs, aprendido.Decidir); err != nil {
 				return err
 			}
+		}
+		if err := f.aplicarNotas(ctx, tx, notas); err != nil {
+			return err
 		}
 		if cursor != nil {
 			if _, err := tx.ExecContext(ctx,
@@ -721,12 +771,15 @@ func nuvemEsquecidaEm(ctx context.Context, q consulta) (*time.Time, error) {
 	return &t, nil
 }
 
-// executar faz o que a ação manda, na transação.
-func (f *Fila) executar(ctx context.Context, tx *sql.Tx, e EstadoDoItem, a AcaoLocal) error {
+// executar faz o que a ação manda, na transação. comNotas é a capacidade das
+// notas (ChaveNuvemNotas), lida na mesma transação: sem ela, o virou_nota
+// que vem da nuvem não é gravado.
+func (f *Fila) executar(ctx context.Context, tx *sql.Tx, e EstadoDoItem, a AcaoLocal, comNotas bool) error {
 	if e.DeOutroDono {
 		// A linha é de outro dono: nada aqui a toca (o marcador, se houver,
 		// é deste dono e segue a ação).
 		a.Gravar, a.ServerVersion, a.ZerarServerVersion, a.ApagarLinha, a.Situacao = nil, nil, false, false, ""
+		a.MudarVirouNota = false
 	}
 	if a.ApagarLinha {
 		if _, err := tx.ExecContext(ctx,
@@ -740,8 +793,15 @@ func (f *Fila) executar(ctx context.Context, tx *sql.Tx, e EstadoDoItem, a AcaoL
 		return nil
 	}
 	if a.Gravar != nil {
-		if err := f.gravarRemoto(ctx, tx, e, *a.Gravar, a.ServerVersion); err != nil {
+		if err := f.gravarRemoto(ctx, tx, e, *a.Gravar, a.ServerVersion, comNotas); err != nil {
 			return err
+		}
+	}
+	if a.MudarVirouNota && comNotas && e.Linha != nil {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE local_transcriptions SET virou_nota = `+virouNotaDaNuvemSQL+` WHERE id = ? AND user_id = ?`,
+			textoNulo(a.VirouNota), textoNulo(a.VirouNota), e.ID, f.dono); err != nil {
+			return fmt.Errorf("storage: gravando a nota do ditado que veio da nuvem: %w", err)
 		}
 	}
 	if e.Linha != nil || a.Gravar != nil {
@@ -801,10 +861,18 @@ func (f *Fila) executar(ctx context.Context, tx *sql.Tx, e EstadoDoItem, a AcaoL
 // SoftDelete), contado do deleted_at.
 const PrazoDaLixeira = 30 * 24 * time.Hour
 
+// virouNotaDaNuvemSQL é o valor novo do virou_nota que veio da nuvem (os dois
+// argumentos são o mesmo valor), com a guarda do "nova:" (N7): a nuvem nunca
+// recebe o "nova:<token>" (o ditado feito numa caixa de "Criar uma nota" que
+// ainda não virou nota), então o nulo dela não tira o ditado da caixa.
+const virouNotaDaNuvemSQL = `CASE WHEN ? IS NULL AND virou_nota LIKE '` + PrefixoDaNotaNova + `%' THEN virou_nota ELSE ? END`
+
 // gravarRemoto grava o estado da nuvem: insere o ditado novo aqui, ou muda o
 // texto, a lixeira, o status e o selo do que existe, subindo a version local.
-// Nunca põe marcador.
-func (f *Fila) gravarRemoto(ctx context.Context, tx *sql.Tx, e EstadoDoItem, r Transcription, sv *int64) error {
+// Com a capacidade das notas (comNotas), também o virou_nota, com a guarda
+// do "nova:" (virouNotaDaNuvemSQL); sem ela, a nuvem não sabe do virou_nota,
+// e o daqui fica. Nunca põe marcador.
+func (f *Fila) gravarRemoto(ctx context.Context, tx *sql.Tx, e EstadoDoItem, r Transcription, sv *int64, comNotas bool) error {
 	var purga *time.Time
 	if r.DeletedAt != nil {
 		p := r.DeletedAt.Add(PrazoDaLixeira)
@@ -818,6 +886,9 @@ func (f *Fila) gravarRemoto(ctx context.Context, tx *sql.Tx, e EstadoDoItem, r T
 		r.SyncState = SituacaoNormal
 		r.ServerVersion = sv
 		r.LastSyncError = nil
+		if !comNotas || (r.VirouNota != nil && strings.HasPrefix(*r.VirouNota, PrefixoDaNotaNova)) {
+			r.VirouNota = nil
+		}
 		if err := inserirLinha(ctx, tx, `INSERT`, r); err != nil {
 			return fmt.Errorf("storage: gravando o ditado que veio da nuvem: %w", err)
 		}
@@ -827,12 +898,18 @@ func (f *Fila) gravarRemoto(ctx context.Context, tx *sql.Tx, e EstadoDoItem, r T
 	if r.Conflito != nil {
 		conflitoTexto, conflitoDevice, conflitoEm = r.Conflito.FinalText, textoNulo(r.Conflito.DeviceID), emTexto(r.Conflito.Em)
 	}
+	virou := `virou_nota`
+	args := []any{r.FinalText, instanteNulo(r.DeletedAt), instanteNulo(purga), r.Status, emTexto(r.UpdatedAt),
+		conflitoTexto, conflitoDevice, conflitoEm}
+	if comNotas {
+		virou = virouNotaDaNuvemSQL
+		args = append(args, textoNulo(r.VirouNota), textoNulo(r.VirouNota))
+	}
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE local_transcriptions SET final_text = ?, deleted_at = ?, purge_at = ?, status = ?, updated_at = ?,
-		   conflito_texto = ?, conflito_device_id = ?, conflito_em = ?, version = version + 1
+		   conflito_texto = ?, conflito_device_id = ?, conflito_em = ?, version = version + 1, virou_nota = `+virou+`
 		 WHERE id = ? AND user_id = ?`,
-		r.FinalText, instanteNulo(r.DeletedAt), instanteNulo(purga), r.Status, emTexto(r.UpdatedAt),
-		conflitoTexto, conflitoDevice, conflitoEm, e.ID, f.dono); err != nil {
+		append(args, e.ID, f.dono)...); err != nil {
 		return fmt.Errorf("storage: aplicando o ditado que veio da nuvem: %w", err)
 	}
 	return nil

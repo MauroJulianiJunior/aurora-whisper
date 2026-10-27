@@ -21,7 +21,8 @@ func TestContrato_StoreEmMemoria(t *testing.T) {
 			mem.AddDeviceToken(id, tokenHMAC)
 			return id
 		},
-		Events: func(_ *testing.T, userID string) []cloudstore.Event { return mem.Events(userID) },
+		Events:     func(_ *testing.T, userID string) []cloudstore.Event { return mem.Events(userID) },
+		NoteEvents: func(_ *testing.T, userID string) []cloudstore.Event { return mem.NoteEvents(userID) },
 		AntesDaTrava: func(t *testing.T, f func(id string)) {
 			mem.AntesDaTravaDaRetencao(f)
 			t.Cleanup(func() { mem.AntesDaTravaDaRetencao(nil) })

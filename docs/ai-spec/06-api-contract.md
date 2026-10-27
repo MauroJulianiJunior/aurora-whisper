@@ -307,7 +307,9 @@ Restaura antes de purge.
 Todas só com sessão (o token do PC não alcança o CRUD).
 - **`target_app` sai:** não está no item nem é aceito em lugar nenhum (é contexto, REQ-025).
 - **`GET /transcriptions`** fica **sem `q`** (um `q` na URL é `400`): cursor, limit (máx. 100),
-  from/to, device_id, mode, trash.
+  from/to, device_id, mode, trash. **N7 (ADR-022):** a lista e a busca **escondem o ditado que virou
+  nota** (`virou_nota` preenchido, na `transcription_note_links`); o item (e o `GET` por id) ganha
+  `virou_nota`, o id da nota ou `null`. Ver "Sync", "Notas e marcadores no sync".
 - **`POST /transcriptions/search`**: a busca, com o texto no corpo, para ele nunca parar num log de
   acesso. Corpo: `q` e os mesmos filtros do `GET`. Mesma resposta do `GET`.
 - **`POST /transcriptions`: não é montada.** O ditado nasce no PC e sobe pelo sync. **ADR-021 (C1,
@@ -445,6 +447,43 @@ PC recebe `403`.
     (`internal/server/pgstore/learned.go`) e os casos do celular em `TestContrato_Postgres` e em
     `learned_celular_pg_test.go` estão escritos e nunca rodaram (o Postgres de teste estava desligado
     na F8d e na revisão). Ver "Como a F8c fechou isso no Postgres", abaixo, para o que falta rodar.
+
+## Notes e Labels (ADR-022, N7)
+As notas e os marcadores de nota, para o celular ler (a tela é a N8). **Só com a sessão do navegador:** o
+token do PC recebe `403` (o PC lê pelo pull, `Sync`). **Não há rota de criar, mudar nem apagar:** a nota é
+escrita pelo sync, e o celular não escreve nota nesta fase. Fonte da verdade:
+`internal/server/notas_routes.go`.
+
+### GET `/notes?vista=ativas|arquivo|lixeira`
+`vista` é `ativas` (o padrão: fora da lixeira e não arquivadas), `arquivo` (fora da lixeira e arquivadas)
+ou `lixeira`; outro valor é `400 VALIDATION`. A ordem é a do PC: `ativas` e `arquivo` por
+`fixada DESC, posicao, id`; `lixeira`, a que foi para lá por último primeiro.
+```json
+{ "items": [ { "id": "uuid", "titulo": "Mercado", "corpo": "- [ ] leite", "cor": null,
+               "fixada": false, "arquivada": false, "posicao": "V", "marcadores": ["uuid"],
+               "ditado_de_origem": null, "created_at": "...", "updated_at": "...",
+               "deleted_at": null, "version": 3, "versao_em_conflito": null } ],
+  "has_more": false }
+```
+O item é o `noteDTO` do pull (ver "Sync", "Notas e marcadores no sync"), com `versao_em_conflito` quando há
+selo. `items` nunca é `null`.
+
+- **O teto é 500 notas** (`cloudstore.MaxNotesList`) **e o orçamento de texto da página** (2 MiB de
+  título, corpo e selo, o mesmo `PageTextBudget` do pull): a página para no item que chegou ao orçamento
+  (sempre pelo menos um). `has_more` é `true` quando sobrou nota depois do corte. Sem paginação: o
+  celular mostra as mais recentes da vista e avisa.
+- O `GET` lê só `vista`; qualquer outro parâmetro é ignorado. O log de acesso leva só o padrão da rota, o
+  status e a contagem `itens`; nunca título, corpo nem id.
+
+### GET `/labels`
+Os marcadores pelo nome (a ordem dos bytes, a mesma do Go e do `COLLATE "C"` do Postgres), até o mesmo
+teto de 500, com `has_more`.
+```json
+{ "items": [ { "id": "uuid", "nome": "Mercado", "created_at": "...", "updated_at": "...", "version": 2 } ],
+  "has_more": false }
+```
+Não lê a query. Só com a sessão; o token do PC recebe `403`. A contagem `itens` é a única coisa que o log
+leva além do padrão da rota.
 
 ## As chaves da IA (ADR-021, C3a)
 Para ditar pelo celular, a pessoa cola no app a chave de API do provedor de IA **dela** (BYOK; a chave
@@ -1135,6 +1174,141 @@ o desfazer de um par que a nuvem já tem, que não leva texto: escolha menor 5 d
   o cursor anda; o arquivo indisponível nunca segura o cursor. O epoch e o pareamento são conferidos
   antes de o `dicionario.json` ser tocado. O detalhe está na ADR-019, "Decisões da F8".
 
+### Notas e marcadores no sync (ADR-022, N7; emenda da ADR-019)
+Acrescentado com a N7 (26-out-2026). Push e pull só com o token do PC, por usuário, como acima; os dois
+tipos novos entram no mesmo `POST /sync/push` e no mesmo `GET /sync/pull`, sem rota nova de sync. Fonte da
+verdade: `internal/server/cloudstore/notas.go`, `notas_regras.go` e `lista_de_marcar.go` (as regras, puras,
+iguais no Store em memória e no do Postgres) e `internal/sync/payload_nota.go` (o lado do PC).
+
+**Os tipos.** `entity_type` `note` e `label` (o servidor fala inglês, como `transcription` e `learned`).
+Operações: `upsert` e `delete` (apagar de vez, com lápide), nos dois. O `delete` vale só para `learned`,
+`note` e `label`; no ditado continua `operacao_invalida`. `delete` não olha `base_version`, vai sem payload
+(ausente, `null` ou `{}`; com qualquer chave, `campo_desconhecido`) e é idempotente.
+
+**Payload da nota, criar** (`base_version` 0; a lista fechada, todas as chaves obrigatórias menos as duas
+últimas):
+```json
+{
+  "titulo": "Mercado", "corpo": "- [ ] leite\n- [x] pão",
+  "cor": "verde",
+  "fixada": false, "arquivada": false,
+  "posicao": "V",
+  "marcadores": ["uuid", "uuid"],
+  "created_at": "2026-10-26T20:00:00Z",
+  "ditado_de_origem": "uuid",
+  "deleted_at": "2026-10-26T21:00:00Z"
+}
+```
+`titulo` até 1 KiB e `corpo` até 64 KiB, em bytes, UTF-8 válido e sem o caractere nulo (conferido nos bytes
+crus, como o texto do ditado); `cor` é `null` ou um de `amarelo`, `laranja`, `vermelho`, `rosa`, `roxo`,
+`azul`, `verde`, `cinza`; `posicao` é uma chave de 1 a 128 caracteres de `0-9A-Za-z` que não termina em `0`;
+`marcadores` é um array (nunca `null`) de UUIDs, sem repetir, no máximo 100; `created_at` é a do PC e não
+passa de um dia no futuro (`data_no_futuro`); `deleted_at` (a nota que sobe já na lixeira) e
+`ditado_de_origem` são opcionais, e o segundo **só se grava na criação** e nunca muda depois. Chave fora da
+lista é `campo_desconhecido`; tipo, valor ou formato errado, `campo_invalido`.
+
+**Payload da nota, mudar** (`base_version` = a versão que o PC conhece; só as chaves que mudaram, ao menos
+uma):
+- `titulo` e `corpo`, **sempre juntos** (um sem o outro é `campo_invalido`): o conteúdo. Podem levar
+  **`corpo_base`**, o corpo da última versão que a nuvem confirmou ao PC (`local_notes.corpo_nuvem`), que
+  só vale junto com o conteúdo; é com ele que a nuvem faz a mescla da lista de marcar (abaixo). O PC o
+  omite quando não o conhece;
+- `deleted_at` (data para ir à lixeira, `null` para restaurar), `cor`, `fixada`, `arquivada`,
+  `marcadores` (o conjunto inteiro) e `posicao`;
+- `resolver_conflito` (`manter` ou `trocar`) com `conflict_at` (o `conflict_at` do selo que a pessoa viu);
+  os dois juntos ou nenhum.
+
+Com `base_version` 0 numa nota que a nuvem já tem (o recomeço, ou a reconciliação), o payload é o de
+criar: o conteúdo e a lixeira são comparados com tudo o que a nuvem mudou, o resto vem do PC, e o
+`ditado_de_origem` e a data de criação ficam os da nuvem. `base_version` maior que a versão atual, ou
+diferente de 0 numa nota que a nuvem não tem, é `base_invalida` (o PC zera a versão e manda a nota
+inteira).
+
+**Payload do marcador:** criar `{ "nome": "Mercado", "created_at": "..." }`; mudar `{ "nome": "..." }`.
+O nome é limpo pelo servidor (bordas sem espaço, cada sequência de espaços vira um) e tem de 1 a 50
+caracteres, numa linha. **A nuvem não impõe nome único** (dois PCs podem criar "Mercado" sem rede); o nome
+do PC vence, sem selo.
+
+**Status e códigos.** Os da seção acima, com o `state` do `conflict` no formato da nota (abaixo) ou do
+marcador:
+- `applied`; com `"mesclado": true` quando a base era velha e o servidor juntou a mudança com as de outro
+  aparelho (inclusive a mescla da lista de marcar), e o PC **não** guarda a versão do mesclado: o pull
+  traz o estado de verdade;
+- `duplicate` (com `original`);
+- `conflict`, só para o **conteúdo** (título e corpo): o que chegou primeiro fica, e o conteúdo do PC que
+  perdeu vai para o selo (`versao_em_conflito`) com a versão nova; ou a edição antiga contra uma lixeira
+  mais nova. A resposta traz `state` (a nota atual, com o selo);
+- `rejected` com `mutacao_invalida`, `campo_desconhecido`, `campo_invalido`, `data_no_futuro`,
+  `base_invalida`, `mutacao_reusada`, `operacao_invalida` (operação fora da lista) e `tipo_desconhecido`
+  (uma nuvem de antes da N7); o PC trata os dois últimos, vindos de uma nuvem que não sabe de notas, como
+  `adiado` (o marcador fica para depois);
+- `gone` com `motivo: "apagado"`: a nota ou o marcador tem lápide (o PC apaga a cópia dele). Não existe
+  `fora_da_janela` para a nota (ela não tem a janela de 6 meses).
+
+**As regras campo a campo** (a nota segue o desenho do ditado):
+- **Lixeira:** a do ditado. Pôr na lixeira sempre vale (apagar vence); restaurar só vale se ninguém mexeu
+  na lixeira depois da base (senão a lixeira fica, sem conflito).
+- **Conteúdo** (título e corpo juntos): vale o que chegou primeiro; o do PC que perdeu vai para o selo,
+  com a escolha "manter" ou "trocar" como no ditado. "Depois da base" é de **outro** aparelho: o campo que o
+  próprio aparelho mudou por último conta como conhecido por ele.
+- **Cor, fixada, arquivada, marcadores e posição:** o último que escreve vence, **sem selo**. O conjunto de
+  marcadores tira os ids com lápide; um id que a nuvem não tem e sem lápide fica (o marcador pode chegar
+  depois da nota).
+- **A mescla da lista de marcar** (`cloudstore.MesclarListaDeMarcar`, de três vias): antes de ir ao selo,
+  se o PC mandou o `corpo_base` e os dois lados só marcaram e desmarcaram itens, o servidor junta os dois
+  e responde `applied` com `mesclado: true`, sem selo. Exige o mesmo título dos dois lados; as linhas que
+  não são de marcar iguais e na mesma ordem nos três corpos; e os mesmos textos de item nos três (contados
+  no corpo inteiro; a posição do item não conta). Qualquer diferença de texto é conflito normal, com selo.
+  Sem `corpo_base`, sem mescla. Detalhe na ADR-022, "Decisões da N7".
+- **Apagar de vez (`delete`):** a linha sai (e as ligações, em cascata), a lápide nasce e o evento
+  `tombstone` entra na versão seguinte. Sem linha e com lápide, `gone`. Sem as duas, a lápide nasce do mesmo
+  jeito (um `upsert` atrasado do mesmo id recebe `gone`). A lápide **não vence**: a nota não tem janela de
+  6 meses. O `delete` do marcador tira as ligações dele de todas as notas, sem subir a versão delas.
+
+**`virou_nota` no ditado.** O payload de criar e o de mudar do `transcription` aceitam `virou_nota`: o id da
+nota (UUID) ou `null` (desfazer). Sem conflito: o último que escreve vence. A nuvem guarda a ligação em
+`transcription_note_links` e **esconde o ditado ligado** de `GET /transcriptions` (a lista e a busca). O
+`GET /transcriptions/{id}` e o item do pull o trazem. O `itemDTO` ganha **`virou_nota`** (o id da nota, ou
+`null`), sempre presente: o PC lê `null` como "a ligação saiu"; a nuvem de antes da N7 não manda a chave, e
+o PC então não mexe no `virou_nota` local. O `nova:<token>` do "Criar uma nota" é só do PC e nunca sobe.
+Um PC de antes da N7 recebe o campo como chave desconhecida do item e a ignora.
+
+**Pull: `note` e `label`.** `entity_type` `note` e `label` aparecem em `changes` com `operation` `upsert`
+(o payload é o estado atual) ou `tombstone` (sem payload, só o id), fundidos com os ditados e o aprendido
+por `seq`. O payload da nota é o `noteDTO`:
+```json
+{
+  "id": "uuid", "titulo": "Mercado", "corpo": "- [ ] leite",
+  "cor": "verde", "fixada": false, "arquivada": false, "posicao": "V",
+  "marcadores": ["uuid"], "ditado_de_origem": null,
+  "created_at": "...", "updated_at": "...", "deleted_at": null,
+  "version": 3,
+  "versao_em_conflito": { "titulo": "...", "corpo": "...", "device_id": "uuid ou null", "conflict_at": "..." }
+}
+```
+`cor`, `ditado_de_origem`, `deleted_at` e `versao_em_conflito` vêm sempre (`null` quando não há);
+`marcadores` é sempre um array, em ordem de id. O payload do marcador é o `labelDTO`:
+`{ "id", "nome", "created_at", "updated_at", "version" }`. O texto da nota (título, corpo e selo) conta no
+orçamento de texto da página do pull, como o do ditado.
+
+**A capacidade: `entidades` na página do pull.** A resposta do pull ganha a chave `entidades`, a lista dos
+tipos que a nuvem sincroniza, sempre presente:
+```json
+{
+  "changes": [], "last_seq": 124, "has_more": false, "sync_epoch": "uuid",
+  "entidades": ["transcription", "learned", "note", "label"]
+}
+```
+O PC só manda nota, marcador e o `virou_nota` do ditado depois de ver `note` ali (conferido na primeira
+página de cada pull). Na **primeira vez** que vê, o PC zera o cursor e lê tudo de novo uma vez. Se a nuvem
+deixa de dizer `note`, o PC para de mandar notas. O PC antigo ignora a chave.
+
+**A ordem do lote do push** (a decide o PC): aprendido, marcadores de nota, notas, ditados. O motor aplica a
+resposta do push e cada página do pull numa transação só (`Fila.AplicarTudo`).
+
+**Log.** O servidor registra, do push e do pull, só as contagens de sempre (`mutacoes`, `mudancas`), que
+agora incluem notas e marcadores; nunca título, corpo, nome de marcador nem id. Ver `11-observability.md`.
+
 ## Ditar pelo celular (ADR-021, C5b; a antiga "ASR cloud")
 O ditado do celular é a única forma de áudio chegar à nuvem: o app manda a voz, o servidor a repassa ao
 provedor de transcrição que a pessoa escolheu (OpenAI ou Groq, com a chave **dela**), passa o texto pelo
@@ -1654,7 +1828,10 @@ Tira da lixeira. `204`.
 
 ### Notas e marcadores (ADR-022, N1)
 Acrescentado com a fase N1 da ADR-022: o banco local e a API local das notas e dos marcadores.
-A tela chegou na N2 (aba Notas do painel do PC, `08-ui-ux-spec.md`). O "Virar nota" chegou na N3 (abaixo, "Virar nota"). **Ainda não há sync (N7).** Fonte da verdade:
+A tela chegou na N2 (aba Notas do painel do PC, `08-ui-ux-spec.md`). O "Virar nota" chegou na N3 (abaixo, "Virar nota"). **O sync chegou na N7** (26-out-2026): toda
+gravação de nota e de marcador entra na fila do sync na mesma transação, e a nota ganhou o campo
+`conflito` e a rota `resolver-conflito` (abaixo); o contrato com a nuvem está em "Sync", `note` e `label`.
+Fonte da verdade:
 `internal/agent/localapi/notas.go`. O modelo está em `05-data-model.md`, "Notas e marcadores".
 
 Convenções, como no histórico: JSON em `snake_case`, datas RFC3339, erros no envelope da cloud com
@@ -1678,11 +1855,14 @@ A nota nos corpos de resposta:
   "created_at": "...", "updated_at": "...",
   "deleted_at": "só na lixeira",
   "posicao": "V",
-  "version": 1
+  "version": 1,
+  "conflito": { "titulo": "...", "corpo": "...", "device_id": "uuid ou null", "conflict_at": "..." }
 }
 ```
 `posicao` é a chave da ordem manual (N2b); o painel não a interpreta, só a lista já vem na ordem dela. `cor` é sempre presente (`null` sem cor); `marcadores` é sempre uma lista (`[]`), na ordem do nome do
-marcador; `ditado_de_origem` e `deleted_at` só aparecem quando há. O marcador:
+marcador; `ditado_de_origem` e `deleted_at` só aparecem quando há. **`conflito` (N7) só aparece quando a
+nota tem o selo:** o título e o corpo que perderam um conflito de conteúdo na nuvem, guardados até a
+pessoa escolher (`device_id` é `null` quando o aparelho saiu da conta). O marcador:
 `{"id", "nome", "created_at", "updated_at", "version"}`.
 
 #### GET `/api/notas`
@@ -1729,7 +1909,20 @@ painel nunca vê nem monta chave. Não leva `base_version`. Os campos desconheci
 `400` sem nenhuma vizinha; `404` nota inexistente (ou de outro dono); `409 CONFLICT` para vizinha que
 não existe, está na lixeira, é a própria nota, é de **outro grupo** (fixada com não fixada, ativa com
 arquivada) ou vem fora de ordem, e para a própria nota na lixeira. Quem recebe `409` lê a lista de novo.
-Não gera evento de sync (a `posicao` viaja com a nota na N7).
+Gera o evento de sync da nota (N7): a `posicao` viaja com a nota, com o bit de posição na fila, e na
+nuvem o último que escreve vence, sem selo. Antes da N7 não gerava evento.
+
+#### POST `/api/notas/{id}/resolver-conflito` (ADR-022, N7)
+```json
+{ "base_version": 4, "escolha": "manter" }
+```
+A escolha do selo da nota, como a do ditado (`PATCH` com `resolver_conflito`). `escolha` é `manter`
+(fica o texto atual e o selo some) ou `trocar` (o título e o corpo passam a ser os do selo). `base_version`
+é obrigatório (a escolha vale para a versão que a pessoa viu). `200` com a nota, com a `version` nova e sem
+`conflito`. `400` sem `base_version` ou com `escolha` fora de `manter` e `trocar`; `404` nota
+inexistente; `409 CONFLICT` com a versão velha, ou sem selo (o painel lê a nota de novo). A escolha entra
+na fila do sync na própria transação do repositório (`selo_escolha` e `selo_em`) e sobe como
+`resolver_conflito` no próximo envio. Os campos desconhecidos são `400`. O log não leva texto.
 
 #### DELETE `/api/notas/{id}`
 Move para a lixeira: `deleted_at` e `purge_at` = agora + 30 dias. `204`. Repetido, `204` de novo sem
@@ -1762,7 +1955,10 @@ desatualizada, `409 NAME_IN_USE` para nome de outro marcador (mudar só a caixa 
 Apaga o marcador e o tira de todas as notas; **não apaga nota**. `204`; repetido, `204`.
 
 #### Virar nota (ADR-022, N3)
-O ditado do histórico vira nota; o Desfazer devolve. Nenhuma das duas rotas toca o sync.
+O ditado do histórico vira nota; o Desfazer devolve. Até a N7, nenhuma das duas rotas tocava o sync. **Na
+N7 as duas passam a gerar eventos**, na mesma transação: a nota nova (ou a lápide da nota que o Desfazer
+apaga) e o bit `virou_nota` do ditado (só num ditado que a nuvem já tem; o que ela não tem sobe inteiro
+com o `virou_nota` lido na hora). O ditado **não** sobe a `version` local. Ver "Sync", `virou_nota`.
 
 **POST `/api/history/{id}/virar-nota`** (sem corpo). Cria a nota com o texto do ditado (`final_text`;
 o `raw_text` se o final está vazio), sem título nem cor, com `ditado_de_origem` = `{id}`, e marca o

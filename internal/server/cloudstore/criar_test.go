@@ -183,9 +183,9 @@ func TestNewDictation_PayloadCobreAListaFechadaDoPush(t *testing.T) {
 		t.Fatal(err)
 	}
 	for campo := range createFields {
-		// deleted_at é o único que o Create não manda: o ditado da nuvem não
-		// nasce na lixeira.
-		if _, ok := obj[campo]; !ok && campo != "deleted_at" {
+		// deleted_at e virou_nota são os únicos que o Create não manda: o
+		// ditado da nuvem não nasce na lixeira nem ligado a uma nota (N7).
+		if _, ok := obj[campo]; !ok && campo != "deleted_at" && campo != "virou_nota" {
 			t.Errorf("o campo %q é do ditado novo do push e não do Create", campo)
 		}
 	}

@@ -226,6 +226,47 @@ var wantTables = []tableSpec{
 			"accepted_at", "ended_at", "end_reason",
 		},
 	},
+	// ADR-022, N7: o sync das notas e dos marcadores de nota.
+	{
+		file:  "0020_labels_table.sql",
+		table: "labels",
+		columns: []string{
+			"id", "user_id", "nome", "created_at", "updated_at", "version", "last_seq",
+		},
+	},
+	{
+		file:  "0021_notes_table.sql",
+		table: "notes",
+		columns: []string{
+			"id", "user_id", "titulo", "corpo", "cor", "fixada", "arquivada", "posicao",
+			"ditado_de_origem", "created_at", "updated_at", "deleted_at", "purge_at",
+			"version", "content_version", "trash_version", "content_device_id", "trash_device_id",
+			"last_seq", "conflict_titulo", "conflict_corpo", "conflict_device_id", "conflict_at",
+		},
+	},
+	{
+		file:    "0022_note_labels_table.sql",
+		table:   "note_labels",
+		columns: []string{"user_id", "note_id", "label_id"},
+	},
+	{
+		file:    "0023_note_tombstones_table.sql",
+		table:   "note_tombstones",
+		columns: []string{"user_id", "entity_type", "entity_id", "seq"},
+	},
+	{
+		file:  "0024_note_sync_events_table.sql",
+		table: "note_sync_events",
+		columns: []string{
+			"user_id", "seq", "entity_type", "entity_id", "operation", "entity_version",
+			"device_id", "changed_at",
+		},
+	},
+	{
+		file:    "0025_transcription_note_links_table.sql",
+		table:   "transcription_note_links",
+		columns: []string{"user_id", "transcription_id", "note_id"},
+	},
 }
 
 // TestSchema_EveryMigrationIsCoveredBySpec garante que a lista acima e os
@@ -321,6 +362,19 @@ func TestSchema_UniqueConstraints(t *testing.T) {
 		// preferências e a do id do aceite estão em sqlContracts.)
 		{"0019_dictation_consents_table.sql",
 			"CREATE UNIQUE INDEX idx_dictation_consents_open ON dictation_consents (user_id) WHERE ended_at IS NULL"},
+		// N7: a nota e o marcador têm o id do cliente (a PK por usuário) e o
+		// last_seq único por usuário, como o ditado; a lápide é uma por
+		// entidade, com o seq único; o evento tem o seq por usuário; a ligação
+		// é uma por par (nota, marcador) e uma nota por ditado.
+		{"0020_labels_table.sql", "PRIMARY KEY (user_id, id)"},
+		{"0020_labels_table.sql", "UNIQUE (user_id, last_seq)"},
+		{"0021_notes_table.sql", "PRIMARY KEY (user_id, id)"},
+		{"0021_notes_table.sql", "UNIQUE (user_id, last_seq)"},
+		{"0022_note_labels_table.sql", "PRIMARY KEY (user_id, note_id, label_id)"},
+		{"0023_note_tombstones_table.sql", "PRIMARY KEY (user_id, entity_type, entity_id)"},
+		{"0023_note_tombstones_table.sql", "UNIQUE (user_id, seq)"},
+		{"0024_note_sync_events_table.sql", "PRIMARY KEY (user_id, seq)"},
+		{"0025_transcription_note_links_table.sql", "PRIMARY KEY (user_id, transcription_id)"},
 	}
 	for _, c := range cases {
 		// Sem os comentários: eles explicam as constraints, e citam o texto delas.
@@ -481,6 +535,27 @@ func TestSchema_TranscriptionIndexes(t *testing.T) {
 	}
 }
 
+// TestSchema_NoteIndexes prova os índices da N7 (ADR-022): a lista das notas
+// fora da lixeira na ordem da tela (fixada desc, posição, id; a posição é
+// COLLATE "C" na própria coluna), a lixeira (deleted_at desc) e as ligações
+// de um marcador (o apagar de vez dele).
+func TestSchema_NoteIndexes(t *testing.T) {
+	for file, frags := range map[string][]string{
+		"0021_notes_table.sql": {
+			"CREATE INDEX idx_notes_list ON notes (user_id, arquivada, fixada DESC, posicao, id) WHERE deleted_at IS NULL;",
+			"CREATE INDEX idx_notes_trash ON notes (user_id, deleted_at DESC) WHERE deleted_at IS NOT NULL;",
+		},
+		"0022_note_labels_table.sql": {"CREATE INDEX idx_note_labels_label ON note_labels (user_id, label_id);"},
+	} {
+		content := squashSQL(readMigration(t, file))
+		for _, frag := range frags {
+			if !strings.Contains(content, frag) {
+				t.Errorf("%s: esperava conter %q, não encontrado", file, frag)
+			}
+		}
+	}
+}
+
 // TestSchema_RetentionIndexes prova os índices da arrumação do job de
 // retenção (ADR-019, "Decisões da F9"): o do sync_event órfão por usuário e
 // idade (a 0008, corrigida no lugar pela F9c), o da resposta guardada por
@@ -490,6 +565,8 @@ func TestSchema_RetentionIndexes(t *testing.T) {
 		"0008_sync_events_table.sql":       {"CREATE INDEX idx_sync_events_changed_at ON sync_events (user_id, changed_at);"},
 		"0009_applied_mutations_table.sql": {"CREATE INDEX idx_applied_mutations_applied_at ON applied_mutations (applied_at);"},
 		"0015_tombstones_table.sql":        {"CREATE INDEX idx_tombstones_dictated_at ON tombstones (dictated_at);"},
+		// N7: o evento órfão das notas, pela mesma regra do da 0008.
+		"0024_note_sync_events_table.sql": {"CREATE INDEX idx_note_sync_events_changed_at ON note_sync_events (user_id, changed_at);"},
 	} {
 		content := stripSQLComments(readMigration(t, file))
 		for _, frag := range frags {
@@ -548,6 +625,14 @@ func TestSchema_OptimisticConcurrencyVersionColumn(t *testing.T) {
 		// nenhuma das duas tem concorrência otimista.
 		"0018_dictation_settings_table.sql": false,
 		"0019_dictation_consents_table.sql": false,
+		// ADR-022, N7: a nota e o marcador são entidades editáveis com versão,
+		// como o ditado; as ligações, a lápide e o evento não.
+		"0020_labels_table.sql":                   true,
+		"0021_notes_table.sql":                    true,
+		"0022_note_labels_table.sql":              false,
+		"0023_note_tombstones_table.sql":          false,
+		"0024_note_sync_events_table.sql":         false,
+		"0025_transcription_note_links_table.sql": false,
 	}
 
 	re := regexp.MustCompile(`(?im)^\s*version\s+BIGINT`)
@@ -672,19 +757,22 @@ func TestSchema_DeviceForeignKeysAreCompositePerUser(t *testing.T) {
 			}
 		}
 	}
-	// Seis colunas de aparelho hoje. Se a generalização acima não achar
-	// nenhuma (um erro de leitura), o teste passaria sem provar nada.
+	// Dez colunas de aparelho hoje (as quatro das notas na N7). Se a
+	// generalização acima não achar nenhuma (um erro de leitura), o teste
+	// passaria sem provar nada.
 	for _, want := range []string{
 		"transcriptions.device_id", "transcriptions.conflict_device_id",
 		"transcriptions.text_device_id", "transcriptions.trash_device_id",
 		"sync_events.device_id", "applied_mutations.device_id",
+		"notes.content_device_id", "notes.trash_device_id", "notes.conflict_device_id",
+		"note_sync_events.device_id",
 	} {
 		if !found[want] {
 			t.Errorf("o teste não viu a coluna de aparelho %s (uma coluna nova de aparelho entra nesta lista, uma que sumiu sai)", want)
 		}
 	}
-	if len(found) != 6 {
-		t.Errorf("achei %d colunas de aparelho em tabelas com user_id (%v), esperava 6", len(found), found)
+	if len(found) != 10 {
+		t.Errorf("achei %d colunas de aparelho em tabelas com user_id (%v), esperava 10", len(found), found)
 	}
 }
 
@@ -827,6 +915,66 @@ var sqlContracts = []struct {
 		"end_reason TEXT CHECK (end_reason IN ('revogado', 'substituido'))",
 		"CHECK ((ended_at IS NULL) = (end_reason IS NULL))",
 		"CHECK (ended_at IS NULL OR ended_at >= accepted_at)",
+	}},
+	// ADR-022, N7: o marcador de nota. O nome de 1 a 50 caracteres (o do PC),
+	// sem nome único (dois PCs criam "Mercado" sem rede); as datas e a versão
+	// vêm de quem grava, sem DEFAULT.
+	{"0020_labels_table.sql", "labels", []string{
+		"user_id UUID NOT NULL REFERENCES users (id)",
+		"nome TEXT NOT NULL CHECK (char_length(nome) BETWEEN 1 AND 50)",
+		"created_at TIMESTAMPTZ NOT NULL,",
+		"updated_at TIMESTAMPTZ NOT NULL,",
+		"version BIGINT NOT NULL CHECK (version >= 1)",
+		"last_seq BIGINT NOT NULL CHECK (last_seq > 0)",
+	}},
+	// A nota: os tetos do PC (o título em 1 KiB, o corpo em 64 KiB, em bytes),
+	// as oito cores, a posição do índice fracionário em COLLATE "C" (a ordem dos
+	// bytes), a lixeira, as versões de cada campo e o selo inteiro ou nenhum.
+	{"0021_notes_table.sql", "notes", []string{
+		"titulo TEXT NOT NULL CHECK (octet_length(titulo) <= 1024)",
+		"corpo TEXT NOT NULL CHECK (octet_length(corpo) <= 65536)",
+		"cor TEXT CHECK (cor IN ('amarelo', 'laranja', 'vermelho', 'rosa', 'roxo', 'azul', 'verde', 'cinza'))",
+		"fixada BOOLEAN NOT NULL,",
+		"arquivada BOOLEAN NOT NULL,",
+		`posicao TEXT COLLATE "C" NOT NULL CHECK (posicao ~ '^[0-9A-Za-z]{1,128}$' AND right(posicao, 1) <> '0')`,
+		"ditado_de_origem UUID,",
+		"created_at TIMESTAMPTZ NOT NULL,",
+		"updated_at TIMESTAMPTZ NOT NULL,",
+		"version BIGINT NOT NULL CHECK (version >= 1)",
+		"last_seq BIGINT NOT NULL CHECK (last_seq > 0)",
+		"conflict_titulo TEXT CHECK (octet_length(conflict_titulo) <= 1024)",
+		"conflict_corpo TEXT CHECK (octet_length(conflict_corpo) <= 65536)",
+		"CHECK (purge_at IS NULL OR deleted_at IS NOT NULL)",
+		"CHECK (content_version BETWEEN 1 AND version)",
+		"CHECK (trash_version BETWEEN 1 AND version)",
+		"CHECK ((conflict_titulo IS NULL) = (conflict_at IS NULL))",
+		"CHECK ((conflict_corpo IS NULL) = (conflict_at IS NULL))",
+		"CHECK (conflict_at IS NOT NULL OR conflict_device_id IS NULL)",
+	}},
+	// As ligações saem com a nota (a cascata), e não apontam para labels (o
+	// marcador pode chegar depois).
+	{"0022_note_labels_table.sql", "note_labels", []string{
+		"FOREIGN KEY (user_id, note_id) REFERENCES notes (user_id, id) ON DELETE CASCADE",
+		"label_id UUID NOT NULL,",
+	}},
+	// A lápide só de nota e de marcador, com o seq.
+	{"0023_note_tombstones_table.sql", "note_tombstones", []string{
+		"entity_type TEXT NOT NULL CHECK (entity_type IN ('note', 'label'))",
+		"seq BIGINT NOT NULL CHECK (seq > 0)",
+	}},
+	// O evento: os mesmos CHECKs da sync_events, com os dois tipos novos.
+	{"0024_note_sync_events_table.sql", "note_sync_events", []string{
+		"seq BIGINT NOT NULL CHECK (seq > 0)",
+		"entity_type TEXT NOT NULL CHECK (entity_type IN ('note', 'label'))",
+		"operation TEXT NOT NULL CHECK (operation IN ('upsert', 'tombstone'))",
+		"entity_version BIGINT NOT NULL CHECK (entity_version >= 1)",
+		"changed_at TIMESTAMPTZ NOT NULL,",
+	}},
+	// A ligação do ditado com a nota sai com o ditado (a retenção de 6 meses
+	// continua valendo), e não aponta para notes.
+	{"0025_transcription_note_links_table.sql", "transcription_note_links", []string{
+		"FOREIGN KEY (user_id, transcription_id) REFERENCES transcriptions (user_id, id) ON DELETE CASCADE",
+		"note_id UUID NOT NULL,",
 	}},
 }
 

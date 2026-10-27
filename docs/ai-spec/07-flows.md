@@ -73,8 +73,10 @@ flowchart TD
 - **Como entra:** nota com lista de marcar recebe itens `- [ ] ` antes dos marcados (a enumeração
   separada pela regra das listas, `resolver.ItensPorRegra`, ou um item só); lista com `- ` recebe `- `;
   numerada continua a numeração; sem lista, o resto entra no fim como foi ditado.
-- **Nada** de SendInput nem clipboard; nenhum evento de sync (N7); o painel aberto na aba Notas relê a
-  lista ao voltar à frente.
+- **Nada** de SendInput nem clipboard; o painel aberto na aba Notas relê a lista ao voltar à frente. A
+  gravação na nota entra na fila do sync como qualquer gravação de nota (N7, "Notas no sync", abaixo: o
+  acréscimo sobe como mudança de conteúdo, a nota nova como criar, e o ditado escondido sobe com o
+  `virou_nota`); até a N7, nenhum evento de sync.
 
 ## Smart resolve
 Na etapa 5 (ADR-019), "Cloud allowed?" é sempre "Não": o resolve com contexto na nuvem fica para
@@ -271,6 +273,96 @@ Regras que o diagrama não mostra:
     nesse meio e o deixava virar selo à toa). Uma resposta que chega depois de
     o PC desconectar, esquecer ou reconectar (o pedido estava na rede) não é aplicada, e a rodada só
     termina: nada de recomeço com o aparelho velho.
+
+## Notas no sync (ADR-022, N7)
+As notas e os marcadores andam pelo mesmo laço do ditado e do aprendido (`internal/sync`), com a mesma
+fila de um marcador por entidade, o mesmo cursor e as mesmas regras de eco, de epoch e de backoff. O que
+muda está abaixo; o resto é a seção "Sync".
+
+```mermaid
+flowchart TD
+    A[Gravação local: criar, editar, cor, fixar, arquivar, marcador, mover, lixeira] --> B[(SQLite: a linha + o marcador da fila, na MESMA transação, com os bits do que mudou)]
+    B --> C{A nuvem disse note nas entidades do pull?}
+    C -->|Não| C1[Os marcadores esperam na fila: nada de nota sobe, e o virou_nota do ditado também espera]
+    C -->|Sim| D[Push: o lote vai na ordem aprendido, marcadores, notas, ditados]
+    D --> E{Status da nota}
+    E -->|applied| F[Guarda a versão e o corpo_nuvem, se nada mudou no voo]
+    E -->|applied mesclado| F2[Esquece a versão e o corpo_nuvem: o pull traz o de verdade]
+    E -->|conflict| G[Aplica o estado devolvido; o conteúdo que perdeu fica no selo]
+    E -->|gone apagado| H[Apaga a cópia local]
+    E -->|rejected tipo_desconhecido| I[Adiado: o marcador fica e o push das notas para nesta rodada]
+    F --> P
+    F2 --> P
+    G --> P
+    H --> P
+    I --> P
+    P[Pull] --> Q{A capacidade é nova?}
+    Q -->|Primeira vez que vê note| R[Cursor volta a 0, lê tudo de novo e marca o virou_nota dos ditados que a nuvem já tem]
+    Q -->|Não| S[Para cada nota e marcador da página]
+    S --> T[Aplica na mesma transação do cursor: sem criar marcador, subindo a version local; o marcador citado e ausente vira o que espera]
+```
+
+**Escrever (PC).** Toda gravação de nota e de marcador põe o marcador na `sync_outbox` na mesma transação
+da linha (ADR-009), com os bits do que mudou: conteúdo (título e corpo juntos), lixeira, cor, fixar,
+arquivar, marcadores e posição (o `mover` também, porque sobe a `version`). Antes de a nuvem existir, só
+entra o que a nuvem já tem; depois do aceite do "Enviar o histórico" e da capacidade, a completação de cada
+rodada põe na fila o que ela ainda não tem (`Fila.CompletarNotas`: marcadores vivos e notas fora da
+lixeira, sem cópia nem pergunta nova).
+
+**Subir (push).** O lote vai nesta ordem: o aprendido, os marcadores de nota, as notas e, no fim, os
+ditados. Assim o marcador chega antes da nota que o cita, e a nota antes do ditado que virou nota nela. O
+payload é lido da linha na hora de enviar, nunca da fila; a nota que a nuvem não tem sobe inteira, a que
+tem sobe só as chaves dos bits, e o conteúdo leva o `corpo_base` (o `corpo_nuvem`).
+
+**Regras no servidor (`DecideNote`).** A lixeira é a do ditado (apagar vence). O conteúdo vale pelo que
+chegou primeiro, e o do PC que perdeu vai para o selo. **Antes do selo, a mescla da lista de marcar**: com
+o `corpo_base`, se os dois lados só marcaram ou desmarcaram itens (o texto de cada item igual nos três
+corpos e o mesmo título), o servidor junta os estados, sem selo, e responde `applied` com `mesclado:
+true`; qualquer diferença de texto (item editado, acrescentado, tirado, parágrafo mudado) é conflito com
+selo. Cor, fixar, arquivar, marcadores e posição: o último que escreve vence, sem selo.
+
+**Descer (pull).** A página traz `note` e `label` junto com os ditados, por `seq`, e as lápides como
+`tombstone`. O PC aplica o estado da nuvem na mesma transação do cursor (`Fila.AplicarTudo`): a nota nova
+é inserida, a existente tem todos os campos trocados e o conjunto de marcadores substituído, a `version`
+local sobe e **nenhum marcador é posto na fila** (aplicar não ecoa). Uma nota com marcador pendente de
+envio é pulada (o estado chega pela resposta do push, ou pelo pull seguinte). A nota que existe aqui sem a
+versão da nuvem e sem marcador (depois do esquecer, ou do recomeço de um epoch novo) e que difere da da
+nuvem em algo que a pessoa vê (conteúdo, cor, fixar, arquivar, marcadores, lixeira; a posição não conta)
+sobe inteira, com a base vazia, e a nuvem decide (conteúdo diferente vira selo, nada se perde); igual, só
+adota a versão. O marcador que a nota cita e o PC ainda não tem vira uma linha **que espera** (`sync_state = 'aguardando'`, invisível): a ligação fica
+guardada, e o marcador de verdade a ocupa quando chega. Dois marcadores de mesmo nome criados em dois PCs
+sem rede não são recusados: o segundo a chegar ganha " (2)" no nome, só no PC que o recebe.
+
+**Conflito e a escolha do selo.** A nota com selo mostra "Versão em conflito" no cartão e, na janela,
+a outra versão com **Manter esta** e **Usar a outra** (`POST /api/notas/{id}/resolver-conflito`, com a
+`version` que a pessoa viu). A escolha vale na hora no PC, entra na fila (`selo_escolha` e `selo_em`, também
+desconectado, em nota que a nuvem tem) e sobe como `resolver_conflito` com o `conflict_at` do selo. Na
+nuvem, vale sobre o mesmo selo e sem o conteúdo mudado depois; senão cai, vale o que chegou primeiro, e o
+pull traz o estado de volta. O outro PC recebe a nota já escolhida, sem selo.
+
+**Apagar de vez (a lápide).** O "Excluir para sempre" da lixeira, o expurgo de 30 dias, o Desfazer do "Virar nota" que
+apaga a nota e o apagar do marcador sobem como `delete`. No PC, a linha sai na hora e o marcador da fila
+fica só com o bit `CampoApagado` (a lápide local) até a nuvem responder; a nota que a nuvem nunca teve sai
+sem deixar nada. Na nuvem, a linha sai, as ligações saem em cascata e nasce a lápide (`note_tombstones`,
+só ids), que **nunca vence**: um `upsert` atrasado do mesmo id (um PC parado) recebe `gone`. O pull entrega
+a lápide aos outros PCs, que apagam a cópia deles. O `delete` do marcador tira as ligações dele de todas
+as notas sem subir a versão delas.
+
+**Virar nota.** O "Virar nota" (e o ditado feito dentro de uma nota, e o do gatilho "ditar para nota")
+grava a nota e o `virou_nota` do ditado na mesma transação. O bit `CampoVirouNota` sobe com o ditado,
+só num ditado que a nuvem já tem (o que ela não tem sobe inteiro com o `virou_nota` lido na hora); a
+nuvem guarda a ligação (`transcription_note_links`) e **esconde o ditado da lista e da busca do histórico
+do celular**. O Desfazer limpa a marca (`virou_nota` = `null` sobe) e o ditado volta ao histórico da
+nuvem. A retenção de 6 meses da nuvem continua valendo para o ditado que virou nota (a ligação sai com
+ele). O `nova:<token>` da caixa "Criar uma nota" nunca sobe; quando a nota nasce, os ditados ligados a
+ela ganham o bit.
+
+**A capacidade e o primeiro pull depois do deploy.** O Agent novo só manda nota, marcador e
+`virou_nota` depois de ver `note` em `entidades` (a chave `nuvem_notas` da `instalacao`), então instalar
+o Agent antes do servidor não estraga nada: o resto do sync segue. Na primeira vez que vê, o cursor volta
+a 0 e a rodada lê tudo de novo (os ditados voltam como eco), marca com `CampoVirouNota` os ditados que
+virou nota e a nuvem já tem, e a completação põe na fila as notas e os marcadores que existem só no PC. A
+nuvem que deixa de dizer `note` (uma volta de versão) faz o PC parar de mandar notas.
 
 ## Device auth
 Reescrito pela ADR-019 (01-out-2026): retorno a `127.0.0.1` com PKCE (RFC 8252, §7.3). O desenho

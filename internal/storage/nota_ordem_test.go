@@ -317,13 +317,14 @@ func TestOrdem_MoverRecusa(t *testing.T) {
 }
 
 func TestOrdem_AMoveNaoMexeNaFilaDoSync(t *testing.T) {
-	// Mover não escreve na sync_outbox (a N7 leva a posicao com a nota).
+	// Desconectado e sem a versão da nuvem, Mover não escreve na sync_outbox (o
+	// lado conectado, com CampoNotaPosicao, está em nota_sync_test.go).
 	r, rel := novoRepoDeNotas(t)
 	a, _, _, d := quatro(t, r, rel)
 	if _, err := r.Mover(context.Background(), dono, a.ID, "", d.ID); err != nil {
 		t.Fatal(err)
 	}
-	// A prova direta está em TestNotas_NaoMexemNaFilaDoSync; aqui basta a nota ter
+	// A prova direta está em TestNotas_DesconectadoNaoMexemNaFilaDoSync; aqui basta a nota ter
 	// ficado "pending", sem versão da nuvem.
 	n, _ := r.Get(context.Background(), dono, a.ID)
 	if n.SyncState != "pending" || n.ServerVersion != nil {

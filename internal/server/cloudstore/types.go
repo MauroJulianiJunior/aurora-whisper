@@ -64,6 +64,13 @@ type Transcription struct {
 
 	// Conflict é o selo: a versão que perdeu um conflito. Nulo sem selo.
 	Conflict *Conflict
+
+	// VirouNota é o id da nota que o ditado virou (ADR-022, N7; a ligação da
+	// transcription_note_links, a 0025). Nulo sem ligação. Não tem conflito:
+	// o último que escreve vence, sem mexer em TextVersion nem TrashVersion. O
+	// ditado com ligação some da listagem do histórico na nuvem (List), mas
+	// continua no Get e no pull.
+	VirouNota *string
 }
 
 // Conflict é a versão que perdeu um conflito de texto, guardada no próprio
@@ -146,7 +153,8 @@ const (
 	// entity_type grande demais. Esta recusa não é gravada (não há chave para
 	// gravar), então um reenvio recebe rejected de novo, e não duplicate.
 	CodeInvalidMutation = "mutacao_invalida"
-	// CodeUnknownType: entity_type fora de transcription e learned.
+	// CodeUnknownType: entity_type fora de transcription, learned, note e
+	// label.
 	CodeUnknownType = "tipo_desconhecido"
 	// CodeTypeNotSynced: learned numa nuvem anterior à F8. Desde a F8b (a
 	// memória) e a F8c (o Postgres), nenhum Store deste módulo o devolve; ele
@@ -154,7 +162,8 @@ const (
 	CodeTypeNotSynced = "tipo_ainda_nao_sincroniza"
 	// CodeInvalidOperation: operation fora de upsert e delete, ou delete de
 	// um ditado (a lixeira é o campo deleted_at do upsert, e apagar de vez é
-	// só da nuvem). O delete só vale para o learned: é o desfazer (F8).
+	// só da nuvem). O delete vale para o learned (o desfazer, F8) e para a
+	// nota e o marcador de nota (apagar de vez, com lápide; N7).
 	CodeInvalidOperation = "operacao_invalida"
 	// CodeUnknownField: campo fora da lista fechada do tipo (target_app,
 	// áudio, contexto, ou qualquer outro).
@@ -195,6 +204,10 @@ const (
 const (
 	EntityTranscription = "transcription"
 	EntityLearned       = "learned"
+	// EntityNote e EntityLabel são a nota e o marcador de nota (ADR-022, N7).
+	// Os dois aceitam upsert e delete (apagar de vez, com lápide).
+	EntityNote  = "note"
+	EntityLabel = "label"
 
 	OpUpsert    = "upsert"
 	OpDelete    = "delete"
@@ -278,6 +291,10 @@ type Result struct {
 	// aprendido (F8: vale o que chegou primeiro, e o desfazer vence). Nunca
 	// junto com State.
 	LearnedState *Learned
+	// NoteState é o estado atual da nota, só no conflict de uma nota (N7: o
+	// texto do PC foi para o selo). O marcador de nota não tem conflict. No
+	// máximo um dos três estados vem preenchido.
+	NoteState *Note
 }
 
 // Applied é o que fica gravado de uma mutação aplicada (applied_mutations),
@@ -315,6 +332,11 @@ type Change struct {
 	// tem lápide). Os dois nulos na lápide, e nunca os dois juntos.
 	Item    *Transcription
 	Learned *Learned
+	// Note e Label são o estado atual de uma nota e de um marcador de nota
+	// (ADR-022, N7). Nulos na lápide. Uma mudança leva no máximo um dos
+	// quatro.
+	Note  *Note
+	Label *Label
 }
 
 // TextBytes é o tamanho do texto ditado de um item: o bruto, o final e o do
@@ -345,6 +367,10 @@ func (c Change) TextBytes() int {
 		return TextBytes(*c.Item)
 	case c.Learned != nil:
 		return LearnedTextBytes(*c.Learned)
+	case c.Note != nil:
+		return NoteTextBytes(*c.Note)
+	case c.Label != nil:
+		return len(c.Label.Nome)
 	}
 	return 0
 }
@@ -381,6 +407,17 @@ type PullResponse struct {
 	LastSeq int64
 	HasMore bool
 	Epoch   string
+	// Entidades são os tipos que esta nuvem sincroniza (EntidadesDoSync),
+	// sempre preenchido. É a capacidade da N7 (ADR-022): o PC só manda nota,
+	// marcador e o virou_nota do ditado depois de ver "note" aqui, e um PC
+	// antigo ignora o campo.
+	Entidades []string
+}
+
+// EntidadesDoSync devolve os tipos que esta nuvem sincroniza, na ordem em que
+// entraram. Uma lista nova a cada chamada: quem recebe pode mexer nela.
+func EntidadesDoSync() []string {
+	return []string{EntityTranscription, EntityLearned, EntityNote, EntityLabel}
 }
 
 // ListFilter são os filtros da listagem (06-api-contract.md, "GET
@@ -579,4 +616,14 @@ type Store interface {
 	// UsuariosDaRetencao lista os usuários que têm contador de sync (os que o
 	// job percorre), em ordem.
 	UsuariosDaRetencao(ctx context.Context) ([]string, error)
+
+	// ListNotes lista as notas do usuário numa vista (VistaAtivas,
+	// VistaArquivo ou VistaLixeira; outra é ErrInvalidFilter), até limit (o
+	// teto, MaxNotesList, quando vem zero, negativo ou acima dele) e o
+	// orçamento de texto da página (ListOfNotes). Só lê.
+	ListNotes(ctx context.Context, userID, vista string, limit int) (NotePage, error)
+	// ListLabels lista os marcadores de nota do usuário pelo nome (a ordem
+	// dos bytes, a mesma no Go e no COLLATE "C" do Postgres), até limit (o
+	// mesmo teto). Só lê.
+	ListLabels(ctx context.Context, userID string, limit int) (LabelPage, error)
 }

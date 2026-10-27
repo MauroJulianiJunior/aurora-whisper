@@ -41,6 +41,9 @@ func TestSyncE2E_PaginaComTextoEscapado(t *testing.T) {
 	}
 	n := novaNuvemE2E(t, server.Limites{})
 	pc1, pc2 := n.novoPC(), n.novoPC()
+	// A primeira rodada do PC2 vê que a nuvem sabe de notas (N7) e lê de novo do
+	// 0 uma vez; com ela antes, as páginas contadas abaixo são só as do ditado.
+	pc2.rodadaOK()
 	enorme := strings.Repeat("<", storage.MaxTextoBytes)
 	agora := time.Now().UTC()
 	for i := 0; i < 17; i++ {

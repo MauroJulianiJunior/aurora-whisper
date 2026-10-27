@@ -17,7 +17,8 @@ func (r *SQLiteNotaRepository) Mover(ctx context.Context, userID, id, antesID, d
 	if id == antesID || id == depoisID {
 		return Nota{}, ErrVizinhoInvalido // a nota não é vizinha de si mesma
 	}
-	err := naTransacao(ctx, r.db, func(tx *sql.Tx) error {
+	agora := r.now()
+	err := r.gravar(ctx, func(tx *sql.Tx, fila *naFila) error {
 		if err := conferirNotaEditavel(ctx, tx, userID, id, -1); err != nil {
 			return err
 		}
@@ -50,14 +51,14 @@ func (r *SQLiteNotaRepository) Mover(ctx context.Context, userID, id, antesID, d
 		if err != nil {
 			return fmt.Errorf("storage: gerando a posição da nota: %w", err)
 		}
-		// A versão sobe (a nota mudou, e o sync da N7 precisa ver); a hora de
-		// edição NÃO muda: arrastar não é editar.
+		// A versão sobe (a nota mudou) e a posição entra na fila do sync
+		// (CampoNotaPosicao); a hora de edição NÃO muda: arrastar não é editar.
 		if _, err := tx.ExecContext(ctx,
 			`UPDATE local_notes SET posicao = ?, version = version + 1 WHERE id = ? AND user_id = ?`,
 			posicao, id, userID); err != nil {
 			return fmt.Errorf("storage: movendo a nota: %w", err)
 		}
-		return nil
+		return fila.anotar(emitirNota(ctx, tx, id, CampoNotaPosicao, agora))
 	})
 	if err != nil {
 		return Nota{}, err
