@@ -6,6 +6,7 @@ import { EscolherMarcadores } from './EscolherMarcadores'
 import { Icone } from './Icone'
 import { PaletaDeCores } from './PaletaDeCores'
 import { type CorDaNota, type Marcador, NOMES_DAS_CORES, type Nota } from './tipos'
+import { type ConfigDaOrdem, type PropsDoItem, useOrdemManual } from './useOrdemManual'
 
 // O que se faz com uma nota sem abri-la (as ferramentas do cartão).
 export interface AcoesDaNota {
@@ -31,6 +32,9 @@ interface PropsComuns {
   noArquivo: boolean
   aoAbrir(nota: Nota): void
   acoes: AcoesDaNota
+  // ordem: o que o gesto de reorganizar põe no elemento da nota (a posição, o
+  // arrastar, o Alt + seta). Sem ele, o cartão fica no fluxo, como antes.
+  ordem?: PropsDoItem
 }
 
 // Quantas linhas de texto cabem no cartão antes das reticências: o cartão é um
@@ -209,7 +213,7 @@ export function CartaoDaNota(props: PropsComuns) {
   const nome = nomeDaNota(nota.titulo, linhas)
   const vazia = nota.titulo.trim() === '' && linhas.every((l) => l.texto.trim() === '')
   return (
-    <article className="cartao" data-nota={nota.id} data-cor={nota.cor ?? undefined}>
+    <article className="cartao" data-nota={nota.id} data-cor={nota.cor ?? undefined} {...props.ordem}>
       <div
         role="button"
         tabIndex={0}
@@ -239,7 +243,7 @@ export function LinhaDaNota(props: PropsComuns) {
   // Sem título, o nome já é o começo do corpo: o resumo não o repete.
   const inicio = titulo ? inicioDoCorpo(linhas) : ''
   return (
-    <li className="nota-linha" data-nota={nota.id}>
+    <li className="nota-linha" data-nota={nota.id} {...props.ordem}>
       <div
         role="button"
         tabIndex={0}
@@ -260,77 +264,100 @@ export function LinhaDaNota(props: PropsComuns) {
 }
 
 // TabelaDeNotas é a forma "detalhes": título, marcadores, itens marcados
-// ("2/6"), cor e quando foi editada.
+// ("2/6"), cor e quando foi editada. As fixadas e as outras são dois <tbody>,
+// cada um com a sua ordem manual (uma fixada não passa para as outras).
 export function TabelaDeNotas({
+  fixadas,
+  outras,
+  nomesDosMarcadores,
+  aoAbrir,
+  config,
+}: {
+  fixadas: Nota[]
+  outras: Nota[]
+  nomesDosMarcadores: ReadonlyMap<string, string>
+  aoAbrir(nota: Nota): void
+  config: ConfigDaOrdem
+}) {
+  return (
+    <div className="detalhes-rolagem">
+      <table className="detalhes">
+        <thead>
+          <tr>
+            <th scope="col">Título</th>
+            <th scope="col">Marcadores</th>
+            <th scope="col">Itens marcados</th>
+            <th scope="col">Cor</th>
+            <th scope="col">Editada</th>
+          </tr>
+        </thead>
+        {fixadas.length > 0 && <GrupoDaTabela notas={fixadas} nomesDosMarcadores={nomesDosMarcadores} aoAbrir={aoAbrir} config={config} />}
+        {outras.length > 0 && <GrupoDaTabela notas={outras} nomesDosMarcadores={nomesDosMarcadores} aoAbrir={aoAbrir} config={config} />}
+      </table>
+    </div>
+  )
+}
+
+function GrupoDaTabela({
   notas,
   nomesDosMarcadores,
   aoAbrir,
+  config,
 }: {
   notas: Nota[]
   nomesDosMarcadores: ReadonlyMap<string, string>
   aoAbrir(nota: Nota): void
+  config: ConfigDaOrdem
 }) {
+  const { montarContainer, propsDoItem, arrastando, pronto } = useOrdemManual({ ids: notas.map((n) => n.id), colunas: 1, vao: 0, modo: 'fluxo', ...config })
   return (
-    <div className="detalhes-rolagem">
-    <table className="detalhes">
-      <thead>
-        <tr>
-          <th scope="col">Título</th>
-          <th scope="col">Marcadores</th>
-          <th scope="col">Itens marcados</th>
-          <th scope="col">Cor</th>
-          <th scope="col">Editada</th>
-        </tr>
-      </thead>
-      <tbody>
-        {notas.map((n) => {
-          const linhas = lerCorpo(n.corpo)
-          const nome = nomeDaNota(n.titulo, linhas)
-          const { feitos, total } = contarItens(linhas)
-          const nomes = n.marcadores.map((id) => nomesDosMarcadores.get(id)).filter((x): x is string => Boolean(x))
-          return (
-            <tr key={n.id} data-nota={n.id} onClick={() => aoAbrir(n)}>
-              <td>
-                <button
-                  type="button"
-                  className="detalhes-abrir"
-                  data-abrir
-                  aria-haspopup="dialog"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    aoAbrir(n)
-                  }}
-                >
-                  {nome}
-                </button>
-                {n.fixada && <span className="etiqueta">fixada</span>}
-              </td>
-              <td>
-                {nomes.map((x) => (
-                  <span key={x} className="etiqueta">
-                    {x}
-                  </span>
-                ))}
-              </td>
-              <td className="numero">{total > 0 ? `${feitos}/${total}` : '—'}</td>
-              <td>
-                {n.cor ? (
-                  <span className="cor-na-tabela">
-                    <span className="bolinha" data-cor={n.cor} aria-hidden="true" />
-                    {NOMES_DAS_CORES[n.cor]}
-                  </span>
-                ) : (
-                  '—'
-                )}
-              </td>
-              <td className="hora">
-                <time dateTime={n.updated_at}>{formatarCurta(n.updated_at)}</time>
-              </td>
-            </tr>
-          )
-        })}
-      </tbody>
-    </table>
-    </div>
+    <tbody ref={montarContainer} data-pronto={pronto ? '' : undefined} data-em-arrasto={arrastando ? '' : undefined}>
+      {notas.map((n) => {
+        const linhas = lerCorpo(n.corpo)
+        const nome = nomeDaNota(n.titulo, linhas)
+        const { feitos, total } = contarItens(linhas)
+        const nomes = n.marcadores.map((id) => nomesDosMarcadores.get(id)).filter((x): x is string => Boolean(x))
+        return (
+          <tr key={n.id} data-nota={n.id} onClick={() => aoAbrir(n)} {...propsDoItem(n.id)}>
+            <td>
+              <button
+                type="button"
+                className="detalhes-abrir"
+                data-abrir
+                aria-haspopup="dialog"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  aoAbrir(n)
+                }}
+              >
+                {nome}
+              </button>
+              {n.fixada && <span className="etiqueta">fixada</span>}
+            </td>
+            <td>
+              {nomes.map((x) => (
+                <span key={x} className="etiqueta">
+                  {x}
+                </span>
+              ))}
+            </td>
+            <td className="numero">{total > 0 ? `${feitos}/${total}` : '—'}</td>
+            <td>
+              {n.cor ? (
+                <span className="cor-na-tabela">
+                  <span className="bolinha" data-cor={n.cor} aria-hidden="true" />
+                  {NOMES_DAS_CORES[n.cor]}
+                </span>
+              ) : (
+                '—'
+              )}
+            </td>
+            <td className="hora">
+              <time dateTime={n.updated_at}>{formatarCurta(n.updated_at)}</time>
+            </td>
+          </tr>
+        )
+      })}
+    </tbody>
   )
 }

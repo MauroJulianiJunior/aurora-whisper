@@ -2,6 +2,7 @@ import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { Conflito, ErroDaApi, problemaDe } from '../api'
 import { Aurora } from '../Aurora'
 import { type AcoesDaNota, CartaoDaNota, LinhaDaNota, TabelaDeNotas } from './CartaoDaNota'
+import { GradeDeNotas, ListaDeNotas } from './ColecaoDeNotas'
 import { copiarParaWhatsApp } from './copiarParaWhatsApp'
 import { CriarNota } from './CriarNota'
 import { DialogoDaNota, type FimDaNota } from './DialogoDaNota'
@@ -9,8 +10,10 @@ import { EditarMarcadores } from './EditarMarcadores'
 import { Icone } from './Icone'
 import { acharPorNome, limparNome, ordenarPorNome } from './marcadores'
 import { NotaNaLixeira } from './NotaNaLixeira'
+import { aplicarOrdem, fraseNaPonta, frasePosicao, moverNaLista, vizinhasDe } from './ordem'
 import { type FormaDeVer, FORMAS, gravarColunas, gravarForma, lerColunas, lerForma, limitar, limitesDeColunas } from './preferencias'
 import type { ClienteDeNotas, CorDaNota, FiltroDasNotas, Marcador, Nota, VistaDasNotas } from './tipos'
+import { type OrigemDoMovimento, type ConfigDaOrdem } from './useOrdemManual'
 import { useTelaEstreita } from './useTelaEstreita'
 
 // Tempo mínimo entre duas leituras causadas por voltar à aba: "focus" e
@@ -52,8 +55,8 @@ const mensagemDe = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
 const nomesDasFormas: Record<FormaDeVer, string> = { grade: 'Quadradinhos', lista: 'Lista', detalhes: 'Detalhes' }
 
-// ordenar põe as fixadas primeiro; a ordem de cada grupo é a da API (a última
-// edição primeiro).
+// ordenar põe as fixadas primeiro; a ordem de cada grupo é a da API (a ordem
+// manual, ADR-022 N2b: a nota nova e a que se fixa entram no topo, editar não move).
 const ordenar = (itens: Nota[]) => [...itens.filter((n) => n.fixada), ...itens.filter((n) => !n.fixada)]
 
 function vizinhoDe(ordenados: Nota[], id: string): string | null {
@@ -94,6 +97,13 @@ export function Notas({ cliente, busca, aoPerderLigacao: aoPerderLigacaoDoPainel
   // focarDepois: a nota que recebe o foco quando a janela fecha ou um cartão
   // sai da tela (null: não há nota, e o foco vai para o "Criar uma nota").
   const focarDepois = useRef<{ id: string | null } | null>(null)
+  // A ordem manual: a frase que o leitor de tela ouve depois de mover, a fila dos
+  // pedidos de mover (um de cada vez, na ordem em que a pessoa soltou) e a versão
+  // mais nova que cada nota teve numa resposta de mover (mover sobe a versão, e a
+  // próxima edição, feita com a nota do cartão, não pode usar a de antes).
+  const [anuncioDaOrdem, setAnuncioDaOrdem] = useState('')
+  const filaDaEdicao = useRef<Promise<unknown>>(Promise.resolve())
+  const versoesMovidas = useRef(new Map<string, number>())
 
   const consulta = `${vista}\u0000${marcador ?? ''}\u0000${busca}`
   const recarregar = useCallback(() => setRecarga((n) => n + 1), [])
@@ -220,17 +230,61 @@ export function Notas({ cliente, busca, aoPerderLigacao: aoPerderLigacaoDoPainel
   // editar muda a nota pelo PATCH com a versão que o cartão tem. O 409 quer
   // dizer que ela mudou em outra aba: a lista é lida de novo e a pessoa repete.
   async function editar(nota: Nota, mudanca: { cor?: CorDaNota | null; fixada?: boolean; arquivada?: boolean }): Promise<Nota | null> {
-    try {
-      return await cliente.editarNota(nota.id, nota.version, mudanca)
-    } catch (e) {
-      if (e instanceof Conflito) {
-        avisar('Esta nota mudou em outra aba. A lista foi lida de novo; repita se ainda quiser.')
-        recarregar()
+    // Na fila dos pedidos que mexem na nota: um mover ainda a caminho sobe a versão
+    // dela, e o PATCH com a versão de antes seria um 409 à toa.
+    const passo = async (): Promise<Nota | null> => {
+      const versao = Math.max(nota.version, versoesMovidas.current.get(nota.id) ?? 0)
+      try {
+        const nova = await cliente.editarNota(nota.id, versao, mudanca)
+        versoesMovidas.current.delete(nota.id)
+        return nova
+      } catch (e) {
+        if (e instanceof Conflito) {
+          avisar('Esta nota mudou em outra aba. A lista foi lida de novo; repita se ainda quiser.')
+          recarregar()
+          return null
+        }
+        falhar(e)
         return null
       }
-      falhar(e)
-      return null
     }
+    const p = filaDaEdicao.current.then(passo, passo)
+    filaDaEdicao.current = p
+    return p
+  }
+
+  // mover é o soltar de uma nota em outro lugar do grupo dela (ou o Alt + seta):
+  // a lista muda na hora, o pedido vai ao Agent, e, se ele recusa, a ordem de antes
+  // volta e a pílula diz por quê. indice é a posição nova SEM contar a própria nota.
+  function mover(id: string, indice: number, origem: OrigemDoMovimento) {
+    const nota = ordenados.find((n) => n.id === id)
+    if (!nota) return
+    const grupo = ordenados.filter((n) => n.fixada === nota.fixada).map((n) => n.id)
+    const nova = moverNaLista(grupo, id, indice)
+    const posicao = nova.indexOf(id) + 1
+    if (nova.every((x, i) => x === grupo[i])) {
+      if (origem === 'teclado') setAnuncioDaOrdem(fraseNaPonta(posicao, grupo.length))
+      return
+    }
+    const { antes, depois } = vizinhasDe(nova, id)
+    mudarItens((itens) => aplicarOrdem(itens, nova))
+    setAnuncioDaOrdem(frasePosicao(posicao, grupo.length))
+    if (origem === 'teclado') focarDepois.current = { id }
+    const passo = async () => {
+      try {
+        const salva = await cliente.moverNota(id, antes, depois)
+        versoesMovidas.current.set(id, salva.version)
+        trocar(salva)
+      } catch (e) {
+        // Volta a ordem de antes e lê a lista de novo: o que o Agent tem é o que vale.
+        mudarItens((itens) => aplicarOrdem(itens, grupo))
+        if (e instanceof Conflito) avisar('A lista das notas mudou em outra aba. Li de novo; repita se ainda quiser.')
+        else falhar(e)
+        recarregar()
+      }
+    }
+    const p = filaDaEdicao.current.then(passo, passo)
+    filaDaEdicao.current = p
   }
 
   async function arquivar(nota: Nota) {
@@ -363,7 +417,13 @@ export function Notas({ cliente, busca, aoPerderLigacao: aoPerderLigacaoDoPainel
       return null
     },
     fixar: (nota) => {
-      void editar(nota, { fixada: !nota.fixada }).then((nova) => nova && trocar(nova))
+      // Fixar e desafixar levam a nota para o topo do grupo de destino (o Agent
+      // faz o mesmo): ela vai para o começo da lista, e a lista a põe no grupo.
+      void editar(nota, { fixada: !nota.fixada }).then((nova) => {
+        if (!nova) return
+        trocar(nova)
+        mudarItens((itens) => [nova, ...itens.filter((n) => n.id !== nova.id)])
+      })
     },
     cor: (nota, cor) => {
       void editar(nota, { cor }).then((nova) => nova && trocar(nova))
@@ -410,6 +470,22 @@ export function Notas({ cliente, busca, aoPerderLigacao: aoPerderLigacaoDoPainel
 
   const noArquivo = vista === 'arquivo'
   const base = resultado?.base ?? []
+  // Reorganizar só vale na tela principal, sem filtro nem busca: lá a lista é a
+  // ordem inteira das notas ativas, e o "entre estas duas" do Agent faz sentido.
+  // Nas outras (marcador, busca, Arquivo) arrastar avisa por que não.
+  const podeOrdenar = vista === 'ativas' && !marcador && !busca
+  const ordem: ConfigDaOrdem = {
+    habilitado: podeOrdenar,
+    aoMover: mover,
+    aoBloquear: () =>
+      avisar(
+        busca
+          ? 'Para reorganizar, limpe a busca.'
+          : marcador
+            ? 'Para reorganizar, saia do filtro de marcador: volte para “Notas”.'
+            : 'O Arquivo fica na ordem em que as notas foram arquivadas.',
+      ),
+  }
   const nomeDaVista = vista === 'lixeira' ? 'a lixeira das notas' : noArquivo ? 'o arquivo' : 'as notas'
 
   let conteudo: ReactNode
@@ -465,23 +541,30 @@ export function Notas({ cliente, busca, aoPerderLigacao: aoPerderLigacaoDoPainel
   } else {
     const fixadas = ordenados.filter((n) => n.fixada)
     const outras = ordenados.filter((n) => !n.fixada)
-    const abrir = (n: Nota) => setAberta(n)
+    // Abrir leva a versão mais nova que a nota teve num mover (a do cartão pode ser
+    // a de antes, se a resposta ainda não chegou).
+    const abrir = (n: Nota) => setAberta({ ...n, version: Math.max(n.version, versoesMovidas.current.get(n.id) ?? 0) })
     const desenhar = (itens: Nota[]) =>
-      forma === 'detalhes' ? null : forma === 'lista' ? (
-        <ul className="notas-lista">
-          {itens.map((n) => (
-            <LinhaDaNota key={n.id} nota={n} nomesDosMarcadores={nomesDosMarcadores} marcadores={marcadores} noArquivo={noArquivo} aoAbrir={abrir} acoes={acoes} />
-          ))}
-        </ul>
+      forma === 'lista' ? (
+        <ListaDeNotas
+          notas={itens}
+          config={ordem}
+          renderizar={(n, o) => (
+            <LinhaDaNota key={n.id} nota={n} nomesDosMarcadores={nomesDosMarcadores} marcadores={marcadores} noArquivo={noArquivo} aoAbrir={abrir} acoes={acoes} ordem={o} />
+          )}
+        />
       ) : (
-        <div className="grade" data-colunas={colunas}>
-          {itens.map((n) => (
-            <CartaoDaNota key={n.id} nota={n} nomesDosMarcadores={nomesDosMarcadores} marcadores={marcadores} noArquivo={noArquivo} aoAbrir={abrir} acoes={acoes} />
-          ))}
-        </div>
+        <GradeDeNotas
+          notas={itens}
+          colunas={colunas}
+          config={ordem}
+          renderizar={(n, o) => (
+            <CartaoDaNota key={n.id} nota={n} nomesDosMarcadores={nomesDosMarcadores} marcadores={marcadores} noArquivo={noArquivo} aoAbrir={abrir} acoes={acoes} ordem={o} />
+          )}
+        />
       )
     if (forma === 'detalhes') {
-      conteudo = <TabelaDeNotas notas={ordenados} nomesDosMarcadores={nomesDosMarcadores} aoAbrir={abrir} />
+      conteudo = <TabelaDeNotas fixadas={fixadas} outras={outras} nomesDosMarcadores={nomesDosMarcadores} aoAbrir={abrir} config={ordem} />
     } else if (fixadas.length > 0) {
       conteudo = (
         <>
@@ -513,6 +596,9 @@ export function Notas({ cliente, busca, aoPerderLigacao: aoPerderLigacaoDoPainel
     <div className="notas" ref={raiz} data-oculta={oculta ? '' : undefined}>
       <p className="so-leitor anuncio" role="status">
         {anuncio}
+      </p>
+      <p className="so-leitor" role="status" aria-live="polite" data-ordem>
+        {anuncioDaOrdem}
       </p>
 
       <div className="barra-de-notas">

@@ -18,6 +18,10 @@ export interface Nota {
   arquivada: boolean
   // marcadores: ids, na ordem do nome do marcador.
   marcadores: string[]
+  // posicao: a ordem manual (um índice fracionário, texto). O painel não a
+  // compara: a lista já vem ordenada pelo Agent (as fixadas, depois a menor
+  // posição). Fica no tipo porque é parte da nota, e a N7 a leva no sync.
+  posicao: string
   ditado_de_origem?: string
   created_at: string
   updated_at: string
@@ -98,6 +102,12 @@ export interface ClienteDeNotas {
   editarNota(id: string, versao: number, mudanca: MudancaDaNota): Promise<Nota>
   moverNotaParaLixeira(id: string): Promise<void>
   restaurarNota(id: string): Promise<Nota>
+  // moverNota é o arrastar da ordem manual (POST /api/notas/{id}/mover): a nota
+  // passa a ficar entre antes e depois, as vizinhas DEPOIS de soltar (null: nada
+  // desse lado, o topo ou o fim do grupo). Sem versão: mover não é editar o
+  // texto. Devolve a nota, com a versão nova. Conflito: as vizinhas não valem
+  // mais (outra aba mexeu na lista, ou são de outro grupo).
+  moverNota(id: string, antes: string | null, depois: string | null): Promise<Nota>
   apagarNotaDeVez(id: string): Promise<void>
   listarMarcadores(sinal?: AbortSignal): Promise<Marcador[]>
   // Os marcadores (N4). criarMarcador recusa o nome já usado (sem diferenciar

@@ -39,6 +39,10 @@
 //                      Abrir (leva à aba Notas, com a nota na janela) e Desfazer.
 //   Nas notas, ?forma=lista|detalhes escolhe a forma de ver, e ?abrir=<título> abre
 //   a nota com esse título (para ver a janela sem clicar).
+//   (N2b) No cenário notas dá para reorganizar: arrastar com o mouse (ou segurar e arrastar, no modo
+//   de dispositivo com toque) e Alt + setas no teclado; o Agent de mentira guarda a ordem e responde
+//   ao mover como o de verdade (só dentro do grupo: duas fixadas e as outras). Recarregar a página
+//   zera tudo (é em memória).
 //   (N4) No cenário notas, "Editar marcadores" (no fim da fileira) abre a janela de criar,
 //   renomear e apagar; o botão de marcador do cartão e da nota abre o menu com caixinhas;
 //   e ?abrir=Lista do sábado abre uma lista sem marcador parecida com as do Compras, com a
@@ -143,7 +147,8 @@ const hora = (h: number, m = 0) => new Date(2026, 9, 25, h, m).toISOString()
 const notasDeExemplo: Nota[] = [
   nota({ id: 'n1', titulo: 'Compras da semana', corpo: '- [ ] leite\n- [ ] café\n- [ ] ovos\n- [x] pão\n- [x] manteiga', cor: 'amarelo', fixada: true, marcadores: ['m1'], updated_at: hora(9) }),
   nota({ id: 'n2', titulo: 'Reunião com o contador', corpo: '# Pauta\n- conferir o extrato do Itaú\n- boleto do aluguel\n1. mandar o DAS\n2. pagar o ISS', cor: 'azul', marcadores: ['m2'], updated_at: hora(10), ditado_de_origem: 'd1' }),
-  nota({ id: 'n3', titulo: 'Ideia de vídeo', corpo: 'Um Reels curto sobre o que muda na reforma para o MEI.', cor: 'roxo', marcadores: ['m3'], updated_at: hora(11) }),
+  // Duas fixadas (a n1 e esta): a ordem manual (N2b) se vê dentro de cada grupo.
+  nota({ id: 'n3', titulo: 'Ideia de vídeo', corpo: 'Um Reels curto sobre o que muda na reforma para o MEI.', cor: 'roxo', fixada: true, marcadores: ['m3'], updated_at: hora(11) }),
   nota({ id: 'n4', corpo: 'Ligar para a Fernanda antes das cinco e confirmar a gravação de quinta.', cor: 'laranja', updated_at: hora(12) }),
   nota({ id: 'n5', titulo: 'Ponto de atenção', corpo: 'Rever o prazo da DCTFWeb.', cor: 'vermelho', updated_at: hora(8) }),
   nota({ id: 'n6', titulo: 'Para lembrar', corpo: '- trocar o filtro\n- regar as plantas', cor: 'verde', updated_at: hora(7) }),

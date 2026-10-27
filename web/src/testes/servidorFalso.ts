@@ -59,7 +59,13 @@
 // As notas e os marcadores (ADR-022, N1; internal/agent/localapi/notas.go) seguem
 // as regras do Agent que importam para o painel: GET /api/notas filtra por vista,
 // marcador e q (sem diferenciar maiúscula nem acento), com as fixadas primeiro e,
-// dentro de cada grupo, a última edição primeiro; o PATCH pede base_version e
+// dentro de cada grupo, a ordem manual (ADR-022, N2b): as notas que o servidor já
+// tinha começam na ordem de antes (fixadas, depois a última edição), a nota nova
+// entra no topo do grupo, fixar, desafixar, arquivar e restaurar levam ao topo do
+// grupo de destino, e editar não move. POST /api/notas/{id}/mover {antes, depois}
+// põe a nota entre as duas vizinhas (409 se são de outro grupo, da lixeira, do
+// Arquivo, inexistentes, a própria nota ou estão fora de ordem; 400 sem vizinha),
+// sobe a versão e não mexe na hora de edição; o PATCH pede base_version e
 // devolve 409 para a versão velha e para a nota que está na lixeira; todo
 // POST/PATCH recusa campo desconhecido, nota vazia e cor fora das oito (400);
 // mover para a lixeira, restaurar e todo PATCH sobem a versão; o apagar de vez
@@ -154,6 +160,7 @@ export function nota(parcial: Partial<Nota> & { id: string }): Nota {
     fixada: false,
     arquivada: false,
     marcadores: [],
+    posicao: '',
     created_at: quando,
     updated_at: quando,
     version: 1,
@@ -560,6 +567,22 @@ export function servidorFalso(
   // As notas e os marcadores. O relógio é um contador de milissegundos: duas
   // gravações no mesmo instante ainda saem em ordem.
   const bancoDeNotas = notasIniciais.map((n) => ({ ...n, marcadores: [...n.marcadores] }))
+  // A ordem manual: um número por nota (o topo é o menor), que a nota mostra como
+  // texto em `posicao`. As notas do começo ficam na ordem de antes da N2b (fixadas,
+  // depois a última edição, e a mais nova do array desempata).
+  const ordemDasNotas = new Map<string, number>()
+  bancoDeNotas
+    .map((n, i) => ({ n, i }))
+    .sort((a, b) => Number(b.n.fixada) - Number(a.n.fixada) || Date.parse(b.n.updated_at) - Date.parse(a.n.updated_at) || b.i - a.i)
+    .forEach(({ n }, i) => ordemDasNotas.set(n.id, i * 1024))
+  const textoDaPosicao = (n: Nota) => `p${String(ordemDasNotas.get(n.id) ?? 0)}`
+  const comPosicao = (n: Nota): Nota => ({ ...n, marcadores: [...n.marcadores], posicao: textoDaPosicao(n) })
+  const mesmoGrupo = (a: Nota, b: Nota) => !a.deleted_at && !b.deleted_at && a.fixada === b.fixada && a.arquivada === b.arquivada
+  // noTopo põe a nota acima da primeira do grupo dela.
+  function noTopo(n: Nota) {
+    const outras = bancoDeNotas.filter((x) => x.id !== n.id && mesmoGrupo(x, n)).map((x) => ordemDasNotas.get(x.id) ?? 0)
+    ordemDasNotas.set(n.id, outras.length === 0 ? 0 : Math.min(...outras) - 1024)
+  }
   const bancoDeMarcadores = marcadoresIniciais.map((m) => ({ ...m }))
   let relogioDasNotas = Date.UTC(2026, 9, 25, 12)
   let seqDasNotas = 0
@@ -650,14 +673,16 @@ export function servidorFalso(
       fixada: false,
       arquivada: false,
       marcadores: [],
+      posicao: '',
       ditado_de_origem: id,
       created_at: quando,
       updated_at: quando,
       version: 1,
     }
     bancoDeNotas.push(nova)
+    noTopo(nova)
     virouNota.set(id, nova.id)
-    return json({ ...nova }, 201)
+    return json(comPosicao(nova), 201)
   }
 
   // desfazerVirar é POST /api/notas/{id}/desfazer-virar: o ditado volta; a nota
@@ -745,11 +770,37 @@ export function servidorFalso(
       n.version += 1
       n.updated_at = agoraDasNotas()
     }
-    return json({ ...n, marcadores: [...n.marcadores] })
+    return json(comPosicao(n))
+  }
+
+  // moverNota é POST /api/notas/{id}/mover, como o Agent.
+  function moverNota(p: Pedido, n: Nota): Response {
+    if (p.metodo !== 'POST') return erro(405, 'BAD_REQUEST', 'método')
+    const c = p.corpo ?? {}
+    if (Object.keys(c).some((k) => k !== 'antes' && k !== 'depois')) return erro(400, 'BAD_REQUEST', 'corpo JSON inválido')
+    const ehTextoOuNulo = (v: unknown) => v === undefined || v === null || typeof v === 'string'
+    if (!ehTextoOuNulo(c.antes) || !ehTextoOuNulo(c.depois)) return erro(400, 'BAD_REQUEST', 'corpo JSON inválido')
+    const antesId = typeof c.antes === 'string' && c.antes !== '' ? c.antes : null
+    const depoisId = typeof c.depois === 'string' && c.depois !== '' ? c.depois : null
+    if (!antesId && !depoisId) return erro(400, 'BAD_REQUEST', 'mover pede a nota de antes ou a de depois')
+    if (n.deleted_at) return erro(409, 'CONFLICT', 'a nota está na lixeira: restaure antes de mexer nela')
+    const invalida = () => erro(409, 'CONFLICT', 'as notas vizinhas mudaram (ou não estão no mesmo grupo): a lista será lida de novo')
+    const vizinha = (id: string | null) => (id ? bancoDeNotas.find((x) => x.id === id && x.id !== n.id && mesmoGrupo(x, n)) : undefined)
+    const antes = vizinha(antesId)
+    const depois = vizinha(depoisId)
+    if ((antesId && !antes) || (depoisId && !depois)) return invalida()
+    const a = antes ? (ordemDasNotas.get(antes.id) ?? 0) : -Infinity
+    const d = depois ? (ordemDasNotas.get(depois.id) ?? 0) : Infinity
+    if (a >= d) return invalida()
+    const atual = ordemDasNotas.get(n.id) ?? 0
+    if (a < atual && atual < d) return json(comPosicao(n)) // já está entre as duas: nada a gravar
+    ordemDasNotas.set(n.id, a === -Infinity ? d - 1024 : d === Infinity ? a + 1024 : (a + d) / 2)
+    n.version += 1 // a hora de edição não muda: arrastar não é editar
+    return json(comPosicao(n))
   }
 
   function rotaNotas(p: Pedido): Response {
-    const m = p.caminho.match(/^\/api\/notas(?:\/([^/]+)(\/restaurar|\/definitivo|\/desfazer-virar|\/marcadores\/[^/]+)?)?$/)
+    const m = p.caminho.match(/^\/api\/notas(?:\/([^/]+)(\/restaurar|\/mover|\/definitivo|\/desfazer-virar|\/marcadores\/[^/]+)?)?$/)
     if (!m) return erro(404, 'NOT_FOUND', 'rota')
     const [, idBruto, sufixo] = m
     if (!idBruto) {
@@ -762,9 +813,11 @@ export function servidorFalso(
           .filter((n) => (vista === 'lixeira' ? Boolean(n.deleted_at) : !n.deleted_at && n.arquivada === (vista === 'arquivo')))
           .filter((n) => !marcadorId || n.marcadores.includes(marcadorId))
           .filter((n) => !q || dobrar(`${n.titulo}\n${n.corpo}`).includes(q))
-        const por = (n: Nota) => Date.parse(vista === 'lixeira' ? (n.deleted_at ?? n.updated_at) : n.updated_at)
-        itens.sort((a, b) => (vista === 'lixeira' ? 0 : Number(b.fixada) - Number(a.fixada)) || por(b) - por(a))
-        return json({ items: itens.map((n) => ({ ...n, marcadores: [...n.marcadores] })) })
+        const apagadaEm = (n: Nota) => Date.parse(n.deleted_at ?? n.updated_at)
+        itens.sort((a, b) =>
+          vista === 'lixeira' ? apagadaEm(b) - apagadaEm(a) : Number(b.fixada) - Number(a.fixada) || (ordemDasNotas.get(a.id) ?? 0) - (ordemDasNotas.get(b.id) ?? 0),
+        )
+        return json({ items: itens.map(comPosicao) })
       }
       if (p.metodo !== 'POST') return erro(405, 'BAD_REQUEST', 'método')
       const c = p.corpo ?? {}
@@ -783,18 +836,20 @@ export function servidorFalso(
         fixada: c.fixada === true,
         arquivada: c.arquivada === true,
         marcadores: [],
+        posicao: '',
         ...(typeof c.ditado_de_origem === 'string' && c.ditado_de_origem ? { ditado_de_origem: c.ditado_de_origem } : {}),
         created_at: quando,
         updated_at: quando,
         version: 1,
       }
       bancoDeNotas.push(nova)
+      noTopo(nova)
       // O token liga à nota os ditados feitos na caixa (virou_nota = id).
       if (typeof c.token === 'string' && c.token) {
         for (const d of ditadosDaCaixa.get(c.token) ?? []) virouNota.set(d, nova.id)
         ditadosDaCaixa.delete(c.token)
       }
-      return json({ ...nova }, 201)
+      return json(comPosicao(nova), 201)
     }
 
     const id = decodeURIComponent(idBruto)
@@ -805,9 +860,11 @@ export function servidorFalso(
         delete n.deleted_at
         n.version += 1
         n.updated_at = agoraDasNotas()
+        noTopo(n)
       }
-      return json({ ...n })
+      return json(comPosicao(n))
     }
+    if (sufixo === '/mover') return moverNota(p, n)
     if (sufixo === '/desfazer-virar' && p.metodo === 'POST') return desfazerVirar(n)
     if (sufixo === '/definitivo' && p.metodo === 'DELETE') {
       if (!n.deleted_at) return erro(409, 'CONFLICT', 'só se apaga de vez a nota que está na lixeira')
@@ -818,7 +875,7 @@ export function servidorFalso(
     if (sufixo) return erro(405, 'BAD_REQUEST', 'método')
     switch (p.metodo) {
       case 'GET':
-        return json({ ...n })
+        return json(comPosicao(n))
       case 'DELETE':
         if (!n.deleted_at) {
           n.deleted_at = agoraDasNotas()
@@ -838,11 +895,15 @@ export function servidorFalso(
         if (typeof c.titulo === 'string') n.titulo = c.titulo
         if (typeof c.corpo === 'string') n.corpo = c.corpo
         if ('cor' in c) n.cor = (c.cor || null) as Nota['cor']
+        const fixadaAntes = n.fixada
+        const arquivadaAntes = n.arquivada
         if (typeof c.fixada === 'boolean') n.fixada = c.fixada
         if (typeof c.arquivada === 'boolean') n.arquivada = c.arquivada
+        // Mudar de grupo (fixar, desafixar, arquivar, desarquivar) leva ao topo do destino.
+        if (n.fixada !== fixadaAntes || n.arquivada !== arquivadaAntes) noTopo(n)
         n.version += 1
         n.updated_at = agoraDasNotas()
-        return json({ ...n })
+        return json(comPosicao(n))
       }
     }
     return erro(405, 'BAD_REQUEST', 'método')

@@ -29,7 +29,7 @@ interface Resultado {
 
 const mensagemDe = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
-// As fixadas primeiro; a ordem de cada grupo é a da API (a última edição primeiro).
+// As fixadas primeiro; a ordem de cada grupo é a da API (a ordem manual das notas).
 const ordenar = (notas: Nota[]) => [...notas.filter((n) => n.fixada), ...notas.filter((n) => !n.fixada)]
 
 const plural = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um : varios}`

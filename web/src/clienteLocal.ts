@@ -337,6 +337,10 @@ export function criarCliente(token: string, buscar: Buscador = buscadorPadrao): 
       const r = await pedir(buscar, `${daNota(id)}/restaurar`, autorizado({ method: 'POST' }), false)
       return (await r.json()) as Nota
     },
+    async moverNota(id, antes, depois) {
+      const r = await pedir(buscar, `${daNota(id)}/mover`, comJson('POST', { antes, depois }))
+      return (await r.json()) as Nota
+    },
     async apagarNotaDeVez(id) {
       await pedir(buscar, `${daNota(id)}/definitivo`, autorizado({ method: 'DELETE' }), false)
     },

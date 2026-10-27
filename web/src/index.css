@@ -2316,44 +2316,100 @@ a.botao {
   text-transform: uppercase;
 }
 
-/* A grade: colunas de verdade (os cartões têm alturas diferentes). O número
-   vem do atributo, e não de um style inline. */
-.grade {
-  column-count: 4;
-  column-gap: 12px;
+/* A grade e a lista são "ordenadas" (ADR-022, N2b): cada cartão fica em posição
+   absoluta, e quem o põe no lugar (e o arrasta) é o useOrdemManual, só com
+   transform. A grade é em colunas NA ORDEM DE LEITURA (o cartão seguinte vai para
+   a coluna mais curta), o que o CSS columns não faz. O número de colunas e o
+   vão vêm do hook (a largura de cada cartão e o translate saem de lá). */
+.ordenada {
+  position: relative;
 }
 
-.grade[data-colunas='1'] {
-  column-count: 1;
+.ordenada > * {
+  position: absolute;
+  top: 0;
+  left: 0;
+  margin: 0;
 }
 
-.grade[data-colunas='2'] {
-  column-count: 2;
+/* As transições só ligam depois da primeira pintura (data-pronto): sem isso os
+   cartões voariam do canto. Só transform e sombra, que o navegador anima sem
+   refazer a página. */
+.ordenada[data-pronto] > * {
+  transition:
+    transform 220ms var(--curva),
+    box-shadow 120ms var(--curva);
 }
 
-.grade[data-colunas='3'] {
-  column-count: 3;
+/* O cartão levantado: segue o ponteiro (sem transição, senão ficaria para trás),
+   com sombra e uma escala leve; não recebe o ponteiro, que é de quem arrasta. */
+.ordenada > [data-arrastando] {
+  z-index: 20;
+  box-shadow:
+    0 14px 32px rgb(0 0 0 / 0.24),
+    0 2px 6px rgb(0 0 0 / 0.16);
+  cursor: grabbing;
+  opacity: 0.97;
+  pointer-events: none;
+  transition: box-shadow 120ms var(--curva);
 }
 
-.grade[data-colunas='4'] {
-  column-count: 4;
+/* A vaga: o espaço aberto onde o cartão cairia. */
+.ordenada > .vaga {
+  border: 2px dashed var(--contorno);
+  border-radius: var(--raio-md);
+  background: color-mix(in srgb, var(--realce) 60%, transparent);
+  pointer-events: none;
 }
 
-.grade[data-colunas='5'] {
-  column-count: 5;
+/* Durante o arrasto o texto não se seleciona. */
+.ordenada[data-em-arrasto],
+tbody[data-em-arrasto] {
+  -webkit-user-select: none;
+  user-select: none;
 }
 
-.grade[data-colunas='6'] {
-  column-count: 6;
+tbody[data-em-arrasto] tr[data-arrastando] {
+  position: relative;
+  z-index: 20;
+  background: var(--superficie);
+  box-shadow:
+    0 14px 32px rgb(0 0 0 / 0.24),
+    0 2px 6px rgb(0 0 0 / 0.16);
+  cursor: grabbing;
+  pointer-events: none;
+}
+
+tbody[data-pronto] tr {
+  transition: transform 220ms var(--curva);
+}
+
+tbody[data-pronto] tr[data-arrastando] {
+  transition: none;
+}
+
+/* No celular o toque longo é do arrasto: sem o menu de "copiar" do navegador nem
+   a seleção de texto no cartão (a nota inteira abre na janela, onde se seleciona). */
+@media (pointer: coarse) {
+  .ordenada > [data-ordenavel],
+  tbody tr[data-ordenavel] {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ordenada[data-pronto] > *,
+  tbody[data-pronto] tr {
+    transition: none;
+  }
 }
 
 .cartao {
-  position: relative;
-  margin: 0 0 12px;
   border: 1px solid var(--linha);
   border-radius: var(--raio-md);
   background: var(--cor-nota, var(--superficie));
-  break-inside: avoid;
   transition: box-shadow 120ms var(--curva);
 }
 
@@ -2524,9 +2580,6 @@ a.botao {
 
 /* A lista: uma nota por linha, a cor numa bolinha. */
 .notas-lista {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
   max-width: 60rem;
   margin: 0 auto;
   padding: 0;
@@ -2534,7 +2587,6 @@ a.botao {
 }
 
 .nota-linha {
-  position: relative;
   display: flex;
   align-items: center;
   gap: 4px;
