@@ -512,14 +512,15 @@ func TestPostgres_Retencao_ArrumacaoEmLotesSoltaATrava(t *testing.T) {
 		}
 	}
 	// Um ano depois: as 5 lápides (lotes de 2: 3 transações), os 15 eventos
-	// órfãos (8) e as 10 respostas (5, mais a que acha menos que o lote).
+	// órfãos (8), os eventos das notas (1, vazio) e as 10 respostas (5, mais a
+	// que acha menos que o lote).
 	r, err := s.Reter(e.ctx, user, now0.AddDate(1, 0, 0))
 	want := cloudstore.Retido{LapidesVencidas: n, Eventos: 3 * n, Mutacoes: 2 * n}
 	if err != nil || r != want {
 		t.Fatalf("Reter um ano depois = %+v, %v; quero %+v", r, err, want)
 	}
-	if lotes != 3+8+6 {
-		t.Errorf("%d lotes, quero %d (cada lote é uma transação)", lotes, 3+8+6)
+	if lotes != 3+8+1+6 {
+		t.Errorf("%d lotes, quero %d (cada lote é uma transação)", lotes, 3+8+1+6)
 	}
 	for _, q := range []string{
 		"SELECT count(*) FROM tombstones WHERE user_id = $1",

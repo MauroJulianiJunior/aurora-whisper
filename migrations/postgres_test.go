@@ -1548,7 +1548,7 @@ func TestPostgres_AsMigrationsDasNotasAplicamSobreUmBancoComDados(t *testing.T) 
 		lit("reason", "'apagado'").lit("dictated_at", "now() - interval '10 days'").val("seq", int64(3)))
 	p.accept("aprendido", newRow("learned_pairs").lit("id", "gen_random_uuid()").val("user_id", a).val("variant", "SF").
 		val("normalized_variant", "sf").lit("term", "'ECF'").val("last_seq", int64(4)))
-	p.accept("mutação", mutationRow(a, device))
+	p.accept("mutação", mutationRow(a, device).val("mutation_id", p.newID()))
 	p.exec(`INSERT INTO dictation_settings (user_id, asr_provider, asr_model, use_hint, polish_enabled, polish_provider, polish_model, created_at, updated_at)
 		VALUES ($1, 'openai', 'gpt-4o-mini-transcribe', false, false, 'openai', '', now(), now())`, a)
 
