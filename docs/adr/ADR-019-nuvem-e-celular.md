@@ -6699,6 +6699,61 @@ B2 como exemplo, a política de privacidade como modelo para quem sobe a própri
   regra: comando que imprime segredo vem com a saída suprimida, porque o aviso "não cole" não basta (o
   mesmo da senha do Postgres de teste, em 05-out-2026).
 
+### Emenda da N7 (ADR-022, 26-out-2026): notas e marcadores no sync
+
+A ADR-022 trouxe a nota e o marcador de nota para o contrato de sync desta ADR. Nada do que está acima
+muda para o ditado e o aprendido; o que entra é aditivo. O desenho completo, com os desvios, está na
+ADR-022, "Decisões da N7"; aqui fica o que toca o contrato.
+
+- **Dois tipos novos no fio:** `note` e `label` (`entity_type`), cada um com as operações `upsert` e
+  `delete` (apagar de vez, com lápide). A regra de conflito desta ADR vale igual para o **conteúdo** da
+  nota (título e corpo juntos: o que chegou primeiro fica, o do PC que perdeu vai para o selo, com a
+  escolha "manter" ou "trocar" como no ditado). Cor, fixar, arquivar, marcadores e posição: o último que
+  escreve vence, sem selo. O marcador não tem conflito.
+- **Tabelas à parte para o log e a lápide: `note_sync_events` (0024) e `note_tombstones` (0023).** Os
+  `CHECK` de `entity_type` do `sync_events` (0008) e do `tombstones` (0015) só aceitam os tipos de antes,
+  e alargá-los pede `ALTER`, que as migrations depois do deploy não usam (só `CREATE TABLE` e
+  `CREATE INDEX`, uma tabela por arquivo). As duas tabelas novas usam o **mesmo contador por usuário**
+  (`user_sync_counters`, 0010): um `seq` é de uma mudança só, numa das tabelas, e o pull junta as listas por
+  `seq` antes do corte da página. As tabelas das entidades são `labels` (0020), `notes` (0021) e
+  `note_labels` (0022); a ligação do ditado com a nota é `transcription_note_links` (0025).
+- **A lápide da nota e a do marcador nunca vencem.** A lápide do ditado vence com a janela de 6 meses
+  (a decisão da F9); a nota não tem janela, então nada cobriria a recusa depois que a lápide saísse, e um
+  PC parado por um ano ressuscitaria a nota apagada. São só ids (`user_id`, tipo, id, `seq`); o job de
+  retenção não as toca. Um `upsert` atrasado de uma entidade com lápide recebe `gone` (`apagado`).
+- **A capacidade: `entidades` no pull.** A página do pull ganha `entidades`, a lista dos tipos que a nuvem
+  sincroniza (`["transcription", "learned", "note", "label"]`), sempre presente; o PC antigo a ignora. O
+  PC só manda nota, marcador e o `virou_nota` do ditado depois de ver `note` ali. Por quê: o Agent novo
+  instalado antes do servidor novo teria toda nota recusada (`tipo_desconhecido`) e o ditado com
+  `virou_nota` recusado (`campo_desconhecido`), e a recusa fica. Na **primeira vez** que o PC vê a
+  capacidade, ele **zera o cursor** e lê tudo de novo uma vez (um binário de antes pode ter passado pelas
+  notas sem aplicá-las); os ditados voltam como eco, sem mudar nada. Uma nuvem que deixa de dizer `note`
+  (volta de versão) faz o PC parar de mandar notas. A recusa de tipo de uma nuvem antiga é `adiado`: a
+  nota fica na fila e o resto da rodada segue.
+- **`virou_nota` no ditado.** O ditado ganha o campo `virou_nota` (o id da nota, ou `null`): no payload de
+  criar e no de mudar, e sempre presente no `itemDTO` do pull e do `GET`. A nuvem guarda a ligação na
+  `transcription_note_links` (cascata do ditado: a retenção de 6 meses continua valendo e a ligação sai
+  junto) e **esconde o ditado ligado da lista e da busca do histórico do celular** (`GET /transcriptions`).
+  Sem conflito: o último que escreve vence. O `nova:<token>` da caixa "Criar uma nota" é só do PC e nunca
+  sobe. A nuvem de antes da N7 não manda a chave, e o PC não mexe no `virou_nota` local nesse caso.
+- **A ordem do lote do push** é: aprendido, marcadores de nota, notas, ditados. O marcador vai antes da
+  nota que o cita, e a nota antes do ditado que virou nota nela. Mesmo assim a nuvem aceita a nota
+  que cita um marcador que ainda não existe (`note_labels` não tem chave estrangeira para `labels`); o PC
+  que recebe a nota antes do marcador guarda uma linha "que espera" (`sync_state = 'aguardando'`).
+- **O envio inicial das notas** não pede clique novo: o "Enviar o histórico" (F7c) já é o aceite da pessoa
+  para mandar o que é dela. Com o aceite e a capacidade, toda rodada põe na fila os marcadores vivos e as
+  notas fora da lixeira que a nuvem ainda não tem (`Fila.CompletarNotas`), sem cópia nova do banco.
+- **Retenção.** A nota e o marcador não têm a retenção de 6 meses. O ditado que virou nota **continua**
+  sujeito aos 6 meses na nuvem (o texto vive na nota; a nuvem guarda o mínimo). No PC, a N3 deixou o
+  ditado que virou nota fora dos 6 meses, e a N7 não mudou isso (o ponto de privacidade sobre o `raw_text`
+  que fica no PC segue aberto, ADR-022, "Riscos").
+- **Rotas de leitura do celular:** `GET /notes?vista=ativas|arquivo|lixeira` e `GET /labels`, só com a
+  sessão do navegador (o token do PC recebe `403`: o PC lê pelo pull). A tela das notas no celular é a N8.
+  Detalhe em `06-api-contract.md`.
+- **O "Apagar meus dados"** e a arrumação dos eventos cobrem as seis tabelas novas.
+- **Deploy:** ponto de parada, do Mauro. O roteiro é `docs/deploy-notas-n7.md` (as migrations `0020` a
+  `0025`, só aditivas, e a API nova), e o teste depois dele é `docs/teste-manual-notas-n7.md`.
+
 ## O que o Mauro providencia, e quando
 
 - **Agora (F0):**

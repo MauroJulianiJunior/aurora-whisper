@@ -6,6 +6,7 @@
 | Texto | Confidencial | SQLite; no Postgres **só depois que quem usa conecta a nuvem**, legível no servidor na v1 (ADR-019). O texto do ditado do celular nasce na nuvem, depois do aceite dela (ADR-021) | 6m, pela data do ditado; o backup da nuvem o guarda até a cópia girar |
 | Áudio (do PC) | Sensível efêmero | RAM | tentativa. Nunca sai do PC |
 | Contexto UIA | Sensível efêmero | RAM | resolução |
+| Título e corpo da nota, nome do marcador (ADR-022) | Confidencial; a nota pode ter dado pessoal e de terceiros (clientes, por exemplo), como o ditado | SQLite (`local_notes`, `local_labels`); no Postgres (`notes`, `labels`) **só depois que quem usa conecta a nuvem**, legível no servidor como o ditado (N7). A lápide (`note_tombstones`) e o log (`note_sync_events`) levam só ids e datas | a nota e o marcador: até quem usa apagar (a lixeira expurga em 30 dias; **sem** os 6 meses do histórico). O ditado que virou nota segue os 6 meses na nuvem (a ligação sai com ele). O backup da nuvem os guarda até a cópia girar |
 | Nota em foco (ADR-022: em que nota está o cursor, o id dela ou o token da caixa "Criar uma nota") | Sensível efêmero | só na memória do Agent (`internal/agent/notafoco`). Nunca em disco, log, resposta de erro nem sync | 60 s sem renovação (o painel renova a cada ~20 s), ou o DELETE `/api/notas/foco`, ou o reinício. O que fica no banco é o efeito (`virou_nota` do ditado), não o aviso |
 | Dictionary/corrections | Confidencial | SQLite/Postgres; **hoje o `dicionario.json` local, em texto, na pasta de dados** (ADR-017; ADR-018: `%LOCALAPPDATA%\AuroraWhisper`, ou ao lado do executável no modo portátil), onde o painel grava o que aprende | até exclusão |
 | Email/google_sub/nome (`display_name`, o `name` do Google; o `avatar_url` existe na tabela e nunca é preenchido) | Pessoal | Postgres | vida da conta: o "apagar meus dados" **não** apaga o cadastro (dossiê de LGPD, `docs/lgpd-dossie.md`, decisão 2) |
@@ -406,8 +407,36 @@ ADR-019, "Decisões da F3"). O que vale, e onde cada coisa é provada (a suíte
   também, até a reconciliação). **A cópia local:** o espelho no `historico.db` guarda a variante e o
   termo da última sincronização e o par que chegou e não vale aqui. O esquecer zera a versão e a
   situação, e apaga o texto do que veio da conta esquecida e não está no arquivo (fica o id).
+- **Notas e marcadores (ADR-022, N7; 26-out-2026):** com a nuvem conectada, sobem também o **título e o
+  corpo de cada nota**, a cor, fixada, arquivada, a posição, a lixeira, os ids dos marcadores da nota, o
+  `ditado_de_origem` (só o id), e o **nome de cada marcador**; e o `virou_nota` do ditado (só o id da
+  nota). O título e o corpo têm o mesmo tratamento do texto do ditado: ficam legíveis no servidor (THR-023),
+  entram no backup cifrado e no "Apagar meus dados" (as seis tabelas novas). Sobem sem clique novo: o
+  "Enviar o histórico" (F7c) já é o aceite da pessoa para mandar o que é dela, e a nota criada com a nuvem
+  conectada entra na fila na hora. Detalhes:
+  - **Nunca sobem:** o `nova:<token>` da caixa "Criar uma nota" (contexto, só do PC); o aviso de nota em
+    foco; o selo e a situação do sync (o selo vem da nuvem); o `corpo_nuvem` (a base local da mescla;
+    o `corpo_base` do payload é o mesmo texto da nota, já nela). O texto bruto de um ditado que virou nota
+    continua só no PC e na nuvem do ditado, como antes.
+  - **As lápides só têm ids.** Apagar de vez uma nota ou um marcador apaga o texto na nuvem (a linha sai) e
+    deixa só o id em `note_tombstones`, que não vence (a nota não tem janela de 6 meses). O backup guarda
+    o texto apagado até a cópia girar, como o do ditado.
+  - **O ditado que virou nota** some do histórico do celular (a nuvem esconde o ditado ligado), mas a
+    **retenção de 6 meses continua valendo** para ele na nuvem: depois dela, o ditado sai e a ligação sai
+    junto; o texto fica na nota. **Ponto aberto, que a N7 não muda (ADR-022, "Riscos"):** no PC, o ditado
+    que virou nota fica fora dos 6 meses, e o `raw_text` dele (e o `final_text`) segue no PC sem prazo,
+    mesmo que a nota seja apagada de vez depois. Se isso incomodar na revisão de LGPD, a saída é limpar o
+    `raw_text` quando a nota for apagada de vez, ou deixar o ditado voltar à regra dos 6 meses. Não foi
+    decidido.
+  - **A pílula e o log:** nenhum log do Agent nem do servidor leva título, corpo ou nome de marcador (abaixo,
+    "Logging proibido"). O servidor registra só o padrão da rota, o status e contagens (`mutacoes`,
+    `mudancas`, `itens`).
 - **No servidor:** o texto fica legível para quem administra a VPS (THR-023). A revisão de LGPD é
-  pré-condição do deploy (abaixo; o dossiê é `docs/lgpd-dossie.md`).
+  pré-condição do deploy (abaixo; o dossiê é `docs/lgpd-dossie.md`). **Pendência, não feita na N7:** a
+  revisão de LGPD da F11 foi escrita antes das notas, e nem o dossiê nem a política de privacidade falam
+  delas ainda. A ADR-022 já previa "a política de privacidade ganha uma linha" (título, corpo e marcador no
+  servidor, o ditado que virou nota); fica para o Mauro decidir quando, e vale lembrar antes do deploy da
+  N7 (`docs/deploy-notas-n7.md`).
 - **Revogar ou desconectar** não apaga nada no PC: o Agent continua funcionando localmente.
 
 ## Ditar no celular: o que sai do aparelho (ADR-021)
@@ -739,6 +768,14 @@ bundle da nuvem não a contém.
   termo ou o domínio. O servidor confere o par antes do banco (o id, os 80 caracteres, o caractere
   nulo e o UTF-8, o restrito com domínio) para nenhuma constraint do Postgres pôr a variante no
   `DETAIL` do log dele;
+- as notas e os marcadores (ADR-022, N7): o título, o corpo (e o selo do conflito), o nome do marcador e o
+  `corpo_base` do payload, no Agent e no servidor. O sync das notas registra **só contagens e códigos de
+  listas fechadas**, nas mesmas linhas do ditado (`11-observability.md`); a recusa de uma nota grava só o
+  código (`last_sync_error`), nunca o texto; os erros do repositório dizem só o que falhou; o servidor
+  confere o payload antes do banco (UTF-8 válido nos bytes crus, sem o nulo, tetos, cor da lista, posição,
+  UUIDs) para nenhuma constraint do Postgres pôr o texto da nota no `DETAIL` do log dele; os handlers do
+  `GET /notes` e `GET /labels` logam só o padrão da rota, o status e a contagem `itens`; e nenhum log leva
+  o id da nota nem o do marcador. A lápide e o evento (`note_tombstones`, `note_sync_events`) só têm ids;
 - contexto;
 - Authorization;
 - cookies;
@@ -795,6 +832,12 @@ protegido"; ADR-011, nota de 29-set-2026).
   ditado: a D3 da F10, abaixo);
 - purge daily (no PC e na nuvem, na subida e de hora em hora);
 - delete definitivo remove raw/final.
+- **Notas (ADR-022, N7):** a nota e o marcador **não têm os 6 meses**: ficam até a pessoa apagar. A lixeira
+  da nota é de 30 dias e o expurgo é do PC (a nuvem não expurga nota nesta fase; quando o celular puder pôr
+  nota na lixeira, N8, ela ganha o dela); o expurgo do PC sobe como `delete`. A lápide da nota e a do
+  marcador (só ids) não vencem e o job de retenção não as toca. O evento do log das notas
+  (`note_sync_events`) sai com a mesma arrumação de 90 dias, só o órfão. **O ditado que virou nota** continua
+  sujeito aos 6 meses na nuvem; no PC, não (ADR-022, "Riscos").
 - **Nuvem (ADR-019):** os prazos contam pela data do ditado que o PC mandou; o que foi apagado de vez
   dentro da janela deixa lápide, para não ressuscitar; o backup guarda texto apagado até a cópia
   girar (30 dias no Backblaze B2, mais o tempo do B2 para apagar o que a regra escondeu: D2 da F11;
