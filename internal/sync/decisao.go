@@ -98,7 +98,7 @@ func DecidirResultado(e storage.EstadoDoItem, r MutationResult) Decisao {
 		a := storage.AcaoLocal{Situacao: storage.SituacaoNormal, Marcador: storage.MarcadorSai}
 		if !duplicado && r.State != nil && itemValido(*r.State, e.ID) {
 			// O estado atual: o texto que venceu, e o deste PC no selo.
-			g := LinhaDoItem(*r.State)
+			g := linhaComVirouNota(*r.State, e.Linha)
 			v := r.State.Version
 			a.Gravar, a.ServerVersion = &g, &v
 		}
@@ -188,12 +188,18 @@ func DecidirMudanca(e storage.EstadoDoItem, c Change) Decisao {
 			return Decisao{Tipo: TipoPulado}
 		}
 		if e.Linha != nil && e.Linha.ServerVersion != nil && *e.Linha.ServerVersion == c.EntityVersion {
+			if v := c.Payload.VirouNota; v.Presente && !mesmoVirouNota(e.Linha.VirouNota, v.ID) {
+				// O eco que traz um virou_nota diferente do daqui: um binário de
+				// antes da N7 passou por esta versão sem gravar a coluna (a
+				// primeira rodada com a capacidade lê tudo de novo). Só ela muda.
+				return Decisao{Acao: storage.AcaoLocal{MudarVirouNota: true, VirouNota: v.ID}, Tipo: TipoEco}
+			}
 			return Decisao{Tipo: TipoEco}
 		}
 		if e.Linha != nil && e.Linha.ServerVersion == nil && e.MudouAqui && pcPodeVencer(*e.Linha, *c.Payload) {
 			return Decisao{Acao: storage.AcaoLocal{Marcador: storage.MarcadorCriar}, Tipo: TipoReconciliado}
 		}
-		g := LinhaDoItem(*c.Payload)
+		g := linhaComVirouNota(*c.Payload, e.Linha)
 		v := c.EntityVersion
 		a := storage.AcaoLocal{Gravar: &g, ServerVersion: &v}
 		if e.Linha != nil && e.Linha.SyncState == storage.SituacaoRecusado {
@@ -218,6 +224,9 @@ func pcPodeVencer(l storage.Transcription, it Item) bool {
 // (um UUID), a data existe, os textos cabem no teto e a versão é positiva.
 func itemValido(it Item, id string) bool {
 	if !pareceUUID(id) || !strings.EqualFold(it.ID, id) || it.Version < 1 || it.CreatedAt.IsZero() {
+		return false
+	}
+	if v := it.VirouNota; v.ID != nil && !pareceUUID(*v.ID) {
 		return false
 	}
 	textos := []string{it.RawText, it.FinalText}
@@ -252,7 +261,34 @@ func LinhaDoItem(it Item) storage.Transcription {
 	if s := it.VersaoEmConflito; s != nil {
 		t.Conflito = &storage.Conflito{FinalText: s.FinalText, DeviceID: s.DeviceID, Em: s.ConflictAt.UTC()}
 	}
+	if v := it.VirouNota; v.Presente && v.ID != nil {
+		id := strings.ToLower(*v.ID)
+		t.VirouNota = &id
+	}
 	return t
+}
+
+// linhaComVirouNota é LinhaDoItem com o virou_nota daqui quando a nuvem não o
+// mandou (uma nuvem de antes da N7): sem isso, o pull de uma nuvem antiga
+// devolveria ao histórico o ditado que virou nota neste PC.
+func linhaComVirouNota(it Item, local *storage.Transcription) storage.Transcription {
+	g := LinhaDoItem(it)
+	if !it.VirouNota.Presente && local != nil {
+		g.VirouNota = local.VirouNota
+	}
+	return g
+}
+
+// mesmoVirouNota compara o virou_nota daqui com o da nuvem. O "nova:<token>"
+// daqui (a caixa "Criar uma nota" ainda aberta) com o nulo da nuvem é o mesmo:
+// a nuvem nunca o conhece.
+func mesmoVirouNota(local, nuvem *string) bool {
+	switch {
+	case local == nil || nuvem == nil:
+		return (local == nil || strings.HasPrefix(*local, storage.PrefixoDaNotaNova)) && nuvem == nil
+	default:
+		return strings.EqualFold(*local, *nuvem)
+	}
 }
 
 // codigoCurto guarda um código de recusa da nuvem, que é de uma lista

@@ -36,6 +36,10 @@ type payloadCriar struct {
 	Status         string   `json:"status"`
 	CreatedAt      string   `json:"created_at"`
 	DeletedAt      *string  `json:"deleted_at,omitempty"`
+	// VirouNota é a nota em que o ditado virou (N7): só com a nuvem que sabe
+	// de notas, e só o id de uma nota de verdade (nunca o "nova:<token>" de
+	// uma caixa ainda aberta, que é só deste PC).
+	VirouNota *string `json:"virou_nota,omitempty"`
 }
 
 // formatoDaNuvem é como as datas vão no payload (RFC 3339, em UTC). A nuvem
@@ -45,8 +49,30 @@ const formatoDaNuvem = time.RFC3339Nano
 func dataDaNuvem(t time.Time) string { return t.UTC().Format(formatoDaNuvem) }
 
 // MutacaoDe monta a mutação do marcador, com o mutationID dado (o do envio em
-// curso, num reenvio; um novo, senão).
+// curso, num reenvio; um novo, senão), para uma nuvem que não sabe de notas:
+// o virou_nota não vai. Ver MutacaoDoDitado.
 func MutacaoDe(it storage.ItemDaFila, mutationID string) (Mutation, error) {
+	return MutacaoDoDitado(it, mutationID, false)
+}
+
+// virouNotaQueSobe é o virou_nota que pode subir: o id de uma nota de verdade
+// (um UUID), em minúsculas. O "nova:<token>" (a caixa "Criar uma nota" ainda
+// aberta) e o nulo não sobem.
+func virouNotaQueSobe(v *string) *string {
+	if v == nil || !pareceUUID(*v) {
+		return nil
+	}
+	s := strings.ToLower(*v)
+	return &s
+}
+
+// MutacaoDoDitado é MutacaoDe sabendo se a nuvem sincroniza notas (comNotas,
+// a capacidade da N7): com ela, o ditado novo leva o virou_nota (o ditado
+// feito dentro de uma nota), e a mudança com o bit storage.CampoVirouNota leva
+// a chave virou_nota (o id da nota, ou null: o Desfazer). Sem ela, nada disso
+// vai, e o bit fica na fila (storage.Fila.Pendentes não devolve o marcador que
+// só tem ele).
+func MutacaoDoDitado(it storage.ItemDaFila, mutationID string, comNotas bool) (Mutation, error) {
 	l := it.Linha
 	m := Mutation{
 		MutationID: strings.ToLower(mutationID),
@@ -66,12 +92,18 @@ func MutacaoDe(it storage.ItemDaFila, mutationID string) (Mutation, error) {
 			d := dataDaNuvem(*l.DeletedAt)
 			c.DeletedAt = &d
 		}
+		if comNotas {
+			c.VirouNota = virouNotaQueSobe(l.VirouNota)
+		}
 		corpo = c
 	} else {
 		m.BaseVersion = *l.ServerVersion
 		campos := it.Marcador.Campos
+		if !comNotas {
+			campos &^= storage.CampoVirouNota
+		}
 		escolha := it.Marcador.SeloEscolha
-		if campos&(storage.CampoTexto|storage.CampoLixeira) == 0 && escolha == "" {
+		if campos&(storage.CampoTexto|storage.CampoLixeira|storage.CampoVirouNota) == 0 && escolha == "" {
 			// Um marcador sem campo nem escolha sobre um ditado que a nuvem
 			// já tem (não deveria acontecer: só o ditado novo nasce sem
 			// campo). Os dois campos com a base certa não mudam nada que a
@@ -95,6 +127,11 @@ func MutacaoDe(it storage.ItemDaFila, mutationID string) (Mutation, error) {
 			} else {
 				p["deleted_at"] = nil
 			}
+		}
+		if campos&storage.CampoVirouNota != 0 {
+			// O "nova:<token>" é só deste PC: para a nuvem, o ditado ainda
+			// não virou nota.
+			p["virou_nota"] = virouNotaQueSobe(l.VirouNota)
 		}
 		corpo = p
 	}

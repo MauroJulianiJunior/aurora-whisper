@@ -90,6 +90,11 @@ type MutationResult struct {
 	// mutação learned (nunca no duplicate). Só o Cliente o preenche: o state
 	// não diz o tipo, que é o da mutação do mesmo lugar no lote.
 	StateAprendido *Aprendido `json:"-"`
+	// StateNota e StateMarcador são o estado atual da nota e do marcador de
+	// nota no conflict de uma mutação note ou label (N7). Só o Cliente os
+	// preenche, como o StateAprendido.
+	StateNota     *Nota            `json:"-"`
+	StateMarcador *MarcadorDaNuvem `json:"-"`
 }
 
 // PushResult é a resposta do push: um resultado por mutação, na ordem, e o
@@ -120,6 +125,36 @@ type Item struct {
 	DeletedAt        *time.Time `json:"deleted_at"`
 	Version          int64      `json:"version"`
 	VersaoEmConflito *Selo      `json:"versao_em_conflito"`
+	// VirouNota é a nota em que o ditado virou (ADR-022, N7): a nuvem a manda
+	// sempre (null quando não há); a nuvem de antes da N7 não a manda, e aí
+	// ela fica ausente (VirouNotaOpcional.Presente falso) e o PC não toca no
+	// virou_nota daqui.
+	VirouNota VirouNotaOpcional `json:"virou_nota"`
+}
+
+// VirouNotaOpcional é o virou_nota do ditado com a diferença entre "veio
+// null" (Presente, ID nil: o ditado não virou nota na nuvem) e "não veio"
+// (uma nuvem de antes da N7). O encoding/json só chama o UnmarshalJSON quando
+// a chave está no JSON, o null inclusive.
+type VirouNotaOpcional struct {
+	Presente bool
+	ID       *string
+}
+
+// UnmarshalJSON lê a chave: null ou o id.
+func (v *VirouNotaOpcional) UnmarshalJSON(b []byte) error {
+	var id *string
+	if err := json.Unmarshal(b, &id); err != nil {
+		return err
+	}
+	*v = VirouNotaOpcional{Presente: true, ID: id}
+	return nil
+}
+
+// MarshalJSON escreve o id ou null (os testes montam respostas da nuvem com
+// o Item).
+func (v VirouNotaOpcional) MarshalJSON() ([]byte, error) {
+	return json.Marshal(v.ID)
 }
 
 // Selo é a versão que perdeu um conflito.
@@ -144,6 +179,43 @@ type Aprendido struct {
 	UndoneAt   *time.Time `json:"undone_at"`
 }
 
+// Nota é a nota como a nuvem a devolve (ADR-022, N7; o noteDTO do
+// servidor): no pull e no state do conflict. cor, ditado_de_origem,
+// deleted_at e versao_em_conflito vêm sempre, null quando não há.
+type Nota struct {
+	ID               string      `json:"id"`
+	Titulo           string      `json:"titulo"`
+	Corpo            string      `json:"corpo"`
+	Cor              *string     `json:"cor"`
+	Fixada           bool        `json:"fixada"`
+	Arquivada        bool        `json:"arquivada"`
+	Posicao          string      `json:"posicao"`
+	Marcadores       []string    `json:"marcadores"`
+	DitadoDeOrigem   *string     `json:"ditado_de_origem"`
+	CreatedAt        time.Time   `json:"created_at"`
+	UpdatedAt        time.Time   `json:"updated_at"`
+	DeletedAt        *time.Time  `json:"deleted_at"`
+	Version          int64       `json:"version"`
+	VersaoEmConflito *SeloDaNota `json:"versao_em_conflito"`
+}
+
+// SeloDaNota é a versão do título e do corpo que perdeu um conflito.
+type SeloDaNota struct {
+	Titulo     string    `json:"titulo"`
+	Corpo      string    `json:"corpo"`
+	DeviceID   *string   `json:"device_id"`
+	ConflictAt time.Time `json:"conflict_at"`
+}
+
+// MarcadorDaNuvem é o marcador de nota como a nuvem o devolve (o labelDTO).
+type MarcadorDaNuvem struct {
+	ID        string    `json:"id"`
+	Nome      string    `json:"nome"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	Version   int64     `json:"version"`
+}
+
 // Change é uma linha do pull: o estado atual de uma entidade que mudou depois
 // do cursor (upsert) ou uma lápide do ditado (tombstone, sem payload).
 type Change struct {
@@ -160,6 +232,10 @@ type Change struct {
 	// PayloadAprendido é o par (o upsert de um learned). Só o Cliente o
 	// preenche (a leitura pelo tipo).
 	PayloadAprendido *Aprendido `json:"-"`
+	// PayloadNota e PayloadMarcador são a nota e o marcador de nota (o upsert
+	// de um note e de um label, N7). Só o Cliente os preenche.
+	PayloadNota     *Nota            `json:"-"`
+	PayloadMarcador *MarcadorDaNuvem `json:"-"`
 }
 
 // ChangePage é uma página do pull.
@@ -168,6 +244,20 @@ type ChangePage struct {
 	LastSeq int64    `json:"last_seq"`
 	HasMore bool     `json:"has_more"`
 	Epoch   string   `json:"sync_epoch"`
+	// Entidades são os tipos que a nuvem sincroniza (N7). A nuvem de antes da
+	// N7 não a manda: sem "note" aqui, o PC não sobe nota, marcador nem o
+	// virou_nota do ditado (storage.Fila.VerCapacidade).
+	Entidades []string `json:"entidades,omitempty"`
+}
+
+// TemNotas diz se a nuvem desta página sincroniza notas.
+func (p ChangePage) TemNotas() bool {
+	for _, e := range p.Entidades {
+		if e == storage.EntidadeNota {
+			return true
+		}
+	}
+	return false
 }
 
 // SyncClient é o contrato de fio com a nuvem (18-tool-contract.md,
@@ -216,15 +306,28 @@ func (c *cru) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
+// destinos são os lugares de cada tipo onde a leitura pelo tipo decodifica.
+type destinos struct {
+	item     **Item
+	par      **Aprendido
+	nota     **Nota
+	marcador **MarcadorDaNuvem
+}
+
 // lerPorTipo decodifica as ocorrências no tipo de entityType: no par, para o
-// aprendido; no item, para todo o resto.
-func (c cru) lerPorTipo(entityType string, item **Item, par **Aprendido) error {
+// aprendido; na nota e no marcador, para os da N7; no item, para todo o resto.
+func (c cru) lerPorTipo(entityType string, d destinos) error {
 	for _, o := range c {
 		var err error
-		if entityType == storage.EntidadeAprendido {
-			err = json.Unmarshal(o, par)
-		} else {
-			err = json.Unmarshal(o, item)
+		switch entityType {
+		case storage.EntidadeAprendido:
+			err = json.Unmarshal(o, d.par)
+		case storage.EntidadeNota:
+			err = json.Unmarshal(o, d.nota)
+		case storage.EntidadeMarcadorDeNota:
+			err = json.Unmarshal(o, d.marcador)
+		default:
+			err = json.Unmarshal(o, d.item)
 		}
 		if err != nil {
 			return err
@@ -255,7 +358,7 @@ func (w paginaDoFio) pagina() (ChangePage, error) {
 	}
 	for i, m := range w.Changes {
 		c := m.Change
-		if err := m.Payload.lerPorTipo(c.EntityType, &c.Payload, &c.PayloadAprendido); err != nil {
+		if err := m.Payload.lerPorTipo(c.EntityType, destinos{&c.Payload, &c.PayloadAprendido, &c.PayloadNota, &c.PayloadMarcador}); err != nil {
 			return ChangePage{}, err
 		}
 		p.Changes[i] = c
@@ -289,7 +392,7 @@ func (w respostaDoPush) resultado(muts []Mutation) (PushResult, error) {
 		if i < len(muts) {
 			tipo = muts[i].EntityType
 		}
-		if err := r.State.lerPorTipo(tipo, &res.State, &res.StateAprendido); err != nil {
+		if err := r.State.lerPorTipo(tipo, destinos{&res.State, &res.StateAprendido, &res.StateNota, &res.StateMarcador}); err != nil {
 			return PushResult{}, err
 		}
 		out.Results[i] = res
