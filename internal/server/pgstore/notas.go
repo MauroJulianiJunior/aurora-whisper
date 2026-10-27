@@ -352,16 +352,10 @@ func pushNote(ctx context.Context, tx pgx.Tx, a cloudstore.Actor, m cloudstore.M
 		return cloudstore.Outcome{}, false, err
 	}
 	out = cloudstore.DecideNote(m, cur, tomb, dead, a, now)
-	switch out.Write {
-	case cloudstore.WriteNone:
+	if out.Write == cloudstore.WriteNone {
 		return out, false, nil
-	case cloudstore.WriteTombstone:
-		if err := writeNoteTombstone(ctx, tx, a, cloudstore.EntityNote, entityID, cur != nil, out.Result.EntityVersion, seq, now); err != nil {
-			return cloudstore.Outcome{}, false, err
-		}
-		return out, true, nil
 	}
-	if err := putNote(ctx, tx, out.NextNote, cur, seq, a, now); err != nil {
+	if err := gravarNotaDecidida(ctx, tx, a, out, entityID, cur, seq, now); err != nil {
 		return cloudstore.Outcome{}, false, err
 	}
 	if out.Result.NoteState != nil {
@@ -385,34 +379,48 @@ func pushLabel(ctx context.Context, tx pgx.Tx, a cloudstore.Actor, m cloudstore.
 		return cloudstore.Outcome{}, false, err
 	}
 	out = cloudstore.DecideLabel(m, cur, tomb, a, now)
-	switch out.Write {
-	case cloudstore.WriteNone:
+	if out.Write == cloudstore.WriteNone {
 		return out, false, nil
-	case cloudstore.WriteTombstone:
-		if err := writeNoteTombstone(ctx, tx, a, cloudstore.EntityLabel, entityID, cur != nil, out.Result.EntityVersion, seq, now); err != nil {
-			return cloudstore.Outcome{}, false, err
-		}
-		return out, true, nil
+	}
+	if err := gravarMarcadorDecidido(ctx, tx, a, out, entityID, cur, seq, now); err != nil {
+		return cloudstore.Outcome{}, false, err
+	}
+	return out, true, nil
+}
+
+// gravarNotaDecidida grava, com o seq, o que DecideNote decidiu (Write não é
+// WriteNone) sobre cur: a lápide, ou a linha nova (cur nil) ou a versão nova.
+func gravarNotaDecidida(ctx context.Context, tx pgx.Tx, a cloudstore.Actor, out cloudstore.Outcome, entityID string,
+	cur *cloudstore.Note, seq int64, now time.Time) error {
+	if out.Write == cloudstore.WriteTombstone {
+		return writeNoteTombstone(ctx, tx, a, cloudstore.EntityNote, entityID, cur != nil, out.Result.EntityVersion, seq, now)
+	}
+	return putNote(ctx, tx, out.NextNote, cur, seq, a, now)
+}
+
+// gravarMarcadorDecidido grava, com o seq, o que DecideLabel decidiu (Write
+// não é WriteNone) sobre cur.
+func gravarMarcadorDecidido(ctx context.Context, tx pgx.Tx, a cloudstore.Actor, out cloudstore.Outcome, entityID string,
+	cur *cloudstore.Label, seq int64, now time.Time) error {
+	if out.Write == cloudstore.WriteTombstone {
+		return writeNoteTombstone(ctx, tx, a, cloudstore.EntityLabel, entityID, cur != nil, out.Result.EntityVersion, seq, now)
 	}
 	l := out.NextLabel
 	l.LastSeq = seq
 	if cur == nil {
 		if _, err := tx.Exec(ctx, sqlInsertLabel, l.ID, l.UserID, l.Nome, l.CreatedAt, l.UpdatedAt, l.Version, l.LastSeq); err != nil {
-			return cloudstore.Outcome{}, false, sanitize("gravar o marcador", err)
+			return sanitize("gravar o marcador", err)
 		}
 	} else {
 		tag, err := tx.Exec(ctx, sqlUpdateLabel, l.UserID, l.ID, l.Nome, l.UpdatedAt, l.Version, l.LastSeq, cur.Version)
 		if err != nil {
-			return cloudstore.Outcome{}, false, sanitize("gravar o marcador", err)
+			return sanitize("gravar o marcador", err)
 		}
 		if tag.RowsAffected() != 1 {
-			return cloudstore.Outcome{}, false, errors.New("pgstore: gravar o marcador: a versão mudou durante a transação")
+			return errors.New("pgstore: gravar o marcador: a versão mudou durante a transação")
 		}
 	}
-	if err := writeNoteEvent(ctx, tx, l.UserID, seq, cloudstore.EntityLabel, l.ID, cloudstore.OpUpsert, l.Version, a.Device(), now); err != nil {
-		return cloudstore.Outcome{}, false, err
-	}
-	return out, true, nil
+	return writeNoteEvent(ctx, tx, l.UserID, seq, cloudstore.EntityLabel, l.ID, cloudstore.OpUpsert, l.Version, a.Device(), now)
 }
 
 // pullNotes lê, na transação do pull (o mesmo snapshot), as notas, os

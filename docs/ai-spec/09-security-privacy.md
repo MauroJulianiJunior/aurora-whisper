@@ -437,6 +437,25 @@ ADR-019, "Decisões da F3"). O que vale, e onde cada coisa é provada (a suíte
   delas ainda. A ADR-022 já previa "a política de privacidade ganha uma linha" (título, corpo e marcador no
   servidor, o ditado que virou nota); fica para o Mauro decidir quando, e vale lembrar antes do deploy da
   N7 (`docs/deploy-notas-n7.md`).
+- **Notas no celular (ADR-022, N8; 27-out-2026):** o app da nuvem passa a ler e escrever as notas pela
+  sessão, e **guarda no aparelho**, num banco IndexedDB por conta (`aurora-notas-<id da conta>`,
+  `web/src/nuvem/notas/armazem.ts`), a última lista de notas (título e corpo), os marcadores (o nome) e a
+  fila das mudanças feitas sem rede (a E4: a lista do mercado tem de abrir sem sinal). Num banco à parte
+  (`aurora-notas`), só o id, o e-mail e o nome da última conta que abriu o app, para ele abrir sem rede.
+  Detalhes:
+  - **Nunca vão para o aparelho:** o ditado, o áudio e o texto do histórico (o `bundle.test.ts` prende que
+    só o banco das notas usa o IndexedDB, e o gravador continua sem guardar nada). O service worker continua
+    guardando só a casca do app.
+  - **Sai com a conta:** o **Sair** apaga o banco da conta e a conta anotada (com mudança esperando a rede,
+    pergunta antes: ela se perderia); o **"Apagar meus dados"** apaga o banco da conta (a sessão continua).
+    A sessão que vence **não** apaga: as notas continuam no aparelho até o Sair, para o app abrir sem rede.
+    Quem tem o celular desbloqueado lê as notas guardadas, como lê as que estão na tela.
+  - **O "Ditar para nota" e o microfone dentro da nota** mandam a voz pelo mesmo caminho do ditado do
+    celular (ADR-021: o provedor da pessoa, com a chave dela, o aceite antes); o texto vai para a nota, e o
+    ditado fica na nuvem ligado a ela (fora do histórico, sob os 6 meses como todo ditado). O cabeçalho
+    `Ditado-Nota` leva só `para-nota` ou o id da nota.
+  - **O log:** as rotas novas registram só o padrão da rota, o status e contagens; a linha `retenção` ganha a
+    contagem `notas` (o expurgo). Nenhum título, corpo, nome ou id.
 - **Revogar ou desconectar** não apaga nada no PC: o Agent continua funcionando localmente.
 
 ## Ditar no celular: o que sai do aparelho (ADR-021)
@@ -832,9 +851,10 @@ protegido"; ADR-011, nota de 29-set-2026).
   ditado: a D3 da F10, abaixo);
 - purge daily (no PC e na nuvem, na subida e de hora em hora);
 - delete definitivo remove raw/final.
-- **Notas (ADR-022, N7):** a nota e o marcador **não têm os 6 meses**: ficam até a pessoa apagar. A lixeira
-  da nota é de 30 dias e o expurgo é do PC (a nuvem não expurga nota nesta fase; quando o celular puder pôr
-  nota na lixeira, N8, ela ganha o dela); o expurgo do PC sobe como `delete`. A lápide da nota e a do
+- **Notas (ADR-022, N7 e N8):** a nota e o marcador **não têm os 6 meses**: ficam até a pessoa apagar. A
+  lixeira da nota é de 30 dias, e expurga **no PC e, desde a N8, na nuvem** (o job de retenção apaga de vez
+  a nota com o `purge_at` vencido, com a lápide e o evento sem aparelho; a nota que o celular pôs na lixeira
+  não depende de um PC para sair); o expurgo do PC sobe como `delete`. A lápide da nota e a do
   marcador (só ids) não vencem e o job de retenção não as toca. O evento do log das notas
   (`note_sync_events`) sai com a mesma arrumação de 90 dias, só o órfão. **O ditado que virou nota** continua
   sujeito aos 6 meses na nuvem; no PC, não (ADR-022, "Riscos").

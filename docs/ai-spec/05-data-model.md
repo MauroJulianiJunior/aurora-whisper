@@ -510,6 +510,17 @@ de janela (`schema_test.go` confere).
 | `0024` | `note_sync_events` | o log de eventos das notas e dos marcadores |
 | `0025` | `transcription_note_links` | o ditado que virou nota |
 
+**N8 (27-out-2026; ADR-022): sem migration nova.** As escritas do celular (`06`, "As escritas do
+celular") gravam nas mesmas seis tabelas, pelo mesmo ponto único, com o `device_id` nulo nas colunas de
+aparelho e no evento. O "Ditar para nota" grava a nota e o ditado (com a ligação em
+`transcription_note_links`) na mesma transação, cada um com o seu seq. O expurgo da lixeira das notas
+(30 dias, pelo `purge_at` gravado) usa o `idx_notes_trash`. **No celular**, o app guarda num banco
+IndexedDB por conta (`aurora-notas-<id da conta>`; `web/src/nuvem/notas/armazem.ts`) três lojas: `notas`
+(a nota como a nuvem a deu, chave `id`), `marcadores` (chave `id`) e `fila` (uma mudança feita sem rede por
+nota, chave `notaId`: a versão e o conteúdo da base, o conteúdo de agora, o envio que ficou sem resposta e
+quando entrou). E um banco `aurora-notas` com a loja `conta` (a última conta que abriu o app: id, e-mail e
+nome). Nada de ditado nem de áudio (`09`, "Notas no celular").
+
 #### labels (0020)
 PK `(user_id, id)`; `UNIQUE (user_id, last_seq)`.
 | Coluna | Tipo | Notas |

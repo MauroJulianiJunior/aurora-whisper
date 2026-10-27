@@ -26,7 +26,7 @@ import (
 // As chaves da linha "retenção", e só elas (além das do slog).
 var chavesDaRetencao = []string{
 	"ativos", "eventos", "falhas", "lapides_criadas", "lapides_vencidas", "level", "lixeira", "ms", "msg",
-	"mutacoes", "time", "usuarios",
+	"mutacoes", "notas", "time", "usuarios",
 }
 
 func novaNuvemDoJob(t *testing.T, store cloudstore.Store, acc cloudstore.Accounts, logs io.Writer, now func() time.Time) *server.Cloud {
@@ -95,7 +95,7 @@ func TestReter_ALinhaSoComContagens(t *testing.T) {
 	if strings.Join(chaves(got[0]), ",") != strings.Join(chavesDaRetencao, ",") {
 		t.Fatalf("as chaves da linha = %v, quero %v", chaves(got[0]), chavesDaRetencao)
 	}
-	for _, k := range []string{"usuarios", "ativos", "lixeira", "lapides_criadas", "lapides_vencidas", "eventos", "mutacoes", "falhas"} {
+	for _, k := range []string{"usuarios", "ativos", "lixeira", "lapides_criadas", "lapides_vencidas", "eventos", "mutacoes", "notas", "falhas"} {
 		if got[0][k] != float64(0) {
 			t.Errorf("%s = %v, quero 0", k, got[0][k])
 		}

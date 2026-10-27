@@ -364,6 +364,40 @@ a 0 e a rodada lê tudo de novo (os ditados voltam como eco), marca com `CampoVi
 virou nota e a nuvem já tem, e a completação põe na fila as notas e os marcadores que existem só no PC. A
 nuvem que deixa de dizer `note` (uma volta de versão) faz o PC parar de mandar notas.
 
+## Notas no celular (ADR-022, N8)
+
+**"Ditar para nota" (o botão embaixo da aba Notas):**
+1. A porta do aceite do ditado no celular (ADR-021), o microfone, a gravação e o envio de sempre
+   (`POST /dictations`), com `Ditado-Nota: para-nota`.
+2. Na nuvem, o ASR, o Smart e o Polish de sempre; na gravação, numa transação só: a regra do Ctrl+Win+Alt do
+   PC (`internal/notas`) sobre as notas ativas, a nota gravada (o acrescentar, ou a nota nova com o ditado
+   inteiro no topo das outras) e o ditado gravado já ligado a ela. O ditado nunca entra no histórico.
+3. A resposta traz a nota e o destino; o app a põe na lista e mostra o aviso ("Lista do sábado +2" ou "Nota
+   nova") com **Abrir** (a janela da nota) e **Desfazer** (`POST /transcriptions/{id}/undo-note`: o ditado
+   volta ao histórico; a nota volta ao que era, se ninguém mexeu nela).
+4. Os PCs recebem a nota e o ditado (com `virou_nota`) pelo pull: a nota muda, e o ditado fica fora do
+   histórico deles também.
+
+**O microfone dentro da nota aberta:** o app anota onde o cursor está, grava e envia com `Ditado-Nota: <id da
+nota>`; a nuvem grava o ditado ligado à nota (fora do histórico), e o app escreve o texto no lugar anotado
+(numa linha de lista, a enumeração vira itens pela regra). A janela salva a nota como sempre.
+
+**Sem rede (E4):**
+1. A lista sai do IndexedDB da conta (a última que a nuvem deu); o app aberto do zero sem rede abre na aba
+   Notas, com a última conta. A faixa "Sem rede · N mudanças esperando" fica no alto.
+2. Marcar, desmarcar e acrescentar item (o "+ Item") gravam na fila: uma entrada por nota, com a versão e o
+   conteúdo da base. O resto (criar, mudar o texto, cor, marcadores, fixar, arquivar, lixeira, mover, ditar)
+   fica apagado ou recusa com o aviso.
+3. A rede volta (o navegador avisa, o app volta à frente, ou a tentativa de 30 s): a fila sobe, uma nota de
+   cada vez, com `PATCH {base_version, titulo, corpo, corpo_base}`. A nuvem aplica (ninguém mexeu), junta (o
+   PC só marcou outros itens: `gravacao: mesclada`) ou guarda o texto do celular no selo (os dois mudaram o
+   texto: `no_selo`, com aviso). A recusa vira uma nota nova "… (feita sem rede)", com aviso. O envio que
+   ficou sem resposta lê a nota antes de mandar de novo.
+4. A lista é lida de novo: o "esperando a rede" sai, e a mescla ou o selo aparecem.
+
+**A lixeira das notas na nuvem:** o job de retenção apaga de vez a nota da lixeira com 30 dias (a lápide e o
+evento sem aparelho), e os PCs apagam a cópia pelo pull.
+
 ## Device auth
 Reescrito pela ADR-019 (01-out-2026): retorno a `127.0.0.1` com PKCE (RFC 8252, §7.3). O desenho
 anterior (`start` com `poll_token` e consulta repetida até a aprovação) é phishável: quem começa o

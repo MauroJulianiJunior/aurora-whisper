@@ -448,11 +448,11 @@ PC recebe `403`.
     `learned_celular_pg_test.go` estão escritos e nunca rodaram (o Postgres de teste estava desligado
     na F8d e na revisão). Ver "Como a F8c fechou isso no Postgres", abaixo, para o que falta rodar.
 
-## Notes e Labels (ADR-022, N7)
-As notas e os marcadores de nota, para o celular ler (a tela é a N8). **Só com a sessão do navegador:** o
-token do PC recebe `403` (o PC lê pelo pull, `Sync`). **Não há rota de criar, mudar nem apagar:** a nota é
-escrita pelo sync, e o celular não escreve nota nesta fase. Fonte da verdade:
-`internal/server/notas_routes.go`.
+## Notes e Labels (ADR-022, N7 e N8)
+As notas e os marcadores de nota, para o celular ler (N7) e escrever (N8). **Só com a sessão do
+navegador:** o token do PC recebe `403` (o PC lê e escreve pelo push e pelo pull, `Sync`). Fonte da
+verdade: `internal/server/notas_routes.go` (as leituras) e `internal/server/notas_celular_routes.go` (as
+escritas, desde a N8; "As escritas do celular", abaixo).
 
 ### GET `/notes?vista=ativas|arquivo|lixeira`
 `vista` é `ativas` (o padrão: fora da lixeira e não arquivadas), `arquivo` (fora da lixeira e arquivadas)
@@ -484,6 +484,50 @@ teto de 500, com `has_more`.
 ```
 Não lê a query. Só com a sessão; o token do PC recebe `403`. A contagem `itens` é a única coisa que o log
 leva além do padrão da rota.
+
+### As escritas do celular (ADR-022, N8)
+As mesmas operações da API local do PC (`/api/notas`, abaixo), para a aba Notas do app do celular. **Cada
+pedido vira a mutação que um PC mandaria** e passa pelas mesmas regras da N7 (`cloudstore.DecideNote` e
+`DecideLabel`: o conflito com selo, a mescla da lista de marcar, a lápide que nunca vence), com o `Actor`
+sem aparelho; a gravação leva, na mesma transação, o evento na `note_sync_events`, e os PCs recebem a
+mudança pelo pull (com `device_id` nulo). Uma escrita que não muda nada não grava nem gasta seq. O texto
+vai no corpo JSON (decodificado sem aceitar campo desconhecido), nunca na URL; o log leva só o padrão da
+rota e o status.
+
+| Rota | O quê | Resposta |
+|---|---|---|
+| `GET /notes/{id}` | a nota, também a da lixeira | `200` `noteDTO`; `404` |
+| `POST /notes` | cria: `{titulo, corpo, cor?, fixada?, arquivada?, marcadores?}`; id novo (UUID v7), no **topo** do grupo dela | `201` `noteDTO`; `400` a nota vazia ou o marcador que não existe |
+| `PATCH /notes/{id}` | edita: `{base_version, titulo?, corpo?, corpo_base?, cor?, fixada?, arquivada?}`; ou escolhe o selo: `{base_version, resolver_conflito: "manter"\|"trocar"}` | `200` `noteDTO` com `gravacao` |
+| `DELETE /notes/{id}` | para a lixeira (de novo: nada muda) | `204` |
+| `POST /notes/{id}/restore` | tira da lixeira, para o topo do grupo | `200` `noteDTO` |
+| `POST /notes/{id}/move` | o arrastar: `{antes, depois}`, as vizinhas depois de soltar (`null`: a ponta) | `200` `noteDTO`; `400` sem vizinha; `409` vizinha que não vale |
+| `POST /notes/{id}/purge` | apaga de vez, **só da lixeira** (deixa a lápide) | `204`; `409` fora da lixeira |
+| `PUT /notes/{id}/labels/{label}` | põe o marcador (idempotente) | `200` `noteDTO`; `404` o marcador; `409` a nota na lixeira |
+| `DELETE /notes/{id}/labels/{label}` | tira o marcador (idempotente) | idem |
+| `POST /labels` | cria o marcador: `{nome}` | `201` `labelDTO`; `409 NAME_IN_USE` |
+| `PATCH /labels/{id}` | renomeia: `{base_version, nome}` | `200` `labelDTO`; `409 NAME_IN_USE` |
+| `DELETE /labels/{id}` | apaga: tira das notas (sem subir a versão delas) e deixa a lápide | `204`; `404` |
+| `POST /transcriptions/{id}/undo-note` | o Desfazer do "Ditar para nota" (abaixo, em "Ditar pelo celular") | `200` |
+
+- **O `PATCH` com a base velha não é `409`.** As regras da N7 decidem campo a campo: o conteúdo (o título e
+  o corpo juntos; o que não veio é o de agora) vale se ninguém o mudou depois da base; se outro aparelho
+  mudou, a lista de marcar se junta quando o pedido traz o `corpo_base` (o corpo da versão `base_version`)
+  e os dois lados só marcaram itens; senão, o texto do pedido vai para o selo. A cor, fixar, arquivar e a
+  posição: o último que escreve vence. A resposta é a nota como ficou, com **`gravacao`** quando ela não é
+  o que o pedido mandou: `"mesclada"` (a lista foi juntada) ou `"no_selo"` (o texto do pedido perdeu e está
+  em `versao_em_conflito`); sem a chave, gravou o que veio. `409` só para a base que o servidor nunca deu
+  (`base_version` acima da versão de agora) e para a escolha do selo sobre outra versão, ou sem selo. Nada
+  a mudar é `400`.
+- **Fixar, desafixar, arquivar, desarquivar e restaurar** levam a nota ao topo do grupo de destino (N2b);
+  editar o resto não mexe na posição. **Marcar, desmarcar e mover** recusam a nota da lixeira (`409`),
+  como o PC.
+- **O nome do marcador** é limpo como no PC (as bordas e os espaços repetidos; de 1 a 50 caracteres, uma
+  linha) e único sem diferenciar maiúscula nem acento (`409 NAME_IN_USE`, o mesmo código da API local).
+  Renomear: o nome do celular vence, sem selo, como o do PC (`DecideLabel`).
+- **O "nota em foco" e o separar itens com IA** (`/api/notas/foco`, `/api/notas/separar-itens`) são do
+  Agent do PC e não existem na nuvem: no celular, a conversão de trecho é a da regra (o cliente,
+  `web/src/nuvem/notas/notasNaNuvem.ts`).
 
 ## As chaves da IA (ADR-021, C3a)
 Para ditar pelo celular, a pessoa cola no app a chave de API do provedor de IA **dela** (BYOK; a chave
@@ -1488,6 +1532,37 @@ manda 10 ao mesmo tempo e mede: 3 corpos lidos). O corpo é lido num slice do ta
 `Content-Length` (sem as cópias do crescimento de um buffer), vai ao provedor sem segunda cópia (o
 multipart de partes prontas, `internal/asr/nuvem`) e sai de escopo no fim; nenhuma estrutura de vida
 longa (a memória do registro, um erro, um pânico) o guarda.
+
+### O ditado que vai para uma nota (ADR-022, N8)
+Um cabeçalho a mais, opcional, lido junto com o `Ditado-Id` (antes do corpo e do provedor):
+
+| Cabeçalho | O quê |
+|---|---|
+| `Ditado-Nota` | `para-nota`: o **"Ditar para nota"**; o id de uma nota (UUID): o **microfone de dentro da nota aberta**. Outro valor, ou dois, é `400` `BAD_REQUEST`, sem ler o corpo |
+
+- **`para-nota`.** Depois do Smart e do Polish, a gravação (`Store.CreateParaNota`) aplica, na mesma
+  transação, a regra do Ctrl+Win+Alt do PC (`internal/notas`: `Escolher` e `Acrescentar`, as mesmas do
+  `internal/agent/paranota`) sobre as notas **ativas**: o título no começo do texto leva o resto ao fim
+  daquela nota (como itens `- [ ] `, se ela tem lista de marcar; a contagem continua na numerada); sem
+  título, nasce uma nota nova com o ditado inteiro, sem título, com `ditado_de_origem` = o ditado, no topo
+  das outras. O acrescentar que passaria do teto do corpo vira nota nova (nada se perde). A nota e o ditado
+  são gravados cada um com o seu seq (a nota antes), e o ditado já nasce ligado à nota (`virou_nota`): **ele
+  não aparece no histórico de aparelho nenhum**.
+- **O id de uma nota.** O ditado é gravado ligado a ela (`virou_nota`), fora do histórico; a nota não muda no
+  servidor: quem escreve o texto no cursor é o app, e ele chega à nota pelo `PATCH` de sempre.
+- **A resposta** é a de sempre, mais `nota` (o `noteDTO` como ficou) e `destino`: `{nota_id, nova, linhas,
+  corpo_antes?}` (`linhas`: quantas linhas entraram; `corpo_antes`: o corpo de antes do acrescentar, para o
+  Desfazer). No reenvio (`200`), o destino é o que o ditado gravado diz: a nota nova é a que tem o ditado
+  como origem; `linhas` e `corpo_antes` não se sabem mais.
+
+#### POST `/transcriptions/{id}/undo-note`
+O **Desfazer** do aviso do "Ditar para nota" (como o do "Virar nota", N3). Só com a sessão. Corpo:
+`{versao, corpo_antes?}` (os dois vieram na resposta do ditado). Na mesma transação: o ditado sai da nota
+e **volta ao histórico** (em todo aparelho, pelo pull); a **nota nova** nascida do ditado e ainda na versão 1
+sai de vez (lápide); o **acrescentar** volta ao `corpo_antes` se a nota ainda está na `versao` do ditado.
+Mexida depois, a nota fica como está. Resposta: `{ "ditado": itemDTO, "nota_voltou": bool,
+"nota_apagada": bool }` (`nota_voltou`: a nota voltou ao que era; `nota_apagada`: era a nota nova, e saiu). `404` sem o
+ditado; `409` se ele já não está numa nota (outro aparelho desfez).
 
 ## Resolve cloud
 **Depois (ADR-019):** não montada na etapa 5. O contexto (`context.app`, `nearby_text`) nunca vai

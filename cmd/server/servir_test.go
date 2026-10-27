@@ -166,7 +166,7 @@ func TestServir_ALinhaDaRetencaoNaSubida(t *testing.T) {
 		ks = append(ks, k)
 	}
 	sort.Strings(ks)
-	want := "ativos,eventos,falhas,lapides_criadas,lapides_vencidas,level,lixeira,ms,msg,mutacoes,time,usuarios"
+	want := "ativos,eventos,falhas,lapides_criadas,lapides_vencidas,level,lixeira,ms,msg,mutacoes,notas,time,usuarios"
 	if strings.Join(ks, ",") != want {
 		t.Fatalf("as chaves = %v, quero %s", ks, want)
 	}

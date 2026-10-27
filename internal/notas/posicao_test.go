@@ -1,4 +1,4 @@
-package storage_test
+package notas_test
 
 import (
 	"errors"
@@ -6,16 +6,16 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/MauroJulianiJunior/aurora-whisper/internal/storage"
+	"github.com/MauroJulianiJunior/aurora-whisper/internal/notas"
 )
 
 func posicaoOuFalha(t *testing.T, antes, depois string) string {
 	t.Helper()
-	k, err := storage.PosicaoEntre(antes, depois)
+	k, err := notas.PosicaoEntre(antes, depois)
 	if err != nil {
 		t.Fatalf("PosicaoEntre(%q, %q): %v", antes, depois, err)
 	}
-	if !storage.PosicaoValida(k) {
+	if !notas.PosicaoValida(k) {
 		t.Fatalf("PosicaoEntre(%q, %q) = %q, que não é uma posição válida", antes, depois, k)
 	}
 	if antes != "" && !(antes < k) {
@@ -29,20 +29,20 @@ func posicaoOuFalha(t *testing.T, antes, depois string) string {
 
 func TestPosicao_Valida(t *testing.T) {
 	for _, ok := range []string{"V", "1", "0V", "zz", "a1b2", "Ab"} {
-		if !storage.PosicaoValida(ok) {
+		if !notas.PosicaoValida(ok) {
 			t.Errorf("%q deveria valer", ok)
 		}
 	}
 	for _, ruim := range []string{"", "0", "V0", "a b", "é", "V-", "a\x00"} {
-		if storage.PosicaoValida(ruim) {
+		if notas.PosicaoValida(ruim) {
 			t.Errorf("%q não deveria valer", ruim)
 		}
 	}
-	longa := make([]byte, storage.MaxPosicao+1)
+	longa := make([]byte, notas.MaxPosicao+1)
 	for i := range longa {
 		longa[i] = 'V'
 	}
-	if storage.PosicaoValida(string(longa)) {
+	if notas.PosicaoValida(string(longa)) {
 		t.Error("passou do teto e valeu")
 	}
 }
@@ -75,14 +75,14 @@ func TestPosicao_ComVizinhasDeTodoTipo(t *testing.T) {
 }
 
 func TestPosicao_RecusaOQueNaoVale(t *testing.T) {
-	if _, err := storage.PosicaoEntre("V", "V"); !errors.Is(err, storage.ErrPosicaoInvertida) {
+	if _, err := notas.PosicaoEntre("V", "V"); !errors.Is(err, notas.ErrPosicaoInvertida) {
 		t.Errorf("iguais: %v", err)
 	}
-	if _, err := storage.PosicaoEntre("W", "V"); !errors.Is(err, storage.ErrPosicaoInvertida) {
+	if _, err := notas.PosicaoEntre("W", "V"); !errors.Is(err, notas.ErrPosicaoInvertida) {
 		t.Errorf("trocadas: %v", err)
 	}
 	for _, ruim := range [][2]string{{"V0", "W"}, {"V", "W0"}, {"é", "W"}} {
-		if _, err := storage.PosicaoEntre(ruim[0], ruim[1]); !errors.Is(err, storage.ErrPosicaoInvalida) {
+		if _, err := notas.PosicaoEntre(ruim[0], ruim[1]); !errors.Is(err, notas.ErrPosicaoInvalida) {
 			t.Errorf("%q,%q: %v", ruim[0], ruim[1], err)
 		}
 	}

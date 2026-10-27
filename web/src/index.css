@@ -3644,3 +3644,228 @@ tbody[data-pronto] tr[data-arrastando] {
     animation: none;
   }
 }
+
+/* ─── As notas no celular (ADR-022, N8; docs/notas-previa-n8.html) ──── */
+
+/* O "Ditar para nota": um botão verde embaixo da aba, ao alcance do polegar,
+   acima da lista (e abaixo da nota aberta e da pílula). A lista ganha folga
+   embaixo para o último cartão não ficar sob ele. */
+.notas.no-celular {
+  padding-bottom: 88px;
+}
+
+.ditar-para-nota {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 18px;
+  z-index: 15;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 12px;
+  pointer-events: none;
+}
+
+.ditar-para-nota > * {
+  pointer-events: auto;
+}
+
+/* Com o botão na tela, a pílula sobe e fica acima dele. */
+body:has(.ditar-para-nota) .aviso-regiao {
+  bottom: 80px;
+}
+
+.ditar-nota {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 18px 0 14px;
+  border: 0;
+  border-radius: var(--raio-pilula);
+  background: var(--tinta);
+  color: var(--tinta-texto);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.25);
+}
+
+.ditar-nota:disabled {
+  background: var(--realce);
+  color: var(--texto-3);
+  box-shadow: none;
+  cursor: default;
+}
+
+.ditar-nota[aria-disabled='true'] {
+  cursor: progress;
+}
+
+/* Gravando: a faixa escura da pílula, com o rótulo, a onda, o tempo, o Cancelar
+   e o parar. */
+.gravando-nota {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(34rem, 100%);
+  height: 48px;
+  padding: 0 6px 0 16px;
+  border: 1px solid var(--pilula-borda);
+  border-radius: var(--raio-pilula);
+  background: var(--pilula);
+  color: var(--pilula-texto);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.3);
+}
+
+.gravando-nota .rotulo-g {
+  flex: none;
+  color: var(--pilula-texto-2);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+.gravando-nota .onda-barra {
+  background: var(--pilula-texto-2);
+}
+
+.gravando-nota .ditar-tempo {
+  color: var(--pilula-texto-2);
+}
+
+.gravando-nota .cancelar {
+  flex: none;
+  height: 34px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--raio-sm);
+  background: transparent;
+  color: var(--pilula-texto);
+  font-size: 13px;
+}
+
+.gravando-nota .parar {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--tinta);
+  color: var(--tinta-texto);
+}
+
+.ditar-para-nota .ditar-erro {
+  width: min(34rem, 100%);
+}
+
+/* A faixa "Sem rede · N mudanças esperando", no alto da aba. */
+.faixa-rede {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  padding: 7px 12px;
+  border: 1px solid var(--pilula-borda);
+  border-radius: var(--raio-pilula);
+  background: var(--pilula);
+  color: var(--pilula-texto);
+  font-size: 12.5px;
+}
+
+.faixa-rede .bolinha {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--pilula-texto-2);
+}
+
+/* O cartão com mudança guardada: "↑ esperando a rede". */
+.esperando {
+  color: var(--texto-3);
+  font-family: var(--fonte-mono);
+  font-size: 11px;
+}
+
+.esperando::before {
+  content: '↑ ';
+}
+
+/* Sem rede, na nota aberta: o que dá para fazer, numa frase discreta. */
+.aviso-offline {
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  border: 1px dashed var(--linha-forte);
+  border-radius: var(--raio-md);
+  color: var(--texto-2);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.titulo-campo.so-leitura {
+  color: var(--texto-2);
+}
+
+.criar.desligado {
+  opacity: 0.45;
+}
+
+/* O "+ Item" da lista de marcar. */
+.novo-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 32px;
+  padding: 3px 0;
+  border: 0;
+  background: transparent;
+  color: var(--texto-3);
+  font-size: 15px;
+  text-align: left;
+}
+
+.novo-item .mais-item {
+  width: 16px;
+  font-size: 18px;
+  line-height: 1;
+  text-align: center;
+}
+
+.novo-item:hover {
+  color: var(--texto);
+}
+
+/* O microfone dentro da nota, e a gravação ao lado dele. */
+.mic-nota {
+  color: var(--texto);
+}
+
+.mic-nota.gravando {
+  border: 1px solid var(--texto);
+}
+
+.gravando-na-nota {
+  display: inline-flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--texto-2);
+  font-size: 12.5px;
+}
+
+.gravando-na-nota .onda {
+  height: 20px;
+}
+
+/* O "+N" do aviso do "Ditar para nota". */
+.aviso .mais-n {
+  color: var(--pilula-texto-2);
+  font-family: var(--fonte-mono);
+  font-size: 12px;
+}

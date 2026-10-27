@@ -71,6 +71,34 @@ func (s *MemoryStore) Reter(ctx context.Context, userID string, now time.Time) (
 	if err := ctx.Err(); err != nil {
 		return r, err
 	}
+	// A lixeira das notas (ADR-022, N8): a nota vencida sai de vez, com a
+	// lápide e o evento tombstone sem aparelho, uma por gravação, decidida de
+	// novo com o mutex (a restaurada no meio fica).
+	for _, id := range s.notasVencidas(userID, now) {
+		if err := ctx.Err(); err != nil {
+			return r, err
+		}
+		err := s.write(userID, func(u *memUser, seq int64) (bool, error) {
+			n, ok := u.notes[id]
+			if !ok || !NotaVencida(n, now) {
+				return false, nil
+			}
+			a := Actor{UserID: userID}
+			o := DecideNote(ExpurgoDaNota(id), &n, false, nil, a, now)
+			if o.Write != WriteTombstone {
+				return false, nil
+			}
+			u.gravarNota(o, id, seq, a, now)
+			r.Notas++
+			return true, nil
+		})
+		if err != nil {
+			return r, err
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return r, err
+	}
 	// As lápides vencidas e a arrumação, de uma vez com o mutex (no Postgres,
 	// em lotes, cada um numa transação curta que trava o contador). A marca
 	// d'água não sobe (D2).
@@ -131,6 +159,24 @@ func (u *memUser) arrumar(now time.Time) (eventos, mutacoes int64) {
 		}
 	}
 	return eventos, mutacoes
+}
+
+// notasVencidas são as notas da lixeira com o purge_at vencido, em ordem de id.
+func (s *MemoryStore) notasVencidas(userID string, now time.Time) []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	u, ok := s.users[userID]
+	if !ok {
+		return nil
+	}
+	var ids []string
+	for id, n := range u.notes {
+		if NotaVencida(n, now) {
+			ids = append(ids, id)
+		}
+	}
+	sort.Strings(ids)
+	return ids
 }
 
 // candidatosDaRetencao escolhe, com o pré-filtro do SQL (CorteDoAtivo e o

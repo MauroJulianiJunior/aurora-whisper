@@ -1,5 +1,19 @@
-import { type ChangeEvent, type ClipboardEvent, Fragment, type KeyboardEvent, type MouseEvent, useEffect, useLayoutEffect, useRef } from 'react'
-import { type Linha, colar, dividir, ehLista, itensDaEnumeracao, marcarLinha, normalizarMarcados, numeroDaLinha, prefixoDigitado, puxar, voltar } from './corpo'
+import { type ChangeEvent, type ClipboardEvent, Fragment, type KeyboardEvent, type MouseEvent, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import {
+  type Linha,
+  acrescentarItem,
+  colar,
+  dividir,
+  ehLista,
+  itensDaEnumeracao,
+  marcarLinha,
+  normalizarMarcados,
+  numeroDaLinha,
+  prefixoDigitado,
+  puxar,
+  ultimoItemAberto,
+  voltar,
+} from './corpo'
 import { Icone } from './Icone'
 import type { EditorDeLinhasEstado, PedidoDeFoco } from './useEditorDeLinhas'
 
@@ -47,14 +61,30 @@ interface Props {
   editor: EditorDeLinhasEstado
   // rotulo: o nome do grupo, para o leitor de tela.
   rotulo: string
+  // soMarcar: o celular sem rede (N8, E4). Só se marca e desmarca item e se
+  // acrescenta item novo: as linhas que já estavam ficam só de leitura, e só o
+  // item acrescentado agora se escreve.
+  soMarcar?: boolean
+  // comItemNovo: a linha "+ Item" no fim dos itens abertos de uma lista de
+  // marcar (o celular, N8; a prévia). O PC acrescenta com o Enter.
+  comItemNovo?: boolean
 }
 
-export function EditorDeLinhas({ editor, rotulo }: Props) {
+export function EditorDeLinhas({ editor, rotulo, soMarcar = false, comItemNovo = false }: Props) {
   const { linhas, recolhido, consumirPedido, aplicar, atual, setAtual, selecao, escolher, lerAncora, fixarAncora } = editor
   const raiz = useRef<HTMLDivElement>(null)
   const rajada = useRef<Rajada | null>(null)
   const espera = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const { separar, separando, separacao } = editor
+  // novas: os itens acrescentados nesta janela pelo "+ Item" (e o Enter dentro
+  // deles). Sem rede, são as únicas linhas que se escrevem.
+  const [novas, setNovas] = useState<ReadonlySet<number>>(() => new Set())
+  const travada = (l: Linha) => soMarcar && !novas.has(l.chave)
+  const novoItem = () => {
+    const r = acrescentarItem(linhas)
+    setNovas((n) => new Set(n).add(r.foco.chave))
+    aplicar(r.linhas, r.foco)
+  }
 
   useEffect(() => () => clearTimeout(espera.current), [])
 
@@ -119,6 +149,10 @@ export function EditorDeLinhas({ editor, rotulo }: Props) {
   function aoMudar(e: ChangeEvent<HTMLTextAreaElement>, i: number) {
     const valor = e.target.value
     const l = linhas[i]!
+    if (soMarcar && temQuebra.test(valor)) {
+      // Sem rede, o item novo fica numa linha só (aoColar).
+      return aplicar(linhas.map((x) => (x.chave === l.chave ? { ...x, texto: valor.split(/\r\n?|\n/).join(' ') } : x)))
+    }
     // Um valor com quebra de linha que chegou de uma vez (a automação do
     // Windows, um arrastar-e-soltar): é o mesmo que colar no lugar da linha.
     if (temQuebra.test(valor)) {
@@ -143,6 +177,16 @@ export function EditorDeLinhas({ editor, rotulo }: Props) {
     if (!temQuebra.test(texto)) return
     e.preventDefault()
     const { selectionStart: ini, selectionEnd: fim } = e.currentTarget
+    if (soMarcar) {
+      // Sem rede, o item novo recebe o texto numa linha só: várias linhas
+      // seriam outros tipos de linha, que só se mudam com rede.
+      const l = linhas[i]!
+      const texto1 = texto.split(/\r\n?|\n/).join(' ')
+      return aplicar(linhas.map((x) => (x.chave === l.chave ? { ...x, texto: l.texto.slice(0, ini) + texto1 + l.texto.slice(fim) } : x)), {
+        chave: l.chave,
+        pos: ini + texto1.length,
+      })
+    }
     const r = colar(linhas, i, ini, fim, texto)
     aplicar(r.linhas, r.foco)
   }
@@ -152,6 +196,29 @@ export function EditorDeLinhas({ editor, rotulo }: Props) {
     const l = linhas[i]!
     const { selectionStart: ini, selectionEnd: fim } = e.currentTarget
     const semMod = !e.ctrlKey && !e.metaKey && !e.altKey
+
+    if (soMarcar && (e.key === 'Enter' || e.key === 'Backspace' || e.key === 'Delete') && semMod) {
+      // Sem rede: o Enter num item novo com texto abre outro item novo; o
+      // Backspace num item novo vazio o tira. O resto (juntar, partir, sair da
+      // lista) muda as linhas que estavam, e espera a rede.
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        if (travada(l) || l.texto === '' || l.tipo !== 'tarefa') return
+        const r = dividir(linhas, i, l.texto.length)
+        setNovas((n) => new Set(n).add(r.foco.chave))
+        return aplicar(r.linhas, r.foco)
+      }
+      if (e.key === 'Backspace' && !travada(l) && l.texto === '') {
+        e.preventDefault()
+        const anterior = linhas[i - 1]
+        return aplicar(
+          linhas.filter((x) => x.chave !== l.chave),
+          anterior && { chave: anterior.chave, pos: anterior.texto.length },
+        )
+      }
+      if ((e.key === 'Backspace' && ini === 0 && fim === 0) || (e.key === 'Delete' && ini === l.texto.length)) e.preventDefault()
+      return
+    }
 
     if (e.key === 'Enter' && semMod) {
       e.preventDefault()
@@ -204,11 +271,24 @@ export function EditorDeLinhas({ editor, rotulo }: Props) {
   }
 
   const vazio = linhas.length === 1 && linhas[0]!.tipo === 'paragrafo' && linhas[0]!.texto === ''
+  // O "+ Item" (N8): depois do último item aberto, ou antes dos marcados quando
+  // todos estão marcados. Só numa lista de marcar.
+  const ultimoAberto = ultimoItemAberto(linhas)
+  const itemNovoAntesDosMarcados = comItemNovo && ultimoAberto < 0 && inicioDosMarcados >= 0
+  const botaoItemNovo = (
+    <button type="button" className="novo-item" onMouseDown={(e) => e.preventDefault()} onClick={novoItem}>
+      <span className="mais-item" aria-hidden="true">
+        +
+      </span>
+      Item
+    </button>
+  )
 
   return (
     <div className="editor-de-linhas" role="group" aria-label={rotulo} ref={raiz}>
       {linhas.map((l, i) => (
         <Fragment key={l.chave}>
+          {i === inicioDosMarcados && itemNovoAntesDosMarcados && botaoItemNovo}
           {i === inicioDosMarcados && (
             <button type="button" className="recolher" aria-expanded={!recolhido} onClick={editor.alternarRecolhido}>
               {nMarcados} {nMarcados === 1 ? 'marcado' : 'marcados'}
@@ -251,18 +331,21 @@ export function EditorDeLinhas({ editor, rotulo }: Props) {
                 rows={1}
                 lang="pt-BR"
                 value={l.texto}
+                readOnly={travada(l)}
                 aria-label={nomeDoCampo(l)}
-                placeholder={vazio ? 'Escreva a nota' : undefined}
-                onFocus={() => {
+                placeholder={vazio ? 'Escreva a nota' : novas.has(l.chave) && l.texto === '' ? 'Item' : undefined}
+                onFocus={(e) => {
                   setAtual(l.chave)
                   fixarAncora(l.chave)
+                  editor.lembrarCursor(l.chave, e.currentTarget.selectionStart)
                   if (selecao.size > 0) escolher(new Set())
                 }}
+                onSelect={(e) => editor.lembrarCursor(l.chave, e.currentTarget.selectionStart)}
                 onChange={(e) => aoMudar(e, i)}
                 onPaste={(e) => aoColar(e, i)}
                 onKeyDown={(e) => aoTeclar(e, i)}
               />
-              {l.tipo === 'paragrafo' && itensDaEnumeracao(l.texto, 3) && (
+              {!soMarcar && l.tipo === 'paragrafo' && itensDaEnumeracao(l.texto, 3) && (
                 <button
                   type="button"
                   className="virar-lista"
@@ -289,6 +372,7 @@ export function EditorDeLinhas({ editor, rotulo }: Props) {
               </button>
             </p>
           )}
+          {comItemNovo && i === ultimoAberto && botaoItemNovo}
         </Fragment>
       ))}
     </div>

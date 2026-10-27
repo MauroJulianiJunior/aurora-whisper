@@ -39,6 +39,9 @@ interface Props {
   // recomeçar do <body>. Sem ele (o PC, e a nuvem que abre com a sessão
   // do cookie), o foco fica onde o navegador o pôs.
   focarNoTitulo?: boolean
+  // emNotas: o Painel abre na aba Notas (o celular que abriu sem rede, N8: a
+  // lista das notas vem do aparelho, e o histórico não).
+  emNotas?: boolean
 }
 
 const mensagem = (e: unknown) => (e instanceof Error ? e.message : String(e))
@@ -65,13 +68,13 @@ function semChave<T>(r: Record<string, T>, id: string): Record<string, T> {
   return resto
 }
 
-export function Painel({ ambiente, focarNoTitulo = false }: Props) {
+export function Painel({ ambiente, focarNoTitulo = false, emNotas: abrirEmNotas = false }: Props) {
   const { cliente, textos, Configuracoes, Faixa, AvisoDoMicrofone, ditar: Ditar, Notas, virarNota: acaoVirarNota, buscaUnica } = ambiente
   const [vista, setVista] = useState<Vista>('historico')
   // emNotas: a aba Notas (só no PC, ambiente.Notas) está à vista, no lugar da
   // lista. A busca do topo passa a ser a dela. Como as Configurações, é uma
   // tela à parte: o histórico não muda por baixo.
-  const [emNotas, setEmNotas] = useState(false)
+  const [emNotas, setEmNotas] = useState(() => abrirEmNotas && Boolean(Notas))
   // notaPedida: o "Abrir" do aviso "Virou nota": a nota que a aba Notas abre na
   // janela. vez sobe a cada pedido.
   const [notaPedida, setNotaPedida] = useState<{ id: string; vez: number } | null>(null)
@@ -161,7 +164,10 @@ export function Painel({ ambiente, focarNoTitulo = false }: Props) {
     proximoAviso.current += 1
     setAviso({ id: proximoAviso.current, ...dados })
   }, [])
-  const avisar = useCallback((texto: ReactNode, desfazer?: () => void) => mostrarAviso({ texto, desfazer }), [mostrarAviso])
+  const avisar = useCallback(
+    (texto: ReactNode, desfazer?: () => void, abrir?: () => void) => mostrarAviso({ texto, desfazer, abrir }),
+    [mostrarAviso],
+  )
   const sumirAviso = useCallback(() => setAviso(null), [])
 
   // acender: a ligação caiu. No PC, a faixa do topo avisa e nada sai da
@@ -1059,6 +1065,7 @@ export function Painel({ ambiente, focarNoTitulo = false }: Props) {
           <Ditar
             busca={configurando ? null : campo}
             escondido={configurando}
+            semMicrofone={emNotas}
             aoChegar={chegouUmDitado}
             aoAudioPendente={(pendente) => {
               audioPendente.current = pendente
@@ -1125,6 +1132,7 @@ export function Painel({ ambiente, focarNoTitulo = false }: Props) {
             abrirNota={notaPedida}
             oculta={buscaUnicaAtiva}
             aoTerminarNota={() => setRecargaDaNota((n) => n + 1)}
+            abrirConfiguracoes={() => abrirConfiguracoes('ditar')}
           />
         )}
         {abriuConfiguracoes && (

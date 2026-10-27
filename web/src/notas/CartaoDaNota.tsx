@@ -110,14 +110,16 @@ function SeloNoCartao() {
   )
 }
 
-// Etiquetas do pé do cartão: o aviso de conflito, os marcadores da nota e, se
-// veio de um ditado, a origem.
+// Etiquetas do pé do cartão: o aviso de conflito, os marcadores da nota, se
+// veio de um ditado, a origem, e, no celular sem rede (N8), a mudança que
+// espera para subir.
 function PeDoCartao({ nota, nomesDosMarcadores }: Pick<PropsComuns, 'nota' | 'nomesDosMarcadores'>) {
   const nomes = nota.marcadores.map((id) => nomesDosMarcadores.get(id)).filter((n): n is string => Boolean(n))
-  if (nomes.length === 0 && !nota.ditado_de_origem && !nota.conflito) return null
+  if (nomes.length === 0 && !nota.ditado_de_origem && !nota.conflito && !nota.esperando) return null
   return (
     <div className="pe">
       {nota.conflito && <SeloNoCartao />}
+      {nota.esperando && <span className="esperando">esperando a rede</span>}
       {nomes.map((n) => (
         <span key={n} className="etiqueta">
           {n}
@@ -270,6 +272,7 @@ export function LinhaDaNota(props: PropsComuns) {
         <span className="nota-linha-titulo">{titulo || (linhas.some((l) => l.texto.trim() !== '') ? inicioDoCorpo(linhas, 120) : 'Nota vazia')}</span>
         {inicio && <span className="nota-linha-inicio">{inicio}</span>}
         {nota.conflito && <SeloNoCartao />}
+        {nota.esperando && <span className="esperando">esperando a rede</span>}
       </div>
       <Ferramentas nota={nota} noArquivo={props.noArquivo} acoes={props.acoes} marcadores={props.marcadores} nome={nome} />
     </li>

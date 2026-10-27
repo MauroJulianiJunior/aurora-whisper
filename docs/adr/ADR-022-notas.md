@@ -153,7 +153,8 @@ navegador é um campo comum para o Agent; o caso a conferir é o editor por linh
   - se nenhum nome casa, nasce uma nota nova com o ditado inteiro (sem tirar nada).
 - A pílula mostra para onde foi: "Lista de compras +3", ou "Nota nova".
 - Alternativa: frase-comando, sem gatilho novo; mais natural, mais erro. Ver E1.
-- No celular, o equivalente é um botão "Ditar para nota" (fase N8, com a mesma regra do nome).
+- No celular, o equivalente é um botão "Ditar para nota" (fase N8, com a mesma regra do nome; feito, ver
+  "Decisões da N8").
 
 **Decisões da N9 (26-out-2026), na implementação.** As marcadas **[desvio]** mudam algo escrito acima.
 - **Qual gatilho, pelo pico.** Ctrl+Win+Alt contém o Ctrl+Win, e o hook já arma o ditado com ele. A sessão
@@ -438,7 +439,8 @@ do navegador; o painel as toma só quando o foco está num cartão.
   no navegador (IndexedDB), com o mesmo marcador por entidade do sync do PC, e sobem quando a rede
   volta; a mescla da lista de marcar acima resolve o caso de o PC ter mudado a nota nesse meio-tempo.
   [derivada] Offline, só marcar, desmarcar e acrescentar item; criar, apagar nota e mexer em marcador
-  pedem rede (a tela diz isso). O app mostra "Sem rede: N mudanças esperando".
+  pedem rede (a tela diz isso). O app mostra "Sem rede: N mudanças esperando". **[desvio, N8]** A lista não
+  vem do cache do service worker: vem do mesmo IndexedDB da fila (ver "Decisões da N8").
 
 ### Decisões da N7 (26-out-2026), na implementação
 
@@ -490,7 +492,7 @@ As marcadas **[desvio]** mudam algo escrito acima. O deploy é ponto de parada: 
   lápide do mesmo jeito (um `upsert` atrasado do mesmo id recebe `gone`).
 - **[desvio] O expurgo da lixeira das notas fica no PC.** A nuvem não expurga nota (não há job novo):
   toda lixeira de nota hoje vem de um PC, e o expurgo dele sobe como `delete`. Quando o celular puder pôr
-  nota na lixeira (N8), a nuvem ganha o expurgo dela.
+  nota na lixeira (N8), a nuvem ganha o expurgo dela. (Feito na N8: ver "Decisões da N8".)
 - **O "Virar nota" chega à nuvem (o ponto aberto da N3): opção (a).** O ditado ganha `virou_nota` no fio
   (o bit `CampoVirouNota` do marcador do ditado; a chave no payload de criar), a nuvem guarda a ligação em
   `transcription_note_links` e esconde o ditado do histórico do celular (a lista e a busca), como o PC já
@@ -551,6 +553,100 @@ decisões ("1 - Isso mesmo 2 - Sim 3 - sim 4 - Sim"):
   gesto da N2b, agora conferido num celular de verdade).
 - **A lixeira das notas esvazia sozinha também na nuvem, em 30 dias**, como no PC (o expurgo que a N7
   deixou para cá).
+
+### Decisões da N8 (27-out-2026), na implementação
+
+As marcadas **[desvio]** mudam algo escrito acima (ou na prévia). O deploy é ponto de parada: o roteiro do
+Mauro é o `docs/deploy-notas-n8.md`, e o teste depois dele, o `docs/teste-manual-notas-n8.md`. **Não há
+migration nova**: as seis tabelas da N7 bastam.
+
+- **As escritas do celular, pela sessão** (`internal/server/notas_celular_routes.go`; `06`, "As escritas do
+  celular"): criar, editar, a escolha do selo, lixeira, restaurar, apagar de vez, mover, marcar e desmarcar,
+  e o marcador (criar, renomear, apagar). **[derivada]** Cada pedido vira a mutação que um PC mandaria e
+  passa pelas regras da N7 (`DecideNote`, `DecideLabel`), com o `Actor` sem aparelho e o evento na
+  `note_sync_events` na mesma transação: o celular não tem regra própria, e o PC recebe a mudança pelo pull.
+  O plano de cada pedido é puro (`cloudstore/notas_celular.go`: a posição no topo do grupo, as vizinhas do
+  mover, o conjunto de marcadores), o mesmo na memória e no Postgres.
+- **[desvio da API local] O `PATCH` com a base velha não é `409`.** No PC, a API local recusa a versão velha
+  (o Agent é a única ponta). No celular, a escrita **é** o sync: as regras da N7 decidem, e a resposta diz o
+  que ficou (`gravacao`: `mesclada` ou `no_selo`). Por quê: o caso típico é o mercado (o celular marcando com
+  a nota aberta, alguém em casa marcando no PC), e o `409` do PC ("salvar por cima") jogaria fora o que o
+  outro marcou. A janela da nota passa a mostrar o que ficou (`DialogoDaNota`, `adotar`), e no selo a outra
+  versão é a do celular. O cliente manda o conteúdo inteiro e o `corpo_base` (o corpo da versão que a janela
+  conhece). Renomear o marcador também não é `409`: o nome do celular vence, como o do PC (`DecideLabel`); o
+  nome repetido continua `409 NAME_IN_USE`.
+- **O "Ditar para nota" na nuvem.** O cabeçalho `Ditado-Nota: para-nota` no `POST /dictations`, e a regra do
+  PC aplicada **no servidor**, na mesma transação que grava o ditado (`Store.CreateParaNota`): a nota (o
+  acrescentar, ou a nota nova) e o ditado já ligado a ela (`virou_nota`), cada um com o seu seq. Por isso o
+  ditado **nunca** aparece no histórico, em aparelho nenhum, nem por um instante. A parte pura da N9 (o
+  casamento do título, o acrescentar, a dobra sem acento) e a ordem manual (o índice fracionário) saíram do
+  `internal/storage` e do `internal/agent/paranota` para **`internal/notas`**, que os dois lados importam:
+  uma regra só. O acrescentar que passaria do teto do corpo vira nota nova (nada se perde).
+  **[desvio da prévia]** A prévia mostrou "lista do sábado: queijo e presunto" virando dois itens; pela
+  regra da N9 (a mesma do PC), sem vírgula a enumeração não se separa ("Queijo e presunto" é um item). Com
+  o Polish ligado, a lista já chega em linhas e vira itens; sem ele, "queijo, presunto e pão" vira três.
+- **O aviso** é o da prévia: "Lista do sábado +2" (o título cortado antes de 40 letras, como a pílula do PC)
+  ou "Nota nova", com **Abrir** e **Desfazer**. **[derivada] O Desfazer** é o do "Virar nota" (N3): o ditado
+  sai da nota e **volta ao histórico** (nada se perde); a nota nova nascida dele e ainda na versão 1 sai de
+  vez; o acrescentar volta ao corpo de antes se a nota ainda está na versão do ditado. Mexida depois, a nota
+  fica, e o aviso diz "A nota ficou, porque mudou depois do ditado." Rota: `POST
+  /transcriptions/{id}/undo-note`. Alternativa: apagar o ditado (perderia a fala de quem desfez por engano).
+  **[desvio pequeno]** Com o botão na tela, a pílula do aviso fica acima dele (na prévia, no lugar dele):
+  o botão continua à mão para o próximo ditado.
+- **O microfone dentro da nota** (o `Ditado-Nota` com o id da nota): o ditado nasce ligado à nota (fora do
+  histórico), e o app escreve o texto **onde o cursor estava quando a gravação começou** (a pessoa pode
+  tocar em outro lugar enquanto fala); numa linha de lista, a enumeração vira itens pela regra do PC
+  (`corpo.ts`, `inserirDitado`). **[derivada]** Só na nota que já existe: a caixa "Criar uma nota…" ainda
+  não tem id (no PC ela tem o token do Agent); ali vale o microfone do teclado do celular.
+- **A barra da nota no celular** é a da prévia: Formatar, Cor, Marcadores, Mais e o microfone, sem o botão
+  da imagem (N10) e com **[desvio]** o Arquivar dentro do Mais (não cabia na largura de um celular). A lista
+  de marcar ganha a linha **"+ Item"** (a prévia), com e sem rede. O PC não muda.
+- **[desvio] Sem rede, a lista vem do IndexedDB, não do cache do service worker.** O app guarda, num banco
+  IndexedDB por conta (`web/src/nuvem/notas/armazem.ts`), a última lista que a nuvem deu, os marcadores e a
+  **fila**; o service worker continua guardando só a casca do app. Por quê: a fila precisa da lista para
+  mostrar o "esperando a rede" por cima dela, e um lugar só é um lugar só para apagar (o Sair e o "Apagar meus
+  dados" apagam o banco). O app aberto **sem rede** abre na aba Notas, com a última conta que abriu o app
+  (anotada no banco `aurora-notas`, só o id, o e-mail e o nome); sem conta anotada, a tela "Sem conexão" de
+  sempre.
+- **A fila** (`notasNaNuvem.ts`): uma entrada por nota, com a versão e o conteúdo da base (o que a nuvem
+  confirmou) e o conteúdo de agora; ela sobe sozinha (a rede que volta, o app que volta à frente, e a cada
+  30 s enquanto houver o que subir) com o `PATCH` de `base_version` e `corpo_base`. A nuvem junta (a mescla
+  da N7, sem perguntar) ou guarda no selo (com o aviso "mudou em outro aparelho também: as duas versões estão
+  nela"). **Nunca perda calada:** a nuvem que recusa (a nota apagada de vez no meio, o texto que não passa)
+  faz a mudança virar uma **nota nova** "… (feita sem rede)", com aviso; a resposta que se perdeu (a rede
+  caiu no meio do envio) faz o app ler a nota antes de mandar de novo, e não mandar o que já valeu.
+  "Sem rede" é o que o navegador diz e, mais que isso, o pedido que não chega.
+- **O que vale sem rede** (E4): marcar, desmarcar, "Desmarcar tudo" e acrescentar item. O editor deixa as
+  linhas que já estavam só de leitura e o título também; o item novo se escreve. O cliente confere de novo
+  (`soMarcouOuAcrescentou`: as linhas que não são de marcar iguais e na mesma ordem, e todo item de antes
+  ainda lá). Criar nota, mudar o texto, a cor, os marcadores, fixar, arquivar, lixeira, mover e ditar ficam
+  apagados ou recusam com o aviso da prévia. A faixa "Sem rede · N mudanças esperando" fica no alto da aba,
+  e o cartão diz "↑ esperando a rede".
+- **[desvio] A busca única (N6) não vai para o celular.** A busca do histórico da nuvem não ignora acento
+  (`ILIKE`), e juntar as duas faria "reuniao" achar a nota e não o ditado (o erro que a N6 evitou). No
+  celular, a aba Notas busca nas notas ("Buscar nas notas", sem acento, no aparelho), e o Histórico nos
+  ditados, como hoje. Para juntar, a busca da nuvem tem de ignorar acento antes (um passo à parte).
+- **[derivada] A conversão com IA (N5) também não**: ela usa o Polish e a chave do PC, pelo Agent. No
+  celular, o Formatar separa os itens pela regra (a mesma vírgula, ponto e vírgula e último " e "). O
+  "nota em foco" do PC (o ditado do Agent na nota aberta) não existe no celular: o microfone é do próprio app.
+- **O expurgo da lixeira das notas na nuvem, 30 dias** (o que a N7 deixou para cá): o job de retenção apaga
+  de vez a nota com o `purge_at` vencido, decidida de novo sobre a linha travada (a restaurada no meio
+  fica), com a lápide e o evento `tombstone` sem aparelho; os PCs apagam a cópia pelo pull. As lápides das
+  notas continuam sem vencer. A linha `retenção` do log ganha a contagem `notas`.
+- **Arrastar com o dedo:** o gesto da N2b vale igual no celular (o mesmo componente; o `move` da nuvem
+  calcula a chave com a mesma `notas.PosicaoEntre`). O que falta é só a conferência num celular de verdade
+  (o roteiro).
+- **Privacidade:** o texto das notas passa a ficar **no celular** (o IndexedDB da conta), além do PC e da
+  nuvem. Nunca o ditado nem o áudio (o `bundle.test.ts` prende: só o banco das notas usa o IndexedDB). O
+  Sair e o "Apagar meus dados" o apagam; o Sair com mudança esperando a rede pergunta antes. `09`, "Notas
+  no celular".
+- **Riscos abertos:** o áudio de um "Ditar para nota" que espera "Tentar de novo" não segura a tela quando
+  a sessão acaba (só o do microfone do histórico conta como texto não salvo): se a sessão vencer bem nessa
+  hora, a fala se perde. Duas abas do app no mesmo celular, as duas sem rede mexendo na mesma nota, dividem
+  o banco: a última a gravar a entrada da fila vale. O IndexedDB é "melhor esforço" do navegador (ele pode
+  apagar sob falta de espaço); o app não pede o armazenamento persistente. O Postgres não rodou nos testes
+  desta fase (o Docker estava fechado): os testes de contrato com Postgres estão escritos e rodam no
+  deploy.
 
 ### Imagens (fase N10, por último)
 
@@ -614,7 +710,7 @@ deploy e release só com a autorização do Mauro.
 | N5 | Converter trecho: por prefixo, por regra e com IA (prompt `notas-lista@1` com as guardas; benchmark próprio no `polishbench`) | N2, L |
 | N6 | Lista de marcar (marcados descem, desmarcar tudo), copiar para WhatsApp, busca única | N2 |
 | N7 | Sync das notas e marcadores: migrations do Postgres, entidades no motor, mescla da lista de marcar, rotas da nuvem (a `posicao` da N2b viaja com a nota). **Deploy: ponto de parada.** **Feita localmente (26-out-2026), nos dublês, em quatro commits na branch `notas/n7`; o deploy espera o Mauro** (`docs/deploy-notas-n7.md`, depois `docs/teste-manual-notas-n7.md`). Ver "Decisões da N7" | N1-N6, N2b |
-| N8 | Aba Notas no celular (PWA), com "Ditar para nota" e a fila offline (marcar, desmarcar e acrescentar item sem rede) | N7 |
+| N8 | Aba Notas no celular (PWA), com "Ditar para nota" e a fila offline (marcar, desmarcar e acrescentar item sem rede). **Feita localmente (27-out-2026), na branch `notas/n8`; o deploy espera o Mauro** (`docs/deploy-notas-n8.md`, depois `docs/teste-manual-notas-n8.md`). Ver "Decisões da N8" | N7 |
 | N9 | Gatilho "ditar para nota" no PC, com o destino pelo nome | N2 |
 | N10 | Imagens. **Ponto de parada antes** (servidor, disco, LGPD) | N7 |
 

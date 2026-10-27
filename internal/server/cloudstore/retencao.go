@@ -258,6 +258,10 @@ type Retido struct {
 	Eventos int64
 	// Mutacoes: respostas de applied_mutations apagadas por PrazoDasMutacoes.
 	Mutacoes int64
+	// Notas: notas da lixeira apagadas de vez aos 30 dias (NotaVencida), cada
+	// uma com a lápide e o evento tombstone (ADR-022, N8). As lápides das notas
+	// nunca vencem.
+	Notas int64
 }
 
 // Somar acrescenta as contagens de o.
@@ -268,6 +272,21 @@ func (r *Retido) Somar(o Retido) {
 	r.LapidesVencidas += o.LapidesVencidas
 	r.Eventos += o.Eventos
 	r.Mutacoes += o.Mutacoes
+	r.Notas += o.Notas
+}
+
+// NotaVencida diz se a nota da lixeira já passou do purge_at em now (ADR-022,
+// N8: a lixeira das notas esvazia sozinha também na nuvem, em 30 dias, como no
+// PC). A nota fora da lixeira nunca vence: ela não tem a janela de 6 meses do
+// ditado.
+func NotaVencida(n Note, now time.Time) bool {
+	return n.DeletedAt != nil && n.PurgeAt != nil && !n.PurgeAt.After(now)
+}
+
+// ExpurgoDaNota é a mutação do expurgo de uma nota vencida: o apagar de vez,
+// como o do PC (DecideNote deixa a lápide e o evento tombstone, sem aparelho).
+func ExpurgoDaNota(id string) Mutation {
+	return Mutation{MutationID: NewUUIDv7(), EntityType: EntityNote, EntityID: id, Operation: OpDelete}
 }
 
 // Contou diz o que apagar um ditado com a decisão d conta: o ativo ou a

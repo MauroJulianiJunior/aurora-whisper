@@ -7,6 +7,8 @@ import (
 	"time"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/MauroJulianiJunior/aurora-whisper/internal/notas"
 )
 
 // Este arquivo é o contrato das notas e dos marcadores locais (ADR-022,
@@ -411,34 +413,11 @@ func nomeDoMarcador(bruto string) (nome, chave string, err error) {
 	return nome, dobrar(nome), nil
 }
 
-// semAcento leva as letras acentuadas do português (e as de nomes próprios
-// latinos mais comuns) à letra de base. Só minúsculas: dobrar passa tudo
-// para minúscula antes.
-var semAcento = map[rune]rune{
-	'á': 'a', 'à': 'a', 'â': 'a', 'ã': 'a', 'ä': 'a', 'å': 'a',
-	'é': 'e', 'è': 'e', 'ê': 'e', 'ë': 'e',
-	'í': 'i', 'ì': 'i', 'î': 'i', 'ï': 'i',
-	'ó': 'o', 'ò': 'o', 'ô': 'o', 'õ': 'o', 'ö': 'o',
-	'ú': 'u', 'ù': 'u', 'û': 'u', 'ü': 'u',
-	'ç': 'c', 'ñ': 'n', 'ý': 'y', 'ÿ': 'y',
-}
-
-// Dobrar é dobrar para quem está fora do pacote: o "ditar para nota" (ADR-022,
-// N9) casa o título da nota na mesma forma em que a busca compara.
-func Dobrar(s string) string { return dobrar(s) }
+// Dobrar é a forma em que se compara o texto das notas (notas.Dobrar): o "ditar
+// para nota" (ADR-022, N9) casa o título da nota nela.
+func Dobrar(s string) string { return notas.Dobrar(s) }
 
 // dobrar põe s em minúsculas e sem acento: a forma em que se compara o nome
-// do marcador e se busca no texto das notas. Não mexe em pontuação nem em
-// espaço ("C#" e "C++" continuam diferentes).
-func dobrar(s string) string {
-	return strings.Map(func(r rune) rune {
-		if unicode.Is(unicode.Mn, r) {
-			return -1 // o acento solto, de quem escreveu em NFD
-		}
-		r = unicode.ToLower(r)
-		if f, ok := semAcento[r]; ok {
-			return f
-		}
-		return r
-	}, s)
-}
+// do marcador e se busca no texto das notas e dos ditados. Mora em
+// internal/notas desde a N8 (a nuvem compara o nome do marcador do mesmo jeito).
+func dobrar(s string) string { return notas.Dobrar(s) }

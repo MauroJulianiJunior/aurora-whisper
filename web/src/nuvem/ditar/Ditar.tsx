@@ -31,7 +31,20 @@ interface Props extends PropsDoDitar {
   reabrirAceite?(): Promise<boolean>
 }
 
-export function Ditar({ cliente, plataforma, liberar, reabrirAceite, busca, escondido, aoChegar, aoAudioPendente, aoSemSessao, abrirConfiguracoes, avisar }: Props) {
+export function Ditar({
+  cliente,
+  plataforma,
+  liberar,
+  reabrirAceite,
+  busca,
+  escondido,
+  semMicrofone = false,
+  aoChegar,
+  aoAudioPendente,
+  aoSemSessao,
+  abrirConfiguracoes,
+  avisar,
+}: Props) {
   const [base] = useState(() => {
     const p = plataforma ?? plataformaDoNavegador()
     return { g: new Gravador({ plataforma: p, enviar: (pedido, sinal) => cliente.ditar(pedido, sinal), liberar }), suporta: p.suporta() }
@@ -78,6 +91,9 @@ export function Ditar({ cliente, plataforma, liberar, reabrirAceite, busca, esco
   // Nas Configurações a linha some, a não ser que haja uma gravação em curso
   // ou um áudio esperando: o botão de parar e a nota não podem sumir.
   const aVista = !escondido || gravando || ocupado
+  // Na aba Notas (N8), só a busca: o "Ditar para nota" de baixo toma o lugar do
+  // microfone. A gravação em curso, ou o áudio que espera, continua à vista.
+  const soABusca = semMicrofone && !gravando && !ocupado
 
   let rotulo = 'Ditar'
   if (gravando) rotulo = 'Parar e enviar'
@@ -116,7 +132,8 @@ export function Ditar({ cliente, plataforma, liberar, reabrirAceite, busca, esco
 
   return (
     <div className="ditar" data-fase={fase}>
-      {aVista && (
+      {aVista && soABusca && busca}
+      {aVista && !soABusca && (
         <div className="ditar-linha">
           {miolo}
           <button
@@ -180,7 +197,7 @@ export function Ditar({ cliente, plataforma, liberar, reabrirAceite, busca, esco
 // acompanhando a altura (ADR-014). Escreve direto no estilo das barras a cada
 // quadro, e não passa pelo React: 60 renders por segundo para mexer em 33
 // <span> não valem.
-function Onda({ gravador }: { gravador: Gravador }) {
+export function Onda({ gravador }: { gravador: Gravador }) {
   const barras = useRef<(HTMLSpanElement | null)[]>([])
   useEffect(
     () =>
@@ -215,7 +232,7 @@ function Onda({ gravador }: { gravador: Gravador }) {
 
 // Tempo é o "m:ss" ao lado da onda. Só vira estado quando o texto muda: o
 // quadro chega 60 vezes por segundo, e o React ignora o mesmo texto.
-function Tempo({ gravador }: { gravador: Gravador }) {
+export function Tempo({ gravador }: { gravador: Gravador }) {
   const [texto, setTexto] = useState('0:00')
   useEffect(() => gravador.aoQuadro((q) => setTexto(formatarTempo(q.decorrido))), [gravador])
   return (
@@ -225,7 +242,7 @@ function Tempo({ gravador }: { gravador: Gravador }) {
   )
 }
 
-function IconeMicrofone() {
+export function IconeMicrofone() {
   return (
     <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <rect x="6.25" y="1.75" width="5.5" height="9" rx="2.75" />
@@ -234,7 +251,7 @@ function IconeMicrofone() {
   )
 }
 
-function IconeParar() {
+export function IconeParar() {
   return (
     <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true" focusable="false" fill="currentColor">
       <rect x="4.5" y="4.5" width="9" height="9" rx="2" />

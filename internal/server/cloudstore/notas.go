@@ -248,8 +248,9 @@ func NomeDoMarcador(bruto string) (string, bool) {
 
 // noteTrashPurgeAt é o purge_at de uma nota que entra na lixeira em deletedAt:
 // 30 dias depois (retention.TrashRetentionDays), em UTC. A nota não tem a
-// janela de 6 meses nem o piso da chegada do ditado: a nuvem não expurga nota
-// sozinha (quem apaga de vez é o PC, com o delete).
+// janela de 6 meses nem o piso da chegada do ditado. Desde a N8 a nuvem
+// expurga a nota vencida no job de retenção (NotaVencida), como o PC: a nota
+// que o celular pôs na lixeira não depende de um PC para sair.
 func noteTrashPurgeAt(deletedAt *time.Time) *time.Time {
 	if deletedAt == nil {
 		return nil

@@ -15,6 +15,8 @@ import { AprendidoNaNuvem } from './AprendidoNaNuvem'
 import { type Aparelho, type ClienteNuvem, type Eu, type Sessao, confirmacaoDeApagar } from './cliente'
 import { DitarPeloCelular } from './ditar/DitarPeloCelular'
 import type { Folha } from './ditar/folha'
+import { esquecerConta } from './notas/armazem'
+import type { NotasNaNuvem } from './notas/notasNaNuvem'
 
 interface Props extends PropsDasConfiguracoes {
   cliente: ClienteNuvem
@@ -26,6 +28,10 @@ interface Props extends PropsDasConfiguracoes {
   // aoMudarDitado: o ditado pelo celular da conta mudou aqui (o aceite, a chave,
   // o provedor): o gravador confere de novo antes do próximo microfone.
   aoMudarDitado(): void
+  // notas: as notas guardadas no aparelho (N8). O Sair as apaga do aparelho (e
+  // pergunta antes, se há mudança esperando a rede); o "Apagar meus dados"
+  // também.
+  notas?: Pick<NotasNaNuvem, 'esperando' | 'esquecer'>
 }
 
 const mensagem = (e: unknown) => (e instanceof Error ? e.message : String(e))
@@ -36,6 +42,7 @@ export function ConfiguracoesNuvem({
   aoSair,
   folha,
   aoMudarDitado,
+  notas,
   visivel,
   secao,
   aoPerderLigacao,
@@ -59,9 +66,15 @@ export function ConfiguracoesNuvem({
     if (confirmandoSair) botaoCancelarSair.current?.focus()
   }, [confirmandoSair])
 
+  // notasEsperando: as mudanças nas notas feitas sem rede que ainda não subiram
+  // (N8). Sair as perde, como o texto não salvo.
+  const [notasEsperando, setNotasEsperando] = useState(0)
+
   function pedirSair() {
     if (saindo || confirmandoSair) return
-    if (comTextoNaoSalvo) setConfirmandoSair(true)
+    const esperando = notas?.esperando() ?? 0
+    setNotasEsperando(esperando)
+    if (comTextoNaoSalvo || esperando > 0) setConfirmandoSair(true)
     else void sair()
   }
 
@@ -85,6 +98,9 @@ export function ConfiguracoesNuvem({
         return
       }
     }
+    // As notas guardadas no aparelho saem com a conta (N8).
+    await notas?.esquecer().catch(() => undefined)
+    await esquecerConta()
     aoSair()
   }
 
@@ -284,6 +300,8 @@ export function ConfiguracoesNuvem({
       return
     }
     fecharApagar()
+    // As notas guardadas no aparelho eram cópia do que a nuvem apagou (N8).
+    await notas?.esquecer({ encerrar: false }).catch(() => undefined)
     avisar('Seus dados foram apagados da nuvem.')
     // O histórico ficou vazio, e as outras sessões foram encerradas. O aceite do
     // ditado pelo celular, as preferências e as chaves também foram: o gravador
@@ -333,9 +351,14 @@ export function ConfiguracoesNuvem({
               }}
             >
               <p className="ajuste-nome" id="cfg-sair-titulo">
-                Sair com texto não salvo
+                {comTextoNaoSalvo ? 'Sair com texto não salvo' : 'Sair com mudanças esperando a rede'}
               </p>
-              <p className="ajuda">Há texto que você escreveu e não salvou. Se você sair, ele se perde.</p>
+              <p className="ajuda">
+                {comTextoNaoSalvo && 'Há texto que você escreveu e não salvou. Se você sair, ele se perde.'}
+                {comTextoNaoSalvo && notasEsperando > 0 && ' '}
+                {notasEsperando > 0 &&
+                  `${notasEsperando === 1 ? 'Uma nota tem mudança feita sem rede' : `${notasEsperando} notas têm mudanças feitas sem rede`} que ainda não subiu. Se você sair, ela se perde.`}
+              </p>
               <div className="acoes">
                 <button type="button" className="botao risco" aria-disabled={saindo || undefined} onClick={() => void sair()}>
                   {saindo ? 'Saindo…' : 'Sair e descartar o texto'}

@@ -283,6 +283,9 @@ describe('o papel de cada cor do design system', () => {
         // A nota aberta: os colchetes do editor e a caixa de marcar marcada.
         '.caixa.feita',
         '.confirmado .termo',
+        // O "Ditar para nota" do celular (N8): o botão de ação e o parar da gravação.
+        '.ditar-nota',
+        '.gravando-nota .parar',
         '.dialogo::before,\n.dialogo::after',
         '.editor::before,\n.editor::after',
         '.marca-moldura',

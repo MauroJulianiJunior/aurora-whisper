@@ -10,6 +10,10 @@ interface Props {
   // aoCriar: a nota foi gravada (fechar com algo escrito).
   aoCriar(nota: Nota): void
   aoPerderLigacao(e: unknown): void
+  // desligado: o celular sem rede (N8, E4); celular: o app do celular, sem o
+  // botão da imagem.
+  desligado?: boolean
+  celular?: boolean
 }
 
 const mensagemDe = (e: unknown) => (e instanceof Error ? e.message : String(e))
@@ -26,7 +30,7 @@ function novoToken(): string {
 // CriarNota é o "Criar uma nota…" do alto da tela (ADR-022): uma barra
 // recolhida que abre num título e no corpo por linhas. Fechar com algo
 // escrito grava a nota; fechar vazio não grava nada.
-export function CriarNota({ cliente, aoCriar, aoPerderLigacao }: Props) {
+export function CriarNota({ cliente, aoCriar, aoPerderLigacao, desligado = false, celular = false }: Props) {
   // aberto: o corpo com que a caixa abriu ('' é a nota em branco; '- [ ] ' é a
   // "Nova lista de marcar"). A caixa nasce de novo a cada abertura.
   const [aberto, setAberto] = useState<string | null>(null)
@@ -55,17 +59,28 @@ export function CriarNota({ cliente, aoCriar, aoPerderLigacao }: Props) {
     )
   }
 
+  // Sem rede no celular (N8, E4), criar nota espera a rede: a barra fica
+  // apagada. No celular não há o botão da imagem (a prévia da N8).
   return (
-    <div className="criar">
-      <button ref={barra} type="button" className="criar-abrir" onClick={() => setAberto('')}>
+    <div className={desligado ? 'criar desligado' : 'criar'}>
+      <button ref={barra} type="button" className="criar-abrir" disabled={desligado} onClick={() => setAberto('')}>
         Criar uma nota…
       </button>
-      <button type="button" className="icone-botao" aria-label="Nova lista de marcar" title="Nova lista de marcar" onClick={() => setAberto('- [ ] ')}>
+      <button
+        type="button"
+        className="icone-botao"
+        aria-label="Nova lista de marcar"
+        title="Nova lista de marcar"
+        disabled={desligado}
+        onClick={() => setAberto('- [ ] ')}
+      >
         <Icone nome="marcar" />
       </button>
-      <button type="button" className="icone-botao" aria-label="Nova nota com imagem" title="Imagens chegam depois" disabled>
-        <Icone nome="imagem" />
-      </button>
+      {!celular && (
+        <button type="button" className="icone-botao" aria-label="Nova nota com imagem" title="Imagens chegam depois" disabled>
+          <Icone nome="imagem" />
+        </button>
+      )}
     </div>
   )
 }

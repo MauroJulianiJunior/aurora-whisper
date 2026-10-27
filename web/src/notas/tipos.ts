@@ -3,6 +3,8 @@
 // com a rede, para o app do celular (N8) poder trazer o próprio cliente da
 // nuvem e usar as mesmas telas.
 
+import type { ComponentType, ReactNode } from 'react'
+
 // As oito cores (storage.CoresDaNota). A cor é um nome, não um hex: cada tema
 // tem o seu tom (index.css, --n-*).
 export const CORES = ['amarelo', 'laranja', 'vermelho', 'rosa', 'roxo', 'azul', 'verde', 'cinza'] as const
@@ -30,6 +32,91 @@ export interface Nota {
   // conflito é o selo (ADR-022, N7): o título e o corpo que perderam quando duas
   // pontas editaram a mesma nota. Ausente sem selo; some quando a pessoa escolhe.
   conflito?: ConflitoDaNota
+  // gravacao: só na nota que volta de editarNota no celular (N8), quando o que
+  // ficou não é o que foi mandado: "mesclada" (a lista de marcar foi juntada
+  // com a de outro aparelho) ou "no_selo" (o texto mandado perdeu para o de
+  // outro aparelho e está no selo). A janela passa a mostrar o que ficou.
+  gravacao?: 'mesclada' | 'no_selo'
+  // esperando: a nota tem uma mudança feita sem rede que ainda não subiu (N8,
+  // E4). Só o celular a marca; o cartão diz "esperando a rede".
+  esperando?: boolean
+}
+
+// SoComRede é a recusa do que não se faz sem rede no celular (N8, E4): criar
+// nota, mudar o texto, a cor e os marcadores, ditar. Só marcar, desmarcar e
+// acrescentar item valem offline. A mensagem é a frase que a tela mostra.
+export class SoComRede extends Error {
+  constructor() {
+    super(FRASE_SEM_REDE)
+    this.name = 'SoComRede'
+  }
+}
+
+// FRASE_SEM_REDE é o aviso da nota aberta sem rede (a prévia da N8).
+export const FRASE_SEM_REDE = 'Sem rede: dá para marcar, desmarcar e acrescentar item. O resto volta com a rede.'
+
+// EstadoDaRede é o que o celular sabe da rede e da fila (N8, E4): se está sem
+// rede e quais notas têm mudança esperando para subir.
+export interface EstadoDaRede {
+  semRede: boolean
+  esperando: ReadonlySet<string>
+}
+
+// RedeDasNotas é a fonte desse estado, no formato do useSyncExternalStore: o
+// estado devolve o mesmo objeto até ele mudar.
+export interface RedeDasNotas {
+  assinar(cb: () => void): () => void
+  estado(): EstadoDaRede
+  // aoAvisar: a fila subiu algo que pede a atenção da pessoa (o selo, a nota
+  // que foi para a lixeira no meio, a recusa que virou nota nova).
+  aoAvisar?(cb: (texto: string) => void): () => void
+}
+
+// ChegadaNaNota é o "Ditar para nota" que chegou (N8): a nota como ficou, se
+// ela nasceu do ditado, quantas linhas entraram, e o Desfazer do aviso (o
+// ditado volta ao histórico; a nota volta ao que era, se ninguém mexeu nela).
+export interface ChegadaNaNota {
+  nota: Nota
+  nova: boolean
+  linhas: number
+  // desfazer: nota_voltou diz se a nota voltou ao que era (sem ela, a nota
+  // mudou depois do ditado e ficou).
+  desfazer(): Promise<{ nota_voltou: boolean }>
+}
+
+// PropsDoDitarParaNota é o que a aba Notas passa ao botão "Ditar para nota" do
+// celular: apagado sem rede; aoChegar com a nota que recebeu o ditado.
+export interface PropsDoDitarParaNota {
+  desligado: boolean
+  aoChegar(c: ChegadaNaNota): void
+  avisar(texto: ReactNode): void
+  aoPerderLigacao(e: unknown): void
+  // abrirConfiguracoes leva ao "Ditar pelo celular" das Configurações (a chave
+  // do provedor que falta).
+  abrirConfiguracoes?(): void
+}
+
+// PropsDoDitarNaNota é o que a janela da nota passa ao microfone de dentro
+// dela (N8): a nota (o ditado fica ligado a ela, fora do histórico), apagado
+// sem rede, e aoTexto com o texto que chegou, para a janela pôr no cursor.
+// aoComecar é o instante de lembrar onde o cursor estava.
+export interface PropsDoDitarNaNota {
+  notaId: string
+  desligado: boolean
+  aoComecar(): void
+  aoTexto(texto: string): void
+  avisar(texto: ReactNode): void
+  aoPerderLigacao(e: unknown): void
+}
+
+// NotasNoCelular é o que só o app do celular tem nas notas (N8): a rede e a
+// fila, o "Ditar para nota" embaixo da aba e o microfone dentro da nota. Os
+// componentes vêm do ambiente da nuvem; o PC não passa nada, e a aba fica como
+// era.
+export interface NotasNoCelular {
+  rede: RedeDasNotas
+  DitarParaNota: ComponentType<PropsDoDitarParaNota>
+  DitarNaNota: ComponentType<PropsDoDitarNaNota>
 }
 
 export interface ConflitoDaNota {

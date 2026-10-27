@@ -92,6 +92,10 @@ func (s *Store) Create(ctx context.Context, a cloudstore.Actor, epoch, id string
 		if err := put(ctx, tx, t, true, 0, seq, a, now); err != nil {
 			return false, err
 		}
+		// O ditado do microfone de dentro da nota (N8) nasce ligado a ela.
+		if err := gravarVirouNota(ctx, tx, a.UserID, t.ID, nil, t.VirouNota); err != nil {
+			return false, err
+		}
 		t.LastSeq = seq
 		out, created = t, true
 		return true, nil

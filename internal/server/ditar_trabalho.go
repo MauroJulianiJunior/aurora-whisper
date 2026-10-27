@@ -103,6 +103,9 @@ type trabalhoDoDitado struct {
 	duracaoMs, falaMs int64
 	// pago é o desfecho pago e não gravado: o reenvio só grava.
 	pago *pagoNaoGravado
+	// destino é o Ditado-Nota (N8): o ditado comum, o "Ditar para nota" ou a
+	// nota aberta. No reenvio que só grava, vale o que o pago guardou.
+	destino destinoNaNota
 	// fimDoCorpo conta o prazo da resposta e o processing_ms.
 	fimDoCorpo time.Time
 	// ctxDoPedido é o contexto do pedido, do qual o trabalho se desliga
@@ -119,6 +122,9 @@ type resultadoDoDitado struct {
 	motivo string
 	item   *cloudstore.Transcription
 	criado bool
+	// destino é para onde o "Ditar para nota" levou o ditado (N8); nil no
+	// ditado comum e no microfone de dentro da nota.
+	destino *cloudstore.DestinoDoDitado
 }
 
 // relatorioDoDitado é a linha "ditado" do log: só contagens e códigos.
@@ -196,6 +202,9 @@ func (c *Cloud) rodarDitado(t trabalhoDoDitado, saida chan<- resultadoDoDitado) 
 			res.desfecho = *falhou
 			return
 		}
+		// O destino na nota vai com o ditado: o pago e não gravado o guarda
+		// para o reenvio que só grava.
+		novo.VirouNota, novo.ParaNota = t.destino.nota, t.destino.paraNota
 	}
 	res, pago = c.gravarDitado(base, t, novo, aviso, &rel)
 	if t.pago != nil && res.desfecho.ok() {
@@ -527,7 +536,19 @@ func (c *Cloud) gravarDitado(base context.Context, t trabalhoDoDitado, novo clou
 		rel.desfecho = "sem_aceite"
 		return resultadoDoDitado{desfecho: desfecho{status: http.StatusForbidden, code: codeSemAceite, frase: fraseAceiteNoMeio}}, nil
 	}
-	item, criado, err := c.cfg.Store.Create(ctx, cloudstore.Actor{UserID: t.k.usuario}, t.epoch, t.k.id, novo, c.now())
+	var (
+		item    cloudstore.Transcription
+		criado  bool
+		destino *cloudstore.DestinoDoDitado
+	)
+	if novo.ParaNota {
+		// O "Ditar para nota" (N8): a nota e o ditado, na mesma transação.
+		var d cloudstore.DestinoDoDitado
+		item, criado, d, err = c.cfg.Store.CreateParaNota(ctx, cloudstore.Actor{UserID: t.k.usuario}, t.epoch, t.k.id, novo, c.now())
+		destino = &d
+	} else {
+		item, criado, err = c.cfg.Store.Create(ctx, cloudstore.Actor{UserID: t.k.usuario}, t.epoch, t.k.id, novo, c.now())
+	}
 	switch {
 	case errors.Is(err, cloudstore.ErrEpochChanged):
 		// A conta apagou os dados (ou o banco foi restaurado) no meio: nada
@@ -548,7 +569,7 @@ func (c *Cloud) gravarDitado(base context.Context, t trabalhoDoDitado, novo clou
 	if !criado {
 		rel.desfecho = "ja_existia"
 	}
-	return resultadoDoDitado{desfecho: desfecho{aviso: aviso}, item: &item, criado: criado}, nil
+	return resultadoDoDitado{desfecho: desfecho{aviso: aviso}, item: &item, criado: criado, destino: destino}, nil
 }
 
 // logDoDitado escreve a linha "ditado": só contagens e códigos de listas

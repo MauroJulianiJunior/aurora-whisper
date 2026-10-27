@@ -110,11 +110,28 @@ func (c *Cloud) tabela() []rota {
 		{"GET /api/v1/learned", AcessoSessao, handleLearnedList(st)},
 		{"POST /api/v1/learned/undo", AcessoSessao, handleLearnedUndo(st, c.now)},
 
-		// As notas e os marcadores de nota no celular (ADR-022, N7;
-		// notas_routes.go): só ler, só com a sessão, como o CRUD. O PC lê e
-		// escreve pelo sync.
+		// As notas e os marcadores de nota no celular (ADR-022, N7 e N8;
+		// notas_routes.go e notas_celular_routes.go): ler e escrever, só com a
+		// sessão, como o CRUD. O PC lê e escreve pelo sync; cada escrita daqui
+		// grava o evento que o pull leva a ele.
 		{"GET /api/v1/notes", AcessoSessao, handleNotesList(st)},
+		{"POST /api/v1/notes", AcessoSessao, handleNoteCreate(st, c.now)},
+		{"GET /api/v1/notes/{id}", AcessoSessao, handleNoteGet(st)},
+		{"PATCH /api/v1/notes/{id}", AcessoSessao, handleNotePatch(st, c.now)},
+		{"DELETE /api/v1/notes/{id}", AcessoSessao, handleNoteOp(st, c.now, cloudstore.NotaLixeira)},
+		{"POST /api/v1/notes/{id}/restore", AcessoSessao, handleNoteOp(st, c.now, cloudstore.NotaRestaurar)},
+		{"POST /api/v1/notes/{id}/move", AcessoSessao, handleNoteMove(st, c.now)},
+		{"POST /api/v1/notes/{id}/purge", AcessoSessao, handleNoteOp(st, c.now, cloudstore.NotaApagarDeVez)},
+		{"PUT /api/v1/notes/{id}/labels/{label}", AcessoSessao, handleNoteOp(st, c.now, cloudstore.NotaMarcar)},
+		{"DELETE /api/v1/notes/{id}/labels/{label}", AcessoSessao, handleNoteOp(st, c.now, cloudstore.NotaDesmarcar)},
 		{"GET /api/v1/labels", AcessoSessao, handleLabelsList(st)},
+		{"POST /api/v1/labels", AcessoSessao, handleLabelCreate(st, c.now)},
+		{"PATCH /api/v1/labels/{id}", AcessoSessao, handleLabelRename(st, c.now)},
+		{"DELETE /api/v1/labels/{id}", AcessoSessao, handleLabelDelete(st, c.now)},
+		// O Desfazer do "Ditar para nota" (N8): o ditado volta ao histórico, e
+		// a nota ao que era. Existe mesmo sem o ditado pelo celular montado
+		// (o Desfazer não fala com provedor nenhum).
+		{"POST /api/v1/transcriptions/{id}/undo-note", AcessoSessao, handleDictationUndoNote(st, c.now)},
 
 		{"POST /api/v1/sync/push", AcessoAparelho, c.handlePush},
 		{"GET /api/v1/sync/pull", AcessoAparelho, handleStorePull(st)},

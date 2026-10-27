@@ -834,7 +834,18 @@ próprio para "ditar para nota" e a lista marcável sem rede no celular. Fases (
   migrations (`docs/deploy-notas-n7.md`), e depois o teste no PC com dois aparelhos
   (`docs/teste-manual-notas-n7.md`). Ainda não feitos: a revisão de LGPD das notas no servidor (política de
   privacidade e dossiê), a tela das notas no celular (N8) e o expurgo das notas na nuvem (N8);
-- **N8:** aba Notas no celular, "Ditar para nota" e a fila offline;
+- **N8:** aba Notas no celular, "Ditar para nota" e a fila offline. **Feita localmente, nos dublês
+  (27-out-2026), na branch `notas/n8`; o deploy espera o Mauro** (`docs/deploy-notas-n8.md`, depois
+  `docs/teste-manual-notas-n8.md`; sem migration nova). O que entrou: a parte pura das notas num pacote só
+  (`internal/notas`: a dobra, o índice fracionário e a regra do "ditar para nota", que o PC e a nuvem
+  importam); na nuvem, as escritas do celular pela sessão (`notas_celular_routes.go`, com os planos puros
+  em `cloudstore/notas_celular.go` sobre `DecideNote` e `DecideLabel`, na memória e no Postgres), o
+  `Ditado-Nota` do `POST /dictations` (`CreateParaNota`: a nota e o ditado na mesma transação) e o Desfazer
+  (`POST /transcriptions/{id}/undo-note`), e o expurgo da lixeira das notas aos 30 dias no job de
+  retenção; no app, a aba Notas com o cliente da `/api/v1` (`web/src/nuvem/notas/notasNaNuvem.ts`), a
+  lista e a fila no IndexedDB (`armazem.ts`), o "Ditar para nota" e o microfone dentro da nota
+  (`DitarNasNotas.tsx`), o editor sem rede (só marcar, desmarcar e o "+ Item") e a janela que adota o que
+  a nuvem juntou. Decisões e desvios: ADR-022, "Decisões da N8" (AC-092);
 - **N9:** gatilho "ditar para nota" no PC. **Feita nos dublês (26-out-2026):** o decisor dos dois gatilhos
   (`dictation.Gatilhos`: envolve o Decider do Ctrl+Win sem mudar nenhuma decisão de suprimir ou notificar, e
   marca a sessão pelo pico, Ctrl+Win+Alt inteiro em algum momento), a marca no evento do hook, o destino e o
