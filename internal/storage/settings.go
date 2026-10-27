@@ -44,7 +44,7 @@ type Settings struct {
 	// com 1); desligado, Ctrl+Win+Alt é um ditado comum.
 	NoteTriggerEnabled bool
 	UpdatedAt          time.Time
-	Version               int64
+	Version            int64
 }
 
 // SettingsRepository é o contrato de persistência das preferências
