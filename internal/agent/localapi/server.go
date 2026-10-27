@@ -218,6 +218,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /api/notas/{id}", s.handleDeleteNota)
 	mux.HandleFunc("POST /api/notas/{id}/restaurar", s.handleRestaurarNota)
 	mux.HandleFunc("POST /api/notas/{id}/mover", s.handleMoverNota)
+	mux.HandleFunc("POST /api/notas/{id}/resolver-conflito", s.handleResolverConflitoDaNota)
 	mux.HandleFunc("DELETE /api/notas/{id}/definitivo", s.handleApagarNotaDeVez)
 	mux.HandleFunc("PUT /api/notas/{id}/marcadores/{marcador}", s.handleMarcarNota)
 	mux.HandleFunc("DELETE /api/notas/{id}/marcadores/{marcador}", s.handleDesmarcarNota)

@@ -27,7 +27,22 @@ export interface Nota {
   updated_at: string
   deleted_at?: string
   version: number
+  // conflito é o selo (ADR-022, N7): o título e o corpo que perderam quando duas
+  // pontas editaram a mesma nota. Ausente sem selo; some quando a pessoa escolhe.
+  conflito?: ConflitoDaNota
 }
+
+export interface ConflitoDaNota {
+  titulo: string
+  corpo: string
+  // device_id: o aparelho cuja versão perdeu (null: o celular).
+  device_id: string | null
+  conflict_at: string
+}
+
+// EscolhaDoConflito: "manter" fica com o texto atual; "trocar" fica com o do selo.
+// As duas limpam o selo.
+export type EscolhaDoConflito = 'manter' | 'trocar'
 
 export interface Marcador {
   id: string
@@ -109,6 +124,10 @@ export interface ClienteDeNotas {
   // mais (outra aba mexeu na lista, ou são de outro grupo).
   moverNota(id: string, antes: string | null, depois: string | null): Promise<Nota>
   apagarNotaDeVez(id: string): Promise<void>
+  // resolverConflitoDaNota é a escolha do selo (POST /api/notas/{id}/resolver-conflito):
+  // devolve a nota, sem o selo e com a versão nova. Conflito: a versão velha, ou a
+  // nota já não tem selo (outra aba, ou o sync): o painel lê a nota de novo.
+  resolverConflitoDaNota(id: string, versao: number, escolha: EscolhaDoConflito): Promise<Nota>
   listarMarcadores(sinal?: AbortSignal): Promise<Marcador[]>
   // Os marcadores (N4). criarMarcador recusa o nome já usado (sem diferenciar
   // maiúscula nem acento) com ErroDaApi de codigo NAME_IN_USE; renomearMarcador

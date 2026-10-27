@@ -25,6 +25,7 @@ import (
 //	DELETE /api/notas/{id}                             para a lixeira (204)
 //	POST   /api/notas/{id}/restaurar                   tira da lixeira
 //	POST   /api/notas/{id}/mover                       arrasta a nota: {antes, depois} (200, a nota)
+//	POST   /api/notas/{id}/resolver-conflito           a escolha do selo: {base_version, escolha} (200, a nota)
 //	DELETE /api/notas/{id}/definitivo                  apaga de vez, só da lixeira (204)
 //	PUT    /api/notas/{id}/marcadores/{marcador}       põe o marcador
 //	DELETE /api/notas/{id}/marcadores/{marcador}       tira o marcador
@@ -73,6 +74,18 @@ type notaDTO struct {
 	UpdatedAt      time.Time  `json:"updated_at"`
 	DeletedAt      *time.Time `json:"deleted_at,omitempty"`
 	Version        int64      `json:"version"`
+	// Conflito é o selo (ADR-022, N7): o título e o corpo que perderam um
+	// conflito na nuvem, guardados até a pessoa escolher. Ausente sem selo.
+	Conflito *seloDaNotaDTO `json:"conflito,omitempty"`
+}
+
+// seloDaNotaDTO é o selo da nota como o painel o lê, no formato do selo do
+// ditado (seloDTO): quem escreveu (null: o aparelho saiu da conta) e quando.
+type seloDaNotaDTO struct {
+	Titulo     string    `json:"titulo"`
+	Corpo      string    `json:"corpo"`
+	DeviceID   *string   `json:"device_id"`
+	ConflictAt time.Time `json:"conflict_at"`
 }
 
 func toNotaDTO(n storage.Nota) notaDTO {
@@ -80,10 +93,15 @@ func toNotaDTO(n storage.Nota) notaDTO {
 	if ms == nil {
 		ms = []string{}
 	}
+	var selo *seloDaNotaDTO
+	if c := n.Conflito; c != nil {
+		selo = &seloDaNotaDTO{Titulo: c.Titulo, Corpo: c.Corpo, DeviceID: c.DeviceID, ConflictAt: c.Em}
+	}
 	return notaDTO{
 		ID: n.ID, Titulo: n.Titulo, Corpo: n.Corpo, Cor: n.Cor, Fixada: n.Fixada, Arquivada: n.Arquivada,
 		Marcadores: ms, Posicao: n.Posicao, DitadoDeOrigem: n.DitadoDeOrigem,
 		CreatedAt: n.CreatedAt, UpdatedAt: n.UpdatedAt, DeletedAt: n.DeletedAt, Version: n.Version,
+		Conflito: selo,
 	}
 }
 
@@ -142,6 +160,8 @@ func writeNotaError(w http.ResponseWriter, err error) {
 	case errors.Is(err, storage.ErrVizinhoInvalido):
 		writeError(w, http.StatusConflict, codeConflict,
 			"as notas vizinhas mudaram (ou não estão no mesmo grupo): a lista será lida de novo")
+	case errors.Is(err, storage.ErrEscolhaInvalida):
+		writeError(w, http.StatusBadRequest, codeBadRequest, "escolha do selo inválida: use manter ou trocar")
 	case errors.Is(err, storage.ErrMoverSemVizinho):
 		writeError(w, http.StatusBadRequest, codeBadRequest, "mover pede a nota de antes ou a de depois")
 	case errors.Is(err, storage.ErrNotaForaDaLixeira):
@@ -379,6 +399,41 @@ func (s *Server) handleMoverNota(w http.ResponseWriter, r *http.Request) {
 		depois = *body.Depois
 	}
 	n, err := repo.Mover(r.Context(), s.userID, r.PathValue("id"), antes, depois)
+	if err != nil {
+		writeNotaError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, toNotaDTO(n))
+}
+
+type resolverConflitoDaNotaRequest struct {
+	// BaseVersion é obrigatório, como na edição: a escolha vale para a versão
+	// que a pessoa viu.
+	BaseVersion *int64 `json:"base_version"`
+	// Escolha é "manter" (fica o texto atual) ou "trocar" (fica o do selo).
+	Escolha string `json:"escolha"`
+}
+
+// handleResolverConflitoDaNota atende POST /api/notas/{id}/resolver-conflito:
+// a escolha do selo da nota (ADR-022, N7), como a do ditado (PATCH
+// resolver_conflito). 400 sem base_version ou com escolha fora de "manter" e
+// "trocar"; 404 sem a nota; 409 com a versão velha ou sem selo (o painel
+// relê). A escolha entra na fila do sync na própria transação do repositório.
+// Devolve a nota, com a versão nova. Nada do texto vai ao log.
+func (s *Server) handleResolverConflitoDaNota(w http.ResponseWriter, r *http.Request) {
+	repo, ok := s.notasProntas(w)
+	if !ok {
+		return
+	}
+	var body resolverConflitoDaNotaRequest
+	if !lerCorpoDasNotas(w, r, &body) {
+		return
+	}
+	if body.BaseVersion == nil {
+		writeError(w, http.StatusBadRequest, codeBadRequest, "base_version é obrigatório")
+		return
+	}
+	n, err := repo.ResolverConflitoDaNota(r.Context(), s.userID, r.PathValue("id"), *body.BaseVersion, body.Escolha)
 	if err != nil {
 		writeNotaError(w, err)
 		return

@@ -99,13 +99,25 @@ function CorpoDoCartao({ linhas }: { linhas: Linha[] }) {
   )
 }
 
-// Etiquetas do pé do cartão: os marcadores da nota e, se veio de um ditado, a
-// origem.
+// SeloNoCartao é o aviso de que a nota mudou em dois aparelhos (ADR-022, N7): a
+// outra versão está guardada até a pessoa escolher, dentro da nota. Texto, e não
+// só cor ou ícone.
+function SeloNoCartao() {
+  return (
+    <span className="etiqueta conflito" title="Mudou em dois aparelhos. Abra a nota para escolher a versão.">
+      Versão em conflito
+    </span>
+  )
+}
+
+// Etiquetas do pé do cartão: o aviso de conflito, os marcadores da nota e, se
+// veio de um ditado, a origem.
 function PeDoCartao({ nota, nomesDosMarcadores }: Pick<PropsComuns, 'nota' | 'nomesDosMarcadores'>) {
   const nomes = nota.marcadores.map((id) => nomesDosMarcadores.get(id)).filter((n): n is string => Boolean(n))
-  if (nomes.length === 0 && !nota.ditado_de_origem) return null
+  if (nomes.length === 0 && !nota.ditado_de_origem && !nota.conflito) return null
   return (
     <div className="pe">
+      {nota.conflito && <SeloNoCartao />}
       {nomes.map((n) => (
         <span key={n} className="etiqueta">
           {n}
@@ -257,6 +269,7 @@ export function LinhaDaNota(props: PropsComuns) {
         <span className="bolinha" data-cor={nota.cor ?? undefined} title={nota.cor ? NOMES_DAS_CORES[nota.cor] : undefined} aria-hidden="true" />
         <span className="nota-linha-titulo">{titulo || (linhas.some((l) => l.texto.trim() !== '') ? inicioDoCorpo(linhas, 120) : 'Nota vazia')}</span>
         {inicio && <span className="nota-linha-inicio">{inicio}</span>}
+        {nota.conflito && <SeloNoCartao />}
       </div>
       <Ferramentas nota={nota} noArquivo={props.noArquivo} acoes={props.acoes} marcadores={props.marcadores} nome={nome} />
     </li>
@@ -333,6 +346,7 @@ function GrupoDaTabela({
                 {nome}
               </button>
               {n.fixada && <span className="etiqueta">fixada</span>}
+              {n.conflito && <SeloNoCartao />}
             </td>
             <td>
               {nomes.map((x) => (

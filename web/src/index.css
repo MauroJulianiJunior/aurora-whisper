@@ -3451,6 +3451,47 @@ tbody[data-pronto] tr[data-arrastando] {
   min-width: 12rem;
 }
 
+/* O aviso de conflito no cartão (texto, com a borda forte), e o selo dentro da
+   nota aberta: o mesmo desenho do selo do histórico, mais compacto, com a outra
+   versão rolando se for longa. */
+.etiqueta.conflito {
+  flex: none;
+  border-color: var(--texto);
+  color: var(--texto);
+}
+
+.detalhes td .etiqueta.conflito {
+  margin-left: 4px;
+}
+
+.dialogo .selo {
+  margin: 12px 0 0;
+  padding: 10px 12px 12px;
+}
+
+.dialogo .selo .selo-titulo {
+  margin-bottom: 8px;
+}
+
+.dialogo .selo .versao-titulo {
+  margin-bottom: 4px;
+  font-family: var(--fonte-titulo);
+  font-weight: 600;
+}
+
+.dialogo .selo .versao-corpo {
+  max-height: 9rem;
+  overflow: auto;
+}
+
+.dialogo .selo .acoes {
+  margin-top: 10px;
+}
+
+.dialogo .selo .ajuda {
+  margin: 8px 0 0;
+}
+
 /* Temas de Contraste: a caixa marcada é só fundo, e o navegador a pintaria
    do fundo da página. */
 @media (forced-colors: active) {

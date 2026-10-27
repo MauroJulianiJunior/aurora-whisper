@@ -1,9 +1,9 @@
-import { type KeyboardEvent, type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { type KeyboardEvent, type ReactNode, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Conflito, ErroDaApi, problemaDe } from '../api'
-import { formatarHora } from '../datas'
+import { formatarCurta, formatarHora } from '../datas'
 import { BotaoComMenu } from './BotaoComMenu'
 import { CamposDaNota } from './CamposDaNota'
-import { type TipoDaLinha, lerCorpo, nomeDaNota } from './corpo'
+import { type TipoDaLinha, escreverCorpo, garantirUma, lerCorpo, nomeDaNota, normalizarMarcados } from './corpo'
 import { copiarParaWhatsApp } from './copiarParaWhatsApp'
 import { EscolherMarcadores } from './EscolherMarcadores'
 import { Icone } from './Icone'
@@ -11,7 +11,7 @@ import { PaletaDeCores } from './PaletaDeCores'
 import { dispensarSugestao, sugestaoDispensada } from './preferencias'
 import { prenderOFoco } from './prenderOFoco'
 import { sugerirMarcador } from './sugestao'
-import type { ClienteDeNotas, CorDaNota, Marcador, MudancaDaNota, Nota } from './tipos'
+import type { ClienteDeNotas, CorDaNota, EscolhaDoConflito, Marcador, MudancaDaNota, Nota } from './tipos'
 import { useAdiado } from './useAdiado'
 import { useEditorDeLinhas } from './useEditorDeLinhas'
 import { useTelaEstreita } from './useTelaEstreita'
@@ -82,6 +82,9 @@ export function DialogoDaNota({ nota, cliente, marcadores, notasParaSugerir, cri
   const [arquivada, setArquivada] = useState(nota.arquivada)
   const [ultima, setUltima] = useState(nota)
   const [estado, setEstado] = useState<Estado>({ tipo: 'ok' })
+  // escolhendo: a escolha do selo está no Agent (os dois botões esperam).
+  const [escolhendo, setEscolhendo] = useState(false)
+  const idDoSelo = useId()
   const editor = useEditorDeLinhas(nota.corpo)
   const { corpo, marcados } = editor
   const dialogo = useRef<HTMLDivElement>(null)
@@ -177,6 +180,54 @@ export function DialogoDaNota({ nota, cliente, marcadores, notasParaSugerir, cri
     parado.current = 'conflito'
     setEstado({ tipo: 'conflito' })
     return 'conflito'
+  }
+
+  // escolherSelo é a escolha entre as duas versões da nota (ADR-022, N7). O que a
+  // pessoa digitou e ainda não foi gravado vai antes, e a escolha parte da versão
+  // em que o Agent está, na mesma fila das outras gravações. Com "usar a outra", o
+  // título e o corpo da janela passam a ser os do selo; a versão que o Agent
+  // devolve é a nova base. 409 (versão velha, ou a nota já não tem selo): lê a
+  // nota de novo, como em toda gravação.
+  async function escolherSelo(escolha: EscolhaDoConflito) {
+    if (escolhendo || !ultimaRef.current.conflito || parado.current) return
+    setEscolhendo(true)
+    clearTimeout(timer.current)
+    try {
+      if ((await salvar()) !== 'ok') return
+      const passo = async () => {
+        if (parado.current) return
+        try {
+          const nova = await cliente.resolverConflitoDaNota(nota.id, salvo.current.versao, escolha)
+          // O corpo da janela é o das linhas normalizadas: é o que o editor vai
+          // escrever, e o "salvo" tem de ser igual a ele para a janela não ficar "suja".
+          const linhas = garantirUma(normalizarMarcados(lerCorpo(nova.corpo)))
+          const corpoNovo = escreverCorpo(linhas, { limpar: true })
+          agora.current = { ...agora.current, titulo: nova.titulo, corpo: corpoNovo }
+          salvo.current = { ...salvo.current, titulo: nova.titulo, corpo: corpoNovo, versao: nova.version }
+          if (escolha === 'trocar') {
+            setTitulo(nova.titulo)
+            editor.aplicar(linhas)
+          }
+          ultimaRef.current = nova
+          setUltima(nova)
+          // O botão que tinha o foco sai da tela com o selo: o foco vai ao título.
+          dialogo.current?.querySelector<HTMLElement>('input')?.focus()
+          avisar(escolha === 'trocar' ? 'Ficou a outra versão.' : 'Ficou esta versão.')
+        } catch (e) {
+          if (e instanceof Conflito) {
+            await aposConflito()
+            return
+          }
+          if (problemaDe(e)) aoPerderLigacao(e)
+          setEstado({ tipo: 'erro', mensagem: mensagemDe(e) })
+        }
+      }
+      const p = fila.current.then(passo, passo)
+      fila.current = p
+      await p
+    } finally {
+      setEscolhendo(false)
+    }
   }
 
   // mudarMarcador põe ou tira um marcador na nota, na mesma fila das gravações: a
@@ -460,6 +511,46 @@ export function DialogoDaNota({ nota, cliente, marcadores, notasParaSugerir, cri
               Agora não
             </button>
           </div>
+        )}
+
+        {ultima.conflito && (
+          <section className="selo" aria-labelledby={idDoSelo}>
+            <p className="selo-titulo" id={idDoSelo}>
+              Mudou em dois aparelhos. A outra versão está guardada até você escolher.
+            </p>
+            <div className="versao">
+              <p className="rotulo">
+                A outra · <time dateTime={ultima.conflito.conflict_at}>{formatarCurta(ultima.conflito.conflict_at)}</time>
+              </p>
+              {ultima.conflito.titulo.trim() !== '' && <p className="versao-texto versao-titulo">{ultima.conflito.titulo}</p>}
+              <p className="versao-texto versao-corpo" role="region" aria-label="Texto da outra versão" tabIndex={0}>
+                {ultima.conflito.corpo}
+              </p>
+            </div>
+            <div className="acoes">
+              <button
+                type="button"
+                className="botao"
+                aria-disabled={escolhendo || estado.tipo === 'conflito' || estado.tipo === 'lixeira' || undefined}
+                aria-describedby={`${idDoSelo}-ajuda`}
+                onClick={() => void escolherSelo('manter')}
+              >
+                Manter esta
+              </button>
+              <button
+                type="button"
+                className="botao"
+                aria-disabled={escolhendo || estado.tipo === 'conflito' || estado.tipo === 'lixeira' || undefined}
+                aria-describedby={`${idDoSelo}-ajuda`}
+                onClick={() => void escolherSelo('trocar')}
+              >
+                Usar a outra
+              </button>
+            </div>
+            <p className="ajuda" id={`${idDoSelo}-ajuda`}>
+              A que você não escolher é descartada.
+            </p>
+          </section>
         )}
 
         {estado.tipo === 'erro' && (
