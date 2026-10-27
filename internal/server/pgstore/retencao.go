@@ -171,9 +171,80 @@ func (s *Store) Reter(ctx context.Context, userID string, now time.Time) (clouds
 		ultimo := lote[len(lote)-1]
 		depois = &ultimo
 	}
+	// A lixeira das notas (ADR-022, N8): em lotes, cada nota decidida de novo e
+	// apagada na sua transação (a restaurada no meio fica, e não volta na
+	// leitura seguinte; a apagada também não).
+	for {
+		if err := ctx.Err(); err != nil {
+			return r, err
+		}
+		ids, err := s.notasVencidas(ctx, userID, now)
+		if err != nil {
+			return r, err
+		}
+		apagou := false
+		for _, id := range ids {
+			if err := ctx.Err(); err != nil {
+				return r, err
+			}
+			feito, err := s.expurgarNota(ctx, userID, id, now)
+			if err != nil {
+				return r, err
+			}
+			apagou = apagou || feito.Notas > 0
+			r.Somar(feito)
+		}
+		if len(ids) < cloudstore.LoteDaRetencao || !apagou {
+			break
+		}
+	}
 	arrumado, err := s.arrumar(ctx, userID, now)
 	r.Somar(arrumado)
 	return r, err
+}
+
+// sqlNotasVencidas: as notas da lixeira com o purge_at vencido (o índice é o
+// idx_notes_trash, por usuário), num lote.
+const sqlNotasVencidas = `SELECT id::text FROM notes
+	WHERE user_id = $1 AND deleted_at IS NOT NULL AND purge_at <= $2
+	ORDER BY id LIMIT $3`
+
+// notasVencidas lê, sem trava, um lote de notas da lixeira vencidas.
+func (s *Store) notasVencidas(ctx context.Context, userID string, now time.Time) ([]string, error) {
+	rows, err := s.pool.Query(ctx, sqlNotasVencidas, userID, now, cloudstore.LoteDaRetencao)
+	if err != nil {
+		return nil, sanitize("ler as notas vencidas", err)
+	}
+	ids, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		return nil, sanitize("ler as notas vencidas", err)
+	}
+	return ids, nil
+}
+
+// expurgarNota decide de novo, sobre a linha travada, e apaga de vez uma nota
+// vencida, com a lápide e o evento tombstone sem aparelho (o mesmo apagar de
+// vez do PC). Devolve o que contou (nada, se foi restaurada ou já saiu).
+func (s *Store) expurgarNota(ctx context.Context, userID, id string, now time.Time) (cloudstore.Retido, error) {
+	var feito cloudstore.Retido
+	err := s.gravar(ctx, userID, func(tx pgx.Tx, seq int64, _ string) (bool, error) {
+		feito = cloudstore.Retido{}
+		cur, err := readNoteForUpdate(ctx, tx, userID, id)
+		if err != nil || cur == nil || !cloudstore.NotaVencida(*cur, now) {
+			return false, err
+		}
+		a := cloudstore.Actor{UserID: userID}
+		o := cloudstore.DecideNote(cloudstore.ExpurgoDaNota(id), cur, false, nil, a, now)
+		if o.Write != cloudstore.WriteTombstone {
+			return false, nil
+		}
+		if err := gravarNotaDecidida(ctx, tx, a, o, id, cur, seq, now); err != nil {
+			return false, err
+		}
+		feito.Notas = 1
+		return true, nil
+	})
+	return feito, err
 }
 
 // candidatosDaRetencao lê, sem trava, um lote de ditados que passam no

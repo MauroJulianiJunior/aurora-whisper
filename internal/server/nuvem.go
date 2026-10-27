@@ -505,7 +505,7 @@ func (c *Cloud) Reter(ctx context.Context) RodadaDaRetencao {
 	}
 	c.log.Info("retenção", "usuarios", rodada.Usuarios, "ativos", total.Ativos, "lixeira", total.Lixeira,
 		"lapides_criadas", total.LapidesCriadas, "lapides_vencidas", total.LapidesVencidas,
-		"eventos", total.Eventos, "mutacoes", total.Mutacoes, "falhas", rodada.Falhas,
+		"eventos", total.Eventos, "mutacoes", total.Mutacoes, "notas", total.Notas, "falhas", rodada.Falhas,
 		"ms", time.Since(inicio).Milliseconds())
 	c.saude.anotar(c.now(), rodada)
 	return rodada

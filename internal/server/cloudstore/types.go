@@ -626,4 +626,39 @@ type Store interface {
 	// dos bytes, a mesma no Go e no COLLATE "C" do Postgres), até limit (o
 	// mesmo teto). Só lê.
 	ListLabels(ctx context.Context, userID string, limit int) (LabelPage, error)
+
+	// As escritas das notas e dos marcadores pela sessão do navegador (o
+	// celular; ADR-022, N8; notas_celular.go). O Actor não tem aparelho
+	// (ErrDeviceNotAllowed). Cada uma passa pelas regras da N7 (DecideNote,
+	// DecideLabel) e grava, na mesma transação, o evento na note_sync_events,
+	// para os PCs receberem pelo pull. Uma escrita que não muda nada não grava
+	// nem gasta seq.
+	//
+	// GetNote lê uma nota, também a da lixeira (ErrNoteNotFound sem ela).
+	GetNote(ctx context.Context, userID, id string) (Note, error)
+	// CreateNote cria a nota no topo do grupo dela, com um id novo (UUID v7).
+	// Um marcador que não existe é ErrLabelNotFound; a nota vazia, ErrEmptyNote.
+	CreateNote(ctx context.Context, a Actor, n NovaNotaDoCelular, now time.Time) (Note, error)
+	// ChangeNote é o resto (PlanejarNota): editar, escolher o selo, a lixeira,
+	// restaurar, mover, marcar, desmarcar e apagar de vez (no apagar de vez,
+	// NotaGravada.Nota vem vazia).
+	ChangeNote(ctx context.Context, a Actor, id string, p PedidoDaNota, now time.Time) (NotaGravada, error)
+	// CreateLabel, RenameLabel e DeleteLabel: o marcador, com o nome único sem
+	// diferenciar maiúscula nem acento (ErrNameInUse), como no PC. Apagar tira o
+	// marcador das notas (sem subir a versão delas) e deixa a lápide.
+	CreateLabel(ctx context.Context, a Actor, nome string, now time.Time) (Label, error)
+	RenameLabel(ctx context.Context, a Actor, id string, base int64, nome string, now time.Time) (Label, error)
+	DeleteLabel(ctx context.Context, a Actor, id string, now time.Time) error
+	// CreateParaNota é o Create do "Ditar para nota" do celular: na mesma
+	// transação, a regra do destino (PlanejarParaNota) sobre as notas ativas, a
+	// nota gravada (o acrescentar ou a nota nova) e o ditado gravado já ligado a
+	// ela (VirouNota: fora do histórico em todo aparelho), cada um com o seu
+	// seq. O id que já existe devolve o que está gravado (created=false) e o
+	// destino que o reenvio sabe (DestinoGravado). Os erros são os do Create.
+	CreateParaNota(ctx context.Context, a Actor, epoch, id string, n NewDictation, now time.Time) (Transcription, bool, DestinoDoDitado, error)
+	// UndoParaNota é o Desfazer do aviso (PlanejarDesfazer): o ditado volta ao
+	// histórico e a nota volta ao que era, se ninguém mexeu nela. Devolve o
+	// ditado e se a nota saiu. ErrNotFound sem o ditado; ErrNotLinked se ele
+	// não está numa nota.
+	UndoParaNota(ctx context.Context, a Actor, id string, p PedidoDeDesfazer, now time.Time) (Transcription, bool, error)
 }

@@ -31,31 +31,42 @@ func (u *memUser) pushNote(a Actor, m Mutation, entityID string, seq int64, now 
 		curPtr = &cur
 	}
 	_, tomb := u.noteTombs[noteTombKey(EntityNote, entityID)]
-	dead := map[string]bool{}
-	for _, id := range NoteLabelIDs(m) {
-		if _, ok := u.noteTombs[noteTombKey(EntityLabel, id)]; ok {
-			dead[id] = true
-		}
-	}
-	out := DecideNote(m, curPtr, tomb, dead, a, now)
-	switch out.Write {
-	case WriteNone:
+	out := DecideNote(m, curPtr, tomb, u.marcadoresMortos(NoteLabelIDs(m)), a, now)
+	if out.Write == WriteNone {
 		return out, false
-	case WriteTombstone:
+	}
+	u.gravarNota(out, entityID, seq, a, now)
+	if out.Result.NoteState != nil {
+		st := u.notes[entityID]
+		out.Result.NoteState = &st
+	}
+	return out, true
+}
+
+// gravarNota grava, com o seq, o que DecideNote decidiu (Write não é
+// WriteNone): a lápide e o evento tombstone, ou a linha e o evento upsert.
+func (u *memUser) gravarNota(out Outcome, entityID string, seq int64, a Actor, now time.Time) {
+	if out.Write == WriteTombstone {
 		delete(u.notes, entityID)
 		u.noteTombs[noteTombKey(EntityNote, entityID)] = seq
 		u.putNoteEvent(EntityNote, entityID, OpTombstone, out.Result.EntityVersion, seq, a, now)
-		return out, true
+		return
 	}
 	n := out.NextNote
 	n.LastSeq = seq
 	u.notes[n.ID] = n
 	u.putNoteEvent(EntityNote, n.ID, OpUpsert, n.Version, seq, a, now)
-	if out.Result.NoteState != nil {
-		st := n
-		out.Result.NoteState = &st
+}
+
+// marcadoresMortos são os ids, entre os dados, com lápide de marcador.
+func (u *memUser) marcadoresMortos(ids []string) map[string]bool {
+	dead := map[string]bool{}
+	for _, id := range ids {
+		if _, ok := u.noteTombs[noteTombKey(EntityLabel, id)]; ok {
+			dead[id] = true
+		}
 	}
-	return out, true
+	return dead
 }
 
 // pushLabel decide e grava, sob o mutex, uma mutação de marcador de nota. O
@@ -69,10 +80,18 @@ func (u *memUser) pushLabel(a Actor, m Mutation, entityID string, seq int64, now
 	}
 	_, tomb := u.noteTombs[noteTombKey(EntityLabel, entityID)]
 	out := DecideLabel(m, curPtr, tomb, a, now)
-	switch out.Write {
-	case WriteNone:
+	if out.Write == WriteNone {
 		return out, false
-	case WriteTombstone:
+	}
+	u.gravarMarcador(out, entityID, seq, a, now)
+	return out, true
+}
+
+// gravarMarcador grava, com o seq, o que DecideLabel decidiu (Write não é
+// WriteNone). A lápide tira o marcador de todas as notas, sem subir a versão
+// delas.
+func (u *memUser) gravarMarcador(out Outcome, entityID string, seq int64, a Actor, now time.Time) {
+	if out.Write == WriteTombstone {
 		delete(u.labels, entityID)
 		for id, n := range u.notes {
 			if set := liveLabels(n.Marcadores, map[string]bool{entityID: true}); len(set) != len(n.Marcadores) {
@@ -82,13 +101,12 @@ func (u *memUser) pushLabel(a Actor, m Mutation, entityID string, seq int64, now
 		}
 		u.noteTombs[noteTombKey(EntityLabel, entityID)] = seq
 		u.putNoteEvent(EntityLabel, entityID, OpTombstone, out.Result.EntityVersion, seq, a, now)
-		return out, true
+		return
 	}
 	l := out.NextLabel
 	l.LastSeq = seq
 	u.labels[l.ID] = l
 	u.putNoteEvent(EntityLabel, l.ID, OpUpsert, l.Version, seq, a, now)
-	return out, true
 }
 
 // pullNotes são as mudanças de notas, marcadores e lápides deles depois de

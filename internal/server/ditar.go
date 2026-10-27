@@ -91,6 +91,9 @@ const maxVoltas = 3
 type ditadoDTO struct {
 	itemDTO
 	Aviso string `json:"aviso,omitempty"`
+	// Nota e Destino: só o ditado que foi para uma nota (ADR-022, N8).
+	Nota    *noteDTO    `json:"nota,omitempty"`
+	Destino *destinoDTO `json:"destino,omitempty"`
 }
 
 // handleDitar é o POST /api/v1/dictations.
@@ -122,6 +125,14 @@ func (c *Cloud) handleDitar(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, codeBadRequest, fraseId)
 		return
 	}
+	// O destino na nota (ADR-022, N8): o "Ditar para nota" ou o microfone de
+	// dentro da nota aberta. Sem o cabeçalho, o ditado comum.
+	destino, ok := destinoDoDitado(r.Header)
+	if !ok {
+		anotarMotivo(ctx, "destino")
+		writeError(w, http.StatusBadRequest, codeBadRequest, fraseDestino)
+		return
+	}
 	k := chaveDoDitado{usuario: p.UserID, id: id}
 	rc := http.NewResponseController(w)
 	// A guarda do andamento de que este pedido for dono: um pânico antes de ele
@@ -143,7 +154,7 @@ func (c *Cloud) handleDitar(w http.ResponseWriter, r *http.Request) {
 		switch sit.Estado {
 		case cloudstore.IdDitado:
 			anotarMotivo(ctx, "reenvio")
-			responderDitado(w, http.StatusOK, *sit.Ditado, avisoDoPrimeiro)
+			c.responderDitado(w, r, http.StatusOK, *sit.Ditado, avisoDoPrimeiro, nil)
 			return
 		case cloudstore.IdLapide:
 			anotarMotivo(ctx, "apagado")
@@ -175,7 +186,7 @@ func (c *Cloud) handleDitar(w http.ResponseWriter, r *http.Request) {
 			guarda.pegar(k, o.dono, o.regravar)
 			anotarMotivo(ctx, "regravar")
 			c.ditar(w, r, rc, trabalhoDoDitado{
-				k: k, a: o.dono, epoch: sit.Epoch, prefs: prefs, pago: o.regravar, fimDoCorpo: time.Now(),
+				k: k, a: o.dono, epoch: sit.Epoch, prefs: prefs, pago: o.regravar, fimDoCorpo: time.Now(), destino: destino,
 			}, &guarda)
 			return
 		}
@@ -243,7 +254,7 @@ func (c *Cloud) handleDitar(w http.ResponseWriter, r *http.Request) {
 				writeError(w, http.StatusInternalServerError, codeInternal, "falha interna")
 			case sit.Estado == cloudstore.IdDitado:
 				anotarMotivo(ctx, "reenvio")
-				responderDitado(w, http.StatusOK, *sit.Ditado, avisoDoPrimeiro)
+				c.responderDitado(w, r, http.StatusOK, *sit.Ditado, avisoDoPrimeiro, nil)
 			default:
 				anotarMotivo(ctx, "apagado")
 				writeError(w, http.StatusGone, codeApagado, fraseApagado)
@@ -279,7 +290,7 @@ func (c *Cloud) handleDitar(w http.ResponseWriter, r *http.Request) {
 		// 9. O trabalho solto.
 		c.ditar(w, r, rc, trabalhoDoDitado{
 			k: k, a: dono, epoch: sit.Epoch, prefs: prefs, audio: audio,
-			duracaoMs: duracao.Milliseconds(), falaMs: fala.Milliseconds(), fimDoCorpo: time.Now(),
+			duracaoMs: duracao.Milliseconds(), falaMs: fala.Milliseconds(), fimDoCorpo: time.Now(), destino: destino,
 		}, &guarda)
 		return
 	}
@@ -314,7 +325,7 @@ func (c *Cloud) ditar(w http.ResponseWriter, r *http.Request, rc *http.ResponseC
 		if !res.criado {
 			status = http.StatusOK
 		}
-		responderDitado(w, status, *res.item, res.desfecho.aviso)
+		c.responderDitado(w, r, status, *res.item, res.desfecho.aviso, res.destino)
 	case <-r.Context().Done():
 		// O celular caiu: o trabalho segue e grava. O reenvio recebe o ditado.
 	}
@@ -405,8 +416,75 @@ func (c *Cloud) conferirChavesDoDitado(w http.ResponseWriter, r *http.Request, u
 }
 
 // responderDitado escreve o ditado gravado, com o aviso do Polish se houver.
-func responderDitado(w http.ResponseWriter, status int, t cloudstore.Transcription, aviso string) {
-	writeJSON(w, status, ditadoDTO{itemDTO: toItemDTO(t), Aviso: aviso})
+// O ditado que foi para uma nota (N8) leva também a nota como ficou e o
+// destino: o desta gravação (destino), ou, no reenvio, o que o ditado gravado
+// diz (cloudstore.DestinoGravado). A nota que não se lê (apagada no meio) fica
+// de fora; o ditado já está gravado.
+func (c *Cloud) responderDitado(w http.ResponseWriter, r *http.Request, status int, t cloudstore.Transcription, aviso string,
+	destino *cloudstore.DestinoDoDitado) {
+	d := ditadoDTO{itemDTO: toItemDTO(t), Aviso: aviso}
+	if t.VirouNota != nil {
+		var nota *cloudstore.Note
+		if n, err := c.cfg.Store.GetNote(r.Context(), t.UserID, *t.VirouNota); err == nil {
+			nota = &n
+			dto := toNoteDTO(n)
+			d.Nota = &dto
+		}
+		dest := cloudstore.DestinoGravado(t, nota)
+		if destino != nil {
+			dest = *destino
+		}
+		d.Destino = &destinoDTO{NotaID: dest.NotaID, Nova: dest.Nova, Linhas: dest.Linhas}
+		if !dest.Nova && dest.Linhas > 0 {
+			antes := dest.CorpoAntes
+			d.Destino.CorpoAntes = &antes
+		}
+	}
+	writeJSON(w, status, d)
+}
+
+// destinoDTO é para onde o ditado foi (N8): a nota, se ela nasceu do ditado,
+// quantas linhas entraram e, no acrescentar, o corpo de antes (o Desfazer o
+// manda de volta). No reenvio, as linhas e o corpo de antes não se sabem mais.
+type destinoDTO struct {
+	NotaID     string  `json:"nota_id"`
+	Nova       bool    `json:"nova"`
+	Linhas     int     `json:"linhas"`
+	CorpoAntes *string `json:"corpo_antes,omitempty"`
+}
+
+// ParaNota é o valor do cabeçalho Ditado-Nota do "Ditar para nota": a nuvem
+// escolhe a nota pela regra do título (N8). O outro valor é o id da nota aberta
+// (o microfone de dentro dela).
+const ParaNota = "para-nota"
+
+// fraseDestino: o Ditado-Nota não é "para-nota" nem o id de uma nota.
+const fraseDestino = `Ditado-Nota tem de ser "para-nota" ou o id da nota aberta`
+
+// destinoNaNota é o que o Ditado-Nota pediu: nada (o ditado comum, que vai ao
+// histórico), o "Ditar para nota" (paraNota) ou a nota aberta (nota).
+type destinoNaNota struct {
+	paraNota bool
+	nota     *string
+}
+
+// destinoDoDitado lê o Ditado-Nota: ausente, um valor só com "para-nota", ou
+// um UUID.
+func destinoDoDitado(h http.Header) (destinoNaNota, bool) {
+	v := h.Values("Ditado-Nota")
+	switch {
+	case len(v) == 0:
+		return destinoNaNota{}, true
+	case len(v) != 1:
+		return destinoNaNota{}, false
+	case v[0] == ParaNota:
+		return destinoNaNota{paraNota: true}, true
+	}
+	id, ok := cloudstore.CanonicalUUID(v[0])
+	if !ok {
+		return destinoNaNota{}, false
+	}
+	return destinoNaNota{nota: &id}, true
 }
 
 // responderDesfecho escreve a recusa de um desfecho, com o Retry-After quando

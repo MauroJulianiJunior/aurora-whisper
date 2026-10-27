@@ -107,6 +107,11 @@ func Run(t *testing.T, b Backend) {
 		{"Ditar_Prazos_CorpoLento", testDitarCorpoLento},
 		{"Ditar_Prazos_QuemEsperaPassaDoWriteTimeout", testDitarQuemEsperaPassaDoWriteTimeout},
 		{"Ditar_Canario", testDitarCanario},
+
+		// O ditado que vai para uma nota (ADR-022, N8; ditar_nota.go).
+		{"DitarNota_ParaNotaAcrescentaEDesfaz", testDitarParaNotaAcrescenta},
+		{"DitarNota_ParaNotaSemTituloNasceNotaNova", testDitarParaNotaNotaNova},
+		{"DitarNota_NaNotaAbertaFicaLigadaEForaDoHistorico", testDitarNaNotaAberta},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) { c.fn(t, novoMundo(t, b)) })

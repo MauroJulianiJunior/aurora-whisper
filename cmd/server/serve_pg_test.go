@@ -148,7 +148,7 @@ func TestServe_Postgres_SobeEDesligaLimpo(t *testing.T) {
 	for _, want := range []string{`"msg":"servindo"`, `"msg":"desligado"`, `"rota":"GET /api/v1/health/ready"`, `"msg":"arrumação"`,
 		// A retenção (F9d) roda na subida, com o Store do Postgres: a linha
 		// sai, com zero, e antes de "desligado".
-		`"msg":"retenção","usuarios":0,"ativos":0,"lixeira":0,"lapides_criadas":0,"lapides_vencidas":0,"eventos":0,"mutacoes":0,"falhas":0`} {
+		`"msg":"retenção","usuarios":0,"ativos":0,"lixeira":0,"lapides_criadas":0,"lapides_vencidas":0,"eventos":0,"mutacoes":0,"notas":0,"falhas":0`} {
 		if !strings.Contains(logs, want) {
 			t.Errorf("o log não tem %s:\n%s", want, logs)
 		}

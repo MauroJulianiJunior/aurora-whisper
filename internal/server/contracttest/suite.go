@@ -115,6 +115,11 @@ func Run(t *testing.T, b Backend) {
 		{"Notas_ApagarMeusDadosLevaAsNotas", testNotasApagarMeusDados},
 		{"Notas_ArrumacaoDosEventos", testNotasArrumacao},
 		{"Notas_NadaDeTextoEmLog", testNotasNadaDeTextoEmLog},
+		// As escritas do celular (ADR-022, N8; notas_celular.go).
+		{"NotasCelular_CriaEditaEOPCRecebe", testNotasCelularCriaEditaEOPCRecebe},
+		{"NotasCelular_MesclaDaListaESelo", testNotasCelularMesclaESelo},
+		{"NotasCelular_LixeiraApagarDeVezEExpurgo", testNotasCelularLixeira},
+		{"NotasCelular_MoverEMarcadores", testNotasCelularMoverEMarcadores},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) { c.fn(t, newWorld(t, b)) })

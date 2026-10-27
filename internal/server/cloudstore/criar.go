@@ -43,6 +43,15 @@ type NewDictation struct {
 	DurationMs   *int64
 	ProcessingMs *int64
 	Confidence   *float32
+	// VirouNota é a nota em que o ditado entrou (ADR-022, N8): o microfone de
+	// dentro da nota aberta, no celular. O app escreve o texto no cursor; o
+	// ditado só fica ligado à nota, e nasce fora do histórico em todo aparelho
+	// (como o ditado feito dentro da nota no PC, N3). Nil: o ditado comum.
+	VirouNota *string
+	// ParaNota é o "Ditar para nota" do celular (N8): quem grava é
+	// Store.CreateParaNota, que escolhe a nota pela regra do título. Não vai ao
+	// payload (é o que decide qual gravação, não um campo do ditado).
+	ParaNota bool
 }
 
 // IsCloudPlatform diz se p é uma origem de ditado que nasce na nuvem.
@@ -80,6 +89,7 @@ func (n NewDictation) payload(now time.Time) (json.RawMessage, error) {
 		"confidence":      n.Confidence,
 		"status":          "done",
 		"created_at":      now.UTC().Format(time.RFC3339Nano),
+		"virou_nota":      n.VirouNota,
 	})
 	if err != nil {
 		// Só um número que não vira JSON (NaN, infinito) chega aqui.
