@@ -93,6 +93,16 @@ const (
 // filtrado pelo usuário ($1).
 var apagarDaConta = []struct{ op, sql string }{
 	{"apagar as correções", `DELETE FROM corrections WHERE user_id = $1`},
+	// As notas (ADR-022, N7; as 0020 a 0025): a ligação do ditado com a nota
+	// antes do ditado (ela aponta para ele), as ligações dos marcadores antes
+	// das notas, e os eventos (que apontam para os aparelhos) antes dos
+	// aparelhos, como todo o resto.
+	{"apagar as ligações dos ditados com as notas", `DELETE FROM transcription_note_links WHERE user_id = $1`},
+	{"apagar os marcadores das notas", `DELETE FROM note_labels WHERE user_id = $1`},
+	{"apagar as notas", `DELETE FROM notes WHERE user_id = $1`},
+	{"apagar os marcadores", `DELETE FROM labels WHERE user_id = $1`},
+	{"apagar as lápides das notas", `DELETE FROM note_tombstones WHERE user_id = $1`},
+	{"apagar os eventos das notas", `DELETE FROM note_sync_events WHERE user_id = $1`},
 	{"apagar os ditados", `DELETE FROM transcriptions WHERE user_id = $1`},
 	{"apagar as lápides", `DELETE FROM tombstones WHERE user_id = $1`},
 	{"apagar os eventos", `DELETE FROM sync_events WHERE user_id = $1`},

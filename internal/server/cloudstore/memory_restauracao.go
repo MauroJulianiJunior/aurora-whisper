@@ -85,6 +85,12 @@ func (s *MemoryStore) copiar() *MemoryStore {
 			nu.preferenciasDoDitado = &p
 		}
 		nu.events = append([]Event(nil), u.events...)
+		// As notas e os marcadores (N7). A fatia Marcadores de cada nota é
+		// compartilhada, como os ponteiros: nunca é mudada no lugar.
+		nu.notes = maps.Clone(u.notes)
+		nu.labels = maps.Clone(u.labels)
+		nu.noteTombs = maps.Clone(u.noteTombs)
+		nu.noteEvents = append([]Event(nil), u.noteEvents...)
 		c.users[id] = &nu
 	}
 	c.bySub, c.byEmail, c.pending = maps.Clone(s.bySub), maps.Clone(s.byEmail), maps.Clone(s.pending)

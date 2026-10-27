@@ -777,6 +777,16 @@ func testEscopo(t *testing.T, b Backend) {
 			t.Errorf("%s tem parâmetro na URL", padrao)
 		}
 	}
+	// As notas e os marcadores do celular (ADR-022, N7): só a sessão, e sem
+	// parâmetro de caminho (a vista vai na query, e nenhum texto vai na URL).
+	for _, padrao := range []string{"GET /api/v1/notes", "GET /api/v1/labels"} {
+		if acesso, ok := porPadrao[padrao]; !ok || acesso != server.AcessoSessao {
+			t.Errorf("%s na tabela: %v (montada: %v), quero só a sessão", padrao, acesso, ok)
+		}
+		if strings.ContainsAny(padrao, "{}?") {
+			t.Errorf("%s tem parâmetro na URL", padrao)
+		}
+	}
 	// As chaves da IA do celular (ADR-021, C3a): só a sessão, e percorridas
 	// acima com o token, sem credencial e com o Bearer inválido.
 	for _, padrao := range []string{"PUT /api/v1/ai-keys/{provedor}", "DELETE /api/v1/ai-keys/{provedor}", "GET /api/v1/ai-keys/{provedor}/models"} {
@@ -1038,6 +1048,7 @@ func testHost(t *testing.T, b Backend) {
 		"GET /api/v1/learned", "POST /api/v1/learned/undo",
 		"GET /api/v1/dictation", "PUT /api/v1/dictation/settings", "POST /api/v1/dictation/consent", "DELETE /api/v1/dictation/consent",
 		"POST /api/v1/dictations",
+		"GET /api/v1/notes", "GET /api/v1/labels",
 	} {
 		if !conferidas[padrao] {
 			t.Errorf("%s não foi conferida com o Host estranho", padrao)

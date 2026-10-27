@@ -1118,6 +1118,7 @@ func TestPostgres_IndicesDaRetencao(t *testing.T) {
 		"idx_sync_events_changed_at":       {"sync_events", "USING btree (user_id, changed_at)"},
 		"idx_applied_mutations_applied_at": {"applied_mutations", "USING btree (applied_at)"},
 		"idx_tombstones_dictated_at":       {"tombstones", "USING btree (dictated_at)"},
+		"idx_note_sync_events_changed_at":  {"note_sync_events", "USING btree (user_id, changed_at)"},
 	} {
 		var table, def string
 		p.scan(&table, `SELECT tablename::text FROM pg_indexes WHERE schemaname = 'public' AND indexname = $1`, name)
@@ -1333,4 +1334,292 @@ func TestPostgres_PreferenciasEAceiteDoDitado(t *testing.T) {
 	p.reject(checkViolation, "motivo fora da lista", terminado(p.newUser()).lit("end_reason", "'expirado'"))
 	p.reject(checkViolation, "fim antes do começo", terminado(p.newUser()).lit("ended_at", "now() - interval '3 hour'"))
 	p.reject(uniqueViolation, "o mesmo id de aceite duas vezes", consent(p.newUser()).val("id", p.newID()).lit("id", "(SELECT id FROM dictation_consents LIMIT 1)"))
+}
+
+// ---------------------------------------------------------------------------
+// As notas (ADR-022, N7): a 0020 a 0025
+// ---------------------------------------------------------------------------
+
+// noteRow é uma nota válida, sem aparelho nem selo.
+func noteRow(user string, seq int64) *row {
+	return newRow("notes").
+		lit("id", "gen_random_uuid()").
+		val("user_id", user).
+		lit("titulo", "'Mercado'").
+		lit("corpo", "'- [ ] leite'").
+		lit("fixada", "false").
+		lit("arquivada", "false").
+		lit("posicao", "'V'").
+		lit("created_at", "now()").
+		lit("updated_at", "now()").
+		lit("version", "1").
+		lit("content_version", "1").
+		lit("trash_version", "1").
+		val("last_seq", seq)
+}
+
+func labelRow(user string, seq int64) *row {
+	return newRow("labels").
+		lit("id", "gen_random_uuid()").
+		val("user_id", user).
+		lit("nome", "'Mercado'").
+		lit("created_at", "now()").
+		lit("updated_at", "now()").
+		lit("version", "1").
+		val("last_seq", seq)
+}
+
+func TestPostgres_Notas(t *testing.T) {
+	p := newPG(t)
+	user := p.newUser()
+	device := p.newDevice(user)
+	other := p.newDevice(p.newUser())
+	var seq int64
+	next := func() int64 { seq++; return seq }
+
+	p.accept("nota válida", noteRow(user, next()))
+	p.accept("nota com tudo: cor, aparelhos, ditado de origem, lixeira e selo", noteRow(user, next()).
+		lit("cor", "'verde'").val("content_device_id", device).val("trash_device_id", device).
+		lit("ditado_de_origem", "gen_random_uuid()").lit("deleted_at", "now()").lit("purge_at", "now() + interval '30 days'").
+		lit("version", "3").lit("content_version", "2").lit("trash_version", "3").
+		lit("conflict_titulo", "''").lit("conflict_corpo", "'o que perdeu'").lit("conflict_at", "now()").val("conflict_device_id", device))
+	p.accept("título e corpo vazios", noteRow(user, next()).lit("titulo", "''").lit("corpo", "''"))
+	p.accept("título de 1024 bytes", noteRow(user, next()).lit("titulo", "repeat('é', 512)"))
+	p.reject(checkViolation, "título de 1025 bytes", noteRow(user, next()).lit("titulo", "repeat('é', 512) || 'x'"))
+	p.accept("corpo de 64 KiB", noteRow(user, next()).lit("corpo", "repeat('x', 65536)"))
+	p.reject(checkViolation, "corpo de 64 KiB e um byte", noteRow(user, next()).lit("corpo", "repeat('x', 65537)"))
+	p.reject(checkViolation, "cor fora da lista", noteRow(user, next()).lit("cor", "'#ff0000'"))
+	p.reject(notNullViolation, "título nulo", noteRow(user, next()).lit("titulo", "NULL"))
+	p.reject(notNullViolation, "fixada sem valor (sem DEFAULT)", noteRow(user, next()).drop("fixada"))
+
+	for _, bad := range []string{"", "a0", "a-b", "é", strings.Repeat("a", 129)} {
+		p.reject(checkViolation, fmt.Sprintf("posição %q", bad), noteRow(user, next()).val("posicao", bad))
+	}
+	p.accept("posição de 128 caracteres", noteRow(user, next()).val("posicao", strings.Repeat("z", 128)))
+	p.accept("posição com zero no meio", noteRow(user, next()).val("posicao", "a0b"))
+
+	p.reject(checkViolation, "purge_at sem deleted_at", noteRow(user, next()).lit("purge_at", "now()"))
+	p.reject(checkViolation, "content_version maior que a versão", noteRow(user, next()).lit("content_version", "2"))
+	p.reject(checkViolation, "trash_version zero", noteRow(user, next()).lit("trash_version", "0"))
+	p.reject(checkViolation, "selo sem o corpo", noteRow(user, next()).lit("conflict_titulo", "'x'").lit("conflict_at", "now()"))
+	p.reject(checkViolation, "selo sem a data", noteRow(user, next()).lit("conflict_titulo", "'x'").lit("conflict_corpo", "'y'"))
+	p.reject(checkViolation, "aparelho do selo sem o selo", noteRow(user, next()).val("conflict_device_id", device))
+	p.reject(foreignKeyViolation, "aparelho de outro usuário", noteRow(user, next()).val("content_device_id", other))
+
+	dup := next()
+	p.accept("last_seq novo", noteRow(user, dup))
+	p.reject(uniqueViolation, "last_seq repetido", noteRow(user, dup))
+	shared := p.newID()
+	p.accept("nota com id escolhido", noteRow(user, next()).val("id", shared))
+	p.accept("o mesmo id em outra conta", noteRow(p.newUser(), 1).val("id", shared))
+	p.reject(uniqueViolation, "o mesmo id na mesma conta", noteRow(user, next()).val("id", shared))
+
+	// A posição é COLLATE "C": a ordem dos bytes ("B" < "a"), a mesma do Go e
+	// do PC, qualquer que seja o collation do banco.
+	u := p.newUser()
+	p.accept("posição a", noteRow(u, 1).val("posicao", "a"))
+	p.accept("posição B", noteRow(u, 2).val("posicao", "B"))
+	var first string
+	p.scan(&first, "SELECT posicao FROM notes WHERE user_id = $1 ORDER BY posicao LIMIT 1", u)
+	if first != "B" {
+		t.Errorf("ORDER BY posicao começou por %q, quero \"B\" (a ordem dos bytes)", first)
+	}
+}
+
+func TestPostgres_MarcadoresDeNota(t *testing.T) {
+	p := newPG(t)
+	user := p.newUser()
+	p.accept("marcador válido", labelRow(user, 1))
+	p.accept("o mesmo nome de novo (a nuvem não impõe nome único)", labelRow(user, 2))
+	p.accept("nome de 50 caracteres", labelRow(user, 3).lit("nome", "repeat('é', 50)"))
+	p.reject(checkViolation, "nome de 51 caracteres", labelRow(user, 4).lit("nome", "repeat('é', 51)"))
+	p.reject(checkViolation, "nome vazio", labelRow(user, 4).lit("nome", "''"))
+	p.reject(checkViolation, "versão zero", labelRow(user, 4).lit("version", "0"))
+	p.reject(uniqueViolation, "last_seq repetido", labelRow(user, 1))
+	p.reject(notNullViolation, "sem a data (sem DEFAULT)", labelRow(user, 4).drop("created_at"))
+
+	// As ligações: saem com a nota, e não apontam para labels.
+	note, label := p.newID(), p.newID()
+	p.accept("nota", noteRow(user, 10).val("id", note))
+	link := func(u, n, l string) *row {
+		return newRow("note_labels").val("user_id", u).val("note_id", n).val("label_id", l)
+	}
+	p.accept("ligação com um marcador que ainda não chegou", link(user, note, label))
+	p.reject(uniqueViolation, "a mesma ligação duas vezes", link(user, note, label))
+	p.reject(foreignKeyViolation, "ligação de uma nota que não existe", link(user, p.newID(), label))
+	p.reject(foreignKeyViolation, "ligação com a nota de outro usuário", link(p.newUser(), note, label))
+	p.exec("DELETE FROM notes WHERE user_id = $1 AND id = $2", user, note)
+	var links int
+	p.scan(&links, "SELECT count(*) FROM note_labels WHERE user_id = $1", user)
+	if links != 0 {
+		t.Errorf("apagar a nota deixou %d ligação(ões) (ON DELETE CASCADE)", links)
+	}
+}
+
+func TestPostgres_LapidesEEventosDasNotas(t *testing.T) {
+	p := newPG(t)
+	a, b := p.newUser(), p.newUser()
+	device, other := p.newDevice(a), p.newDevice(b)
+	tomb := func(user, entityType, id string, seq int64) *row {
+		return newRow("note_tombstones").val("user_id", user).val("entity_type", entityType).val("entity_id", id).val("seq", seq)
+	}
+	id := p.newID()
+	p.accept("lápide de nota", tomb(a, "note", id, 1))
+	p.accept("lápide de marcador com o mesmo id (outro tipo)", tomb(a, "label", id, 2))
+	p.reject(uniqueViolation, "segunda lápide da mesma nota", tomb(a, "note", id, 3))
+	p.reject(uniqueViolation, "o mesmo seq", tomb(a, "note", p.newID(), 1))
+	p.accept("o mesmo seq em outra conta", tomb(b, "note", id, 1))
+	p.reject(checkViolation, "lápide de ditado (essa é a da 0015)", tomb(a, "transcription", p.newID(), 4))
+	p.reject(checkViolation, "seq zero", tomb(a, "note", p.newID(), 0))
+
+	ev := func(user string, seq int64) *row {
+		return newRow("note_sync_events").val("user_id", user).val("seq", seq).
+			lit("entity_type", "'note'").lit("entity_id", "gen_random_uuid()").
+			lit("operation", "'upsert'").lit("entity_version", "1").lit("changed_at", "now()")
+	}
+	p.accept("evento de nota", ev(a, 1).val("device_id", device))
+	p.accept("evento de marcador, lápide", ev(a, 2).lit("entity_type", "'label'").lit("operation", "'tombstone'"))
+	p.reject(uniqueViolation, "o mesmo seq", ev(a, 1))
+	p.reject(checkViolation, "tipo de ditado (esse é o da 0008)", ev(a, 3).lit("entity_type", "'transcription'"))
+	p.reject(checkViolation, "operação delete (o evento é upsert ou tombstone)", ev(a, 3).lit("operation", "'delete'"))
+	p.reject(checkViolation, "versão zero", ev(a, 3).lit("entity_version", "0"))
+	p.reject(foreignKeyViolation, "aparelho de outro usuário", ev(a, 3).val("device_id", other))
+	p.reject(notNullViolation, "sem changed_at (sem DEFAULT)", ev(a, 3).drop("changed_at"))
+}
+
+func TestPostgres_LigacaoDoDitadoComANota(t *testing.T) {
+	p := newPG(t)
+	user := p.newUser()
+	tid := p.newID()
+	p.accept("ditado", tRow(user, 1).val("id", tid))
+	link := func(u, id string) *row {
+		return newRow("transcription_note_links").val("user_id", u).val("transcription_id", id).lit("note_id", "gen_random_uuid()")
+	}
+	p.accept("ligação com uma nota que não existe (ela pode chegar depois)", link(user, tid))
+	p.reject(uniqueViolation, "uma segunda nota para o mesmo ditado", link(user, tid))
+	p.reject(foreignKeyViolation, "ligação de um ditado que não existe", link(user, p.newID()))
+	p.reject(foreignKeyViolation, "ligação com o ditado de outro usuário", link(p.newUser(), tid))
+	p.exec("DELETE FROM transcriptions WHERE user_id = $1 AND id = $2", user, tid)
+	var links int
+	p.scan(&links, "SELECT count(*) FROM transcription_note_links WHERE user_id = $1", user)
+	if links != 0 {
+		t.Errorf("apagar o ditado (a retenção) deixou %d ligação(ões) (ON DELETE CASCADE)", links)
+	}
+}
+
+// As migrations das notas são SÓ ADITIVAS (ADR-021, "As migrations"):
+// aplicadas sobre o banco de antes (as 0001 a 0019, o último que o Mauro tem no
+// ar), com dados em todas as tabelas que a nuvem usa, criam as seis tabelas
+// novas, vazias, e não mudam uma linha das que existiam.
+func TestPostgres_AsMigrationsDasNotasAplicamSobreUmBancoComDados(t *testing.T) {
+	url := pgtest.NewDB(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	t.Cleanup(cancel)
+	migs, err := pgmigrate.Load(migrations.FS)
+	if err != nil {
+		t.Fatalf("Load(migrations.FS): %v", err)
+	}
+	const emProducao = 19
+	novas := []string{
+		"0020_labels_table.sql", "0021_notes_table.sql", "0022_note_labels_table.sql",
+		"0023_note_tombstones_table.sql", "0024_note_sync_events_table.sql", "0025_transcription_note_links_table.sql",
+	}
+	if len(migs) != emProducao+len(novas) {
+		t.Fatalf("%d migrations, quero %d (as 19 de antes e as 6 das notas)", len(migs), emProducao+len(novas))
+	}
+	for i, f := range novas {
+		if migs[emProducao+i].File != f {
+			t.Fatalf("a migration %d é %s, quero %s", emProducao+i+1, migs[emProducao+i].File, f)
+		}
+	}
+	conn := pgtest.Connect(t, url)
+	if res, err := pgmigrate.Run(ctx, conn, migs[:emProducao]); err != nil || len(res.Applied) != emProducao {
+		t.Fatalf("aplicar as 0001 a 0019: %+v, %v", res, err)
+	}
+	p := &pg{t: t, ctx: ctx, conn: conn, url: url}
+
+	a, b := p.newUser(), p.newUser()
+	device := p.newDevice(a)
+	tid := p.newID()
+	p.accept("ditado", tRow(a, 1).val("id", tid).val("device_id", device))
+	p.accept("ditado do outro", tRow(b, 1))
+	p.accept("evento", eventRow(a, 2))
+	p.accept("lápide", newRow("tombstones").val("user_id", a).lit("entity_type", "'transcription'").lit("entity_id", "gen_random_uuid()").
+		lit("reason", "'apagado'").lit("dictated_at", "now() - interval '10 days'").val("seq", int64(3)))
+	p.accept("aprendido", newRow("learned_pairs").lit("id", "gen_random_uuid()").val("user_id", a).val("variant", "SF").
+		val("normalized_variant", "sf").lit("term", "'ECF'").val("last_seq", int64(4)))
+	p.accept("mutação", mutationRow(a, device))
+	p.exec(`INSERT INTO dictation_settings (user_id, asr_provider, asr_model, use_hint, polish_enabled, polish_provider, polish_model, created_at, updated_at)
+		VALUES ($1, 'openai', 'gpt-4o-mini-transcribe', false, false, 'openai', '', now(), now())`, a)
+
+	tabelas := func() []string {
+		rows, err := p.conn.Query(p.ctx, `SELECT table_name::text FROM information_schema.tables
+			WHERE table_schema = 'public' AND table_type = 'BASE TABLE' ORDER BY 1`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rows.Close()
+		var out []string
+		for rows.Next() {
+			var name string
+			if err := rows.Scan(&name); err != nil {
+				t.Fatal(err)
+			}
+			out = append(out, name)
+		}
+		if err := rows.Err(); err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+	foto := func() map[string]string {
+		out := map[string]string{}
+		for _, tabela := range tabelas() {
+			if tabela == "schema_migrations" {
+				continue // ganha as linhas novas, de propósito
+			}
+			var n int
+			var resumo *string
+			p.scan(&n, "SELECT count(*) FROM "+pgx.Identifier{tabela}.Sanitize())
+			p.scan(&resumo, "SELECT md5(string_agg(t::text, '|' ORDER BY t::text)) FROM "+pgx.Identifier{tabela}.Sanitize()+" t")
+			out[tabela] = fmt.Sprintf("%d:%v", n, resumo != nil)
+			if resumo != nil {
+				out[tabela] += ":" + *resumo
+			}
+		}
+		return out
+	}
+	antes := foto()
+	if len(antes) != emProducao {
+		t.Fatalf("a foto viu %d tabelas, quero %d: %v", len(antes), emProducao, antes)
+	}
+	if !strings.HasPrefix(antes["transcriptions"], "2:true") || !strings.HasPrefix(antes["learned_pairs"], "1:true") {
+		t.Fatalf("o banco de antes não tem os dados que o teste pôs: %v", antes)
+	}
+
+	res, err := pgmigrate.Run(ctx, conn, migs)
+	if err != nil {
+		t.Fatalf("aplicar as migrations das notas sobre o banco com dados: %v", err)
+	}
+	if len(res.Applied) != len(novas) || res.AlreadyApplied != emProducao {
+		t.Fatalf("aplicou %d e já havia %d; quero %d e %d", len(res.Applied), res.AlreadyApplied, len(novas), emProducao)
+	}
+	depois := foto()
+	for tabela, quero := range antes {
+		if depois[tabela] != quero {
+			t.Errorf("a tabela %s mudou com as migrations das notas: %s -> %s", tabela, quero, depois[tabela])
+		}
+	}
+	for _, tabela := range []string{"labels", "notes", "note_labels", "note_tombstones", "note_sync_events", "transcription_note_links"} {
+		if depois[tabela] != "0:false" {
+			t.Errorf("a %s nasceu com %s, quero vazia", tabela, depois[tabela])
+		}
+	}
+	// As tabelas novas aceitam linhas das contas e dos ditados de antes.
+	p.accept("nota da conta de antes", noteRow(a, 10).val("content_device_id", device))
+	p.accept("ligação do ditado de antes", newRow("transcription_note_links").val("user_id", a).val("transcription_id", tid).lit("note_id", "gen_random_uuid()"))
+
+	if res, err := pgmigrate.Run(ctx, conn, migs); err != nil || len(res.Applied) != 0 || res.AlreadyApplied != len(migs) {
+		t.Errorf("rodar de novo: %+v, %v", res, err)
+	}
 }

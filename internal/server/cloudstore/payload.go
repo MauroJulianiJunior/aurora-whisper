@@ -26,9 +26,14 @@ import (
 //     E, desde a F7c, a escolha do selo feita no PC: resolver_conflito
 //     ("manter" ou "trocar") com o conflict_at do selo escolhido, os dois
 //     juntos, com ou sem final_text e deleted_at (ver DecidePush).
+//
+// Desde a N7 (ADR-022), os dois formatos aceitam virou_nota: o id da nota que
+// o ditado virou (um UUID) ou null (a ligação sai). É opcional nos dois, e o
+// PC só o manda depois de ver a capacidade "note" no pull.
 
 // createFields é a lista fechada do ditado novo (true = obrigatório).
 var createFields = map[string]bool{
+	"virou_nota":      false,
 	"source_platform": true,
 	"raw_text":        true,
 	"final_text":      true,
@@ -50,6 +55,7 @@ var patchFields = map[string]bool{
 	"deleted_at":        false,
 	"resolver_conflito": false,
 	"conflict_at":       false,
+	"virou_nota":        false,
 }
 
 // Tamanhos máximos dos campos curtos (em bytes). [ASSUMPTION] Nenhum
@@ -78,6 +84,28 @@ type patch struct {
 	hasChoice bool
 	choice    string
 	choiceAt  time.Time
+	// hasVirouNota: o PC mandou a ligação com a nota (N7); virouNota é o id
+	// dela, ou nil (a ligação sai).
+	hasVirouNota bool
+	virouNota    *string
+}
+
+// optionalUUID lê uma chave que é null ou um UUID (devolvido em minúsculas).
+// present diz se a chave veio.
+func optionalUUID(obj map[string]json.RawMessage, key string) (id *string, present, ok bool) {
+	v, present := obj[key]
+	if !present || isNull(v) {
+		return nil, present, true
+	}
+	s, ok := cleanString(v, 0)
+	if !ok {
+		return nil, true, false
+	}
+	canon, ok := CanonicalUUID(s)
+	if !ok {
+		return nil, true, false
+	}
+	return &canon, true, true
 }
 
 // decodeObject lê o payload como objeto JSON e confere a lista fechada.
@@ -219,10 +247,32 @@ func Normalize(t time.Time) time.Time {
 // parseCreate lê o payload de um ditado novo. Devolve o ditado (sem id,
 // usuário, aparelho nem versões) ou o código de recusa.
 func parseCreate(raw json.RawMessage) (Transcription, string) {
+	t, _, code := parseCreateVirou(raw)
+	return t, code
+}
+
+// parseCreateVirou é parseCreate dizendo também se a chave virou_nota veio
+// (o recomeço com base 0 sobre um ditado que a nuvem tem: sem a chave, um PC
+// anterior à N7, a ligação da nuvem fica).
+func parseCreateVirou(raw json.RawMessage) (Transcription, bool, string) {
+	t, obj, code := parseCreateObj(raw)
+	if code != "" {
+		return Transcription{}, false, code
+	}
+	_, present := obj["virou_nota"]
+	return t, present, ""
+}
+
+func parseCreateObj(raw json.RawMessage) (Transcription, map[string]json.RawMessage, string) {
 	obj, code := decodeObject(raw, createFields)
 	if code != "" {
-		return Transcription{}, code
+		return Transcription{}, nil, code
 	}
+	t, code := parseCreateFields(obj)
+	return t, obj, code
+}
+
+func parseCreateFields(obj map[string]json.RawMessage) (Transcription, string) {
 	var t Transcription
 	var ok bool
 	if t.SourcePlatform, ok = requiredText(obj, "source_platform", maxSourcePlatformLen, true); !ok {
@@ -262,6 +312,9 @@ func parseCreate(raw json.RawMessage) (Transcription, string) {
 		return Transcription{}, CodeInvalidField
 	}
 	if t.DeletedAt, ok = optionalTime(obj, "deleted_at"); !ok {
+		return Transcription{}, CodeInvalidField
+	}
+	if t.VirouNota, _, ok = optionalUUID(obj, "virou_nota"); !ok {
 		return Transcription{}, CodeInvalidField
 	}
 	return t, ""
@@ -308,6 +361,10 @@ func parsePatch(raw json.RawMessage) (patch, string) {
 			return patch{}, CodeInvalidField
 		}
 		p.hasChoice, p.choice, p.choiceAt = true, s, at
+	}
+	var ok bool
+	if p.virouNota, p.hasVirouNota, ok = optionalUUID(obj, "virou_nota"); !ok {
+		return patch{}, CodeInvalidField
 	}
 	return p, ""
 }

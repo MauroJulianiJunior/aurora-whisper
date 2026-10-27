@@ -48,6 +48,14 @@ type memUser struct {
 	learned   map[string]Learned
 	events    []Event
 	applied   map[string]memApplied
+	// As notas e os marcadores de nota (N7; memory_notas.go): as linhas, as
+	// lápides (pela chave noteTombKey, com o seq) e os eventos, à parte dos
+	// do ditado como a note_sync_events do Postgres. A ligação do ditado com a
+	// nota é o próprio Transcription.VirouNota.
+	notes      map[string]Note
+	labels     map[string]Label
+	noteTombs  map[string]int64
+	noteEvents []Event
 	// chavesDeIA são as linhas de ai_provider_keys, pelo provedor (ADR-021,
 	// C3a; chaves_ia.go). Nil até a primeira gravação.
 	chavesDeIA map[string]ChaveDeIA
@@ -119,12 +127,15 @@ func (s *MemoryStore) AddUser(userID string) {
 
 func newMemUser() *memUser {
 	return &memUser{
-		epoch:   NewUUIDv7(),
-		devices: make(map[string]bool),
-		items:   make(map[string]Transcription),
-		tombs:   make(map[string]memTomb),
-		learned: make(map[string]Learned),
-		applied: make(map[string]memApplied),
+		epoch:     NewUUIDv7(),
+		devices:   make(map[string]bool),
+		items:     make(map[string]Transcription),
+		tombs:     make(map[string]memTomb),
+		learned:   make(map[string]Learned),
+		applied:   make(map[string]memApplied),
+		notes:     make(map[string]Note),
+		labels:    make(map[string]Label),
+		noteTombs: make(map[string]int64),
 	}
 }
 
@@ -267,6 +278,11 @@ func (s *MemoryStore) List(_ context.Context, f ListFilter) (Page, error) {
 	if u, ok := s.users[f.UserID]; ok {
 		for _, t := range u.items {
 			if f.Trash != (t.DeletedAt != nil) {
+				continue
+			}
+			// O ditado que virou nota sai da listagem do histórico (N7): ele
+			// está na nota. O Get e o pull continuam o vendo.
+			if t.VirouNota != nil {
 				continue
 			}
 			if f.DeviceID != nil && (t.DeviceID == nil || *t.DeviceID != deviceID) {
@@ -597,6 +613,18 @@ func (s *MemoryStore) pushOne(a Actor, m Mutation, now time.Time) (Result, error
 		switch {
 		case code != "":
 			out = Rejected(m, code)
+		case m.EntityType == EntityNote || m.EntityType == EntityLabel:
+			// A nota e o marcador (N7) gravam a linha, a lápide e o evento
+			// deles mesmos (memory_notas.go).
+			var wrote bool
+			if m.EntityType == EntityNote {
+				out, wrote = u.pushNote(a, m, entityID, seq, now)
+			} else {
+				out, wrote = u.pushLabel(a, m, entityID, seq, now)
+			}
+			u.applied[mutationID] = memApplied{Applied: out.Record(m, a), at: Normalize(now)}
+			res = out.Result
+			return wrote, nil
 		case learned:
 			var curPtr *Learned
 			if cur, exists := u.learned[entityID]; exists {
@@ -673,8 +701,10 @@ func (s *MemoryStore) Pull(_ context.Context, userID string, afterSeq int64, lim
 			})
 		}
 	}
+	// As notas, os marcadores e as lápides deles (N7).
+	changes = append(changes, u.pullNotes(afterSeq)...)
 	sort.Slice(changes, func(i, j int) bool { return changes[i].Seq < changes[j].Seq })
-	resp := PullResponse{LastSeq: afterSeq, Epoch: u.epoch}
+	resp := PullResponse{LastSeq: afterSeq, Epoch: u.epoch, Entidades: EntidadesDoSync()}
 	n, more := CutPage(changes, limit, Change.TextBytes)
 	changes, resp.HasMore = changes[:n], more
 	if len(changes) > 0 {

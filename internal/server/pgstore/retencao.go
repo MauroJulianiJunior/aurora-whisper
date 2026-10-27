@@ -100,6 +100,17 @@ const (
 				AND NOT EXISTS (SELECT 1 FROM transcriptions t WHERE t.user_id = e.user_id AND t.last_seq = e.seq)
 				AND NOT EXISTS (SELECT 1 FROM learned_pairs l WHERE l.user_id = e.user_id AND l.last_seq = e.seq)
 			LIMIT $3)`
+	// Os eventos das notas e dos marcadores (N7; a 0024), pela mesma regra: o
+	// órfão vencido sai, e o que é o last_seq de uma nota ou de um marcador
+	// vivo fica. O índice da escolha é o idx_note_sync_events_changed_at. As
+	// lápides das notas nunca vencem: a arrumação não as toca.
+	sqlArrumarEventosDasNotas = `DELETE FROM note_sync_events
+		WHERE user_id = $1 AND seq IN (
+			SELECT e.seq FROM note_sync_events e
+			WHERE e.user_id = $1 AND e.changed_at <= $2
+				AND NOT EXISTS (SELECT 1 FROM notes n WHERE n.user_id = e.user_id AND n.last_seq = e.seq)
+				AND NOT EXISTS (SELECT 1 FROM labels b WHERE b.user_id = e.user_id AND b.last_seq = e.seq)
+			LIMIT $3)`
 	sqlArrumarMutacoes = `DELETE FROM applied_mutations
 		WHERE user_id = $1 AND mutation_id IN (
 			SELECT a.mutation_id FROM applied_mutations a
@@ -264,6 +275,7 @@ func (s *Store) arrumar(ctx context.Context, userID string, now time.Time) (clou
 		conta   *int64
 	}{
 		{"arrumar os eventos", sqlArrumarEventos, cloudstore.CorteDosEventos(now), &r.Eventos},
+		{"arrumar os eventos das notas", sqlArrumarEventosDasNotas, cloudstore.CorteDosEventos(now), &r.Eventos},
 		{"arrumar as mutações", sqlArrumarMutacoes, cloudstore.CorteDasMutacoes(now), &r.Mutacoes},
 	} {
 		for {

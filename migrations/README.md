@@ -131,6 +131,41 @@ põe dados nas tabelas de antes (inclusive uma chave da IA cifrada), roda a 0018
 linha de antes mudou. O "apagar meus dados" apaga as três tabelas do ditado no celular
 (`TestSQL_ApagarMeusDadosCobreToda_TabelaComUserID` falha se uma tabela com `user_id` ficar de fora).
 
+## As notas (ADR-022, N7)
+
+O sync das notas e dos marcadores de nota. Pela mesma regra do ditado no celular: **só migration nova, só
+aditiva**, uma tabela por arquivo, nenhuma tabela anterior muda.
+
+| Arquivo | Tabela | O quê |
+|---|---|---|
+| 0020 | `labels` | o marcador de nota: o nome (1 a 50 caracteres, já limpo; **sem** nome único: dois PCs podem criar "Mercado" sem rede, e quem resolve é o PC), as datas, a versão e o `last_seq` |
+| 0021 | `notes` | a nota: título (até 1 KiB) e corpo (até 64 KiB), a cor (um dos 8 nomes), fixada, arquivada, a posição do índice fracionário (`COLLATE "C"`: a ordem dos bytes, a mesma do Go e do PC), o ditado de origem, a lixeira, as versões do conteúdo e da lixeira com o aparelho de cada uma, e o selo (título, corpo, aparelho e data, juntos ou nenhum). Sem a retenção de 6 meses |
+| 0022 | `note_labels` | os marcadores de cada nota; saem com a nota (`ON DELETE CASCADE`), e **sem** chave estrangeira para `labels` (o marcador pode chegar depois da nota) |
+| 0023 | `note_tombstones` | as lápides da nota e do marcador; **nunca vencem** (a nota não tem a janela de 6 meses) |
+| 0024 | `note_sync_events` | o log de eventos das notas e dos marcadores, com o seq do mesmo contador do usuário |
+| 0025 | `transcription_note_links` | o `virou_nota` do ditado: no máximo uma nota por ditado; sai com o ditado (`ON DELETE CASCADE`, a retenção continua valendo) |
+
+**Por que `note_tombstones` e `note_sync_events` são tabelas à parte**, e não a `tombstones` (0015) e a
+`sync_events` (0008): o `CHECK` do `entity_type` delas só aceita os tipos de antes, e as duas já estão em
+produção. Alargar o `CHECK` exige um `ALTER`, que esta convenção não deixa (só `CREATE TABLE` e `CREATE
+INDEX`). Pelo mesmo motivo o `virou_nota` é uma tabela, e não uma coluna da `transcriptions`. O pull junta as
+listas por seq (`internal/server/pgstore`, `mergePage`).
+
+`schema_test.go` lê as seis (as colunas, os `CHECK`s, as chaves, os índices, as quatro colunas de aparelho
+com a chave composta, nenhuma coluna de áudio); o `internal/server/pgstore` confere as colunas, as cores e a
+expressão da posição contra o Go (`TestSQL_ANotaEOMarcadorUsamAsColunasDas0020E0021`,
+`TestSQL_AsListasDa0021SaoAsDoGo`, `TestSQL_AsConsultasDasNotas`). Com um Postgres: cada `CHECK` e chave
+(`TestPostgres_Notas`, `TestPostgres_MarcadoresDeNota`, `TestPostgres_LapidesEEventosDasNotas`,
+`TestPostgres_LigacaoDoDitadoComANota`, a ordem da posição em `COLLATE "C"` inclusive), e
+`TestPostgres_AsMigrationsDasNotasAplicamSobreUmBancoComDados` aplica as 0001 a 0019, põe dados nas tabelas de
+antes, roda as 0020 a 0025 e prova que nenhuma linha de antes mudou. O "apagar meus dados" apaga as seis
+(`TestSQL_ApagarMeusDadosCobreToda_TabelaComUserID`), e o job de retenção arruma o evento órfão da
+`note_sync_events` pela mesma regra da `sync_events` (o evento que é o `last_seq` de uma nota ou de um marcador
+vivo fica).
+
+**Estado em 26-out-2026: nada da N7 rodou contra um Postgres** (o Docker estava parado na máquina em que foi
+escrita). Os testes com Postgres compilam e pulam; a primeira execução real é a do Mauro.
+
 ## Como rodar o `migrate`
 
 É um **subcomando do binário do servidor** (escolha da F1; a ADR e o `05` dizem só "comando próprio do

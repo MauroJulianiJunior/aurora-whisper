@@ -385,6 +385,14 @@ func (s *MemoryStore) ApagarDadosDaConta(_ context.Context, userID, keepSessionI
 	u.learned = make(map[string]Learned)
 	u.events = nil
 	u.applied = make(map[string]memApplied)
+	// As notas, os marcadores, as lápides e os eventos deles (N7): os DELETE
+	// FROM notes, note_labels, labels, note_tombstones e note_sync_events do
+	// Postgres. A ligação do ditado com a nota (transcription_note_links) sai
+	// com os ditados.
+	u.notes = make(map[string]Note)
+	u.labels = make(map[string]Label)
+	u.noteTombs = make(map[string]int64)
+	u.noteEvents = nil
 	// As chaves da IA (ADR-021, C3a): o DELETE FROM ai_provider_keys do
 	// Postgres.
 	u.chavesDeIA = nil

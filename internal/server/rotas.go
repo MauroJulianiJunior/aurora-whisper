@@ -110,6 +110,12 @@ func (c *Cloud) tabela() []rota {
 		{"GET /api/v1/learned", AcessoSessao, handleLearnedList(st)},
 		{"POST /api/v1/learned/undo", AcessoSessao, handleLearnedUndo(st, c.now)},
 
+		// As notas e os marcadores de nota no celular (ADR-022, N7;
+		// notas_routes.go): só ler, só com a sessão, como o CRUD. O PC lê e
+		// escreve pelo sync.
+		{"GET /api/v1/notes", AcessoSessao, handleNotesList(st)},
+		{"GET /api/v1/labels", AcessoSessao, handleLabelsList(st)},
+
 		{"POST /api/v1/sync/push", AcessoAparelho, c.handlePush},
 		{"GET /api/v1/sync/pull", AcessoAparelho, handleStorePull(st)},
 
