@@ -24,7 +24,15 @@ import {
 } from './corpo'
 // Os casos da regra que o Agent também roda (ItensPorRegra, internal/resolver):
 // as duas regras não podem divergir.
-import casosDaRegra from '../../../testdata/notas-lista/regra.json'
+// Lidos pelo import.meta.glob, não por import: o build da imagem da nuvem
+// (deploy/Dockerfile) só leva o web/, e um import estático faria o tsc dele
+// exigir o arquivo. O teste abaixo confere que o arquivo foi achado.
+type CasoDaRegra = { texto: string; minimo: number; itens: string[] }
+const arquivosDaRegra = import.meta.glob<{ casos: CasoDaRegra[] }>('../../../testdata/notas-lista/regra.json', {
+  eager: true,
+  import: 'default',
+})
+const casosDaRegra = Object.values(arquivosDaRegra)[0] ?? { casos: [] }
 
 // O que importa de uma linha, sem a chave (que só existe para a tela).
 const forma = (ls: Linha[]) => ls.map(({ tipo, texto, feito }) => ({ tipo, texto, feito }))
@@ -386,6 +394,9 @@ describe('itensDaEnumeracao', () => {
 })
 
 describe('a regra é a mesma do Agent (testdata/notas-lista/regra.json)', () => {
+  it('acha o arquivo dos casos', () => {
+    expect(casosDaRegra.casos.length).toBeGreaterThan(0)
+  })
   it.each(casosDaRegra.casos.map((c) => [c.texto, c.minimo, c.itens] as const))('%s (mínimo %i)', (texto, minimo, itens) => {
     expect(itensDaEnumeracao(texto, minimo)).toEqual(itens)
   })
