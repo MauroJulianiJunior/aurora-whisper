@@ -1432,6 +1432,38 @@ topo seguem com a busca de sempre.
 **Restaurar** e **Excluir para sempre**, que pergunta na própria linha, sem janela: "Excluir para sempre? Não
 dá para desfazer.", com **Excluir** (risco) e **Cancelar**, o foco já no Cancelar e Esc cancelando.
 
+**Ordem manual (ADR-022, N2b).** As notas se reorganizam como no Keep, na grade, na lista e nos detalhes.
+A grade deixou de ser colunas de CSS: o painel a monta em JS, **na ordem de leitura** (cada cartão na coluna
+mais curta; a esquerda no empate), com as colunas de sempre (1 a 6 no PC, 1 a 3 no celular), as seções
+FIXADAS e OUTRAS e o mesmo visual. A ordem de cada seção é a do Agent (`posicao`); a nota nova entra no topo,
+**editar não move**, fixar e desafixar levam ao topo do grupo de destino.
+- **Mouse e caneta.** Passou de 5 px com o botão apertado, o cartão levanta (cresce um pouco, sombra, cursor
+  `grabbing`) e segue o ponteiro; os outros se afastam com `transform` suave e uma **vaga** de contorno
+  tracejado mostra onde ele cai. A vaga é a mais próxima do centro do cartão. Perto da borda da janela a
+  página rola sozinha. **Esc** cancela. Menos que 5 px é clique e abre a nota; o clique que sobra depois de
+  soltar não abre nada. Os botões do cartão (fixar, cor, Mais) não começam arrasto.
+- **Toque.** Segurar ~400 ms levanta o cartão (vibração curta onde o aparelho tem); mexer antes disso é a
+  rolagem da página. (A conferência num celular de verdade é da N8.)
+- **Só dentro do grupo.** Uma fixada não passa para as outras, nem o contrário: a vaga só existe na seção do
+  cartão.
+- **Teclado.** `Alt` + seta, com o foco no cartão, move uma vaga dentro do grupo: na lista e nos detalhes,
+  `↑` e `↓`; na grade, `←` e `→` uma vaga, `↑` e `↓` uma linha (o número de colunas). Na ponta, o cartão
+  fica e o aviso diz "Já está na posição 1 de 8.". Ao mover, a região viva (`aria-live="polite"`) diz
+  "Movida para a posição 3 de 8." e o foco continua no cartão. Sem `Alt`, ou com `Shift`, `Ctrl` ou `Meta` junto,
+  a seta é a de sempre. `Alt` + `←` e `→` do navegador (voltar e avançar) ficam presos só enquanto o
+  foco está num cartão.
+- **Quando fica desligado.** Só vale em **Notas**, sem filtro de marcador e sem busca. No filtro, na busca
+  (Ver todas as notas) e no Arquivo, arrastar com o mouse e `Alt` + seta mostram o motivo na pílula ("Para
+  reorganizar, saia do filtro de marcador: volte para “Notas”.", "Para reorganizar, limpe a busca.", "O
+  Arquivo fica na ordem em que as notas foram arquivadas."); o toque nem levanta o cartão. A Lixeira não
+  reorganiza.
+- **Otimista.** Soltar muda a lista na hora e pede `POST /api/notas/{id}/mover`. Se o Agent recusa, a ordem de
+  antes volta, a pílula diz o motivo ("A lista das notas mudou em outra aba. Li de novo; repita se ainda
+  quiser." no 409; "Não deu certo: …" no resto) e a lista é lida de novo. Os pedidos de mover e de editar vão
+  numa fila, um de cada vez, e a edição usa a versão que o mover devolveu: mover uma nota e logo fixá-la não dá
+  conflito de versão.
+- **Movimento reduzido.** Com `prefers-reduced-motion`, nenhum cartão anima: o cartão salta para o lugar.
+
 **Vazios.** Sem nota alguma, a `Aurora` com a frase de apoio; filtro, Arquivo ou Lixeira sem nada têm a
 sua frase.
 
@@ -1445,7 +1477,8 @@ e validade** (os colchetes da janela, a caixa marcada); o vermelho só no risco,
 
 **Verificação manual (do Mauro):** `docs/teste-manual-notas-n2.md` (ditar dentro da nota e o Enter
 digitado, no Agent de verdade, e o olhar no navegador); `docs/teste-manual-notas-n6.md` (copiar para o
-WhatsApp Web e a busca única).
+WhatsApp Web e a busca única); `docs/teste-manual-notas-ordem.md` (arrastar, o teclado e a ordem que
+fica depois de reabrir o painel).
 
 ## Local x cloud
 Local: Agent runtime, mic, hotkey, modelos, logs locais.
