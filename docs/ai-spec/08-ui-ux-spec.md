@@ -1286,13 +1286,31 @@ nuvem não os tem, e o `bundle.test.ts` confere nos dois sentidos. Prévia: `doc
   aparece na tela: o aviso sai quando o foco sai da nota, quando a janela perde o foco ou quando a nota
   fecha. A caixa "Criar uma nota…" que fecha vazia devolve ao Histórico o que foi ditado nela.
 
-## Aba Notas (ADR-022, N2)
-Só no painel do PC (a Local API). O componente entra pelo `Ambiente` (`Ambiente.Notas`); o painel da nuvem
-não importa nada dele, e o `bundle.test.ts` confere nos dois sentidos. A fonte da verdade é o código
+## Aba Notas (ADR-022, N2; no celular desde a N8)
+No painel do PC (a Local API) e, desde a N8, no app do celular (a `/api/v1`, "Notas no celular", abaixo).
+O componente entra pelo `Ambiente` (`Ambiente.Notas`), com o cliente de cada lado; o `bundle.test.ts`
+confere que as rotas do Agent não entram no build da nuvem. A fonte da verdade é o código
 (`web/src/notas/`); a prévia aprovada pelo Mauro é `docs/notas-previa-n2.html`. O que não é desta fase:
 celular (N8), imagens (N10); converter trecho chegou na N5, o gatilho de voz na N9 e o sync na N7 (a
 nota com selo de conflito mostra "Versão em conflito" no cartão e, na janela, a outra versão com "Manter
 esta" e "Usar a outra"; ADR-022, "Decisões da N7").
+
+**Notas no celular (N8; a prévia aprovada é `docs/notas-previa-n8.html`).** A mesma aba, com duas colunas
+por padrão (de 1 a 3). O que muda:
+- **Na aba Notas, o microfone do lado da busca sai**, e o botão verde **"Ditar para nota"** fica embaixo, no
+  meio, ao alcance do polegar. Gravando, ele vira a faixa escura "Para nota", com a onda, o tempo, o
+  Cancelar e o parar; depois, o aviso do destino ("**Lista do sábado** +2" ou "**Nota nova**") com Abrir e
+  Desfazer, acima do botão. No Histórico, o microfone fica como sempre. A busca da aba é "Buscar nas notas"
+  (a busca única da N6 é só do PC; ADR-022, "Decisões da N8").
+- **A nota aberta** tem, na barra de baixo, Formatar, Cor, Marcadores, Mais e o **microfone** ("Ditar aqui"),
+  que escreve onde o cursor estava; sem o botão da imagem, e com o Arquivar dentro do Mais. A lista de
+  marcar tem a linha "+ Item" no fim dos itens abertos.
+- **Sem rede:** a faixa "Sem rede · N mudanças esperando" no alto da aba; o "Criar uma nota…" e o "Ditar
+  para nota" apagados; o cartão com mudança guardada diz "↑ esperando a rede"; na nota aberta, o título e
+  as linhas que já estavam ficam só de leitura (dá para marcar, desmarcar e escrever o item novo), os botões
+  apagados, e a frase "Sem rede: dá para marcar, desmarcar e acrescentar item. O resto volta com a rede."
+- **Arrastar com o dedo:** segurar meio segundo levanta a nota; passar o dedo sem segurar rola a tela (o
+  gesto da N2b).
 
 **Onde fica e a largura.** Entre **Histórico** e **Lixeira**. Com a aba aberta o painel usa a largura da
 janela (até 96 rem); as outras telas seguem em 46 rem. O título vira "Notas". A busca do topo é a busca

@@ -104,6 +104,10 @@ Quando a política de esforço desce um degrau (`modelo_incompativel`), sai uma 
   usuário do dicionário.** O servidor não loga o aprendido além da linha de acesso de sempre (a rota
   e o status). As linhas e os campos estão no `06-api-contract.md`.
 - `sync_mutations_total{status}` passa a ter também `gone`.
+- **As notas no celular (ADR-022, N8; 27-out-2026):** as rotas de escrita das notas registram só o padrão
+  da rota e o status (o `POST /notes`, a contagem `itens`). A linha `retenção` do job ganha o campo
+  **`notas`**: quantas notas da lixeira o expurgo de 30 dias apagou de vez na rodada (somadas de todos os
+  usuários). Nada de título, corpo, nome nem id.
 - **Notas e marcadores no sync (ADR-022, N7; 26-out-2026):** só contagens, nada textual. No Agent, as
   decisões do push e do pull sobre notas e marcadores de nota são contadas **com os mesmos tipos** do
   ditado (`aplicado`, `mesclado`, `conflito`, `recusado`, `reenviar`, `apagado`, `recebido`, `pulado`, `eco`,
