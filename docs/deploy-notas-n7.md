@@ -3,7 +3,7 @@
 **O que é e por que:** a fase N7 (ADR-022, "Sync") leva as notas e os marcadores do PC para a nuvem e
 de volta, e faz a nuvem esconder do histórico o ditado que virou nota. Para isso a nuvem ganha seis
 tabelas novas (as migrations `0020` a `0025`) e um servidor novo. Este roteiro é o que **você** roda;
-eu não rodo nada no servidor nem no Docker. Ele usa os mesmos scripts do `docs/deploy-f11.md` (o
+eu não rodo nada no servidor. Ele usa os mesmos scripts do `docs/deploy-f11.md` (o
 `deploy-teste.ps1`, o `enviar-para-servidor.ps1` e o `subir.sh`), na mesma VPS que já está no ar.
 
 **Pontos de parada (são seus):** o backup antes, as migrations `0020` a `0025` em produção, a imagem
@@ -49,25 +49,10 @@ powershell -ExecutionPolicy Bypass -File C:\Desenvolvimento\aurora-whisper\scrip
 **Deve aparecer**, no fim: **"OK: o deploy passou no Docker do PC"**. Se aparecer **FALHOU**, o script
 já derrubou tudo: me mande a linha do FALHOU e as de log que ele mostrou. Nada foi para a VPS.
 
-**Os testes do Postgres (opcional, mas recomendado, no PC):** os testes das tabelas novas contra um
-Postgres de verdade não rodaram na minha máquina (o Docker estava parado). Para rodá-los:
-
-```powershell
-powershell -File C:\Desenvolvimento\aurora-whisper\scripts\postgres-de-teste.ps1
-```
-
-Cole a linha `$env:AURORA_TEST_POSTGRES_URL = '...'` que ele imprime, e então:
-
-```powershell
-go -C C:\Desenvolvimento\aurora-whisper test ./migrations/ ./internal/server/... -count=1
-```
-
-```powershell
-powershell -File C:\Desenvolvimento\aurora-whisper\scripts\postgres-de-teste.ps1 -Parar
-```
-
-**Deve aparecer:** `ok` em cada pacote. Um `FAIL` aqui é ponto de parada: me mande o nome do teste e as
-linhas dele, antes do passo 3.
+**Os testes do Postgres já rodaram (26-out-2026):** com o Docker aberto, o Claude rodou
+`go test ./migrations/ ./internal/server/... ./cmd/...` contra o Postgres de teste do
+`postgres-de-teste.ps1`: tudo `ok`, nenhum teste pulado (dois testes desatualizados foram corrigidos no
+commit `d866526`; o código que vai para a nuvem não mudou). Não precisa rodar de novo.
 
 ## 3. A imagem nova para a VPS
 
@@ -178,6 +163,6 @@ nota.
 ## O que me contar
 
 1. A linha do backup do passo 1.
-2. Se o `deploy-teste.ps1` passou, e o resultado dos testes do Postgres (se você os rodou).
+2. Se o `deploy-teste.ps1` passou.
 3. A lista das migrations pendentes e os `OK:` (ou o FALHOU) do `subir.sh`.
 4. As três contagens do passo 5 e a do passo 6.
