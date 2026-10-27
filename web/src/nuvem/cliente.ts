@@ -22,6 +22,7 @@ import {
   pedir,
 } from '../api'
 import { type Provedor, type ProvedorDeVoz, type ProvedorDoPolish, ehProvedor } from './ditar/aviso'
+import type { NotaDaNuvem } from './notas/formato'
 import {
   type Aceite,
   type ChaveGuardada,
@@ -120,6 +121,21 @@ export interface PedidoDeDitado {
   duracaoMs: number
   // falaMs: quanto do áudio o app achou que era fala (decisão M).
   falaMs: number
+  // nota: para onde vai o ditado (ADR-022, N8): "para-nota" é o "Ditar para
+  // nota" (a nuvem escolhe a nota pelo título); o id de uma nota é o microfone
+  // de dentro dela (o app escreve o texto no cursor). Sem ela, o histórico. Vai
+  // no cabeçalho Ditado-Nota.
+  nota?: string
+}
+
+// DestinoDoDitado é para onde o ditado foi, quando foi para uma nota (N8): a
+// nota, se ela nasceu do ditado, quantas linhas entraram e, no acrescentar, o
+// corpo de antes (o Desfazer o manda de volta).
+export interface DestinoDoDitado {
+  nota_id: string
+  nova: boolean
+  linhas: number
+  corpo_antes?: string
 }
 
 // DitadoGravado é a resposta de POST /api/v1/dictations: o ditado como ficou
@@ -130,6 +146,10 @@ export interface PedidoDeDitado {
 export interface DitadoGravado {
   ditado: Ditado
   aviso?: string
+  // nota e destino: só o ditado que foi para uma nota (N8). A nota vem como a
+  // nuvem a manda (nuvem/notas/formato.ts a traduz).
+  nota?: NotaDaNuvem
+  destino?: DestinoDoDitado
 }
 
 export interface ClienteNuvem extends ClienteDoHistorico {
@@ -137,6 +157,11 @@ export interface ClienteNuvem extends ClienteDoHistorico {
   // pelo Smart (e pelo Polish, se ligado) e grava o ditado (ADR-021). Os erros
   // chegam em ErroDaApi.codigo; o sinal é o prazo de 90 s do celular.
   ditar(pedido: PedidoDeDitado, sinal?: AbortSignal): Promise<DitadoGravado>
+  // desfazerDitadoNaNota é o Desfazer do aviso do "Ditar para nota" (N8; POST
+  // /transcriptions/{id}/undo-note): o ditado volta ao histórico, e a nota ao que
+  // era, se ninguém mexeu nela desde o ditado (a versão e o corpo de antes vieram
+  // na resposta do ditado). nota_apagada: a nota nova saiu.
+  desfazerDitadoNaNota(ditadoId: string, versao: number, corpoAntes?: string): Promise<{ nota_apagada: boolean }>
   // O ditado pelo celular na conta (ADR-021, "O aceite e as preferências" e "As
   // chaves"; o contrato é o do 06-api-contract.md, fixado pela C3a e pela C3b).
   // Os erros chegam em ErroDaApi.codigo (SEM_ACEITE, AVISO_DESATUALIZADO...). A
@@ -351,7 +376,7 @@ export function criarClienteNuvem(buscar: Buscador = buscadorPadrao): ClienteNuv
       const r = await pedir(buscar, doItem(id), comJson('PATCH', { base_version: versao, resolver_conflito: escolha }))
       return doServidor((await r.json()) as ItemDaNuvem)
     },
-    async ditar({ id, audio, duracaoMs, falaMs }, sinal) {
+    async ditar({ id, audio, duracaoMs, falaMs, nota }, sinal) {
       // O corpo é o áudio cru (nunca multipart nem JSON), e o que o app mediu
       // vai em cabeçalhos. O 409 não é versão: chega como ErroDaApi, com o
       // código. Nada daqui vai à URL.
@@ -365,16 +390,28 @@ export function criarClienteNuvem(buscar: Buscador = buscadorPadrao): ClienteNuv
             'Ditado-Id': id,
             'Ditado-Duracao-Ms': String(Math.round(duracaoMs)),
             'Ditado-Fala-Ms': String(Math.round(falaMs)),
+            ...(nota ? { 'Ditado-Nota': nota } : {}),
           },
           body: audio,
           signal: sinal,
         }),
         false,
       )
-      const { aviso, ...item } = (await r.json()) as ItemDaNuvem & { aviso?: unknown }
+      const { aviso, nota: daNota, destino, ...item } = (await r.json()) as ItemDaNuvem & { aviso?: unknown; nota?: NotaDaNuvem; destino?: DestinoDoDitado }
       const gravado: DitadoGravado = { ditado: doServidor(item) }
       if (typeof aviso === 'string' && aviso !== '') gravado.aviso = aviso
+      if (daNota && typeof daNota === 'object') gravado.nota = daNota
+      if (destino && typeof destino === 'object' && typeof destino.nota_id === 'string') gravado.destino = destino
       return gravado
+    },
+    async desfazerDitadoNaNota(ditadoId, versao, corpoAntes) {
+      const corpo: Record<string, unknown> = { versao }
+      if (corpoAntes !== undefined) corpo.corpo_antes = corpoAntes
+      // O 409 aqui é "o ditado já não está numa nota" (outro aparelho desfez):
+      // chega como ErroDaApi, com a frase.
+      const r = await pedir(buscar, `${doItem(ditadoId)}/undo-note`, comJson('POST', corpo), false)
+      const { nota_apagada } = (await r.json()) as { nota_apagada?: unknown }
+      return { nota_apagada: nota_apagada === true }
     },
     async estadoDoDitado() {
       const r = await pedir(buscar, '/api/v1/dictation', daOrigem(), false)

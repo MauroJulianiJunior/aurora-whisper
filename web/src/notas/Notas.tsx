@@ -1,4 +1,4 @@
-import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { Conflito, ErroDaApi, problemaDe } from '../api'
 import { Aurora } from '../Aurora'
 import { type AcoesDaNota, CartaoDaNota, LinhaDaNota, TabelaDeNotas } from './CartaoDaNota'
@@ -12,7 +12,18 @@ import { acharPorNome, limparNome, ordenarPorNome } from './marcadores'
 import { NotaNaLixeira } from './NotaNaLixeira'
 import { aplicarOrdem, fraseNaPonta, frasePosicao, moverNaLista, vizinhasDe } from './ordem'
 import { type FormaDeVer, FORMAS, gravarColunas, gravarForma, lerColunas, lerForma, limitar, limitesDeColunas } from './preferencias'
-import type { ClienteDeNotas, CorDaNota, FiltroDasNotas, Marcador, Nota, VistaDasNotas } from './tipos'
+import {
+  type ChegadaNaNota,
+  type ClienteDeNotas,
+  type CorDaNota,
+  type EstadoDaRede,
+  type FiltroDasNotas,
+  type Marcador,
+  type Nota,
+  type NotasNoCelular,
+  SoComRede,
+  type VistaDasNotas,
+} from './tipos'
 import { type OrigemDoMovimento, type ConfigDaOrdem } from './useOrdemManual'
 import { useTelaEstreita } from './useTelaEstreita'
 
@@ -25,14 +36,36 @@ interface Props {
   // busca: o texto do campo de busca do Painel (já com a espera).
   busca: string
   aoPerderLigacao(e: unknown): void
-  // avisar: a pílula do Painel; desfazer, quando existe, vira o botão e o Ctrl+Z.
-  avisar(texto: ReactNode, desfazer?: () => void): void
+  // avisar: a pílula do Painel; desfazer, quando existe, vira o botão e o Ctrl+Z;
+  // abrir, o botão "Abrir" (o aviso do "Ditar para nota" no celular).
+  avisar(texto: ReactNode, desfazer?: () => void, abrir?: () => void): void
   // abrirNota: o "Abrir" do aviso "Virou nota" (N3): a nota que a janela abre
   // assim que a aba aparece. vez sobe a cada pedido.
   abrirNota?: { id: string; vez: number } | null
   // oculta e aoTerminarNota: a busca única (N6) está à vista; ver PropsDasNotas.
   oculta?: boolean
   aoTerminarNota?(): void
+  // celular: o que só o app do celular tem (N8): a rede e a fila das mudanças
+  // feitas sem rede, o "Ditar para nota" embaixo e o microfone dentro da nota.
+  // O PC não passa nada.
+  celular?: NotasNoCelular
+  // abrirConfiguracoes leva às Configurações do ditado (a chave que falta para
+  // o "Ditar para nota" no celular).
+  abrirConfiguracoes?(): void
+}
+
+// Sem o celular, a rede é sempre a de quem tem rede, e nada espera.
+const redeDoPC: EstadoDaRede = { semRede: false, esperando: new Set() }
+const semAssinar = () => () => {}
+const lerRedeDoPC = () => redeDoPC
+
+// tituloCurto é o título como o aviso do "Ditar para nota" o mostra: numa
+// linha, cortado com "…" antes de 40 letras, para o "+N" nunca sumir (a pílula
+// do PC faz o mesmo, internal/notas.TituloCurto).
+function tituloCurto(titulo: string): string {
+  const t = titulo.split(/\s+/).filter(Boolean).join(' ')
+  const letras = Array.from(t)
+  return letras.length > 40 ? `${letras.slice(0, 39).join('').trimEnd()}…` : t
 }
 
 // O que a tela mostra: a lista da consulta, e a lista das notas ativas inteira
@@ -69,7 +102,17 @@ function vizinhoDe(ordenados: Nota[], id: string): string | null {
 // fileira de marcadores com as formas de ver, a grade (ou a lista, ou os
 // detalhes), a nota aberta numa janela, o Arquivo e a Lixeira. Só o PC o tem
 // (ambienteLocal.tsx): o painel da nuvem não importa este arquivo.
-export function Notas({ cliente, busca, aoPerderLigacao: aoPerderLigacaoDoPainel, avisar, abrirNota, oculta, aoTerminarNota }: Props) {
+export function Notas({
+  cliente,
+  busca,
+  aoPerderLigacao: aoPerderLigacaoDoPainel,
+  avisar,
+  abrirNota,
+  oculta,
+  aoTerminarNota,
+  celular,
+  abrirConfiguracoes,
+}: Props) {
   // O Painel passa uma função nova a cada render: a daqui é estável, e lê a
   // do momento (senão cada render do Painel leria a lista de novo).
   const ligacao = useRef(aoPerderLigacaoDoPainel)
@@ -107,6 +150,20 @@ export function Notas({ cliente, busca, aoPerderLigacao: aoPerderLigacaoDoPainel
 
   const consulta = `${vista}\u0000${marcador ?? ''}\u0000${busca}`
   const recarregar = useCallback(() => setRecarga((n) => n + 1), [])
+  // A rede e a fila do celular (N8, E4). A volta da rede, e cada mudança que
+  // sobe, leem a lista de novo: o "esperando a rede" sai, e a mescla aparece.
+  const rede = useSyncExternalStore(celular?.rede.assinar ?? semAssinar, celular?.rede.estado ?? lerRedeDoPC)
+  const semRede = rede.semRede
+  const nEsperando = rede.esperando.size
+  // Os avisos da fila (o selo de uma nota que mudou nos dois lados, a recusa que
+  // virou nota nova) vão para a pílula.
+  useEffect(() => celular?.rede.aoAvisar?.((texto) => avisar(texto)), [celular, avisar])
+  const redeVista = useRef({ semRede, nEsperando })
+  useEffect(() => {
+    const antes = redeVista.current
+    redeVista.current = { semRede, nEsperando }
+    if (antes.semRede !== semRede || antes.nEsperando !== nEsperando) recarregar()
+  }, [semRede, nEsperando, recarregar])
 
   useEffect(() => {
     const ctrl = new AbortController()
@@ -200,6 +257,7 @@ export function Notas({ cliente, busca, aoPerderLigacao: aoPerderLigacaoDoPainel
 
   const falhar = useCallback(
     (e: unknown) => {
+      if (e instanceof SoComRede) return avisar(e.message)
       if (problemaDe(e)) aoPerderLigacao(e)
       else avisar(`Não deu certo: ${mensagemDe(e)}`)
     },
@@ -434,6 +492,35 @@ export function Notas({ cliente, busca, aoPerderLigacao: aoPerderLigacaoDoPainel
     lixeira: (nota) => void paraALixeira(nota),
   }
 
+  // chegouNaNota é o "Ditar para nota" do celular (N8): a nota entra na lista
+  // (a nova no topo; a de destino, trocada), e o aviso diz para onde foi, com
+  // Abrir e Desfazer.
+  function chegouNaNota(c: ChegadaNaNota) {
+    if (c.nova) mudarItens((itens) => (vista === 'ativas' && !marcador && !busca ? [c.nota, ...itens.filter((n) => n.id !== c.nota.id)] : itens))
+    else trocar(c.nota)
+    recarregar()
+    const texto = c.nova ? (
+      <strong>Nota nova</strong>
+    ) : (
+      <>
+        <strong>{tituloCurto(c.nota.titulo)}</strong> <span className="mais-n">+{c.linhas}</span>
+      </>
+    )
+    avisar(
+      texto,
+      () => {
+        c.desfazer().then(
+          (r) => {
+            recarregar()
+            avisar(r.nota_apagada ? 'Ditado de volta ao histórico.' : 'Ditado de volta ao histórico. A nota ficou, porque mudou depois do ditado.')
+          },
+          (e: unknown) => falhar(e),
+        )
+      },
+      () => setAberta(c.nota),
+    )
+  }
+
   function terminou(fim: FimDaNota) {
     setAberta(null)
     aoTerminarNota?.()
@@ -593,13 +680,20 @@ export function Notas({ cliente, busca, aoPerderLigacao: aoPerderLigacaoDoPainel
   const anuncio = total === null ? '' : total === 1 ? '1 nota.' : `${total} notas.`
 
   return (
-    <div className="notas" ref={raiz} data-oculta={oculta ? '' : undefined}>
+    <div className={celular ? 'notas no-celular' : 'notas'} ref={raiz} data-oculta={oculta ? '' : undefined}>
       <p className="so-leitor anuncio" role="status">
         {anuncio}
       </p>
       <p className="so-leitor" role="status" aria-live="polite" data-ordem>
         {anuncioDaOrdem}
       </p>
+
+      {celular && semRede && (
+        <p className="faixa-rede" role="status">
+          <span className="bolinha" aria-hidden="true" />
+          Sem rede{nEsperando > 0 && ` · ${nEsperando} ${nEsperando === 1 ? 'mudança esperando' : 'mudanças esperando'}`}
+        </p>
+      )}
 
       <div className="barra-de-notas">
         <div className="filtros" role="group" aria-label="Marcadores">
@@ -653,6 +747,8 @@ export function Notas({ cliente, busca, aoPerderLigacao: aoPerderLigacaoDoPainel
       {vista === 'ativas' && (
         <CriarNota
           cliente={cliente}
+          desligado={semRede}
+          celular={Boolean(celular)}
           aoCriar={(nota) => {
             mudarItens((itens) => (marcador || busca ? itens : [nota, ...itens]))
             if (marcador || busca) avisar('Nota criada.')
@@ -675,6 +771,17 @@ export function Notas({ cliente, busca, aoPerderLigacao: aoPerderLigacaoDoPainel
           avisar={avisar}
           aoPerderLigacao={aoPerderLigacao}
           aoTerminar={terminou}
+          celular={celular && { semRede, DitarNaNota: celular.DitarNaNota }}
+        />
+      )}
+
+      {celular && !oculta && vista !== 'lixeira' && (
+        <celular.DitarParaNota
+          desligado={semRede}
+          aoChegar={chegouNaNota}
+          avisar={avisar}
+          aoPerderLigacao={aoPerderLigacao}
+          abrirConfiguracoes={abrirConfiguracoes}
         />
       )}
 

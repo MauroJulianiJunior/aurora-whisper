@@ -3,12 +3,14 @@ import {
   type Foco,
   type Linha,
   type TipoDaLinha,
+  acrescentarItem,
   apagarMarcados,
   converter,
   desmarcarTudo,
   ehLista,
   escreverCorpo,
   garantirUma,
+  inserirDitado,
   lerCorpo,
   normalizarMarcados,
   separarEmItens,
@@ -165,6 +167,32 @@ export function useEditorDeLinhas(corpoInicial: string) {
     setSeparacao(null)
   }
 
+  // O cursor (N8): a linha e a posição onde ele esteve por último, que o
+  // EditorDeLinhas anota a cada mudança de seleção. O microfone de dentro da
+  // nota fixa esse lugar quando começa a gravar (marcarLugarDoDitado), e o texto
+  // que chega segundos depois entra ali (inserirDitadoNoCursor), mesmo que a
+  // pessoa tenha tocado em outro lugar no meio.
+  const cursor = useRef<{ chave: number; pos: number } | null>(null)
+  const lugarDoDitado = useRef<{ chave: number; pos: number } | null>(null)
+  const lembrarCursor = useCallback((chave: number, pos: number) => {
+    cursor.current = { chave, pos }
+  }, [])
+  const marcarLugarDoDitado = useCallback(() => {
+    lugarDoDitado.current = cursor.current && { ...cursor.current }
+  }, [])
+  const inserirDitadoNoCursor = useCallback((texto: string) => {
+    if (texto.trim() === '') return
+    const lugar = lugarDoDitado.current ?? cursor.current
+    lugarDoDitado.current = null
+    setLinhas((agora) => {
+      const r = inserirDitado(agora, lugar?.chave ?? null, lugar?.pos ?? Number.MAX_SAFE_INTEGER, texto)
+      pedido.current = r.foco
+      cursor.current = { chave: r.foco.chave, pos: r.foco.pos }
+      return garantirUma(r.linhas)
+    })
+    setSelecao(nenhuma)
+  }, [])
+
   // separar troca a linha da chave pelos itens da enumeração dela (o ditado
   // "arroz, feijão e batata" numa linha de lista, ou o botão "Virar lista"
   // num parágrafo). Lê as linhas de agora, não as do render que pediu: o ditado
@@ -205,6 +233,14 @@ export function useEditorDeLinhas(corpoInicial: string) {
     separar,
     desmarcarTudo: () => aplicar(desmarcarTudo(linhas)),
     apagarMarcados: () => aplicar(apagarMarcados(linhas)),
+    // O "+ Item" da lista de marcar (N8).
+    acrescentarItem: () => {
+      const r = acrescentarItem(linhas)
+      aplicar(r.linhas, r.foco)
+    },
+    lembrarCursor,
+    marcarLugarDoDitado,
+    inserirDitadoNoCursor,
   }
 }
 

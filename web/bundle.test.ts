@@ -346,13 +346,11 @@ describe('o bundle da nuvem (dist-nuvem)', () => {
     'O Windows está bloqueando o microfone.',
     'Abrir as configurações do microfone',
     'Microfone liberado',
-    // ADR-022, N2: as notas moram no Agent. A aba, o campo de criar e a forma de ver
-    // são só do PC (o celular ganha a dele na N8, com o cliente da nuvem).
+    // ADR-022, N2: as rotas das notas do Agent são só do PC. A aba é a mesma nos
+    // dois builds desde a N8, mas o celular fala com a /api/v1/notes (o teste das
+    // notas no celular, embaixo).
     '/api/notas',
     '/api/marcadores',
-    'Criar uma nota',
-    'aurora.notas',
-    'Imagens chegam depois',
     // ADR-022, N3: o "Virar nota" mexe no histórico do PC e cria a nota no Agent.
     '/virar-nota',
     '/desfazer-virar',
@@ -360,13 +358,13 @@ describe('o bundle da nuvem (dist-nuvem)', () => {
     'Virou nota',
     // O aviso de nota em foco mexe no Agent do PC.
     '/api/notas/foco',
-    // ADR-022, N6: a busca única e o Copiar para WhatsApp são das notas, que só o PC tem.
+    // ADR-022, N6: a busca única nas notas e nos ditados é só do PC: no celular, a
+    // busca do histórico da nuvem não ignora acento, e juntar as duas daria
+    // resultados diferentes para o mesmo termo (ADR-022, "Decisões da N8").
     'Buscar nas notas e nos ditados',
     'Ver notas e ditados',
     'Só nas notas',
     'Só nos ditados',
-    'Copiar para WhatsApp',
-    'Copiado para o WhatsApp.',
     // O primeiro uso do PC (a tecla do ditado do PC, sem chave) e a introdução da IA
     // das Configurações do PC não são do app do celular.
     'Segure Ctrl+Win',
@@ -375,11 +373,34 @@ describe('o bundle da nuvem (dist-nuvem)', () => {
     'Bearer',
     'Authorization',
     'Gerenciador de Credenciais',
-    'localStorage',
+    // O aparelho guarda só as notas (o IndexedDB das notas, N8) e as
+    // preferências da aba Notas (o localStorage); nunca o ditado. O teste de
+    // baixo prende quem fala com cada um.
     'sessionStorage',
-    'indexedDB',
   ])('não tem %s', (texto) => {
     expect(nuvem.js).not.toContain(texto)
+  })
+
+  // ADR-022, N8: a aba Notas no celular, com o cliente da /api/v1, o "Ditar para
+  // nota" e o microfone dentro da nota (o cabeçalho Ditado-Nota), o Desfazer, e a
+  // fila do que se fez sem rede, no IndexedDB.
+  it('tem as notas no celular: a /api/v1/notes, o "Ditar para nota" e a fila sem rede', () => {
+    for (const texto of [
+      '/api/v1/notes',
+      '/api/v1/labels',
+      'Criar uma nota…',
+      'Ditar para nota',
+      'Ditado-Nota',
+      'para-nota',
+      '/undo-note',
+      'esperando a rede',
+      'Sem rede: dá para marcar, desmarcar e acrescentar item. O resto volta com a rede.',
+      'indexedDB',
+      'aurora-notas',
+      'Copiar para WhatsApp',
+    ]) {
+      expect(nuvem.js, texto).toContain(texto)
+    }
   })
 
   it('a busca vai no corpo de um POST, e a lista sem busca por GET', () => {
@@ -417,6 +438,33 @@ describe.each([
     const { html, css } = bundle()
     expect(html).not.toMatch(/(src|href)="(https?:)?\/\//i)
     expect(css).not.toMatch(/url\((["']?)(https?:|\/\/|data:)/i)
+  })
+})
+
+// O que fica no aparelho (N8): só o banco das notas (nuvem/notas/armazem.ts)
+// fala com o IndexedDB, e só as preferências da aba Notas (notas/preferencias.ts)
+// com o localStorage. O gravador do ditado não guarda nada (o teste do áudio,
+// acima): nenhum outro arquivo do app pode passar a guardar coisa no aparelho
+// sem este teste mudar de propósito.
+describe('quem guarda no aparelho', () => {
+  async function quemUsa(padrao: RegExp): Promise<string[]> {
+    const arquivos = (await readdir(path.join(raiz, 'src'), { recursive: true }))
+      .map((f) => f.split(path.sep).join('/'))
+      .filter((f) => /\.(ts|tsx)$/.test(f) && !/\.test\.tsx?$/.test(f) && !f.startsWith('testes/'))
+    const usam: string[] = []
+    for (const f of arquivos) {
+      const codigo = (await readFile(path.join(raiz, 'src', f), 'utf8')).replace(/\/\/.*$/gm, '')
+      if (padrao.test(codigo)) usam.push(f)
+    }
+    return usam.sort()
+  }
+
+  it('o IndexedDB: só o banco das notas', async () => {
+    expect(await quemUsa(/\bindexedDB\b|IDBFactory/)).toEqual(['nuvem/notas/armazem.ts'])
+  })
+
+  it('o localStorage: só as preferências da aba Notas', async () => {
+    expect(await quemUsa(/localStorage/)).toEqual(['notas/preferencias.ts'])
   })
 })
 

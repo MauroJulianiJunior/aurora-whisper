@@ -15,6 +15,10 @@ interface Props {
   // são, para avisar o Agent enquanto o cursor está neles (useFocoDaNota). Sem
   // ele, nada é avisado.
   foco?: { cliente: ClienteDeNotas; nota?: string; token?: string }
+  // soMarcar e comItemNovo: o celular (N8); ver EditorDeLinhas. Com soMarcar,
+  // o título fica só de leitura.
+  soMarcar?: boolean
+  comItemNovo?: boolean
 }
 
 const temQuebra = /[\r\n]/
@@ -24,7 +28,7 @@ const quebras = /\r\n?|\n/
 // corpo por linhas. O título é um campo de uma linha só: o texto de várias
 // linhas colado ali (um ditado que caiu no campo errado) não perde nada, a
 // primeira linha fica no título e o resto vai para o começo do corpo.
-export function CamposDaNota({ titulo, aoMudarTitulo, editor, rotulo, foco }: Props) {
+export function CamposDaNota({ titulo, aoMudarTitulo, editor, rotulo, foco, soMarcar = false, comItemNovo = false }: Props) {
   const raiz = useRef<HTMLDivElement>(null)
   useFocoDaNota(raiz, foco?.cliente, foco?.nota, foco?.token)
   const campoTitulo = useRef<HTMLInputElement>(null)
@@ -74,7 +78,8 @@ export function CamposDaNota({ titulo, aoMudarTitulo, editor, rotulo, foco }: Pr
       <input
         ref={campoTitulo}
         type="text"
-        className="titulo-campo"
+        className={soMarcar ? 'titulo-campo so-leitura' : 'titulo-campo'}
+        readOnly={soMarcar}
         placeholder="Título"
         aria-label="Título"
         lang="pt-BR"
@@ -84,7 +89,7 @@ export function CamposDaNota({ titulo, aoMudarTitulo, editor, rotulo, foco }: Pr
         onPaste={aoColar}
         onKeyDown={aoTeclar}
       />
-      <EditorDeLinhas editor={editor} rotulo={rotulo} />
+      <EditorDeLinhas editor={editor} rotulo={rotulo} soMarcar={soMarcar} comItemNovo={comItemNovo} />
     </div>
   )
 }

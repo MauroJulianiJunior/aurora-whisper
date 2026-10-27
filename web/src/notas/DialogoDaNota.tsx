@@ -11,7 +11,7 @@ import { PaletaDeCores } from './PaletaDeCores'
 import { dispensarSugestao, sugestaoDispensada } from './preferencias'
 import { prenderOFoco } from './prenderOFoco'
 import { sugerirMarcador } from './sugestao'
-import type { ClienteDeNotas, CorDaNota, EscolhaDoConflito, Marcador, MudancaDaNota, Nota } from './tipos'
+import { type ClienteDeNotas, type CorDaNota, type EscolhaDoConflito, FRASE_SEM_REDE, type Marcador, type MudancaDaNota, type Nota, type NotasNoCelular } from './tipos'
 import { useAdiado } from './useAdiado'
 import { useEditorDeLinhas } from './useEditorDeLinhas'
 import { useTelaEstreita } from './useTelaEstreita'
@@ -41,6 +41,10 @@ interface Props {
   // Painel acende a faixa do topo.
   aoPerderLigacao(e: unknown): void
   aoTerminar(fim: FimDaNota): void
+  // celular: só o app do celular (N8). semRede deixa só marcar, desmarcar e
+  // acrescentar item (E4); DitarNaNota é o microfone da barra de baixo, que
+  // escreve onde está o cursor. Sem ele, a janela é a do PC.
+  celular?: { semRede: boolean; DitarNaNota: NotasNoCelular['DitarNaNota'] }
 }
 
 // O que a janela edita, e o que ela já salvou.
@@ -75,7 +79,9 @@ const tiposDoFormatar: [TipoDaLinha, string][] = [
 // edição começou (base_version), e um 409 não perde o texto: ele continua na
 // tela, com a nota vermelha do editor do histórico, até a pessoa salvar por
 // cima.
-export function DialogoDaNota({ nota, cliente, marcadores, notasParaSugerir, criarMarcador, avisar, aoPerderLigacao, aoTerminar }: Props) {
+export function DialogoDaNota({ nota, cliente, marcadores, notasParaSugerir, criarMarcador, avisar, aoPerderLigacao, aoTerminar, celular }: Props) {
+  // semRede: o celular sem rede (N8, E4): só marcar, desmarcar e acrescentar item.
+  const semRede = celular?.semRede ?? false
   const [titulo, setTitulo] = useState(nota.titulo)
   const [cor, setCor] = useState<CorDaNota | null>(nota.cor)
   const [fixada, setFixada] = useState(nota.fixada)
@@ -139,11 +145,23 @@ export function DialogoDaNota({ nota, cliente, marcadores, notasParaSugerir, cri
       setEstado({ tipo: 'salvando' })
       try {
         const nova = await cliente.editarNota(nota.id, salvo.current.versao, mudanca)
+        if (nova.gravacao) {
+          // A nuvem (o celular, N8) não gravou o que foi mandado: juntou a lista
+          // de marcar com a de outro aparelho, ou guardou o texto mandado no selo.
+          return adotar(nova, enviado)
+        }
         // O salvo é o que foi enviado, e não o que voltou: se o Agent devolvesse
         // o texto de outro jeito, a janela ficaria "suja" para sempre.
         salvo.current = { ...enviado, versao: nova.version }
         ultimaRef.current = nova
         setUltima(nova)
+        if (nova.deleted_at) {
+          // A nota foi para a lixeira em outro aparelho, e a nuvem guardou o
+          // texto no selo dela: ele volta junto se a nota for restaurada.
+          parado.current = 'lixeira'
+          setEstado({ tipo: 'lixeira' })
+          return 'conflito'
+        }
         setEstado({ tipo: 'ok' })
         return 'ok'
       } catch (e) {
@@ -156,6 +174,35 @@ export function DialogoDaNota({ nota, cliente, marcadores, notasParaSugerir, cri
     const p = fila.current.then(passo, passo)
     fila.current = p
     return p
+  }
+
+  // adotar é a volta de uma gravação que a nuvem juntou ou mandou para o selo
+  // (N8): a janela passa a mostrar o que ficou, que é a nova base. Se a pessoa
+  // escreveu enquanto a gravação ia, o que ela escreveu fica na tela e a base
+  // continua a de antes: a próxima gravação vai com o corpo daquela base, e a
+  // nuvem junta de novo (ou guarda no selo). Nada se perde calado.
+  function adotar(nova: Nota, enviado: Campos): Resultado {
+    ultimaRef.current = nova
+    setUltima(nova)
+    const a = agora.current
+    if (a.titulo !== enviado.titulo || a.corpo !== enviado.corpo) {
+      setEstado({ tipo: 'ok' })
+      return 'ok'
+    }
+    const linhas = garantirUma(normalizarMarcados(lerCorpo(nova.corpo)))
+    const corpoNovo = escreverCorpo(linhas, { limpar: true })
+    agora.current = { ...a, titulo: nova.titulo, corpo: corpoNovo }
+    salvo.current = { ...salvo.current, ...enviado, titulo: nova.titulo, corpo: corpoNovo, versao: nova.version }
+    setTitulo(nova.titulo)
+    editor.aplicar(linhas)
+    if (nova.deleted_at) {
+      parado.current = 'lixeira'
+      setEstado({ tipo: 'lixeira' })
+      return 'conflito'
+    }
+    setEstado({ tipo: 'ok' })
+    if (nova.gravacao === 'no_selo') avisar('Esta nota mudou em outro aparelho: as duas versões estão nela. Escolha a que fica.')
+    return 'ok'
   }
 
   // aposConflito lê a nota de novo: a versão que o Agent tem agora passa a ser
@@ -473,6 +520,7 @@ export function DialogoDaNota({ nota, cliente, marcadores, notasParaSugerir, cri
           aria-pressed={fixada}
           aria-label={fixada ? 'Desafixar' : 'Fixar'}
           title={fixada ? 'Desafixar' : 'Fixar'}
+          disabled={semRede}
           onClick={alternarFixada}
         >
           <Icone nome="fixar" />
@@ -484,6 +532,8 @@ export function DialogoDaNota({ nota, cliente, marcadores, notasParaSugerir, cri
           editor={editor}
           rotulo="Texto da nota"
           foco={{ cliente, nota: nota.id }}
+          soMarcar={semRede}
+          comItemNovo={Boolean(celular)}
         />
 
         {etiquetas.length > 0 && (
@@ -576,6 +626,8 @@ export function DialogoDaNota({ nota, cliente, marcadores, notasParaSugerir, cri
           </p>
         )}
 
+        {semRede && <p className="aviso-offline">{FRASE_SEM_REDE}</p>}
+
         <p className="meta">
           editada às {quando}
           {ultima.ditado_de_origem && ' · veio de um ditado'}
@@ -583,7 +635,7 @@ export function DialogoDaNota({ nota, cliente, marcadores, notasParaSugerir, cri
         </p>
 
         <div className="barra-nota">
-          <BotaoComMenu icone="formatar" rotulo="Formatar">
+          <BotaoComMenu icone="formatar" rotulo="Formatar" desabilitado={semRede}>
             {(fechar) => (
               <>
                 <div className="titulo-menu">TRANSFORMAR EM</div>
@@ -607,7 +659,7 @@ export function DialogoDaNota({ nota, cliente, marcadores, notasParaSugerir, cri
             )}
           </BotaoComMenu>
 
-          <BotaoComMenu icone="cor" rotulo="Cor">
+          <BotaoComMenu icone="cor" rotulo="Cor" desabilitado={semRede}>
             {(fechar) => (
               <PaletaDeCores
                 atual={cor}
@@ -619,23 +671,29 @@ export function DialogoDaNota({ nota, cliente, marcadores, notasParaSugerir, cri
             )}
           </BotaoComMenu>
 
-          <BotaoComMenu icone="marcador" rotulo="Marcadores" classe="escolher">
+          <BotaoComMenu icone="marcador" rotulo="Marcadores" classe="escolher" desabilitado={semRede}>
             {() => <EscolherMarcadores marcadores={marcadores} marcados={ultima.marcadores} aoAlternar={alternarMarcador} aoCriar={criarEMarcar} />}
           </BotaoComMenu>
 
-          <button type="button" className="icone-botao" aria-label="Imagem" title="Imagens chegam depois" disabled>
-            <Icone nome="imagem" />
-          </button>
+          {/* No celular, a barra é a da prévia (N8): sem a imagem (ainda não existe)
+              e com o Arquivar no Mais, para caber o microfone. */}
+          {!celular && (
+            <button type="button" className="icone-botao" aria-label="Imagem" title="Imagens chegam depois" disabled>
+              <Icone nome="imagem" />
+            </button>
+          )}
 
-          <button
-            type="button"
-            className="icone-botao"
-            aria-label={arquivada ? 'Desarquivar' : 'Arquivar'}
-            title={arquivada ? 'Desarquivar' : 'Arquivar'}
-            onClick={() => void alternarArquivo()}
-          >
-            <Icone nome={arquivada ? 'desarquivar' : 'arquivar'} />
-          </button>
+          {!celular && (
+            <button
+              type="button"
+              className="icone-botao"
+              aria-label={arquivada ? 'Desarquivar' : 'Arquivar'}
+              title={arquivada ? 'Desarquivar' : 'Arquivar'}
+              onClick={() => void alternarArquivo()}
+            >
+              <Icone nome={arquivada ? 'desarquivar' : 'arquivar'} />
+            </button>
+          )}
 
           <BotaoComMenu icone="mais" rotulo="Mais">
             {(fechar) => (
@@ -674,7 +732,7 @@ export function DialogoDaNota({ nota, cliente, marcadores, notasParaSugerir, cri
                 </button>
                 <button
                   type="button"
-                  disabled={marcados === 0}
+                  disabled={marcados === 0 || semRede}
                   onClick={() => {
                     editor.apagarMarcados()
                     fechar()
@@ -683,10 +741,24 @@ export function DialogoDaNota({ nota, cliente, marcadores, notasParaSugerir, cri
                   <Icone nome="lixeira" />
                   Apagar marcados
                 </button>
+                {celular && (
+                  <button
+                    type="button"
+                    disabled={semRede}
+                    onClick={() => {
+                      fechar()
+                      void alternarArquivo()
+                    }}
+                  >
+                    <Icone nome={arquivada ? 'desarquivar' : 'arquivar'} />
+                    {arquivada ? 'Desarquivar' : 'Arquivar'}
+                  </button>
+                )}
                 <hr />
                 <button
                   type="button"
                   className="risco"
+                  disabled={semRede}
                   onClick={() => {
                     fechar()
                     void paraALixeira()
@@ -698,6 +770,17 @@ export function DialogoDaNota({ nota, cliente, marcadores, notasParaSugerir, cri
               </>
             )}
           </BotaoComMenu>
+
+          {celular && (
+            <celular.DitarNaNota
+              notaId={nota.id}
+              desligado={semRede || estado.tipo === 'lixeira'}
+              aoComecar={editor.marcarLugarDoDitado}
+              aoTexto={editor.inserirDitadoNoCursor}
+              avisar={avisar}
+              aoPerderLigacao={aoPerderLigacao}
+            />
+          )}
 
           <span className="empurra" />
           <button type="button" className="botao leve" onClick={() => void fechar()}>

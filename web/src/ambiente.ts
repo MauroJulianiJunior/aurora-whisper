@@ -87,6 +87,10 @@ export interface PropsDoDitar {
   // escondido: o Painel está nas Configurações. O microfone sai de cena, mas
   // uma gravação em curso, ou um áudio que espera "Tentar de novo", fica.
   escondido: boolean
+  // semMicrofone: a aba Notas (ADR-022, N8): a busca fica, e o microfone do
+  // lado dela sai (o "Ditar para nota" embaixo toma o lugar dele). Uma gravação
+  // em curso, ou um áudio que espera, fica à vista.
+  semMicrofone?: boolean
   // aoChegar: o servidor gravou o ditado. nota é o que o app fez sozinho
   // ("Parei quando o app saiu da frente."); aviso, a frase de o Polish não
   // ter agido.
@@ -110,15 +114,16 @@ export interface PropsDoAvisoDoMicrofone {
   avisar(texto: ReactNode): void
 }
 
-// PropsDasNotas é o que o Painel passa à aba Notas (ADR-022, N2). A aba só
-// existe onde há a Local API (o PC): o componente vem do ambiente, e o Painel
+// PropsDasNotas é o que o Painel passa à aba Notas (ADR-022, N2; no celular
+// desde a N8): o componente vem do ambiente, com o cliente de cada lado, e o Painel
 // não importa nada dela.
 export interface PropsDasNotas {
   // busca: o campo de busca do Painel (já com a espera da digitação).
   busca: string
   aoPerderLigacao(e: unknown): void
-  // avisar: a pílula de baixo da tela; com desfazer, ela oferece o Desfazer.
-  avisar(texto: ReactNode, desfazer?: () => void): void
+  // avisar: a pílula de baixo da tela; com desfazer, ela oferece o Desfazer;
+  // com abrir, o "Abrir" (o aviso do "Ditar para nota" no celular, N8).
+  avisar(texto: ReactNode, desfazer?: () => void, abrir?: () => void): void
   // abrirNota: o pedido do "Abrir" do aviso "Virou nota": a nota que a janela
   // abre. vez sobe a cada pedido, para o mesmo pedido de novo valer de novo.
   abrirNota?: { id: string; vez: number } | null
@@ -129,6 +134,9 @@ export interface PropsDasNotas {
   // aoTerminarNota: a janela de uma nota fechou (salvou, arquivou, foi para a
   // lixeira). A busca única relê os resultados.
   aoTerminarNota?(): void
+  // abrirConfiguracoes leva às Configurações do ditado (o "Ditar para nota" do
+  // celular sem a chave do provedor; N8).
+  abrirConfiguracoes?(): void
 }
 
 // GrupoDaBusca é um dos dois grupos da busca única: o que o Painel sabe dizer
@@ -191,7 +199,8 @@ export interface AcaoVirarNota {
 
 export interface Ambiente {
   cliente: ClienteDoHistorico
-  // Notas é a aba Notas. Só o PC a tem; sem ela, o Painel não mostra o botão.
+  // Notas é a aba Notas (o PC, e o celular desde a N8); sem ela, o Painel não
+  // mostra o botão.
   Notas?: ComponentType<PropsDasNotas>
   // virarNota é o "Virar nota" do editor do histórico (ADR-022, N3). Só o PC.
   virarNota?: AcaoVirarNota

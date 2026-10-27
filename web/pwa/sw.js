@@ -6,13 +6,16 @@
 // Ele só guarda a CASCA do app (o index.html, o favicon e os /assets do build),
 // gravada uma vez, no install. Não há put em lugar nenhum: nada que chega da
 // rede depois entra no cache, então nenhum texto ditado tem como parar aqui (o
-// celular não guarda ditado no aparelho).
+// celular não guarda ditado no aparelho). As notas que abrem sem rede (ADR-022,
+// N8, E4) não vêm daqui: o app as guarda no IndexedDB da conta
+// (src/nuvem/notas/armazem.ts), junto com a fila do que se marcou sem rede.
 //
 // O que ele responde é uma lista branca; o resto ele nem toca, e o pedido vai à
 // rede como se ele não existisse:
 //   - a navegação GET para / (com ou sem busca): a rede primeiro; o / guardado só
 //     entra se a rede falhar. Sem rede, o app sobe, o GET /api/v1/me falha, e a
-//     tela é "Sem conexão.";
+//     tela é a aba Notas com o que o aparelho guardou da última conta (ou "Sem
+//     conexão.", se não há conta guardada);
 //   - o GET /favicon.svg: a rede primeiro, o guardado sem rede;
 //   - o GET /assets/*: o guardado, senão a rede (o nome tem o hash e nunca muda).
 // Nunca toca: método que não é GET, /api (inclusive /api/v1/device-auth), /auth

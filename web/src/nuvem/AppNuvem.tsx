@@ -6,7 +6,9 @@
 // se a resposta demorar:
 //   - 200: o Painel;
 //   - 401: Entrar;
-//   - sem rede: Sem conexão;
+//   - sem rede: o Painel na aba Notas, com a conta que abriu o app da última vez
+//     e as notas guardadas no aparelho (ADR-022, N8; E4: a lista do mercado abre
+//     sem sinal); sem conta guardada, Sem conexão;
 //   - outro erro: Não abriu.
 // No meio do uso, um 401 troca a tela inteira por "Sua sessão terminou" — a
 // não ser que haja um texto não salvo na tela: aí o Painel fica, com a faixa
@@ -27,6 +29,7 @@ import { Painel } from '../Painel'
 import { ambienteNuvem } from './ambienteNuvem'
 import { AprovarPC } from './AprovarPC'
 import { type ClienteNuvem, type Eu, criarClienteNuvem, criarPortao, pareceIdDePedido } from './cliente'
+import { type Armazem, lerConta } from './notas/armazem'
 import type { Plataforma } from './ditar/gravador'
 import { abrirJanelaPadrao, avisarQueEntrou, modoDaJanela, useLoginDeTeste } from './entrar'
 import { JanelaDeEntrar } from './EntrarDeNovo'
@@ -38,7 +41,8 @@ type Tela =
   | { tipo: 'sem-conexao' }
   | { tipo: 'nao-abriu' }
   // focar: o Painel entra no lugar de uma tela cujo botão tinha o foco.
-  | { tipo: 'pronto'; ambiente: Ambiente; focar: boolean }
+  // emNotas: abriu sem rede, e o Painel começa nas notas (N8).
+  | { tipo: 'pronto'; ambiente: Ambiente; focar: boolean; emNotas?: boolean }
   // aprovar: a página de aprovação de um PC, com a sessão e o e-mail da conta
   // que aprova (o PC fica ligado a ela).
   | { tipo: 'aprovar'; email: string }
@@ -72,6 +76,11 @@ interface Props {
   // diz que o aviso que ela mostrou não é o atual (AVISO_DESATUALIZADO). Os
   // testes trocam.
   recarregar?(): void
+  // contaGuardada: a conta que abriu o app da última vez (N8), para abrir sem
+  // rede; armazemDasNotas: onde as notas guardam a lista e a fila. Os testes
+  // trocam; sem eles, o IndexedDB do navegador.
+  contaGuardada?(): Promise<Eu | null>
+  armazemDasNotas?(conta: string): Armazem
 }
 
 const irParaPadrao = (url: string) => window.location.assign(url)
@@ -110,9 +119,14 @@ function AppDaConta({
   abrirJanela = abrirJanelaPadrao,
   plataformaDeDitar,
   recarregar,
+  contaGuardada = lerConta,
+  armazemDasNotas,
   pedido,
   trocarPara,
-}: Pick<Props, 'buscar' | 'irPara' | 'host' | 'abrirJanela' | 'plataformaDeDitar' | 'recarregar'> & { pedido: string | null; trocarPara(url: string): void }) {
+}: Pick<Props, 'buscar' | 'irPara' | 'host' | 'abrirJanela' | 'plataformaDeDitar' | 'recarregar' | 'contaGuardada' | 'armazemDasNotas'> & {
+  pedido: string | null
+  trocarPara(url: string): void
+}) {
   const [cliente] = useState<ClienteNuvem>(() => criarClienteNuvem(buscar))
   const [tela, setTela] = useState<Tela>({ tipo: 'abrindo' })
   const [tentando, setTentando] = useState(false)
@@ -125,34 +139,50 @@ function AppDaConta({
   // fecha enquanto espera a pessoa entrar de novo (cliente.ts, Portao); o
   // dela não passa.
   const pronto = useCallback(
-    (eu: Eu, focar: boolean): Tela => {
+    (eu: Eu, focar: boolean, semRede = false): Tela => {
       if (pedido !== null) return { tipo: 'aprovar', email: eu.email }
       const portao = criarPortao()
+      const doPainel = portao.passagem(buscar)
       return {
         tipo: 'pronto',
-        ambiente: ambienteNuvem(criarClienteNuvem(portao.passagem(buscar)), eu, {
+        ambiente: ambienteNuvem(criarClienteNuvem(doPainel), eu, {
           aoSemSessao: () => setTela({ tipo: 'entrar', expirada: true }),
           aoSair: () => setTela({ tipo: 'entrar', expirada: false }),
           reentrada: { cliente, eu, portao, host, abrirJanela, irPara },
           plataformaDeDitar,
           recarregar,
+          buscar: doPainel,
+          armazemDasNotas: armazemDasNotas?.(eu.id),
+          semRede,
         }),
         focar,
+        emNotas: semRede,
       }
     },
-    [cliente, buscar, host, abrirJanela, irPara, pedido, plataformaDeDitar, recarregar],
+    [cliente, buscar, host, abrirJanela, irPara, pedido, plataformaDeDitar, recarregar, armazemDasNotas],
+  )
+
+  // erroDaAbertura: sem rede, o app abre nas notas guardadas da última conta
+  // (N8); o resto é a tela do erro.
+  const erroDaAbertura = useCallback(
+    async (e: unknown, focar: boolean): Promise<Tela> => {
+      if (!(e instanceof ForaDoAr) || pedido !== null) return telaDoErro(e)
+      const eu = await contaGuardada().catch(() => null)
+      return eu ? pronto(eu, focar, true) : telaDoErro(e)
+    },
+    [contaGuardada, pedido, pronto],
   )
 
   useEffect(() => {
     let vivo = true
     cliente.eu().then(
       (eu) => vivo && setTela(pronto(eu, false)),
-      (e: unknown) => vivo && setTela(telaDoErro(e)),
+      (e: unknown) => void erroDaAbertura(e, false).then((t) => vivo && setTela(t)),
     )
     return () => {
       vivo = false
     }
-  }, [cliente, pronto])
+  }, [cliente, pronto, erroDaAbertura])
 
   function tentarDeNovo() {
     if (tentando) return
@@ -161,7 +191,7 @@ function AppDaConta({
       .eu()
       .then(
         (eu) => setTela(pronto(eu, true)),
-        (e: unknown) => setTela(telaDoErro(e)),
+        async (e: unknown) => setTela(await erroDaAbertura(e, true)),
       )
       .finally(() => setTentando(false))
   }
@@ -183,7 +213,7 @@ function AppDaConta({
     case 'abrindo':
       return <Abrindo />
     case 'pronto':
-      return <Painel ambiente={tela.ambiente} focarNoTitulo={tela.focar} />
+      return <Painel ambiente={tela.ambiente} focarNoTitulo={tela.focar} emNotas={tela.emNotas} />
     case 'aprovar':
       return <AprovarPC cliente={cliente} pedido={pedido ?? ''} conta={tela.email} aoSemSessao={() => setTela({ tipo: 'entrar', expirada: true })} trocarPara={trocarPara} />
     case 'entrar':

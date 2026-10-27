@@ -332,6 +332,81 @@ export function trocarPorItens(linhas: Linha[], chave: number, itens: readonly s
   }
 }
 
+// ─── Sem rede (N8, E4) ────────────────────────────────────────────────
+
+// temListaDeMarcar diz se o corpo tem pelo menos um item de marcar: é onde o
+// celular sem rede deixa acrescentar item.
+export function temListaDeMarcar(corpo: string): boolean {
+  return lerCorpo(corpo).some((l) => l.tipo === 'tarefa')
+}
+
+// soMarcouOuAcrescentou diz se depois só difere de antes no que o celular faz
+// sem rede (a escolha do Mauro, E4): marcar e desmarcar itens (o item marcado
+// desce, então a ordem dos itens pode mudar) e acrescentar itens de marcar. As
+// linhas que não são de marcar são as mesmas, na mesma ordem, e todo item de
+// antes continua lá, com o mesmo texto. É a mesma forma que a mescla da lista de
+// marcar da N7 aceita, mais os itens novos.
+export function soMarcouOuAcrescentou(antes: string, depois: string): boolean {
+  const a = lerCorpo(antes)
+  const d = lerCorpo(depois)
+  const outras = (ls: Linha[]) => ls.filter((l) => l.tipo !== 'tarefa').map((l) => `${l.tipo}\u0000${l.texto}`)
+  const oa = outras(a)
+  const od = outras(d)
+  if (oa.length !== od.length || oa.some((x, i) => x !== od[i])) return false
+  const contagem = new Map<string, number>()
+  for (const l of d) if (l.tipo === 'tarefa') contagem.set(l.texto, (contagem.get(l.texto) ?? 0) + 1)
+  for (const l of a) {
+    if (l.tipo !== 'tarefa') continue
+    const n = contagem.get(l.texto) ?? 0
+    if (n === 0) return false
+    contagem.set(l.texto, n - 1)
+  }
+  return true
+}
+
+// ultimoItemAberto é o índice do último item de marcar ainda aberto (-1: nenhum).
+export function ultimoItemAberto(linhas: Linha[]): number {
+  for (let i = linhas.length - 1; i >= 0; i--) if (linhas[i]!.tipo === 'tarefa' && !linhas[i]!.feito) return i
+  return -1
+}
+
+// acrescentarItem é o "+ Item" da lista de marcar (N8): um item vazio logo
+// depois do último aberto (sem aberto, antes do primeiro marcado), com o cursor
+// nele. Os marcados continuam no fim.
+export function acrescentarItem(linhas: Linha[]): Edicao {
+  const novo = criarLinha('tarefa')
+  let i = ultimoItemAberto(linhas) + 1
+  if (i === 0) {
+    const marcado = linhas.findIndex(estaMarcada)
+    i = marcado < 0 ? linhas.length : marcado
+  }
+  return { linhas: [...linhas.slice(0, i), novo, ...linhas.slice(i)], foco: { chave: novo.chave, pos: 0 } }
+}
+
+// inserirDitado põe o texto ditado no cursor (a linha da chave, na posição pos),
+// como a colagem do Agent no PC (N3): várias linhas leem os prefixos; numa linha
+// de lista, a enumeração ditada vira itens pela regra (N2: "não gera lista
+// automaticamente"). Um espaço separa do texto que já estava antes. Sem a linha
+// (ela saiu no meio), o texto vai para o fim da última. É o microfone de dentro
+// da nota no celular (N8).
+export function inserirDitado(linhas: Linha[], chave: number | null, pos: number, texto: string): Edicao {
+  // Sem os espaços das pontas; a quebra de linha fica (a lista do Polish).
+  const limpo = texto.replace(/^[ \t]+|[ \t]+$/g, '')
+  let i = chave === null ? -1 : linhas.findIndex((l) => l.chave === chave)
+  if (i < 0) {
+    i = linhas.length - 1
+    pos = linhas[i]?.texto.length ?? 0
+  }
+  const alvo = linhas[i]!
+  pos = Math.max(0, Math.min(pos, alvo.texto.length))
+  const antes = alvo.texto.slice(0, pos)
+  const separador = antes !== '' && !/\s$/.test(antes) && !/[\r\n]/.test(limpo) ? ' ' : ''
+  const r = colar(linhas, i, pos, pos, separador + limpo)
+  if (/[\r\n]/.test(limpo) || !ehLista(alvo.tipo)) return r
+  const separado = separarEmItens(r.linhas, alvo.chave, 2)
+  return separado ?? r
+}
+
 // garantirUma devolve as linhas, ou uma linha de parágrafo vazia se não há
 // nenhuma: o editor sempre tem onde digitar.
 export function garantirUma(linhas: Linha[]): Linha[] {
