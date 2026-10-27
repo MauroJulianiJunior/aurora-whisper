@@ -522,6 +522,36 @@ As marcadas **[desvio]** mudam algo escrito acima. O deploy é ponto de parada: 
   da nuvem não mostra notas. No painel do PC, a nota com selo ganha um aviso no cartão e, na janela da
   nota, a outra versão com "Manter esta" e "Usar a outra".
 
+### As notas no celular (N8): a prévia aprovada (27-out-2026)
+
+A prévia é o `docs/notas-previa-n8.html`. O Mauro aprovou as seis cenas ("1 - Sim. Se tem o botão não faz
+sentido o microfone. 2 - Isso mesmo. 3 - concordo 4 - Concordo 5 - concordo 6 - Perfeito.") e as quatro
+decisões ("1 - Isso mesmo 2 - Sim 3 - sim 4 - Sim"):
+
+- **A aba Notas no app do celular** é a mesma do PC (o mesmo componente, pelo `Ambiente`), com duas
+  colunas por padrão (1 a 3), como as Decisões do Mauro sobre a prévia da tela já diziam.
+- **Na aba Notas, o microfone do lado da busca sai** e no lugar dele fica o botão **"Ditar para nota"**,
+  embaixo, ao alcance do polegar. No Histórico, o microfone continua como hoje (o ditado vai para o
+  histórico).
+- **"Ditar para nota" tem a regra do Ctrl+Win+Alt do PC** (N9): se o ditado começa com o título de uma nota,
+  o resto entra no fim dela (como itens, se ela for lista de marcar); se não, nasce uma nota nova com o
+  ditado inteiro. O aviso diz o destino ("Lista do sábado +2", ou "Nota nova") com **Abrir** e
+  **Desfazer**. O ditado não fica no histórico.
+- **Microfone dentro da nota aberta**, na barra de baixo: escreve onde está o cursor, como segurar Ctrl+Win
+  dentro da nota no PC (N3). Numa linha de lista, a enumeração vira itens pela mesma regra do PC. O ditado
+  não aparece no histórico.
+- **Sem rede: marcar, desmarcar e acrescentar item** (a E4). Criar nota, mudar o texto, a cor e os
+  marcadores, e ditar, esperam a rede, com os botões apagados e o aviso "Sem rede: dá para marcar,
+  desmarcar e acrescentar item. O resto volta com a rede." A faixa do topo conta o que espera ("Sem rede ·
+  2 mudanças esperando"), e o cartão com mudança guardada mostra "esperando a rede". O que espera fica no
+  aparelho (sobrevive a fechar o app e a desligar o celular) e sobe sozinho quando a rede volta.
+- **A volta da rede:** os dois lados só marcaram itens, a mescla da N7 junta sem perguntar; os dois
+  mudaram o texto, o selo da N7 ("Versão em conflito") e a escolha ao abrir. Nada se perde calado.
+- **Arrastar com o dedo:** segurar meio segundo levanta a nota; passar o dedo sem segurar rola a tela (o
+  gesto da N2b, agora conferido num celular de verdade).
+- **A lixeira das notas esvazia sozinha também na nuvem, em 30 dias**, como no PC (o expurgo que a N7
+  deixou para cá).
+
 ### Imagens (fase N10, por último)
 
 Anexar imagem à nota (o ícone do Keep). Desenho prévio, a confirmar quando a fase chegar:
