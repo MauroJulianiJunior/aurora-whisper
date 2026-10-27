@@ -291,8 +291,8 @@ perguntar ao modelo do Polish. Ver E2.
 - **Aba "Notas"** ao lado do histórico, no PC e no celular (o mesmo código React, ADR-019 decisão 12).
 - No topo, o campo "Criar uma nota..." (o print do Keep do Mauro); expande em título, corpo e a barra:
   formatar, cor, marcador, imagem (N10), arquivar, mais (copiar, desmarcar tudo, lixeira).
-- Abaixo, os cards em grade: **fixadas** primeiro, depois as outras pela última edição. No celular,
-  uma coluna.
+- Abaixo, os cards em grade: **fixadas** primeiro, depois as outras, cada grupo na **ordem manual**
+  (seção "Ordem manual (N2b)"). No celular, uma coluna.
 - Lateral (ou menu, no celular): **Notas**, cada marcador, **Arquivo**, **Lixeira**, **Editar
   marcadores**.
 - Discreto como o resto do painel (`PRODUCT.md`): sem animação de vitrine, a cor do card só como
@@ -340,11 +340,90 @@ itens acima.
   sugere nada. Alternativa: Jaccard (penaliza a nota curta contra o marcador de vocabulário largo). Só as
   notas da tela principal entram na conta; as do Arquivo não.
 
+### Ordem manual (N2b)
+
+Pedido do Mauro, 26-out-2026: "Assim como no keep eu quero poder arrastar as notas na tela e
+reorganizá-las conforme eu achar melhor." As quatro respostas dele (a nota nova no topo; editar não
+move; fixadas entre fixadas e outras entre outras; no celular, segurar e arrastar) estão na seção
+Fases, e valem como regra abaixo.
+
+**O campo.** `local_notes.posicao`, um **índice fracionário**: uma chave de texto no alfabeto
+`0-9A-Za-z`, que **não termina em `0`**, e a lista sai por `fixada DESC, posicao ASC` (a menor chave é
+o topo). Mover uma nota grava **uma** chave nova, a que cai entre as duas vizinhas, e mais nenhuma
+nota é tocada: o sync (N7) leva só a nota que mudou. A chave só cresce com o uso: a nota nova e a que
+se fixa pegam a chave "antes da primeira" (o dígito de antes, não o meio, para gastar um caractere
+a cada ~30 notas no topo, e não a cada cinco), e arrastar para o meio gasta um caractere a cada
+dezenas de arrastos na mesma fresta. O teto é de 128 caracteres; o uso normal fica abaixo de 10.
+Migration `0012`, só de coluna e índice novos (nada destrutivo), com o preenchimento que **mantém a
+ordem de hoje** (fixadas, depois a última edição, depois a criação mais recente) em três dígitos de
+base 61 por pessoa.
+
+**Os grupos.** Uma nota está num de quatro: (ativa ou arquivada) x (fixada ou não), fora da lixeira.
+A ordem manual é a das **ativas**; as fixadas se ordenam entre si e as outras entre as outras. Quem
+muda de grupo vai para o **topo do grupo de destino**: fixar e desafixar, **restaurar da lixeira** e
+**tirar do Arquivo**. Nota nova entra no topo das outras. **Editar** (título, corpo, cor, marcador,
+marcar item) e o **acrescentar por voz** da N9 **não mexem** na posição. O Arquivo continua na ordem
+em que as notas foram arquivadas (a mais recente primeiro): arrastar lá avisa.
+
+**A API.** `POST /api/notas/{id}/mover` com `{antes, depois}`, os ids das vizinhas **como ficaram
+depois de soltar** (um dos dois pode ser nulo: a ponta). Quem calcula a chave é o Agent; o painel
+não conhece chaves. Devolve a nota. 400 sem nenhuma vizinha; 404 nota desconhecida; 409 para vizinha
+que não existe, está na lixeira, é de outro grupo (fixada com não fixada, ativa com arquivada), é a
+própria nota ou está fora de ordem, e para a própria nota na lixeira; o painel lê a lista de novo.
+Se a nota já está entre as duas, nada é gravado.
+
+**[derivada] Versão e concorrência.** `mover` **sobe `version`** (o sync da N7 precisa ver a
+mudança) e **não** sobe `updated_at` (arrastar não é editar). O pedido não leva `base_version`:
+a posição é uma intenção de lugar, não de conteúdo. Para a janela de uma nota aberta não dar 409 à
+toa, o painel põe os `mover` e as edições (PATCH) **numa fila de um pedido de cada vez**, guarda a
+versão que cada `mover` devolveu e a usa no PATCH seguinte (e ao abrir a nota); a janela é modal, então
+a nota que se edita não é a que se arrasta. O caso que sobra (outra aba mexeu) cai no caminho do 409
+que já existia.
+
+**[derivada] Sem `sync_outbox`.** A N7 ainda não existe e `mover` não gera evento. Quando as notas
+subirem, a `posicao` viaja **com a entidade nota**, como qualquer outro campo. **A decidir na N7:** o
+conflito de posição entre dois aparelhos (sugestão: o último vence, sem selo, porque ordem não é
+conteúdo). Dois aparelhos que arrastem para a mesma fresta podem gerar chaves iguais; no Agent o
+desempate de leitura é o `rowid` (estável) e o próximo arrasto desfaz o empate.
+
+**A grade.** Em vez de colunas de CSS, o painel monta a grade em JS, **na ordem de leitura**: cada
+cartão vai para a coluna mais curta (a da esquerda no empate), em posição absoluta com `transform`.
+Medida a altura (`offsetHeight`, `ResizeObserver` do container e `document.fonts.ready`), a
+disposição é uma função pura (`ordem.ts`, `dispor`); antes da medida vale o rodízio `i % n`. As
+colunas continuam as do Mauro (1 a 6 no PC, 1 a 3 no celular), as seções FIXADAS e OUTRAS e o visual
+são os de antes. A lista e os detalhes reorganizam também (a lista é a mesma engrenagem com uma
+coluna; os detalhes são uma tabela com um `<tbody>` por grupo, em que as linhas ficam no fluxo e só
+se deslocam).
+
+**Arrastar.** Eventos de ponteiro. **Mouse e caneta:** passou de 5 px, começa (antes disso é
+clique e abre a nota). **Toque:** segurar ~400 ms (vibração curta onde existe), e mexer antes
+disso é a rolagem (a página rola normalmente até o cartão levantar; depois dele levantado, a rolagem da
+página fica presa e só a rolagem automática das bordas anda). O cartão levantado
+segue o ponteiro, os outros abrem a vaga (contorno tracejado) com `transform` suave (desligado em
+`prefers-reduced-motion`), a janela rola sozinha perto das bordas, **Esc** cancela. A vaga que o
+cartão ocupa é a **mais próxima do centro dele**, calculada da posição do ponteiro e não da
+anterior (sem vaivém). Só dentro do grupo. Soltar muda a lista na hora (otimista) e pede o `mover`;
+se o Agent recusa, a ordem de antes volta, a pílula diz por quê e a lista é lida de novo.
+**[derivada]** Só vale na tela principal (Notas, sem filtro de marcador e sem busca); no filtro, na
+busca e no Arquivo, arrastar com o mouse avisa por quê ("Para reorganizar, limpe a busca.", "... saia do
+filtro de marcador: volte para Notas.", "O Arquivo fica na ordem em que as notas foram arquivadas."), porque
+ali a lista é só um pedaço da ordem e o "entre estas duas" não faria sentido.
+
+**Teclado.** `Alt` + seta no cartão move uma vaga dentro do grupo: na lista e nos detalhes, `↑` e `↓`;
+**[derivada]** na grade, `←` e `→` andam uma vaga e `↑` e `↓` andam uma linha (as colunas). Na ponta
+fica onde está. O leitor de tela ouve "Movida para a posição 3 de 8." (ou "Já está na posição 1 de 8."),
+numa região `aria-live` à parte, e o foco fica no cartão. `Alt` + `←` e `→` são "voltar" e "avançar"
+do navegador; o painel as toma só quando o foco está num cartão.
+
 ### Sync
 
 - **[derivada]** Duas entidades novas no motor (`internal/sync`): `nota` e `marcador`, ao lado de
   `ditado` e `aprendido` (`storage.EntidadeDitado`, `storage.EntidadeAprendido`). Toda gravação com o
   evento na mesma transação (ADR-009).
+- **[derivada] Ordem manual:** a `posicao` (N2b) é um campo da nota e **viaja com a entidade nota**, junto
+  com o resto; mover não tem evento próprio (a gravação da nota que mudou de lugar é que sobe, com a
+  versão nova). A migration do Postgres da N7 traz a coluna `posicao`, e a nota que sobe pela primeira
+  vez leva a posição que tem. O conflito de posição entre dois aparelhos fica para esta fase decidir.
 - **Conflito:** a regra da ADR-019 vale igual. A versão que perdeu fica no item, com o selo, e a
   pessoa escolhe. **[derivada]** Para a lista de marcar há uma mescla a mais, porque o caso típico
   é o mercado (marcando no celular) com uma edição no PC: se os dois lados só mudaram o estado de
@@ -412,30 +491,30 @@ deploy e release só com a autorização do Mauro.
 | L | Listas melhores no Polish: afinar as guardas para lista, medindo no `polishbench` (categoria `lista` e o diagnóstico do histórico) | — |
 | N1 | Banco local (SQLite) e API local das notas e marcadores: criar, editar, fixar, arquivar, cor, lixeira e expurgo | — |
 | N2 | Aba Notas no painel: campo "Criar uma nota", cards, editor por linhas, ditar dentro (verificação manual) | N1 |
+| N2b | Ordem manual: `posicao` (índice fracionário, migration 0012), `POST /api/notas/{id}/mover`, grade em ordem de leitura, arrastar com mouse e toque, Alt + setas | N2 |
 | N3 | "Virar nota" no histórico, com Desfazer | N2 |
 | N4 | Marcadores: criar, renomear, apagar, filtro na lateral, sugestão de marcador | N2 |
 | N5 | Converter trecho: por prefixo, por regra e com IA (prompt `notas-lista@1` com as guardas; benchmark próprio no `polishbench`) | N2, L |
 | N6 | Lista de marcar (marcados descem, desmarcar tudo), copiar para WhatsApp, busca única | N2 |
-| N7 | Sync das notas e marcadores: migrations do Postgres, entidades no motor, mescla da lista de marcar, rotas da nuvem. **Deploy: ponto de parada** | N1-N6 |
+| N7 | Sync das notas e marcadores: migrations do Postgres, entidades no motor, mescla da lista de marcar, rotas da nuvem (a `posicao` da N2b viaja com a nota). **Deploy: ponto de parada** | N1-N6, N2b |
 | N8 | Aba Notas no celular (PWA), com "Ditar para nota" e a fila offline (marcar, desmarcar e acrescentar item sem rede) | N7 |
 | N9 | Gatilho "ditar para nota" no PC, com o destino pelo nome | N2 |
 | N10 | Imagens. **Ponto de parada antes** (servidor, disco, LGPD) | N7 |
 
 Ordem sugerida: L e N1 em paralelo; depois N2, N3, N6, N4, N5, N9; e N7, N8, N10.
 
-**Pedido do Mauro, 26-out-2026 (durante o teste da N9), ainda sem fase:** "Assim como no keep eu quero
+**Pedido do Mauro, 26-out-2026 (durante o teste da N9), virou a fase N2b:** "Assim como no keep eu quero
 poder arrastar as notas na tela e reorganizá-las conforme eu achar melhor." Pede uma ordem manual
 gravada na nota (um campo de posição, que também entra no sync da N7) e arrastar e soltar na grade,
-com alternativa pelo teclado. A desenhar com ele antes do código: a nota nova entra no topo? Editar
-uma nota a leva para o topo (como hoje) ou ela fica onde ele a pôs? Fixadas e outras se arrastam
-cada uma no seu grupo? E no celular, segurar e arrastar? Deve vir antes da N7, para o sync já nascer
-com a posição.
+com alternativa pelo teclado. Vem antes da N7, para o sync já nascer com a posição. O desenho e as
+escolhas derivadas estão na seção "Ordem manual (N2b)".
 
 **Respostas do Mauro (26-out-2026):**
 - a nota nova entra no **topo**;
 - editar **não** move a nota: ela "fica onde eu coloquei";
 - **fixadas se arrastam entre si** (e as outras, entre as outras);
-- no celular, **segurar e arrastar**.
+- no celular, **segurar e arrastar** (o gesto está feito e testado com eventos de toque simulados; a
+  conferência num celular de verdade fica para a N8, quando o painel chegar ao PWA).
 
 ## Escolhas menores (aprovadas em 25-out-2026: todas no padrão, menos a E4)
 
@@ -454,6 +533,12 @@ com a posição.
 - Conversão por regra: tabela de casos (vírgula, "e", número com vírgula, linha vazia).
 - Conversão com IA: as guardas da ADR-016 sobre o prompt novo, com a categoria nova no
   `polishbench` (a auditoria independente, como nas outras).
+- Ordem manual: a chave entre duas vizinhas, antes da primeira e depois da última, muitas inserções
+  na mesma fresta, nunca duas chaves iguais; a migration preserva a ordem de hoje; nota nova no topo;
+  editar e acrescentar por voz não movem; fixar, desafixar, restaurar e tirar do Arquivo vão para o
+  topo; `/mover` com vizinha de outro grupo, da lixeira ou do Arquivo (409), sem vizinha (400);
+  no painel, a grade em ordem de leitura (tabela de alturas), arrastar com mouse e toque, Esc,
+  recusa do Agent, teclado, desligado no filtro, na busca e no Arquivo.
 - Destino do "ditar para nota": casamento do nome, empate, nome inexistente, nota com lista de marcar.
 - Sync: as duas entidades no motor, conflito com selo, mescla da lista de marcar (só estados
   diferentes mescla; texto diferente vira selo), lápide.
@@ -461,4 +546,4 @@ com a posição.
   nota no meio-tempo (mescla), e a mudança que o servidor recusa (selo, nunca perda calada).
 - Painel: os componentes com Testing Library, nos dois temas.
 - Verificação manual (roteiro, uma pessoa sabendo o que vai acontecer): ditar dentro da nota, o
-  segundo gatilho, copiar para WhatsApp.
+  segundo gatilho, copiar para WhatsApp, arrastar as notas (`docs/teste-manual-notas-ordem.md`).

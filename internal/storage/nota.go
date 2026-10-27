@@ -50,6 +50,13 @@ var (
 	// nasceu de um ditado, ou cujo ditado já voltou ao histórico (o Desfazer
 	// repetido).
 	ErrNotaNaoVeioDeDitado = errors.New("storage: a nota não está virada de um ditado")
+	// ErrVizinhoInvalido: mover uma nota para entre duas vizinhas que não valem:
+	// uma não existe, está na lixeira, é de outro grupo (fixadas e outras se
+	// ordenam cada uma no seu; ativas e Arquivo também), é a própria nota, ou as
+	// duas estão fora de ordem (a lista da tela estava desatualizada).
+	ErrVizinhoInvalido = errors.New("storage: vizinha inválida para mover a nota")
+	// ErrMoverSemVizinho: mover sem dizer nenhuma vizinha (antes e depois vazios).
+	ErrMoverSemVizinho = errors.New("storage: mover pede ao menos uma vizinha")
 	// ErrNomeDeMarcadorInvalido: nome vazio, grande demais ou com quebra de
 	// linha.
 	ErrNomeDeMarcadorInvalido = errors.New("storage: nome de marcador inválido")
@@ -119,6 +126,11 @@ type Nota struct {
 	// Marcadores são os ids dos marcadores da nota (os não apagados), na
 	// ordem do nome. Nunca nil.
 	Marcadores []string
+	// Posicao é a ordem manual (ADR-022, "Ordem manual (N2b)"): um índice
+	// fracionário (posicao.go). Dentro do grupo (fixadas, ou as outras), a menor
+	// chave é o topo. Só Criar, fixar/desafixar, arquivar/desarquivar, restaurar
+	// da lixeira e Mover a mudam; editar o texto, a cor ou os marcadores não.
+	Posicao string
 	// DitadoDeOrigem é o id do ditado de que a nota nasceu ("Virar nota", N3).
 	DitadoDeOrigem *string
 	CreatedAt      time.Time
@@ -221,8 +233,9 @@ type FiltroDeNotas struct {
 // NotaRepository é o contrato de persistência das notas e dos marcadores.
 //
 // A lista é ordenada com as fixadas primeiro e, dentro de cada grupo, pela
-// última edição (UpdatedAt desc; a criação mais recente desempata); na lixeira, pelo que foi apagado
-// por último. Não há paginação: nota é coisa que a pessoa guardou de
+// posição manual (Posicao asc: a menor é o topo; a criação mais recente
+// desempata); na lixeira, pelo que foi apagado por último. Editar a nota não a
+// move. Não há paginação: nota é coisa que a pessoa guardou de
 // propósito, e a lista cabe inteira.
 type NotaRepository interface {
 	// Criar grava a nota (versão 1). Sem título e sem corpo, ErrNotaVazia.
@@ -253,6 +266,17 @@ type NotaRepository interface {
 
 	// PurgeExpired apaga de vez as notas cujo PurgeAt venceu e devolve quantas.
 	PurgeExpired(ctx context.Context, now time.Time) (int, error)
+
+	// Mover é arrastar a nota (ADR-022, N2b): ela passa a ficar entre antesID e
+	// depoisID, que são as vizinhas DEPOIS de soltar, no mesmo grupo (fixadas, ou
+	// as outras; ativas, ou Arquivo). "" no lugar de uma delas é "nada de
+	// lado": antesID vazio é o topo do grupo, depoisID vazio é o fim. As duas
+	// vazias, ErrMoverSemVizinho. Vizinha que não vale: ErrVizinhoInvalido. Na
+	// lixeira, ErrNotaNaLixeira. Grava só a posição desta nota (a versão sobe, a
+	// hora de edição não); se ela já está entre as duas, não faz nada. Sem
+	// base_version: mover não é editar o texto, e a posição sobrevive a quem
+	// estava com a nota aberta. Não põe nada na sync_outbox.
+	Mover(ctx context.Context, userID, id, antesID, depoisID string) (Nota, error)
 
 	// Marcar põe o marcador na nota; Desmarcar tira. Os dois são
 	// idempotentes e só sobem a versão da nota quando algo mudou. O marcador

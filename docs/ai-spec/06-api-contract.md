@@ -1677,10 +1677,11 @@ A nota nos corpos de resposta:
   "ditado_de_origem": "id do ditado",
   "created_at": "...", "updated_at": "...",
   "deleted_at": "só na lixeira",
+  "posicao": "V",
   "version": 1
 }
 ```
-`cor` é sempre presente (`null` sem cor); `marcadores` é sempre uma lista (`[]`), na ordem do nome do
+`posicao` é a chave da ordem manual (N2b); o painel não a interpreta, só a lista já vem na ordem dela. `cor` é sempre presente (`null` sem cor); `marcadores` é sempre uma lista (`[]`), na ordem do nome do
 marcador; `ditado_de_origem` e `deleted_at` só aparecem quando há. O marcador:
 `{"id", "nome", "created_at", "updated_at", "version"}`.
 
@@ -1688,7 +1689,7 @@ marcador; `ditado_de_origem` e `deleted_at` só aparecem quando há. O marcador:
 Query: `vista` (`ativas`, o padrão; `arquivo`; `lixeira`), `marcador` (id; só as notas que o têm) e `q`
 (busca no título e no corpo, **sem diferenciar maiúscula nem acento**). Os filtros se combinam.
 `200 {"items": [...]}` (`[]` vazio, nunca `null`), sem paginação: fixadas primeiro e, dentro de cada
-grupo, a última edição primeiro; na lixeira, a exclusão mais recente primeiro. `400` para `vista`
+grupo, a **ordem manual** (`posicao`; ADR-022, N2b); na lixeira, a exclusão mais recente primeiro. `400` para `vista`
 desconhecida.
 
 #### POST `/api/notas`
@@ -1713,15 +1714,30 @@ Inclusive a da lixeira. `404` se não existe (ou é de outro dono).
 `base_version` é obrigatório (`400` sem ele). Só muda o que veio: `titulo`, `corpo`, `cor` (um nome, ou
 `null` / `""` para tirar a cor; ausente não mexe), `fixada` e `arquivada` (fixar, desafixar, arquivar e
 desarquivar passam todos por aqui). Sem nenhum desses, `400`. `200` com a nota. `409 CONFLICT` se
-`base_version` não é a versão atual, ou se a nota está na lixeira (restaure antes).
+`base_version` não é a versão atual, ou se a nota está na lixeira (restaure antes). Fixar, desafixar,
+arquivar e desarquivar levam a nota para o **topo do grupo de destino**; as outras mudanças não mexem na
+posição dela.
+
+#### POST `/api/notas/{id}/mover` (ADR-022, N2b, a ordem manual)
+```json
+{ "antes": "id da vizinha de cima, ou null", "depois": "id da vizinha de baixo, ou null" }
+```
+Põe a nota **entre** as duas vizinhas, os ids **como ficam depois de soltar**; um dos dois pode ser `null`
+ou ausente (a ponta), mas não os dois. O Agent calcula a chave (`posicao`) e grava **só a da nota**; o
+painel nunca vê nem monta chave. Não leva `base_version`. Os campos desconhecidos são `400`. `200` com a nota
+(a `version` sobe; `updated_at` não). Se a nota já está entre as duas, `200` sem gravar nada.
+`400` sem nenhuma vizinha; `404` nota inexistente (ou de outro dono); `409 CONFLICT` para vizinha que
+não existe, está na lixeira, é a própria nota, é de **outro grupo** (fixada com não fixada, ativa com
+arquivada) ou vem fora de ordem, e para a própria nota na lixeira. Quem recebe `409` lê a lista de novo.
+Não gera evento de sync (a `posicao` viaja com a nota na N7).
 
 #### DELETE `/api/notas/{id}`
 Move para a lixeira: `deleted_at` e `purge_at` = agora + 30 dias. `204`. Repetido, `204` de novo sem
 reiniciar o prazo.
 
 #### POST `/api/notas/{id}/restaurar`
-Tira da lixeira. `200` com a nota (a tela precisa da `version` nova). Em nota que não está na lixeira,
-`200` sem mudar nada.
+Tira da lixeira. `200` com a nota (a tela precisa da `version` nova), no **topo do grupo** dela. Em nota
+que não está na lixeira, `200` sem mudar nada.
 
 #### DELETE `/api/notas/{id}/definitivo`
 Apaga para sempre, e **só** a nota que já está na lixeira (`409` fora dela). `204`.

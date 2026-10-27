@@ -776,6 +776,15 @@ próprio para "ditar para nota" e a lista marcável sem rede no celular. Fases (
   colunas guardadas por aparelho, criar, a nota aberta com autosave e conflito, o editor por linhas, o
   Arquivo e a Lixeira (`web/src/notas/`, AC-081 e AC-082). **Falta o teste no PC, que é do Mauro:**
   `docs/teste-manual-notas-n2.md` (o olhar no navegador e ditar dentro da nota);
+- **N2b:** ordem manual das notas (pedido do Mauro, 26-out-2026: "Assim como no keep eu quero poder arrastar
+  as notas"). **Feita nos dublês (26-out-2026):** a migration `0012` (`posicao`, índice fracionário; só coluna
+  e índice, com o preenchimento que mantém a ordem de antes), `storage.PosicaoEntre`, `Mover` e as regras de
+  grupo (nota nova, fixar, desafixar, arquivar e restaurar no topo; editar e o acrescentar por voz não
+  movem), `POST /api/notas/{id}/mover` (sem `base_version`; sobe a `version`, não o `updated_at`; sem
+  `sync_outbox`), e no painel a grade em ordem de leitura, o arrastar com mouse e toque, `Alt` + setas, o
+  desligado nos filtros e a volta atrás quando o Agent recusa (`web/src/notas/ordem.ts`,
+  `useOrdemManual.ts`, `ColecaoDeNotas.tsx`; AC-090). A `posicao` viaja com a nota na N7. **Falta o teste no
+  PC, que é do Mauro:** `docs/teste-manual-notas-ordem.md` (o segurar e arrastar no celular fica para a N8);
 - **N3:** "Virar nota" no histórico, com Desfazer. **Feita nos dublês (25-out-2026):** migration
   `0010` (coluna `virou_nota`), `VirarNota` e `DesfazerVirarNota` numa transação, as duas rotas, o botão
   no editor com o aviso Abrir/Desfazer, o ditado fora do histórico sem lixeira e fora dos 6 meses, sem

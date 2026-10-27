@@ -217,6 +217,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PATCH /api/notas/{id}", s.handlePatchNota)
 	mux.HandleFunc("DELETE /api/notas/{id}", s.handleDeleteNota)
 	mux.HandleFunc("POST /api/notas/{id}/restaurar", s.handleRestaurarNota)
+	mux.HandleFunc("POST /api/notas/{id}/mover", s.handleMoverNota)
 	mux.HandleFunc("DELETE /api/notas/{id}/definitivo", s.handleApagarNotaDeVez)
 	mux.HandleFunc("PUT /api/notas/{id}/marcadores/{marcador}", s.handleMarcarNota)
 	mux.HandleFunc("DELETE /api/notas/{id}/marcadores/{marcador}", s.handleDesmarcarNota)

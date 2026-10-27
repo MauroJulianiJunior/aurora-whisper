@@ -290,7 +290,7 @@ func TestNotas_ListaOrdemEVistas(t *testing.T) {
 		return titulos(ns)
 	}
 
-	// Última edição primeiro; a vista vazia é a das ativas.
+	// A nota nova entra no topo; a vista vazia é a das ativas.
 	if got := lista(""); !mesmaLista(got, []string{"d", "c", "b", "a"}) {
 		t.Errorf("ordem inicial: %v", got)
 	}
@@ -302,20 +302,20 @@ func TestNotas_ListaOrdemEVistas(t *testing.T) {
 	if got := lista(storage.VistaAtivas); !mesmaLista(got, []string{"a", "d", "c", "b"}) {
 		t.Errorf("fixada primeiro: %v", got)
 	}
-	// Editar b a leva ao topo do grupo das não fixadas.
+	// Editar b NÃO a move (ADR-022, N2b): ela fica onde a pessoa a pôs.
 	rel.Andar(time.Minute)
 	if _, err := r.Atualizar(ctx, dono, b.ID, 1, storage.MudancaDaNota{Corpo: ptr("mudou")}); err != nil {
 		t.Fatal(err)
 	}
-	if got := lista(storage.VistaAtivas); !mesmaLista(got, []string{"a", "b", "d", "c"}) {
-		t.Errorf("a última edição vem primeiro: %v", got)
+	if got := lista(storage.VistaAtivas); !mesmaLista(got, []string{"a", "d", "c", "b"}) {
+		t.Errorf("editar moveu a nota: %v", got)
 	}
 
 	// Arquivo: sai das ativas, entra no Arquivo.
 	if _, err := r.Atualizar(ctx, dono, c.ID, 1, storage.MudancaDaNota{Arquivada: ptr(true)}); err != nil {
 		t.Fatal(err)
 	}
-	if got := lista(storage.VistaAtivas); !mesmaLista(got, []string{"a", "b", "d"}) {
+	if got := lista(storage.VistaAtivas); !mesmaLista(got, []string{"a", "d", "b"}) {
 		t.Errorf("ativas sem a arquivada: %v", got)
 	}
 	if got := lista(storage.VistaArquivo); !mesmaLista(got, []string{"c"}) {
@@ -789,7 +789,7 @@ func TestSchema_AsTabelasDasNotas(t *testing.T) {
 	for _, tabela := range []string{"local_notes", "local_labels", "local_note_labels"} {
 		assertSQLiteMasterHas(t, db, "table", tabela)
 	}
-	for _, indice := range []string{"idx_local_notes_lista", "idx_local_notes_lixeira", "idx_local_notes_purge",
+	for _, indice := range []string{"idx_local_notes_lista", "idx_local_notes_lixeira", "idx_local_notes_purge", "idx_local_notes_ordem",
 		"idx_local_labels_nome", "idx_local_note_labels_label"} {
 		assertSQLiteMasterHas(t, db, "index", indice)
 	}
@@ -827,14 +827,17 @@ func TestSchema_VarreduraVeAsColunasDa0009(t *testing.T) {
 	if err := storage.NewMigrator().Migrate(ctx, db); err != nil {
 		t.Fatal(err)
 	}
-	conteudo, err := os.ReadFile(filepath.Join("migrations", "0009_notas.sql"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	// As colunas das tabelas das notas vêm da 0009 e da 0012 (a posicao).
 	vistas := map[string]bool{}
-	for _, linha := range strings.Split(string(conteudo), "\n") {
-		if m := linhaDeColuna.FindStringSubmatch(linha); m != nil {
-			vistas[strings.ToLower(m[1])] = true
+	for _, arquivo := range []string{"0009_notas.sql", "0012_notas_posicao.sql"} {
+		conteudo, err := os.ReadFile(filepath.Join("migrations", arquivo))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, linha := range strings.Split(string(conteudo), "\n") {
+			if m := linhaDeColuna.FindStringSubmatch(linha); m != nil {
+				vistas[strings.ToLower(m[1])] = true
+			}
 		}
 	}
 	total := 0
@@ -855,7 +858,7 @@ func TestSchema_VarreduraVeAsColunasDa0009(t *testing.T) {
 		}
 		cols.Close()
 	}
-	if total != 16+10+2 {
-		t.Errorf("as tabelas das notas têm %d colunas, esperava 28", total)
+	if total != 17+10+2 {
+		t.Errorf("as tabelas das notas têm %d colunas, esperava 29", total)
 	}
 }

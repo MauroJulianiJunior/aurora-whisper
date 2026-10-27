@@ -572,24 +572,44 @@ migrado pelo dono fixo como o das outras tabelas (a migração lê as tabelas do
 | `created_at`, `updated_at` | TEXT | o mesmo formato de largura fixa do histórico (`formatoTempo`) |
 | `deleted_at`, `purge_at` | TEXT nulo | a lixeira de 30 dias, a mesma dos ditados |
 | `version` | INTEGER | 1 na criação; sobe em toda mudança |
+| `posicao` | TEXT | a ordem manual (ADR-022, N2b; migration `0012`): um índice fracionário, ver abaixo |
 | `sync_state` | TEXT | `pending` (padrão; a N7 define o resto) |
 | `server_version`, `last_sync_error` | nulos | da N7 |
 
 Índices: `idx_local_notes_lista` (`user_id, arquivada, fixada DESC, updated_at DESC`, só não
-apagadas), `idx_local_notes_lixeira` (`user_id, deleted_at DESC`, só apagadas) e
-`idx_local_notes_purge` (`purge_at`, para o expurgo).
+apagadas; da 0009, mantido), `idx_local_notes_ordem` (`user_id, arquivada, fixada DESC, posicao`, só não
+apagadas; da 0012, o que a listagem usa), `idx_local_notes_lixeira` (`user_id, deleted_at DESC`, só
+apagadas) e `idx_local_notes_purge` (`purge_at`, para o expurgo).
+
+- **`posicao`, a ordem manual (ADR-022, N2b; migration `0012_notas_posicao`).** Uma chave de texto, o
+  **índice fracionário**: alfabeto `0-9A-Za-z` (a ordem dos bytes é a do alfabeto), **nunca terminada em
+  `0`** (assim sempre existe uma chave entre duas e uma antes da primeira), até 128 caracteres
+  (`storage.MaxPosicao`; o uso normal fica abaixo de 10). A listagem ordena por
+  `fixada DESC, posicao ASC` (a menor chave é o topo), com `rowid DESC` de desempate. Mover uma nota
+  grava **só a chave dela**, a que cai entre as duas vizinhas (`storage.PosicaoEntre`); a nota nova e
+  a que muda de grupo recebem a chave "antes da primeira" do grupo de destino. A migration só soma a
+  coluna (`NOT NULL DEFAULT ''`, o valor vazio é só transitório) e o índice novo, e **preenche** toda
+  nota com uma chave de três dígitos de base 61, por pessoa, na ordem de antes (fixadas, `updated_at`
+  decrescente, criação mais recente): a tela não muda de ordem no dia da atualização. Nada destrutivo.
+  A posição é por pessoa (um só espaço de chaves; os quatro grupos, ativa ou arquivada x fixada ou
+  não, são faixas dele).
 
 - **Sem a retenção de 6 meses.** A nota é coisa que a pessoa guardou de propósito (ADR-022): só a
   lixeira expira. O passo dos 6 meses do expurgo não olha esta tabela.
 - **Arquivada não é lixeira:** sai da tela principal, aparece em "Arquivo" e nunca expira.
-- **Ordem da lista:** fixadas primeiro, depois `updated_at` decrescente (a criação mais recente desempata);
-  na lixeira, `deleted_at` decrescente.
+- **Ordem da lista:** fixadas primeiro, depois `posicao` crescente, a ordem manual (ADR-022, N2b); na
+  lixeira, `deleted_at` decrescente. **Quem mexe na `posicao`:** criar (topo das não fixadas, ou das
+  fixadas se nasce fixada), mudar de grupo (fixar, desafixar, arquivar, desarquivar: topo do grupo de
+  destino), restaurar da lixeira (topo do grupo) e mover (`Mover`, entre duas vizinhas). **Editar** o
+  texto, a cor, os marcadores e o acrescentar por voz (N9) **não** mexem nela: a nota fica onde a
+  pessoa a pôs.
 - **Expurgo:** a lixeira vencida (`purge_at <= agora`) sai no mesmo ciclo da dos ditados
   (`internal/agent/expurgo`, `expurgo.ComNotas`), na subida e de hora em hora; o log só tem a
   contagem (`lixeira: expurgo das notas`).
 - **O que sobe a `version`:** editar, fixar/desafixar, arquivar/desarquivar, trocar a cor, ir para a
-  lixeira e voltar, pôr ou tirar um marcador (estes dois também sobem `updated_at`) e apagar um
-  marcador que a nota tinha (este sobe só a `version`, para a nota não pular para o topo da lista).
+  lixeira e voltar, pôr ou tirar um marcador (estes dois também sobem `updated_at`), apagar um
+  marcador que a nota tinha e **mover** (este sobe só a `version`, e não `updated_at`: arrastar não é
+  editar; a N7 precisa ver a mudança).
   Repetir uma operação que já vale (reapagar, remarcar) não muda nada, nem a `version`.
 
 #### local_labels

@@ -239,6 +239,34 @@ func TestGravar_AcrescentaNaNotaComOTitulo(t *testing.T) {
 	}
 }
 
+// TestGravar_AcrescentarNaoMoveANotaENotaNovaVaiAoTopo: a ordem manual (ADR-022,
+// N2b). Acrescentar a uma nota existente não a tira de onde a pessoa a pôs; o
+// ditado que vira nota nova entra no topo.
+func TestGravar_AcrescentarNaoMoveANotaENotaNovaVaiAoTopo(t *testing.T) {
+	ctx := context.Background()
+	r := repoDeVerdade(t)
+	alvo := criar(t, r, "Lista de compras", "- [ ] Arroz")
+	criar(t, r, "Meio", "x")
+	criar(t, r, "Topo", "y") // lista: Topo, Meio, Lista de compras
+	antes, _ := r.Get(ctx, dono, alvo.ID)
+
+	if _, err := Gravar(ctx, r, dono, "d1", "Lista de compras: leite."); err != nil {
+		t.Fatalf("Gravar: %v", err)
+	}
+	depois, _ := r.Get(ctx, dono, alvo.ID)
+	if depois.Posicao != antes.Posicao || depois.Version != antes.Version+1 {
+		t.Fatalf("o acréscimo mexeu na posição: %q → %q", antes.Posicao, depois.Posicao)
+	}
+	res, err := Gravar(ctx, r, dono, "d2", "Ligar para o contador amanhã.")
+	if err != nil || !res.Nova {
+		t.Fatalf("Gravar nova: %v %+v", err, res)
+	}
+	lista, _ := r.Listar(ctx, storage.FiltroDeNotas{UserID: dono})
+	if len(lista) != 4 || lista[0].ID != res.NotaID || lista[3].ID != alvo.ID {
+		t.Fatalf("a nota nova devia abrir a lista e a acrescentada ficar onde estava: %v", lista)
+	}
+}
+
 func TestGravar_SemTituloNasceNotaNova(t *testing.T) {
 	ctx := context.Background()
 	r := repoDeVerdade(t)
