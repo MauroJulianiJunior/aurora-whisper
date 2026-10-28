@@ -237,12 +237,12 @@ func TestSyncE2E_HistoricoDeVerdadeNaoPerdeNemMudaNada(t *testing.T) {
 	depois06 := lerTabelasDe(t, pc.db)
 	semMudar(t, "a 0006, a 0007 e a 0008", original, depois06, "schema_migrations")
 	// (e a 0009, das notas, a 0010, do ditado que virou nota, e a 0011, do gatilho
-	// da nota, a 0012, da ordem das notas, e a 0013, do sync das notas: o
-	// Migrate roda até a última)
-	if m := depois06["schema_migrations"]; len(m) != 13 || m[6]["version"] != "0007_sync_aprendido" || m[7]["version"] != "0008_sync_aprendido_perdido" || m[8]["version"] != "0009_notas" || m[9]["version"] != "0010_ditado_virou_nota" || m[10]["version"] != "0011_local_settings_gatilho_da_nota" || m[11]["version"] != "0012_notas_posicao" || m[12]["version"] != "0013_notas_sync" {
+	// da nota, a 0012, da ordem das notas, a 0013, do sync das notas, e a 0014,
+	// das imagens das notas: o Migrate roda até a última)
+	if m := depois06["schema_migrations"]; len(m) != 14 || m[6]["version"] != "0007_sync_aprendido" || m[7]["version"] != "0008_sync_aprendido_perdido" || m[8]["version"] != "0009_notas" || m[9]["version"] != "0010_ditado_virou_nota" || m[10]["version"] != "0011_local_settings_gatilho_da_nota" || m[11]["version"] != "0012_notas_posicao" || m[12]["version"] != "0013_notas_sync" || m[13]["version"] != "0014_notas_imagens" {
 		t.Errorf("as migrations: %v", m)
 	}
-	for _, tb := range []string{"sync_mudou_aqui", "sync_aprendido", "sync_veio_da_nuvem", "local_notes", "local_labels", "local_note_labels"} {
+	for _, tb := range []string{"sync_mudou_aqui", "sync_aprendido", "sync_veio_da_nuvem", "local_notes", "local_labels", "local_note_labels", "local_note_images"} {
 		if linhas, ok := depois06[tb]; !ok || len(linhas) != 0 {
 			t.Errorf("a tabela nova %s: presente %v, %d linhas", tb, ok, len(linhas))
 		}

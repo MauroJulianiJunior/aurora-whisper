@@ -30,10 +30,11 @@ func TestMigracao0010_SoGanhaAColunaNula(t *testing.T) {
 		d := depois[tb]
 		if tb == "schema_migrations" {
 			// A 0010 e as que vieram depois (a 0011, do gatilho da nota, a 0012, da
-			// ordem das notas, e a 0013, do sync das notas).
-			if len(d) != len(a)+4 || d[len(a)]["version"] != "0010_ditado_virou_nota" ||
+			// ordem das notas, a 0013, do sync das notas, e a 0014, das imagens).
+			if len(d) != len(a)+5 || d[len(a)]["version"] != "0010_ditado_virou_nota" ||
 				d[len(a)+1]["version"] != "0011_local_settings_gatilho_da_nota" ||
-				d[len(a)+2]["version"] != "0012_notas_posicao" || d[len(a)+3]["version"] != "0013_notas_sync" {
+				d[len(a)+2]["version"] != "0012_notas_posicao" || d[len(a)+3]["version"] != "0013_notas_sync" ||
+				d[len(a)+4]["version"] != "0014_notas_imagens" {
 				t.Fatalf("as migrations aplicadas: %v", d)
 			}
 			d = d[:len(a)]

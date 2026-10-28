@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -28,6 +29,11 @@ type SQLiteNotaRepository struct {
 	// marcador na fila do sync. Nunca dentro da transação, e não pode
 	// bloquear (o mesmo contrato do SQLiteTranscriptionRepository).
 	aviso atomic.Pointer[func()]
+	// pastaDasImagens é onde ficam os arquivos das imagens das notas
+	// (nota_imagem.go); imagensMu serializa a anexação e a varredura, para a
+	// varredura nunca ver o arquivo de uma imagem cuja linha ainda vai entrar.
+	pastaDasImagens atomic.Pointer[string]
+	imagensMu       sync.Mutex
 }
 
 // AoEnfileirar liga o aviso de que uma gravação pôs um marcador de nota, de
@@ -139,6 +145,7 @@ func lerNota(s scanner) (Nota, error) {
 	n.ServerVersion = deInteiro(serverVersion)
 	n.Fixada, n.Arquivada = fixada == 1, arquivada == 1
 	n.Marcadores = []string{}
+	n.Imagens = []ImagemDaNota{}
 	return n, nil
 }
 
@@ -229,6 +236,13 @@ func lerNotaCompleta(ctx context.Context, q consulta, userID, id string) (Nota, 
 	}
 	if ms := porNota[id]; ms != nil {
 		n.Marcadores = ms
+	}
+	imagens, err := imagensDasNotas(ctx, q, userID, id)
+	if err != nil {
+		return Nota{}, err
+	}
+	if is := imagens[id]; is != nil {
+		n.Imagens = is
 	}
 	return n, nil
 }
@@ -397,9 +411,16 @@ func (r *SQLiteNotaRepository) Listar(ctx context.Context, f FiltroDeNotas) ([]N
 	if err != nil {
 		return nil, err
 	}
+	imagens, err := imagensDasNotas(ctx, r.db, f.UserID, "")
+	if err != nil {
+		return nil, err
+	}
 	for i := range notas {
 		if ms := porNota[notas[i].ID]; ms != nil {
 			notas[i].Marcadores = ms
+		}
+		if is := imagens[notas[i].ID]; is != nil {
+			notas[i].Imagens = is
 		}
 	}
 	return notas, nil
@@ -642,7 +663,10 @@ func (r *SQLiteNotaRepository) Restaurar(ctx context.Context, userID, id string)
 
 func (r *SQLiteNotaRepository) ApagarDeVez(ctx context.Context, userID, id string) error {
 	agora := r.now()
-	return r.gravar(ctx, func(tx *sql.Tx, fila *naFila) error {
+	// As imagens saem com a nota: as linhas na transação, os arquivos depois do
+	// commit (nota_imagem.go).
+	var imagens []string
+	err := r.gravar(ctx, func(tx *sql.Tx, fila *naFila) error {
 		var deletedAt sql.NullString
 		var versao sql.NullInt64
 		err := tx.QueryRowContext(ctx,
@@ -656,18 +680,31 @@ func (r *SQLiteNotaRepository) ApagarDeVez(ctx context.Context, userID, id strin
 		if !deletedAt.Valid {
 			return ErrNotaForaDaLixeira
 		}
+		if imagens, err = idsDasImagensDaNota(ctx, tx, id); err != nil {
+			return err
+		}
 		if err := apagarNotaDaTabela(ctx, tx, id); err != nil {
 			return err
 		}
 		return fila.anotar(lapideLocal(ctx, tx, EntidadeNota, id, versao.Valid, agora))
 	})
+	if err != nil {
+		return err
+	}
+	r.apagarArquivosDasImagens(imagens)
+	return nil
 }
 
-// apagarNotaDaTabela apaga a nota e as ligações dela com os marcadores, na
-// transação. A fila fica com quem chama (a lápide, ou a resposta da nuvem).
+// apagarNotaDaTabela apaga a nota, as ligações dela com os marcadores e as
+// linhas das imagens dela, na transação. A fila fica com quem chama (a lápide, ou
+// a resposta da nuvem); os arquivos das imagens, também (o repositório os apaga
+// depois do commit; no caminho do sync, a varredura da rodada do expurgo).
 func apagarNotaDaTabela(ctx context.Context, tx *sql.Tx, id string) error {
 	if _, err := tx.ExecContext(ctx, `DELETE FROM local_note_labels WHERE note_id = ?`, id); err != nil {
 		return fmt.Errorf("storage: apagando os marcadores da nota: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM local_note_images WHERE note_id = ?`, id); err != nil {
+		return fmt.Errorf("storage: apagando as imagens da nota: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM local_notes WHERE id = ?`, id); err != nil {
 		return fmt.Errorf("storage: apagando a nota: %w", err)
@@ -678,8 +715,10 @@ func apagarNotaDaTabela(ctx context.Context, tx *sql.Tx, id string) error {
 func (r *SQLiteNotaRepository) PurgeExpired(ctx context.Context, now time.Time) (int, error) {
 	apagadas := 0
 	agora := now.UTC()
+	var imagens []string
 	err := r.gravar(ctx, func(tx *sql.Tx, fila *naFila) error {
 		apagadas = 0
+		imagens = nil
 		linhas, err := tx.QueryContext(ctx,
 			`SELECT id, server_version IS NOT NULL FROM local_notes
 			 WHERE deleted_at IS NOT NULL AND purge_at IS NOT NULL AND purge_at <= ?`, emTexto(agora))
@@ -707,6 +746,11 @@ func (r *SQLiteNotaRepository) PurgeExpired(ctx context.Context, now time.Time) 
 		// Cada nota expurgada vira a lápide local dela (a nuvem que a tem fica
 		// sabendo; a que nunca a teve não ouve nada), na mesma transação.
 		for _, v := range vencidas {
+			ids, err := idsDasImagensDaNota(ctx, tx, v.id)
+			if err != nil {
+				return err
+			}
+			imagens = append(imagens, ids...)
 			if err := apagarNotaDaTabela(ctx, tx, v.id); err != nil {
 				return fmt.Errorf("storage: expurgando as notas: %w", err)
 			}
@@ -720,11 +764,17 @@ func (r *SQLiteNotaRepository) PurgeExpired(ctx context.Context, now time.Time) 
 	if err != nil {
 		return 0, err
 	}
+	r.apagarArquivosDasImagens(imagens)
 	// Carona do mesmo ciclo: o ditado feito numa caixa "Criar uma nota" que
 	// nunca virou nota volta ao histórico depois da carência (nota_ditado_foco.go).
 	// Uma falha aqui não derruba o expurgo das notas: tenta de novo na rodada
 	// seguinte.
 	_, _ = r.LiberarDitadosDeNotasNovas(ctx, now.Add(-CarenciaDaNotaNova))
+	// E os arquivos de imagem que nenhuma linha cita: os da nota que o sync
+	// apagou (a lápide da nuvem tira as linhas pela Fila, que não conhece a
+	// pasta), e o que um apagar de arquivo deixou para trás. As linhas sem arquivo
+	// ficam para a varredura da subida.
+	_, _ = r.varrer(ctx, false)
 	return apagadas, nil
 }
 

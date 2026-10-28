@@ -128,8 +128,14 @@ func (r *SQLiteNotaRepository) DesfazerVirarNota(ctx context.Context, userID, no
 		}
 		// Nota que ninguém mexeu (versão 1) e que não foi para a lixeira: sai.
 		// Qualquer edição (texto, cor, fixar, arquivar, marcador, lixeira) sobe
-		// a versão, e a nota editada fica.
-		if versao == 1 && !apagada.Valid {
+		// a versão, e a nota editada fica. Anexar imagem não sobe a versão (a
+		// imagem é uma linha à parte, N10), então a nota com imagem também fica:
+		// a pessoa já mexeu nela.
+		var comImagem int
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM local_note_images WHERE note_id = ?`, notaID).Scan(&comImagem); err != nil {
+			return fmt.Errorf("storage: contando as imagens da nota: %w", err)
+		}
+		if versao == 1 && !apagada.Valid && comImagem == 0 {
 			if err := apagarNotaDaTabela(ctx, tx, notaID); err != nil {
 				return err
 			}

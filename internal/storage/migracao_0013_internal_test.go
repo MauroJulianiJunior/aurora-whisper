@@ -41,7 +41,9 @@ func TestMigracao0013_SoGanhaAsColunasNulas(t *testing.T) {
 		t.Fatalf("Migrate: %v", err)
 	}
 	depois := todasAsTabelas(t, db)
-	if len(depois) != len(antes) {
+	// A única tabela nova é a das imagens das notas, da 0014 (o Migrate roda até a
+	// última), e vazia.
+	if l, ok := depois["local_note_images"]; len(depois) != len(antes)+1 || !ok || len(l) != 0 {
 		t.Errorf("a 0013 criou ou tirou tabela: %d antes, %d depois", len(antes), len(depois))
 	}
 	novas := []string{"conflito_titulo", "conflito_corpo", "conflito_device_id", "conflito_em", "corpo_nuvem"}
@@ -49,7 +51,7 @@ func TestMigracao0013_SoGanhaAsColunasNulas(t *testing.T) {
 		d := depois[tb]
 		switch tb {
 		case "schema_migrations":
-			if len(d) != len(a)+1 || d[len(a)]["version"] != "0013_notas_sync" {
+			if len(d) != len(a)+2 || d[len(a)]["version"] != "0013_notas_sync" || d[len(a)+1]["version"] != "0014_notas_imagens" {
 				t.Fatalf("as migrations aplicadas: %v", d)
 			}
 			d = d[:len(a)]

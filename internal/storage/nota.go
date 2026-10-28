@@ -157,6 +157,9 @@ type Nota struct {
 	// CorpoNuvem é o corpo da última versão que a nuvem confirmou (o
 	// corpo_base do envio do conteúdo); nil quando o PC não sabe.
 	CorpoNuvem *string
+	// Imagens são as imagens da nota (N10, nota_imagem.go), na ordem em que
+	// foram anexadas: só os metadados; os bytes ficam em arquivo. Nunca nil.
+	Imagens []ImagemDaNota
 }
 
 // ConflitoDaNota é o selo da nota: a versão do título e do corpo que perdeu
