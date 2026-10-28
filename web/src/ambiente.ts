@@ -134,6 +134,10 @@ export interface PropsDasNotas {
   // aoTerminarNota: a janela de uma nota fechou (salvou, arquivou, foi para a
   // lixeira). A busca única relê os resultados.
   aoTerminarNota?(): void
+  // mudancasDoSync sobe quando o contador de mudanças do sync do PC muda
+  // (Ambiente.mudancasDoSync): a nota feita ou mudada no celular chegou, e a
+  // lista é lida de novo, como a do histórico. Na nuvem, não vem.
+  mudancasDoSync?: number
   // abrirConfiguracoes leva às Configurações do ditado (o "Ditar para nota" do
   // celular sem a chave do provedor; N8).
   abrirConfiguracoes?(): void

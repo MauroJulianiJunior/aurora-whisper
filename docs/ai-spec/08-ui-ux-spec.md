@@ -204,6 +204,9 @@ no celular e as edições feitas lá chegam ao painel do PC aberto em segundos, 
   aba". A leitura é também o aviso ao Agent de que o painel está aberto: ele busca a nuvem a cada 10 s
   (e a cada 60 s com o painel fechado ou escondido há mais de 15 s). Uma edição feita no celular
   aparece no painel aberto em até ~13 s (os 10 s do Agent mais os 3 s da leitura).
+- **A aba Notas também (27-out-2026, achado do Mauro no teste da N8).** O mesmo sinal relê a lista das
+  notas: a nota criada ou mudada no celular aparece no PC sem recarregar a página (o F5 perde a sessão
+  do painel, `06`, "O bilhete"). A nota aberta numa janela não muda, como o editor do histórico.
 - **O que não muda na tela.** Nada se anuncia: sem aviso, sem "Atualizado", sem recarregar a página.
   A busca, a vista (Histórico ou Lixeira) e as páginas de "Mostrar mais antigos" já carregadas ficam
   como estão. **A edição em andamento não se perde:** o editor aberto continua aberto, o texto

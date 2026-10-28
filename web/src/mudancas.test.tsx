@@ -1,11 +1,11 @@
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 import { Painel } from './Painel'
 import { ambienteLocal } from './ambienteLocal'
 import { criarCliente } from './clienteLocal'
 import { intervaloDoContador } from './mudancas'
-import { type Pedido, ditado, servidorFalso } from './testes/servidorFalso'
+import { type Pedido, ditado, nota, servidorFalso } from './testes/servidorFalso'
 
 // A chegada mais rápida no PC (ADR-021, subfatia S): o painel à vista lê o
 // contador de mudanças do sync a cada 3 s e, quando o número muda, relê a
@@ -165,6 +165,47 @@ describe('o painel do PC relê a lista quando o sync traz algo', () => {
     // As páginas que a pessoa já tinha aberto continuam.
     expect(screen.getByRole('button', { name: /Ditado número 3\./ })).toBeTruthy()
     expect(screen.getByRole('button', { name: /Ditado número 4\./ })).toBeTruthy()
+  })
+})
+
+describe('a aba Notas também relê quando o sync traz algo (ADR-022, N8)', () => {
+  const listagensDasNotas = (srv: { pedidos: Pedido[] }) => srv.pedidos.filter((p) => p.metodo === 'GET' && p.caminho === '/api/notas')
+
+  async function montarNasNotas() {
+    const srv = servidorFalso([], { notas: [nota({ id: 'n1', titulo: 'Lista do sábado', corpo: 'arroz' })] })
+    render(<App sessao={Promise.resolve('tok')} buscar={srv.buscar} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Notas' }))
+    await screen.findByText('Lista do sábado')
+    return srv
+  }
+
+  it('a nota mudada no celular aparece sozinha quando o contador sobe, e não antes', async () => {
+    const srv = await montarNasNotas()
+    const antes = listagensDasNotas(srv).length
+
+    // Nada mudou: três leituras do contador, nenhuma da lista.
+    await passar(9000)
+    expect(listagensDasNotas(srv)).toHaveLength(antes)
+
+    srv.notaPorFora('n1', { titulo: 'Lista do domingo' })
+    srv.mudancasPorFora()
+    await passar(3000)
+    await screen.findByText('Lista do domingo')
+    expect(screen.queryByText('Lista do sábado')).toBeNull()
+  })
+
+  it('a nota aberta continua aberta, com o que está nela', async () => {
+    const srv = await montarNasNotas()
+    fireEvent.click(screen.getByText('Lista do sábado'))
+    const titulo = await screen.findByRole<HTMLInputElement>('textbox', { name: 'Título' })
+    expect(titulo.value).toBe('Lista do sábado')
+
+    srv.notaPorFora('n1', { titulo: 'Lista do domingo' })
+    srv.mudancasPorFora()
+    await passar(3000)
+    await waitFor(() => expect(listagensDasNotas(srv).length).toBeGreaterThan(1))
+    expect(screen.getByRole('dialog')).toBeTruthy()
+    expect(screen.getByRole<HTMLInputElement>('textbox', { name: 'Título' }).value).toBe('Lista do sábado')
   })
 })
 
