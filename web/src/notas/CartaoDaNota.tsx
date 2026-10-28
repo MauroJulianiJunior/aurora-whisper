@@ -4,6 +4,9 @@ import { BotaoComMenu } from './BotaoComMenu'
 import { type Linha, contarItens, inicioDoCorpo, lerCorpo, nomeDaNota } from './corpo'
 import { EscolherMarcadores } from './EscolherMarcadores'
 import { Icone } from './Icone'
+import { contaDeImagens, imagensDaNota, nomeComImagens } from './imagens'
+import { useImagensNaTela } from './contextoDasImagens'
+import { GradeDeImagens } from './ImagensDaNota'
 import { PaletaDeCores } from './PaletaDeCores'
 import { type CorDaNota, type Marcador, NOMES_DAS_CORES, type Nota } from './tipos'
 import { type ConfigDaOrdem, type PropsDoItem, useOrdemManual } from './useOrdemManual'
@@ -219,15 +222,26 @@ function Ferramentas({ nota, noArquivo, acoes, nome, marcadores }: Pick<PropsCom
   )
 }
 
+// quantasImagens é quantas imagens a nota mostra agora (sem as tiradas, com as
+// anexadas nesta visita); sem a loja das imagens (o celular), as da lista.
+function useQuantasImagens(nota: Nota): number {
+  const loja = useImagensNaTela()
+  return loja ? loja.imagensDe(nota).length + loja.guardandoDe(nota.id).length : imagensDaNota(nota).length
+}
+
 // CartaoDaNota é um quadradinho da grade (ADR-022, "A tela"): título em Space
-// Grotesk, o corpo, os marcadores, e a cor só como fundo suave.
+// Grotesk, o corpo, os marcadores, e a cor só como fundo suave. As imagens (N10)
+// ficam no topo, de ponta a ponta; a nota só com imagem mostra só ela.
 export function CartaoDaNota(props: PropsComuns) {
   const { nota, aoAbrir } = props
   const linhas = useMemo(() => lerCorpo(nota.corpo), [nota.corpo])
-  const nome = nomeDaNota(nota.titulo, linhas)
+  const nImagens = useQuantasImagens(nota)
+  const nome = nomeComImagens(nomeDaNota(nota.titulo, linhas), nImagens)
   const vazia = nota.titulo.trim() === '' && linhas.every((l) => l.texto.trim() === '')
+  const pe = <PeDoCartao nota={nota} nomesDosMarcadores={props.nomesDosMarcadores} />
+  const soImagem = vazia && nImagens > 0
   return (
-    <article className="cartao" data-nota={nota.id} data-cor={nota.cor ?? undefined} {...props.ordem}>
+    <article className={soImagem ? 'cartao so-imagem' : 'cartao'} data-nota={nota.id} data-cor={nota.cor ?? undefined} {...props.ordem}>
       <div
         role="button"
         tabIndex={0}
@@ -238,9 +252,10 @@ export function CartaoDaNota(props: PropsComuns) {
         onClick={() => aoAbrir(nota)}
         onKeyDown={(e) => abrirComTeclado(e, () => aoAbrir(nota))}
       >
+        <GradeDeImagens nota={nota} />
         {nota.titulo.trim() !== '' && <h3>{nota.titulo}</h3>}
-        {vazia ? <p className="vazio">Nota vazia</p> : <CorpoDoCartao linhas={linhas} />}
-        <PeDoCartao nota={nota} nomesDosMarcadores={props.nomesDosMarcadores} />
+        {soImagem ? null : vazia ? <p className="vazio">Nota vazia</p> : <CorpoDoCartao linhas={linhas} />}
+        {pe}
       </div>
       <Ferramentas nota={nota} noArquivo={props.noArquivo} acoes={props.acoes} marcadores={props.marcadores} nome={nome} />
     </article>
@@ -252,7 +267,8 @@ export function CartaoDaNota(props: PropsComuns) {
 export function LinhaDaNota(props: PropsComuns) {
   const { nota, aoAbrir } = props
   const linhas = useMemo(() => lerCorpo(nota.corpo), [nota.corpo])
-  const nome = nomeDaNota(nota.titulo, linhas)
+  const nImagens = useQuantasImagens(nota)
+  const nome = nomeComImagens(nomeDaNota(nota.titulo, linhas), nImagens)
   const titulo = nota.titulo.trim()
   // Sem título, o nome já é o começo do corpo: o resumo não o repete.
   const inicio = titulo ? inicioDoCorpo(linhas) : ''
@@ -269,8 +285,15 @@ export function LinhaDaNota(props: PropsComuns) {
         onKeyDown={(e) => abrirComTeclado(e, () => aoAbrir(nota))}
       >
         <span className="bolinha" data-cor={nota.cor ?? undefined} title={nota.cor ? NOMES_DAS_CORES[nota.cor] : undefined} aria-hidden="true" />
-        <span className="nota-linha-titulo">{titulo || (linhas.some((l) => l.texto.trim() !== '') ? inicioDoCorpo(linhas, 120) : 'Nota vazia')}</span>
+        <span className="nota-linha-titulo">{titulo || (linhas.some((l) => l.texto.trim() !== '') ? inicioDoCorpo(linhas, 120) : nome)}</span>
         {inicio && <span className="nota-linha-inicio">{inicio}</span>}
+        {nImagens > 0 && (
+          <span className="nota-linha-imagens" title={contaDeImagens(nImagens)}>
+            <Icone nome="imagem" />
+            <span className="so-leitor">{contaDeImagens(nImagens)}</span>
+            <span aria-hidden="true">{nImagens}</span>
+          </span>
+        )}
         {nota.conflito && <SeloNoCartao />}
         {nota.esperando && <span className="esperando">esperando a rede</span>}
       </div>
@@ -330,7 +353,7 @@ function GrupoDaTabela({
     <tbody ref={montarContainer} data-pronto={pronto ? '' : undefined} data-em-arrasto={arrastando ? '' : undefined}>
       {notas.map((n) => {
         const linhas = lerCorpo(n.corpo)
-        const nome = nomeDaNota(n.titulo, linhas)
+        const nome = nomeComImagens(nomeDaNota(n.titulo, linhas), imagensDaNota(n).length)
         const { feitos, total } = contarItens(linhas)
         const nomes = n.marcadores.map((id) => nomesDosMarcadores.get(id)).filter((x): x is string => Boolean(x))
         return (

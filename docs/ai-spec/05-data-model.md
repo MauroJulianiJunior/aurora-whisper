@@ -846,6 +846,37 @@ existente é tirado ou recriado, e nenhuma linha muda (toda nota de hoje fica se
   transação dos ditados, do aprendido e do cursor, sobe a `version` local em 1 e **nunca** põe marcador na
   fila. O conjunto de marcadores da nota é trocado inteiro.
 
+#### local_note_images (ADR-022, N10, a primeira metade; migration `0014_notas_imagens`)
+**Não destrutiva.** Só nasce a tabela, vazia, e o índice dela. Uma linha por imagem de nota:
+
+| Coluna | Tipo | O que é |
+|---|---|---|
+| `id` | TEXT PK | UUID v7, gerado no PC (o nome do arquivo) |
+| `note_id` | TEXT NOT NULL | a nota (`REFERENCES local_notes (id) ON DELETE CASCADE`) |
+| `largura`, `altura` | INTEGER NOT NULL | em pixels, `> 0` (o teto de 2.000 é do Go, `internal/imagemdanota`) |
+| `bytes` | INTEGER NOT NULL | o **tamanho** do arquivo, `> 0` |
+| `sha256` | TEXT NOT NULL | dos bytes do arquivo, em hexadecimal; conferido a cada leitura |
+| `created_at` | TEXT NOT NULL | a hora em que entrou; a ordem das imagens na nota é esta (o `rowid` desempata) |
+
+Índice: `idx_local_note_images_nota (note_id, created_at)`.
+
+- **Os bytes não ficam no banco.** Cada imagem é o arquivo `<dados>\notas-imagens\<id>.jpg` (a pasta da tabela
+  de caminhos do Agent, ao lado do `historico.db`), gravado com temporário (`.gravando-<id>-*.tmp`) e rename
+  dentro da transação que insere a linha: com a linha, o arquivo existe. As cópias do banco ao lado dele (os
+  6 meses, o envio, o dono) não levam as fotos. O nome original do arquivo nunca é guardado.
+- **A imagem é imutável**: anexar é uma linha nova e tirar apaga a linha (e o arquivo depois do commit).
+  Anexar e tirar **não** mudam a `version` nem o `updated_at` da nota.
+- **Segue a nota**: a lixeira e o restaurar não tocam a imagem; o "Apagar para sempre", o expurgo de 30 dias
+  e o Desfazer do "Virar nota" que apaga a nota (só se ela não tem imagem) apagam as linhas na transação e
+  os arquivos depois. A cascata da chave estrangeira é a segunda guarda.
+- **A varredura** (`VarrerImagens`): na subida do Agent, antes do expurgo e do painel, apaga o arquivo sem
+  linha, a linha sem arquivo e o temporário que sobrou; a rodada do expurgo (a cada hora) apaga o arquivo sem
+  linha (o da nota que a lápide da nuvem apagou pela `Fila`, que não conhece a pasta).
+- **Os limites** (`internal/imagemdanota`): só JPEG, até 4 MB e 2.000 px no lado maior; 10 por nota; o total
+  das imagens da pessoa (as da lixeira contam) até `TetoDoTotal`, 400 MB.
+- **O sync não entra nesta migration** (a segunda metade da N10): nada aqui põe marcador na `sync_outbox`, e a
+  tabela não tem `server_version` nem `sync_state`.
+
 ### local_dictionary_entries / aliases / corrections
 Espelhos sincronizáveis.
 

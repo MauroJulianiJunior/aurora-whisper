@@ -1309,7 +1309,7 @@ No painel do PC (a Local API) e, desde a N8, no app do celular (a `/api/v1`, "No
 O componente entra pelo `Ambiente` (`Ambiente.Notas`), com o cliente de cada lado; o `bundle.test.ts`
 confere que as rotas do Agent não entram no build da nuvem. A fonte da verdade é o código
 (`web/src/notas/`); a prévia aprovada pelo Mauro é `docs/notas-previa-n2.html`. O que não é desta fase:
-celular (N8), imagens (N10); converter trecho chegou na N5, o gatilho de voz na N9 e o sync na N7 (a
+celular (N8), imagens (N10; no PC, chegaram na primeira metade da N10, abaixo, "Imagens nas notas"); converter trecho chegou na N5, o gatilho de voz na N9 e o sync na N7 (a
 nota com selo de conflito mostra "Versão em conflito" no cartão e, na janela, a outra versão com "Manter
 esta" e "Usar a outra"; ADR-022, "Decisões da N7").
 
@@ -1355,7 +1355,7 @@ lixeira); com ponteiro de toque ela fica sempre à vista. Ações de cartão avi
 **A nota aberta** é uma janela (`role="dialog"`, `aria-modal`) sobre a grade, com véu e colchetes verdes nos
 cantos. O foco fica preso nela; **Esc** salva e fecha; ao fechar o foco volta ao cartão. Ao abrir, o foco
 vai para o fim do corpo. Barra: **Formatar** (título, marcador, número, caixa de marcar; numa linha de texto corrido, a lista separa os itens: N5, abaixo),
-**Cor** (oito cores e "sem cor"), **Imagem** (desligada, com o título "Imagens chegam depois"), **Arquivar**,
+**Cor** (oito cores e "sem cor"), **Imagem** (N10: anexa; "Imagens nas notas", abaixo), **Arquivar**,
 **Fixar**, **Mais** (Copiar texto, Desmarcar tudo, Apagar marcados, Mover para a lixeira) e **Fechar**. O
 rodapé diz "editada às HH:MM" e, se veio de ditado, "veio de um ditado".
 
@@ -1513,10 +1513,52 @@ e validade** (os colchetes da janela, a caixa marcada); o vermelho só no risco,
 **Acessibilidade.** Tudo por teclado; foco visível; a grade e as listas têm rótulos; avisos pelo
 `aria-live` que o painel já tem; `forced-colors` e `prefers-reduced-motion` tratados.
 
+**Imagens nas notas (ADR-022, N10, a primeira metade: o PC; prévia aprovada em `docs/notas-previa-n10.html`,
+cenas 1 a 4 e 7).** No app do celular ainda não há imagem (a segunda metade).
+- **A grade no topo do cartão e da nota, de ponta a ponta, como no Keep:** uma imagem inteira; duas lado a
+  lado; três ou mais, a primeira larga e duas embaixo, com **"+N"** no último quadrado. No cartão, a primeira
+  imagem tem a proporção dela, contida entre um retrato 3:4 e uma paisagem 2:1 (o print de celular não estica
+  o cartão); as outras são quadradas. Na nota aberta a grade tem altura fixa (190 px a larga, 120 px as de
+  baixo). Enquanto a imagem chega, o quadrado tem o fundo de realce; a que não abre diz "Imagem indisponível".
+- **A nota só com imagem** mostra só a imagem no cartão (sem "Nota vazia"), com o nome "Nota com imagem" (ou
+  "Nota com N imagens") para o leitor de tela, a lista, os detalhes, a lixeira e a janela.
+- **Anexar:** o ícone de imagem da barra da nota aberta (a escolha de arquivos do Windows, várias de uma vez), o
+  **Ctrl+V** de um print (com texto junto no que se colou, o colar é o de sempre: a célula do Excel e o trecho
+  do Word continuam texto) e **arrastar o arquivo** do Windows para dentro da nota, com o contorno tracejado
+  "Solte para anexar à nota". Um arquivo solto fora da nota (no véu) não faz nada (o navegador não troca o
+  painel pela imagem). O ícone de imagem do **"Criar uma nota…"** cria a nota só com a imagem e a abre; as
+  outras escolhidas entram nela.
+- **Antes de sair da página**, a imagem é reduzida no navegador: no máximo 2.000 px no lado maior, em JPEG
+  (0,85; 0,72 e 0,6 se passar de 4 MB), com a orientação da foto e fundo branco para o PNG transparente. Só essa
+  cópia é mandada; o original e o nome do arquivo nunca saem da página.
+- **"guardando…"**: a cópia reduzida aparece apagada, com o selo, até o Agent responder (uma imagem de cada
+  vez, na ordem escolhida). Anexar não muda a versão nem a hora de edição da nota. O rodapé da nota aberta
+  conta "· N imagens".
+- **A imagem grande:** o clique numa imagem da nota aberta (ou no "+N", que abre a terceira) a abre sobre a tela
+  escura (escura nos dois temas: o escuro da pílula), com "3 de 5 · título da nota", as setas (e ← →, que dão a
+  volta), **Baixar** (um `<a download>` com a cópia reduzida, a única que existe, no clique da pessoa), **Tirar
+  da nota** e fechar (o ×, ou **Esc**, que fecha só a imagem grande). O foco entra no fechar e volta a quem
+  abriu.
+- **Tirar da nota:** o × sobre a imagem (aparece com o ponteiro ou o foco; no toque, sempre) ou o botão da
+  imagem grande. A imagem some na hora, e o aviso "Imagem tirada da nota." oferece **Desfazer** (e Ctrl+Z) pelo
+  tempo de sempre (8 s, parado com o ponteiro ou o foco na pílula). Só quando o aviso sai sem o Desfazer (o
+  tempo, outro aviso no lugar dele, a página fechando) o Agent a apaga de vez. Na imagem grande, tirar a última
+  fecha a imagem grande; com outras, mostra a seguinte.
+- **Os avisos (a cena 7):** "A imagem passou de 10 MB."; "A nota já tem 10 imagens." (o painel confere antes de
+  mandar); "Esse arquivo não é uma imagem que o navegador abra." (o HEIC, o PDF, o arquivo estragado); "As
+  imagens das notas chegaram ao limite de 400 MB. Apague algumas para anexar outras." (a frase vem do Agent,
+  com o número); "A rede caiu antes de a imagem subir. Tente de novo." **[derivada]** Duas a mais: "A imagem
+  ficou grande demais mesmo reduzida." (a cópia que passa de 4 MB nas três qualidades) e "Esta nota foi para a
+  lixeira em outra aba; a imagem não foi anexada."
+- **A busca, o "Copiar texto", o "Copiar para WhatsApp", o Formatar e a sugestão de marcador ignoram as
+  imagens.** Nada da imagem vai à IA.
+- A forma **lista** mostra o ícone de imagem com a conta; a **Lixeira** diz "· N imagens" na linha da nota.
+
 **Verificação manual (do Mauro):** `docs/teste-manual-notas-n2.md` (ditar dentro da nota e o Enter
 digitado, no Agent de verdade, e o olhar no navegador); `docs/teste-manual-notas-n6.md` (copiar para o
 WhatsApp Web e a busca única); `docs/teste-manual-notas-ordem.md` (arrastar, o teclado e a ordem que
-fica depois de reabrir o painel).
+fica depois de reabrir o painel); `docs/teste-manual-notas-n10.md` (as imagens no PC: os três jeitos de
+anexar, a imagem grande, tirar e desfazer, a lixeira e os limites).
 
 ## Local x cloud
 Local: Agent runtime, mic, hotkey, modelos, logs locais.

@@ -40,6 +40,45 @@ export interface Nota {
   // esperando: a nota tem uma mudança feita sem rede que ainda não subiu (N8,
   // E4). Só o celular a marca; o cartão diz "esperando a rede".
   esperando?: boolean
+  // imagens: as imagens da nota (ADR-022, N10), na ordem em que foram anexadas,
+  // só os metadados. O Agent manda sempre a lista; a nuvem ainda não a manda (a
+  // segunda metade da N10), e ausente vale [].
+  imagens?: ImagemDaNota[]
+}
+
+// ImagemDaNota é a imagem como a nota a traz (06-api-contract.md, "Imagens das
+// notas"): o tamanho em pixels e o do arquivo. Os bytes vêm à parte
+// (ClienteDeImagens.ler), e o nome original do arquivo nunca existe.
+export interface ImagemDaNota {
+  id: string
+  largura: number
+  altura: number
+  bytes: number
+  created_at: string
+}
+
+// ClienteDeImagens é o que a aba Notas usa das imagens. Só o PC o tem nesta fase
+// (clienteLocal.ts); sem ele, a aba fica sem imagens (o ícone some, o colar e o
+// arrastar não anexam). Os erros vêm como os do api.ts: ErroDaApi com o codigo
+// (IMAGE_INVALID, IMAGE_TOO_LARGE, TOO_MANY_IMAGES, IMAGES_FULL) que o painel
+// traduz nas frases da ADR (imagens.ts).
+export interface ClienteDeImagens {
+  // anexar manda o JPEG já reduzido (reduzirImagem.ts) e devolve a imagem.
+  anexar(notaId: string, jpeg: Blob): Promise<ImagemDaNota>
+  // criarNotaComImagem é o ícone de imagem do "Criar uma nota…": a nota nasce
+  // só com a imagem.
+  criarNotaComImagem(jpeg: Blob): Promise<Nota>
+  // ler traz os bytes da imagem, pelo pedido com o token.
+  ler(notaId: string, imagemId: string, sinal?: AbortSignal): Promise<Blob>
+  // tirar tira a imagem da nota de vez (quem chama já esperou o Desfazer).
+  tirar(notaId: string, imagemId: string): Promise<void>
+  // paraATela e soltar fazem e desfazem a URL blob: com que a imagem aparece
+  // (URL.createObjectURL e revokeObjectURL). Moram no cliente, e não na tela, de
+  // propósito: o build da nuvem ainda não mostra imagem, e o bundle.test.ts prende
+  // que ele não cria URL de blob nenhum (é a garantia de que o áudio do ditado não
+  // é guardado nem tocado).
+  paraATela(blob: Blob): string
+  soltar(url: string): void
 }
 
 // SoComRede é a recusa do que não se faz sem rede no celular (N8, E4): criar
@@ -238,6 +277,8 @@ export interface ClienteDeNotas {
   // itens com a IA da pessoa (se o Polish está ligado) ou pela regra. Não grava
   // nada: quem troca a linha é o editor, que guarda a de antes para o Desfazer.
   separarItens(trecho: string): Promise<ItensSeparados>
+  // imagens: as imagens das notas (N10). Só o cliente do PC o tem.
+  imagens?: ClienteDeImagens
 }
 
 // NOMES_DAS_CORES é o rótulo de cada cor, para o menu e para o leitor de tela.

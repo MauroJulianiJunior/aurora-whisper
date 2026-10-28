@@ -86,7 +86,7 @@
 import type { Aprendida, Buscador, Configuracoes, Ditado, ListaDeTermos, Provedor, ResultadoTeste, Sugestao, TermoAdicionado } from '../api'
 import type { EstadoNuvem, EstadoRetencao } from '../clienteLocal'
 import { itensDaEnumeracao } from '../notas/corpo'
-import { CORES, type ItensSeparados, type Marcador, type Nota } from '../notas/tipos'
+import { CORES, type ImagemDaNota, type ItensSeparados, type Marcador, type Nota } from '../notas/tipos'
 
 export interface Pedido {
   metodo: string
@@ -94,6 +94,10 @@ export interface Pedido {
   busca: URLSearchParams
   corpo?: Record<string, unknown>
   auth?: string
+  // tipo e blob: o corpo que não é JSON (a imagem da nota, N10) e o Content-Type.
+  tipo?: string
+  blob?: Blob
+  keepalive?: boolean
 }
 
 export function ditado(parcial: Partial<Ditado> & { id: string; created_at: string }): Ditado {
@@ -173,6 +177,11 @@ export function nota(parcial: Partial<Nota> & { id: string }): Nota {
   }
 }
 
+// imagem monta a imagem de uma nota (N10), só os metadados.
+export function imagem(parcial: Partial<ImagemDaNota> & { id: string }): ImagemDaNota {
+  return { largura: 1600, altura: 1200, bytes: 400_000, created_at: new Date(2026, 9, 25, 9).toISOString(), ...parcial }
+}
+
 export function marcador(parcial: Partial<Marcador> & { id: string; nome: string }): Marcador {
   const quando = new Date(2026, 9, 20, 10).toISOString()
   return { created_at: quando, updated_at: quando, version: 1, ...parcial }
@@ -203,6 +212,9 @@ export interface OpcoesDoServidor {
   // copiasProtegidas: quantas cópias o botão não apaga (a do envio do histórico
   // à nuvem que ainda não terminou).
   copiasProtegidas?: number
+  // tetoDasImagens: o total das imagens já chegou ao teto (o Agent responde
+  // IMAGES_FULL ao anexar).
+  tetoDasImagens?: boolean
 }
 
 export function servidorFalso(
@@ -221,6 +233,7 @@ export function servidorFalso(
     nuvem: nuvemInicial = { estado: 'desconectado', url: '' },
     retencao: retencaoInicial = {},
     copiasProtegidas: protegidas = 0,
+    tetoDasImagens = false,
   }: OpcoesDoServidor = {},
 ) {
   const itens = inicial.map((i) => ({ ...i }))
@@ -581,7 +594,7 @@ export function servidorFalso(
     .sort((a, b) => Number(b.n.fixada) - Number(a.n.fixada) || Date.parse(b.n.updated_at) - Date.parse(a.n.updated_at) || b.i - a.i)
     .forEach(({ n }, i) => ordemDasNotas.set(n.id, i * 1024))
   const textoDaPosicao = (n: Nota) => `p${String(ordemDasNotas.get(n.id) ?? 0)}`
-  const comPosicao = (n: Nota): Nota => ({ ...n, marcadores: [...n.marcadores], posicao: textoDaPosicao(n) })
+  const comPosicao = (n: Nota): Nota => ({ ...n, marcadores: [...n.marcadores], posicao: textoDaPosicao(n), imagens: [...(n.imagens ?? [])] })
   const mesmoGrupo = (a: Nota, b: Nota) => !a.deleted_at && !b.deleted_at && a.fixada === b.fixada && a.arquivada === b.arquivada
   // noTopo põe a nota acima da primeira do grupo dela.
   function noTopo(n: Nota) {
@@ -824,8 +837,59 @@ export function servidorFalso(
     return json(comPosicao(n))
   }
 
+  // As imagens das notas (N10; internal/agent/localapi/notas_imagens.go), como o
+  // Agent: o corpo é o JPEG cru (image/jpeg, até 4 MB), dez por nota, o teto do
+  // total (tetoDasImagens), a nota da lixeira não recebe; ler devolve os bytes
+  // guardados; tirar é de vez (404 depois). Os bytes ficam em bytesDasImagens.
+  const bytesDasImagens = new Map<string, Blob>()
+  let seqDasImagens = 0
+  const FRASE_DO_TETO = 'As imagens das notas chegaram ao limite de 400 MB. Apague algumas para anexar outras.'
+  function guardarImagem(p: Pedido): ImagemDaNota | Response {
+    if (p.tipo !== 'image/jpeg' || !p.blob) return erro(415, 'IMAGE_INVALID', 'mande a imagem como image/jpeg')
+    if (p.blob.size > 4 * 1024 * 1024) return erro(413, 'IMAGE_TOO_LARGE', 'a imagem passou do tamanho máximo, mesmo reduzida')
+    if (tetoDasImagens) return erro(409, 'IMAGES_FULL', FRASE_DO_TETO)
+    const im: ImagemDaNota = { id: `img-${++seqDasImagens}`, largura: 800, altura: 600, bytes: p.blob.size, created_at: agoraDasNotas() }
+    bytesDasImagens.set(im.id, p.blob)
+    return im
+  }
+  function rotaImagens(p: Pedido, n: Nota, imagemId: string | undefined): Response {
+    if (!imagemId) {
+      if (p.metodo !== 'POST') return erro(405, 'BAD_REQUEST', 'método')
+      if (n.deleted_at) return erro(409, 'CONFLICT', 'a nota está na lixeira: restaure antes de mexer nela')
+      if ((n.imagens ?? []).length >= 10) return erro(409, 'TOO_MANY_IMAGES', 'a nota já tem 10 imagens')
+      const im = guardarImagem(p)
+      if (im instanceof Response) return im
+      n.imagens = [...(n.imagens ?? []), im]
+      return json(im, 201)
+    }
+    const im = (n.imagens ?? []).find((x) => x.id === imagemId)
+    if (!im) return erro(404, 'NOT_FOUND', 'registro não encontrado')
+    if (p.metodo === 'GET') {
+      const b = bytesDasImagens.get(im.id) ?? new Blob([new Uint8Array([0xff, 0xd8, 0xff, 0xd9])], { type: 'image/jpeg' })
+      return new Response(b, { status: 200, headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'no-store' } })
+    }
+    if (p.metodo === 'DELETE') {
+      n.imagens = (n.imagens ?? []).filter((x) => x.id !== im.id)
+      bytesDasImagens.delete(im.id)
+      return new Response(null, { status: 204 })
+    }
+    return erro(405, 'BAD_REQUEST', 'método')
+  }
+
   function rotaNotas(p: Pedido): Response {
-    const m = p.caminho.match(/^\/api\/notas(?:\/([^/]+)(\/restaurar|\/mover|\/resolver-conflito|\/definitivo|\/desfazer-virar|\/marcadores\/[^/]+)?)?$/)
+    if (p.caminho === '/api/notas/com-imagem' && p.metodo === 'POST') {
+      const im = guardarImagem(p)
+      if (im instanceof Response) return im
+      const quando = agoraDasNotas()
+      const nova: Nota = {
+        id: `nota-${++seqDasNotas}`, titulo: '', corpo: '', cor: null, fixada: false, arquivada: false, marcadores: [], posicao: '',
+        created_at: quando, updated_at: quando, version: 1, imagens: [im],
+      }
+      bancoDeNotas.push(nova)
+      noTopo(nova)
+      return json(comPosicao(nova), 201)
+    }
+    const m = p.caminho.match(/^\/api\/notas(?:\/([^/]+)(\/restaurar|\/mover|\/resolver-conflito|\/definitivo|\/desfazer-virar|\/marcadores\/[^/]+|\/imagens(?:\/[^/]+)?)?)?$/)
     if (!m) return erro(404, 'NOT_FOUND', 'rota')
     const [, idBruto, sufixo] = m
     if (!idBruto) {
@@ -898,6 +962,9 @@ export function servidorFalso(
       return new Response(null, { status: 204 })
     }
     if (sufixo?.startsWith('/marcadores/')) return marcadoresDaNota(p, n, decodeURIComponent(sufixo.slice('/marcadores/'.length)))
+    if (sufixo === '/imagens' || sufixo?.startsWith('/imagens/')) {
+      return rotaImagens(p, n, sufixo === '/imagens' ? undefined : decodeURIComponent(sufixo.slice('/imagens/'.length)))
+    }
     if (sufixo) return erro(405, 'BAD_REQUEST', 'método')
     switch (p.metodo) {
       case 'GET':
@@ -945,6 +1012,9 @@ export function servidorFalso(
       busca: url.searchParams,
       corpo: typeof init.body === 'string' ? (JSON.parse(init.body) as Record<string, unknown>) : undefined,
       auth: cabecalhos.Authorization,
+      tipo: cabecalhos['Content-Type'],
+      blob: init.body instanceof Blob ? init.body : undefined,
+      keepalive: init.keepalive,
     }
     pedidos.push(p)
     const forcada = interceptar?.(p)
@@ -1040,6 +1110,8 @@ export function servidorFalso(
     itens,
     // notas e marcadores são o que o banco das notas tem agora.
     notas: bancoDeNotas,
+    // bytesDasImagens: o que o Agent guardou de cada imagem (N10).
+    bytesDasImagens,
     // virouNota: ditado -> nota, dos ditados escondidos do histórico.
     virouNota,
     // foco: o que o Agent gravaria em virou_nota agora (o id da nota, ou

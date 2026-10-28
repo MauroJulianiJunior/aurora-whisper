@@ -27,7 +27,7 @@ import {
   buscadorPadrao,
   pedir,
 } from './api'
-import type { ClienteDeNotas, DesfeitoOVirarNota, Marcador, Nota } from './notas/tipos'
+import type { ClienteDeImagens, ClienteDeNotas, DesfeitoOVirarNota, ImagemDaNota, Marcador, Nota } from './notas/tipos'
 
 // EstadoNuvem é o GET /api/nuvem (ADR-019, F6): se este PC está ligado à
 // nuvem. Nunca traz o token do aparelho, que fica no Gerenciador de
@@ -142,6 +142,8 @@ export interface CopiasApagadas extends EstadoRetencao {
 // Cliente é o cliente local inteiro: o histórico, as notas (ADR-022) e o que só
 // o PC tem.
 export interface Cliente extends ClienteDoHistorico, ClienteDeNotas {
+  // imagens: as imagens das notas (N10). O PC sempre as tem.
+  imagens: ClienteDeImagens
   configuracoes(): Promise<Configuracoes>
   // campos: só os que vão no PUT; o que fica de fora, o Agent mantém.
   salvarConfiguracoes(versao: number, campos: Partial<Editaveis>): Promise<Configuracoes>
@@ -263,6 +265,10 @@ export function criarCliente(token: string, buscar: Buscador = buscadorPadrao): 
   const doMarcador = (id: string) => `/api/marcadores/${encodeURIComponent(id)}`
   const comJson = (method: string, corpo: unknown): RequestInit =>
     autorizado({ method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) })
+  // comJpeg é o corpo das imagens das notas (N10): o JPEG já reduzido, cru, sem
+  // multipart e sem o nome do arquivo.
+  const comJpeg = (jpeg: Blob): RequestInit => autorizado({ method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: jpeg })
+  const daImagem = (notaId: string, id: string) => `${daNota(notaId)}/imagens/${encodeURIComponent(id)}`
   const daChave = (provedor: Provedor) => `/api/ia/chave?${new URLSearchParams({ provedor })}`
 
   return {
@@ -370,6 +376,30 @@ export function criarCliente(token: string, buscar: Buscador = buscadorPadrao): 
       const lista = Array.isArray(itens) ? itens.filter((i): i is string => typeof i === 'string') : []
       if ((como !== 'ia' && como !== 'regra') || lista.length < 2) return { itens: [], como: 'nenhum' }
       return { itens: lista, como }
+    },
+    // As imagens das notas (ADR-022, N10; 06, "Imagens das notas"). A imagem é
+    // lida com o token e vira uma URL blob: (paraATela): um <img> apontando para a
+    // API não levaria o token. conflitoEhVersao false: os 409 daqui são a nota
+    // cheia, o teto e a nota na lixeira, com o código.
+    imagens: {
+      async anexar(notaId, jpeg) {
+        const r = await pedir(buscar, `${daNota(notaId)}/imagens`, comJpeg(jpeg), false)
+        return (await r.json()) as ImagemDaNota
+      },
+      async criarNotaComImagem(jpeg) {
+        const r = await pedir(buscar, '/api/notas/com-imagem', comJpeg(jpeg), false)
+        return (await r.json()) as Nota
+      },
+      async ler(notaId, id, sinal) {
+        const r = await pedir(buscar, daImagem(notaId, id), autorizado({ signal: sinal }), false)
+        return await r.blob()
+      },
+      async tirar(notaId, id) {
+        // keepalive: o aviso que vence com a página fechando ainda tira a imagem.
+        await pedir(buscar, daImagem(notaId, id), { ...autorizado({ method: 'DELETE' }), keepalive: true }, false)
+      },
+      paraATela: (blob) => URL.createObjectURL(blob),
+      soltar: (url) => URL.revokeObjectURL(url),
     },
     async listarMarcadores(sinal) {
       const r = await pedir(buscar, '/api/marcadores', autorizado({ signal: sinal }), false)

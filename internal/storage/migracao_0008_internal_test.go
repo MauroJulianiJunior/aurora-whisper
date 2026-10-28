@@ -41,10 +41,11 @@ func TestMigracao0008_SoGanhaAsColunasNulas(t *testing.T) {
 		switch tb {
 		case "schema_migrations":
 			// O Migrate roda até a última: a 0008 e as migrations que vieram depois.
-			if len(d) != len(a)+6 || d[len(a)]["version"] != "0008_sync_aprendido_perdido" ||
+			if len(d) != len(a)+7 || d[len(a)]["version"] != "0008_sync_aprendido_perdido" ||
 				d[len(a)+1]["version"] != "0009_notas" || d[len(a)+2]["version"] != "0010_ditado_virou_nota" ||
 				d[len(a)+3]["version"] != "0011_local_settings_gatilho_da_nota" ||
-				d[len(a)+4]["version"] != "0012_notas_posicao" || d[len(a)+5]["version"] != "0013_notas_sync" {
+				d[len(a)+4]["version"] != "0012_notas_posicao" || d[len(a)+5]["version"] != "0013_notas_sync" ||
+				d[len(a)+6]["version"] != "0014_notas_imagens" {
 				t.Fatalf("as migrations aplicadas: %v", d)
 			}
 			d = d[:len(a)]
@@ -62,9 +63,10 @@ func TestMigracao0008_SoGanhaAsColunasNulas(t *testing.T) {
 			t.Errorf("%s mudou:\nantes  %v\ndepois %v", tb, a, d)
 		}
 	}
-	// A 0008 não cria tabela; as três novas são as das notas, da 0009.
-	if len(depois) != len(antes)+3 {
-		t.Errorf("a 0008 criou tabela: %d antes, %d depois (esperava só as 3 das notas)", len(antes), len(depois))
+	// A 0008 não cria tabela; as quatro novas são as três das notas, da 0009, e a
+	// das imagens das notas, da 0014.
+	if len(depois) != len(antes)+4 {
+		t.Errorf("a 0008 criou tabela: %d antes, %d depois (esperava só as 4 das notas)", len(antes), len(depois))
 	}
 
 	// O espelho lê a linha migrada: a etiqueta, sem o par perdido.

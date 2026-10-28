@@ -174,8 +174,10 @@ export function useOrdemManual({ ids, colunas, vao, modo, habilitado, aoBloquear
   })
 
   // Os cartões mudam de altura sem o React saber: a janela que estreita ou alarga
-  // (a largura de cada cartão sai da do container) e a fonte que chega depois. O
-  // observador do container e a promessa das fontes pedem a medida de novo.
+  // (a largura de cada cartão sai da do container), a fonte que chega depois e a
+  // imagem que entra ou sai do cartão (N10: o "guardando…", o Desfazer do tirar,
+  // que redesenham só o cartão). O observador do container e de cada cartão, e a
+  // promessa das fontes, pedem a medida de novo.
   useEffect(() => {
     void document.fonts?.ready.then(medir)
     if (typeof ResizeObserver === 'undefined') return
@@ -183,6 +185,7 @@ export function useOrdemManual({ ids, colunas, vao, modo, habilitado, aoBloquear
     const r = registro.current
     r.observador = o
     if (r.container) o.observe(r.container)
+    for (const el of r.elementos.values()) o.observe(el)
     return () => {
       o.disconnect()
       r.observador = null
@@ -199,8 +202,13 @@ export function useOrdemManual({ ids, colunas, vao, modo, habilitado, aoBloquear
   const refDoItem =
     (id: string): RefCallback<HTMLElement> =>
     (el) => {
-      if (el) registro.current.elementos.set(id, el)
-      else registro.current.elementos.delete(id)
+      const r = registro.current
+      const antes = r.elementos.get(id)
+      if (antes && antes !== el) r.observador?.unobserve(antes)
+      if (el) {
+        r.elementos.set(id, el)
+        r.observador?.observe(el)
+      } else r.elementos.delete(id)
     }
   const montarContainer = useCallback<RefCallback<HTMLElement>>((el) => {
     if (registro.current.container && registro.current.container !== el) registro.current.observador?.unobserve(registro.current.container)

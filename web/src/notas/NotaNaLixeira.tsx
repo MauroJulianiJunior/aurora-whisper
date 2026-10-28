@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { formatarCurta } from '../datas'
 import { inicioDoCorpo, lerCorpo, nomeDaNota } from './corpo'
+import { contaDeImagens, imagensDaNota, nomeComImagens } from './imagens'
 import type { Nota } from './tipos'
 
 interface Props {
@@ -17,8 +18,13 @@ interface Props {
 // PATCH): para mexer nela, restaura.
 export function NotaNaLixeira({ nota, aoRestaurar, aoExcluirDeVez }: Props) {
   const linhas = useMemo(() => lerCorpo(nota.corpo), [nota.corpo])
-  const nome = nomeDaNota(nota.titulo, linhas)
-  const resumo = nota.titulo.trim() ? inicioDoCorpo(linhas, 200) : ''
+  // As imagens vão e voltam da lixeira com a nota (N10): a linha diz quantas.
+  const nImagens = imagensDaNota(nota).length
+  const nomeDoTexto = nomeDaNota(nota.titulo, linhas)
+  const nome = nomeComImagens(nomeDoTexto, nImagens)
+  // A nota só com imagem já diz no nome quantas tem.
+  const comConta = nImagens > 0 && nome === nomeDoTexto
+  const resumo = [nota.titulo.trim() ? inicioDoCorpo(linhas, 200) : '', comConta ? contaDeImagens(nImagens) : ''].filter(Boolean).join(' · ')
   const quando = nota.deleted_at ?? nota.updated_at
   const [confirmando, setConfirmando] = useState(false)
   const [excluindo, setExcluindo] = useState(false)

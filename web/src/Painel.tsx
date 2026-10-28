@@ -160,15 +160,51 @@ export function Painel({ ambiente, focarNoTitulo = false, emNotas: abrirEmNotas 
   const chave = `${vista}\u0000${buscaDoHistorico}\u0000${recarga}`
   const carregando = resultado?.chave !== chave
 
-  const mostrarAviso = useCallback((dados: Omit<AvisoDados, 'id'>) => {
-    proximoAviso.current += 1
-    setAviso({ id: proximoAviso.current, ...dados })
+  // vencer: o que o aviso do momento faz quando sai SEM o Desfazer (o tempo,
+  // outro aviso no lugar dele, a página fechando). É o "depois, sai de vez" da
+  // imagem tirada da nota (ADR-022, N10): o pedido só vai quando o Desfazer não dá
+  // mais. O Desfazer o cancela.
+  const vencer = useRef<(() => void) | null>(null)
+  const venceu = useCallback(() => {
+    const v = vencer.current
+    vencer.current = null
+    v?.()
   }, [])
+  const mostrarAviso = useCallback(
+    (dados: Omit<AvisoDados, 'id'>, aoVencer?: () => void) => {
+      // O aviso que sai para este entrar já não tem Desfazer.
+      venceu()
+      proximoAviso.current += 1
+      const { desfazer } = dados
+      vencer.current = aoVencer ?? null
+      setAviso({
+        id: proximoAviso.current,
+        ...dados,
+        desfazer: desfazer && (() => {
+          vencer.current = null
+          desfazer()
+        }),
+      })
+    },
+    [venceu],
+  )
   const avisar = useCallback(
-    (texto: ReactNode, desfazer?: () => void, abrir?: () => void) => mostrarAviso({ texto, desfazer, abrir }),
+    (texto: ReactNode, desfazer?: () => void, abrir?: () => void, aoVencer?: () => void) => mostrarAviso({ texto, desfazer, abrir }, aoVencer),
     [mostrarAviso],
   )
-  const sumirAviso = useCallback(() => setAviso(null), [])
+  const sumirAviso = useCallback(() => {
+    venceu()
+    setAviso(null)
+  }, [venceu])
+  // A página que fecha (ou o painel que sai) com o aviso na tela: o Desfazer some
+  // junto, e o que esperava por ele acontece agora (o pedido vai com keepalive).
+  useEffect(() => {
+    window.addEventListener('pagehide', venceu)
+    return () => {
+      window.removeEventListener('pagehide', venceu)
+      venceu()
+    }
+  }, [venceu])
 
   // acender: a ligação caiu. No PC, a faixa do topo avisa e nada sai da
   // tela; na nuvem, a sessão que acabou troca a tela inteira

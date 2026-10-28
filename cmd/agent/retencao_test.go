@@ -49,7 +49,7 @@ func novoAgentDaRetencao(t *testing.T) *agentDaRetencao {
 
 func (a *agentDaRetencao) abrir() {
 	a.t.Helper()
-	h, err := abrirHistoricoComRetencao(slog.New(slog.NewTextHandler(a.log, nil)), a.caminho, "mauro", a.relogio)
+	h, err := abrirHistoricoComRetencao(slog.New(slog.NewTextHandler(a.log, nil)), a.caminho, imagensAoLado(a.caminho), "mauro", a.relogio)
 	if err != nil {
 		a.t.Fatalf("abrirHistoricoComRetencao: %v", err)
 	}
@@ -317,7 +317,7 @@ func TestRetencao_SemDonoFixoPula(t *testing.T) {
 		t.Fatal(err)
 	}
 	var buf bytes.Buffer
-	h, err := abrirHistoricoComRetencao(slog.New(slog.NewTextHandler(&buf, nil)), caminho, "mauro", clock.NewFake(inicioDaRetencao))
+	h, err := abrirHistoricoComRetencao(slog.New(slog.NewTextHandler(&buf, nil)), caminho, imagensAoLado(caminho), "mauro", clock.NewFake(inicioDaRetencao))
 	if err != nil {
 		t.Fatal(err)
 	}

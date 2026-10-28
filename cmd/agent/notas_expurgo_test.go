@@ -26,7 +26,7 @@ func TestAbrirHistorico_ExpurgaALixeiraDasNotas(t *testing.T) {
 	relogio := clock.NewFake(inicio)
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 
-	h, err := abrirHistoricoComRetencao(log, caminho, "mauro", relogio)
+	h, err := abrirHistoricoComRetencao(log, caminho, imagensAoLado(caminho), "mauro", relogio)
 	if err != nil {
 		t.Fatalf("abrirHistoricoComRetencao: %v", err)
 	}
@@ -51,7 +51,7 @@ func TestAbrirHistorico_ExpurgaALixeiraDasNotas(t *testing.T) {
 	}
 	h.fechar()
 
-	h, err = abrirHistoricoComRetencao(log, caminho, "mauro", relogio)
+	h, err = abrirHistoricoComRetencao(log, caminho, imagensAoLado(caminho), "mauro", relogio)
 	if err != nil {
 		t.Fatalf("reabrindo: %v", err)
 	}

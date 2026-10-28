@@ -3869,3 +3869,357 @@ body:has(.ditar-para-nota) .aviso-regiao {
   font-family: var(--fonte-mono);
   font-size: 12px;
 }
+
+/* ─── As imagens das notas (ADR-022, N10; a prévia docs/notas-previa-n10.html) ───
+   No topo do cartão e da nota, de ponta a ponta: uma inteira; duas lado a lado;
+   três ou mais, a primeira larga e duas embaixo, com o "+N" no último quadrado. A
+   foto não muda com o tema (é conteúdo); o quadrado vazio, enquanto ela chega, tem
+   o fundo de realce. */
+.fotos {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  margin: -12px -14px 10px;
+  overflow: hidden;
+  border-radius: calc(var(--raio-md) - 1px) calc(var(--raio-md) - 1px) 0 0;
+}
+
+.fotos.um {
+  grid-template-columns: 1fr;
+}
+
+.fotos.tres > .foto:first-child {
+  grid-column: 1 / -1;
+}
+
+.foto {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 1;
+  background: var(--realce);
+}
+
+.foto > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.foto .faltam {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgb(0 0 0 / 0.45);
+  color: var(--pilula-texto);
+  font-family: var(--fonte-mono);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+/* "guardando…": a cópia reduzida, apagada, até o Agent responder. */
+.foto.guardando > img {
+  opacity: 0.55;
+}
+
+.foto .estado {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  padding: 2px 8px;
+  border-radius: var(--raio-pilula);
+  background: rgb(0 0 0 / 0.62);
+  color: var(--pilula-texto);
+  font-family: var(--fonte-mono);
+  font-size: 11px;
+}
+
+.foto.sem-imagem {
+  display: grid;
+  place-items: center;
+}
+
+.foto-aviso {
+  color: var(--texto-3);
+  font-family: var(--fonte-mono);
+  font-size: 11px;
+}
+
+/* A nota só com imagem: o cartão é a imagem, sem o respiro do texto. */
+.cartao.so-imagem .cartao-abrir {
+  padding: 0;
+}
+
+.cartao.so-imagem .fotos {
+  margin: 0;
+  border-radius: calc(var(--raio-md) - 1px);
+}
+
+.cartao.so-imagem .pe {
+  margin: 0;
+  padding: 6px 14px 8px;
+}
+
+/* Na nota aberta, a grade tem altura fixa: a nota rola, e a imagem inteira se vê
+   grande (a imagem grande, abaixo). */
+.dialogo .fotos {
+  margin: -16px -16px 12px;
+  border-radius: calc(var(--raio-lg) - 1px) calc(var(--raio-lg) - 1px) 0 0;
+}
+
+.dialogo .foto {
+  aspect-ratio: auto;
+  height: 120px;
+}
+
+.dialogo .fotos.um .foto,
+.dialogo .fotos.tres .foto:first-child {
+  height: 190px;
+}
+
+/* Os colchetes do editor ficam por cima das fotos. */
+.dialogo::before,
+.dialogo::after {
+  z-index: 3;
+}
+
+/* O fixar fica onde sempre esteve, no canto do título, com ou sem imagem em cima. */
+.dialogo .com-fixar {
+  position: relative;
+}
+
+.dialogo .com-fixar > .fixar-no-dialogo {
+  top: -4px;
+  right: -4px;
+}
+
+.foto-abrir {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: zoom-in;
+}
+
+.foto-abrir:focus-visible {
+  outline-offset: -3px;
+}
+
+/* O × sobre a imagem aparece com o ponteiro ou o foco nela (no toque, sempre). */
+.foto .tirar {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 1;
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgb(0 0 0 / 0.62);
+  color: var(--pilula-texto);
+  opacity: 0;
+  transition: opacity 120ms var(--curva);
+}
+
+.foto .tirar svg {
+  width: 14px;
+  height: 14px;
+}
+
+.foto:hover .tirar,
+.foto:focus-within .tirar {
+  opacity: 1;
+}
+
+.dialogo .foto:hover::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  box-shadow: inset 0 0 0 2px var(--linha-forte);
+  pointer-events: none;
+}
+
+@media (hover: none) {
+  .foto .tirar {
+    opacity: 1;
+  }
+}
+
+/* Arrastar um arquivo do Windows por cima da nota aberta. */
+.soltar {
+  position: absolute;
+  inset: 6px;
+  z-index: 4;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 8px;
+  border: 2px dashed var(--foco);
+  border-radius: calc(var(--raio-lg) - 4px);
+  background: color-mix(in srgb, var(--superficie) 90%, transparent);
+  color: var(--texto);
+  font-size: 14px;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.soltar svg {
+  width: 26px;
+  height: 26px;
+  color: var(--texto-2);
+}
+
+/* A imagem grande: escura nos dois temas, como todo visor de foto (o escuro da
+   pílula, que é o mesmo nos dois). */
+.luz {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  background: var(--pilula);
+  color: var(--pilula-texto);
+}
+
+.luz :focus-visible {
+  outline-color: var(--pilula-texto);
+}
+
+.topo-luz {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 12px;
+}
+
+.luz .conta {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--pilula-texto-2);
+  font-family: var(--fonte-mono);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.botao-luz {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--raio-sm);
+  background: transparent;
+  color: var(--pilula-texto);
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.botao-luz:hover:not(:disabled) {
+  background: rgb(245 247 245 / 0.1);
+}
+
+.botao-luz:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.botao-luz svg {
+  width: 16px;
+  height: 16px;
+}
+
+.imagem-grande {
+  position: absolute;
+  inset: 56px 72px 24px;
+  display: grid;
+  place-items: center;
+}
+
+.imagem-grande img {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 4px;
+}
+
+.seta-luz {
+  position: absolute;
+  top: 50%;
+  display: inline-grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 50%;
+  background: rgb(245 247 245 / 0.1);
+  color: var(--pilula-texto);
+  font-size: 20px;
+  transform: translateY(-50%);
+}
+
+.seta-luz.esq {
+  left: 16px;
+}
+
+.seta-luz.dir {
+  right: 16px;
+}
+
+@media (max-width: 720px) {
+  .imagem-grande {
+    inset: 56px 8px 72px;
+  }
+
+  .seta-luz {
+    top: auto;
+    bottom: 16px;
+    transform: none;
+  }
+}
+
+@media (pointer: coarse) {
+  .botao-luz,
+  .seta-luz {
+    height: 44px;
+  }
+
+  .seta-luz {
+    width: 44px;
+  }
+
+  .foto .tirar {
+    width: 36px;
+    height: 36px;
+  }
+}
+
+/* Na forma "lista", quantas imagens a nota tem. */
+.nota-linha-imagens {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  color: var(--texto-3);
+  font-family: var(--fonte-mono);
+  font-size: 11px;
+}
+
+.nota-linha-imagens svg {
+  width: 14px;
+  height: 14px;
+}

@@ -135,6 +135,14 @@ describe('o bundle local (bin\\painel)', () => {
     expect(local.js).toContain('Ver notas e ditados')
     expect(local.js).toContain('Copiar para WhatsApp')
     expect(local.js).toContain('Copiado para o WhatsApp.')
+    // ADR-022, N10: as imagens das notas no PC (as rotas do Agent, o colar e o
+    // arrastar, o tirar com Desfazer).
+    expect(local.js).toContain('/api/notas/com-imagem')
+    expect(local.js).toContain('/imagens')
+    expect(local.js).toContain('image/jpeg')
+    expect(local.js).toContain('Solte para anexar à nota')
+    expect(local.js).toContain('Imagem tirada da nota.')
+    expect(local.js).toContain('createObjectURL')
   })
 
   // A orientação das chaves (lançamento, garantia 1): o campo da chave da IA diz onde
@@ -472,6 +480,14 @@ describe('quem guarda no aparelho', () => {
 
   it('o localStorage: só as preferências da aba Notas', async () => {
     expect(await quemUsa(/localStorage/)).toEqual(['notas/preferencias.ts'])
+  })
+
+  // ADR-022, N10: a URL blob: das imagens das notas nasce só no cliente do PC (a
+  // imagem lida com o token). O app do celular ainda não mostra imagem, e o
+  // gravador do ditado não pode criar URL de blob nenhum (o it.each do áudio,
+  // acima): a segunda metade da N10 muda esta lista de propósito.
+  it('a URL blob: só no cliente do PC', async () => {
+    expect(await quemUsa(/createObjectURL/)).toEqual(['clienteLocal.ts'])
   })
 })
 

@@ -91,6 +91,11 @@ type Preferencias struct {
 	// /api/marcadores*. Em produção, o *storage.SQLiteNotaRepository. Nil: as
 	// rotas respondem 503.
 	Notas storage.NotaRepository
+	// Imagens são as imagens das notas (ADR-022, N10): /api/notas/com-imagem e
+	// /api/notas/{id}/imagens*. Em produção, o mesmo *storage.SQLiteNotaRepository
+	// das notas, com a pasta das imagens montada. Nil: as rotas respondem 503, e a
+	// nota no JSON continua com a lista (vazia).
+	Imagens storage.ImagemDaNotaRepository
 	// Foco é o aviso, só em memória, de que o cursor está dentro de uma nota
 	// (ADR-022, "Ditado feito dentro da nota"): PUT e DELETE /api/notas/foco.
 	// Em produção é o mesmo *notafoco.Marcador que o Runtime consulta ao gravar
@@ -222,6 +227,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /api/notas/{id}/definitivo", s.handleApagarNotaDeVez)
 	mux.HandleFunc("PUT /api/notas/{id}/marcadores/{marcador}", s.handleMarcarNota)
 	mux.HandleFunc("DELETE /api/notas/{id}/marcadores/{marcador}", s.handleDesmarcarNota)
+
+	mux.HandleFunc("POST /api/notas/com-imagem", s.handleCriarNotaComImagem)
+	mux.HandleFunc("POST /api/notas/{id}/imagens", s.handleAnexarImagem)
+	mux.HandleFunc("GET /api/notas/{id}/imagens/{imagem}", s.handleLerImagem)
+	mux.HandleFunc("DELETE /api/notas/{id}/imagens/{imagem}", s.handleTirarImagem)
 
 	mux.HandleFunc("POST /api/notas/separar-itens", s.handleSepararItens)
 
