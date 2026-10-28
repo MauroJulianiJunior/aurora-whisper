@@ -644,7 +644,11 @@ entrega.
   nela). Só quando maiores que 0, em linhas discretas embaixo: "{M} deles estão na lixeira.", "{K} têm
   duas versões, e as duas saem." (o selo sai sem a escolha de quem usa) e "{J} são de outro dono e
   ficam." (as linhas de outro `user_id` que o painel não mostra). Com N = 1, as duas primeiras falam
-  dele: "Ele está na lixeira." e "Ele tem duas versões, e as duas saem."
+  dele: "Ele está na lixeira." e "Ele tem duas versões, e as duas saem." **Desde 28-out-2026** (o
+  ditado que virou nota segue os 6 meses: o dossiê de LGPD, decisão 11), depois do selo: "{V} deles
+  viraram nota: saem os ditados, e as notas ficam." ("1 deles virou nota: sai o ditado, e a nota fica.";
+  com N = 1, "Ele virou nota: sai o ditado, e a nota fica."), porque o histórico não mostra esses ditados
+  e a pergunta os conta.
 - **A confirmação na própria linha** (o padrão do **Esquecer esta nuvem**, sem janela): o clique no
   botão abre, logo abaixo das linhas e com o respiro da linha de botões que ela substitui,
   "**Apagar {N} ditados?** Não dá para desfazer." com **Apagar** (botão de risco) e **Cancelar** (a

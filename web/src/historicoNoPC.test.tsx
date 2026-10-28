@@ -145,6 +145,24 @@ describe('o bloco Histórico do PC: a pergunta', () => {
     expect(t).not.toContain('na lixeira')
     expect(t).not.toContain('duas versões')
     expect(t).not.toContain('outro dono')
+    expect(t).not.toContain('virou nota')
+    expect(t).not.toContain('viraram nota')
+  })
+
+  // O ditado que virou nota segue os 6 meses (o dossiê de LGPD, decisão 11): o
+  // histórico não o mostra, e a pergunta, que o conta, diz que a nota fica.
+  it('os que viraram nota: a linha diz que a nota fica, no plural, com 1 deles e com um só; sem o campo (Agent de antes), nada', async () => {
+    await abrir({ retencao: estado({ previa: 1240, viraram_nota: 12 }) })
+    expect(within(secao()).getByText('12 deles viraram nota: saem os ditados, e as notas ficam.')).toBeTruthy()
+    cleanup()
+    await abrir({ retencao: estado({ previa: 7, viraram_nota: 1 }) })
+    expect(within(secao()).getByText('1 deles virou nota: sai o ditado, e a nota fica.')).toBeTruthy()
+    cleanup()
+    await abrir({ retencao: estado({ previa: 1, viraram_nota: 1 }) })
+    expect(within(secao()).getByText('Ele virou nota: sai o ditado, e a nota fica.')).toBeTruthy()
+    cleanup()
+    await abrir({ retencao: estado({ previa: 5 }) })
+    expect(secao().textContent).not.toContain('nota fica')
   })
 
   it('o clique pergunta de novo na própria linha: o foco vai ao Cancelar, e o Esc cancela e devolve o foco', async () => {

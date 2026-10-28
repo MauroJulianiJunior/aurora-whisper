@@ -37,9 +37,12 @@ import (
 //
 // # O ditado que virou nota
 //
-// Fica fora da regra (virou_nota IS NULL no pré-filtro): o texto dele vive na
-// nota, que não tem a retenção de 6 meses (ADR-022, "Ditado vira nota"). Nem a
-// prévia o conta.
+// Segue a regra, como na nuvem (decisão do Mauro, 28-out-2026; o dossiê de
+// LGPD, seção 7, decisão 11): sai a linha escondida do ditado, e a nota, que
+// não tem a retenção de 6 meses e já tem o texto, fica (o ditado_de_origem dela
+// não tem chave estrangeira e guarda o id solto, como na nuvem). Até então o
+// texto bruto ficava no PC sem prazo, mesmo depois de a nota ser apagada. A
+// prévia o conta à parte (ViraramNota), porque o histórico não o mostra.
 //
 // # O que sai com o ditado, e o que fica
 //
@@ -68,6 +71,9 @@ type ContagemDosSeisMeses struct {
 	// ComSelo: dos Total, os que têm duas versões (o selo), que saem sem a
 	// escolha de quem usa.
 	ComSelo int
+	// ViraramNota: dos Total, os que viraram nota (fora do histórico): sai o
+	// ditado, e a nota fica.
+	ViraramNota int
 	// DeOutroDono: as linhas de outro dono fora da janela, que ficam (não
 	// entram no Total).
 	DeOutroDono int
@@ -108,6 +114,7 @@ type vencidoDosSeisMeses struct {
 	id        string
 	naLixeira bool
 	comSelo   bool
+	virouNota bool
 }
 
 // foraDaJanela lê um lote: até LoteDosSeisMeses candidatos do dono (ou, com
@@ -129,8 +136,8 @@ func foraDaJanela(ctx context.Context, q consulta, dono string, deOutroDono bool
 		args = append(args, depois.criado, depois.criado, depois.id)
 	}
 	args = append(args, LoteDosSeisMeses)
-	linhas, err := q.QueryContext(ctx, `SELECT id, created_at, deleted_at IS NOT NULL, conflito_texto IS NOT NULL
-		FROM local_transcriptions WHERE `+donoSQL+` AND virou_nota IS NULL AND created_at <= ?`+cursorSQL+`
+	linhas, err := q.QueryContext(ctx, `SELECT id, created_at, deleted_at IS NOT NULL, conflito_texto IS NOT NULL, virou_nota IS NOT NULL
+		FROM local_transcriptions WHERE `+donoSQL+` AND created_at <= ?`+cursorSQL+`
 		ORDER BY created_at, id LIMIT ?`, args...)
 	if err != nil {
 		return nil, 0, depois, fmt.Errorf("storage: lendo o que passou dos 6 meses: %w", err)
@@ -142,7 +149,7 @@ func foraDaJanela(ctx context.Context, q consulta, dono string, deOutroDono bool
 	for linhas.Next() {
 		var v vencidoDosSeisMeses
 		var criado string
-		if err := linhas.Scan(&v.id, &criado, &v.naLixeira, &v.comSelo); err != nil {
+		if err := linhas.Scan(&v.id, &criado, &v.naLixeira, &v.comSelo, &v.virouNota); err != nil {
 			return nil, 0, depois, fmt.Errorf("storage: lendo o que passou dos 6 meses: %w", err)
 		}
 		lidos++
@@ -200,6 +207,9 @@ func previaDosSeisMeses(ctx context.Context, tx *sql.Tx, agora time.Time) (Conta
 				}
 				if v.comSelo {
 					c.ComSelo++
+				}
+				if v.virouNota {
+					c.ViraramNota++
 				}
 			}
 			if lidos < LoteDosSeisMeses {

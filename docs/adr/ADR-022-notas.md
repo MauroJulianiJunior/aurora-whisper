@@ -108,6 +108,8 @@ colunas de sync que o ditado já tem (`sync_state`, `server_version`, `last_sync
   ela não foi editada). Alternativa: mandar para a lixeira (mais simples, sem coluna nova).
 - Apagar a nota depois não devolve o ditado ao histórico.
 - A retenção de 6 meses do histórico não alcança o ditado que virou nota (o texto vive na nota).
+  **[mudou em 28-out-2026]** Alcança, no PC e na nuvem: ver "Riscos", item "'Virar nota' guarda o texto
+  bruto para sempre".
 - **Feito na N3 (25-out-2026):** rota `POST /api/history/{id}/virar-nota` e `POST
   /api/notas/{id}/desfazer-virar`; a coluna `virou_nota` (migration 0010), sem chave estrangeira; a lista e
   a busca do histórico (e a lixeira) escondem o ditado marcado, o expurgo de 30 dias e os 6 meses o
@@ -502,7 +504,8 @@ As marcadas **[desvio]** mudam algo escrito acima. O deploy é ponto de parada: 
 - **A retenção de 6 meses na nuvem continua valendo para o ditado que virou nota** (a ligação sai junto,
   em cascata). No PC continua como a N3 deixou (fora dos 6 meses). Por quê: a nuvem guarda o mínimo, e o
   texto vive na nota. **A nota de privacidade da N3 ("Virar nota" guarda o texto bruto para sempre no PC)
-  continua em aberto**: a N7 não muda o PC.
+  continua em aberto**: a N7 não muda o PC. (Fechada em 28-out-2026: o PC segue os 6 meses também; ver
+  "Riscos".)
 - **`ditado_de_origem` sobe** no criar da nota (só o id), e nunca muda depois.
 - **O envio inicial das notas.** Nada de clique novo: o "Enviar o histórico" (F7c) já é o aceite da pessoa
   para mandar o que é dela à nuvem. Com o aceite e com a nuvem que sabe de notas, toda rodada põe na fila
@@ -683,6 +686,12 @@ Anexar imagem à nota (o ícone do Keep). Desenho prévio, a confirmar quando a 
   mesmo que a pessoa apague a nota da lixeira depois (o ditado fica escondido, com o id solto). Se isso
   incomodar na LGPD (o ditado é dado pessoal), a saída é limpar o `raw_text` do ditado quando a nota
   for apagada de vez, ou deixá-lo voltar à regra dos 6 meses nesse caso. Não foi decidido.
+  **Decidido em 28-out-2026 (Mauro, na revisão de LGPD das notas: "Segue os 6 meses"; o dossiê, decisão
+  11):** o ditado que virou nota segue a regra dos 6 meses do PC, como já seguia na nuvem. Sai a linha
+  escondida do ditado, e a nota fica (o `ditado_de_origem` não tem chave estrangeira: o id fica solto,
+  como na nuvem). A pergunta dos 6 meses o conta à parte (`viraram_nota`, "N deles viraram nota: saem os
+  ditados, e as notas ficam."), porque o histórico não o mostra. Código:
+  `internal/storage/seis_meses_sqlite.go`.
 - **O segundo gatilho** pode colidir com atalho de outro programa (`Ctrl+Win+Alt` é pouco usado, mas
   não foi medido). O detector de conflito de atalho do Agent (`internal/agent/conflito`) passa a
   olhar os dois.
@@ -691,7 +700,7 @@ Anexar imagem à nota (o ícone do Keep). Desenho prévio, a confirmar quando a 
   propriedade, `cloudstore/lista_de_marcar_test.go`; ver Decisões da N7.)
 - **Texto da nota no servidor:** mesmo tratamento dos ditados (ADR-019); a política de privacidade
   ganha uma linha. (Feito em 28-out-2026: a política, o dossiê e as frases do app falam das notas; ver
-  `docs/lgpd-dossie.md`, seção 7, decisões 10 e 11.)
+  `docs/lgpd-dossie.md`, seção 7, decisões 10 e 11, as duas decididas pelo Mauro no mesmo dia.)
 - **Custo da IA na conversão:** uma chamada por conversão de texto corrido, na chave da pessoa
   (centavos por mês no uso esperado).
 

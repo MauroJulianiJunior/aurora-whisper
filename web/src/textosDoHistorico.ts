@@ -29,6 +29,14 @@ export const naLixeira = (m: number, n: number) =>
 export const comDuasVersoes = (k: number, n: number) =>
   n === 1 ? 'Ele tem duas versões, e as duas saem.' : k === 1 ? '1 tem duas versões, e as duas saem.' : `${numero(k)} têm duas versões, e as duas saem.`
 export const deOutroDono = (j: number) => (j === 1 ? '1 é de outro dono e fica.' : `${numero(j)} são de outro dono e ficam.`)
+// viraramNota: os que viraram nota não aparecem no histórico, e a pergunta os
+// conta (ADR-022; o dossiê de LGPD, decisão 11): a linha diz que a nota fica.
+export const viraramNota = (v: number, n: number) =>
+  n === 1
+    ? 'Ele virou nota: sai o ditado, e a nota fica.'
+    : v === 1
+      ? '1 deles virou nota: sai o ditado, e a nota fica.'
+      : `${numero(v)} deles viraram nota: saem os ditados, e as notas ficam.`
 
 // regraPausada vem antes da pergunta (ou sozinha, sem nada a apagar: aí o bloco
 // só aparece pelas cópias, e a frase diz quando a pergunta volta).

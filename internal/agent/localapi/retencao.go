@@ -86,9 +86,11 @@ var MsgCopiasDemaisDoLigar = fmt.Sprintf("Já há %d cópias de antes dos 6 mese
 type retencaoDTO struct {
 	// Previa: quantos ditados do dono o OK apagaria agora (ativos e na lixeira).
 	Previa int `json:"previa"`
-	// NaLixeira e ComSelo: subconjuntos da Previa.
-	NaLixeira int `json:"na_lixeira"`
-	ComSelo   int `json:"com_selo"`
+	// NaLixeira, ComSelo e ViraramNota: subconjuntos da Previa (o que virou
+	// nota não aparece no histórico; sai o ditado, e a nota fica).
+	NaLixeira   int `json:"na_lixeira"`
+	ComSelo     int `json:"com_selo"`
+	ViraramNota int `json:"viraram_nota"`
 	// DeOutroDono: os fora da janela de outro dono, que ficam e não entram na Previa.
 	DeOutroDono int `json:"de_outro_dono"`
 	// Ligada: o OK está gravado.
@@ -107,7 +109,7 @@ type retencaoDTO struct {
 
 func retencaoDe(e storage.EstadoDosSeisMeses) retencaoDTO {
 	return retencaoDTO{
-		Previa: e.Total, NaLixeira: e.NaLixeira, ComSelo: e.ComSelo, DeOutroDono: e.DeOutroDono,
+		Previa: e.Total, NaLixeira: e.NaLixeira, ComSelo: e.ComSelo, ViraramNota: e.ViraramNota, DeOutroDono: e.DeOutroDono,
 		Ligada: e.Ligada, Pausada: e.Pausada, Copias: e.Copias,
 		CopiasApagaveis: e.CopiasApagaveis, CopiaDosSeisMeses: e.CopiaDosSeisMeses,
 	}

@@ -192,7 +192,7 @@ que o provedor diz hoje, vale o que o provedor diz. As páginas lidas estão cit
 | **Notas e marcadores** | **até você apagar**: não têm os 6 meses dos ditados |
 | Lixeira das notas | 30 dias depois de você mandar para lá, no PC e na nuvem |
 | Nota ou marcador apagado de vez | some na hora. Fica só o número dele, sem texto, **enquanto a sua conta existir**, para a nota não voltar de um PC que ficou desligado muito tempo |
-| Ditado que virou nota | na nuvem, os 6 meses de todo ditado (o texto continua na nota). **No PC, não tem prazo** (seção 10) |
+| Ditado que virou nota | os 6 meses de todo ditado, na nuvem e no PC (no PC, depois do seu OK na tela Histórico). O texto continua na nota |
 | Notas guardadas no celular | até o Sair ou o "Apagar meus dados". O navegador pode apagá-las antes, se faltar espaço no aparelho |
 | Trocas aprendidas | enquanto você não as desfaz. **Depois de desfeita, a nuvem guarda a troca (a palavra e a certa), marcada como desfeita, enquanto a sua conta existir** (seção 10) |
 | Sessão do navegador | 30 dias sem uso, e no máximo 90 desde o login |
@@ -300,9 +300,8 @@ responsável comunica você e a autoridade (art. 48).
    administra o servidor as lê, como lê os ditados:
    - a nota apagada de vez some na hora, mas o número dela (sem texto) fica enquanto a sua conta
      existir, e a cópia de segurança guarda o texto até girar;
-   - **no PC, o ditado que virou nota fica sem prazo**: ele sai do histórico, mas o texto dele continua
-     guardado no PC, escondido, mesmo com os 6 meses ligados e mesmo depois de você apagar a nota. Na
-     nuvem, ele segue os 6 meses de todo ditado;
+   - o ditado que virou nota sai do histórico, mas continua guardado, escondido, até completar os 6
+     meses de todo ditado (no PC, quando você os liga); a nota fica;
    - no celular, a última lista das notas fica no aparelho até você **Sair** (seção 3).
 
 ## 11. Se for preciso restaurar a cópia de segurança
