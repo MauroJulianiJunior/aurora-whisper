@@ -586,6 +586,9 @@ pergunta conta as trocas aprendidas (o `previa_trocas` do `06`, o M).
   (durante o clique, "Enviando…" no lugar de "Copiando o histórico…", porque não há cópia); depois, as
   trocas contam no "{n} para enviar." e não no progresso "Enviando o histórico: {feitos} de {total}.",
   que é só dos ditados.
+- **As notas (ADR-022, N7; frase de 28-out-2026):** logo depois da contagem, sempre, "As suas notas vão
+  junto." (elas sobem pelo mesmo clique; as da lixeira, não). Fica: "Vão subir {N} ditados dos últimos 6
+  meses. As suas notas vão junto. A lixeira não vai. Antes, uma cópia do histórico fica neste PC."
 - **O aviso do freio** (conectado, abaixo da linha do envio e acima do Desconectar, num `role="status"`,
   como uma linha de ajuda e não como nota de erro: não houve falha): quando o `historico.freio_trocas`
   (`06`) é maior que 0, "{n} trocas aprendidas saíram do dicionário de uma vez. Por segurança, nada do
@@ -594,10 +597,13 @@ pergunta conta as trocas aprendidas (o `previa_trocas` do `06`, o M).
   campo, ou com 0, não aparece; desconectado, também não (a varredura só roda conectada). É o aviso
   que a ADR prometia ("nada sobe, e o painel avisa"); o botão de confirmar a remoção à mão continua
   sendo decisão do Mauro (ADR-019, desvio 16).
-- **A Privacidade do PC**, com o PC conectado: "Com a nuvem conectada, o texto dos seus ditados e as
-  trocas que você aprendeu vão para a sua nuvem, em {endereço}. O áudio e o que está nas outras janelas
-  nunca vão." (o `08` do plano dizia "e o que você aprendeu"; "as trocas que você aprendeu" é o que a D1
-  limita: só o botão Aprender). A do app do celular: "Configurações do celular", abaixo (ADR-021, D0).
+- **A Privacidade do PC**, com o PC conectado: "Com a nuvem conectada, o texto dos seus ditados, as suas
+  notas e as trocas que você aprendeu vão para a sua nuvem, em {endereço}. O áudio e o que está nas outras
+  janelas nunca vão." (o `08` do plano dizia "e o que você aprendeu"; "as trocas que você aprendeu" é o que
+  a D1 limita: só o botão Aprender; "as suas notas" entrou em 28-out-2026, ADR-022). Logo depois da frase
+  do Polish, sempre (é aviso, como ela): "Com o Polish ligado, separar em itens uma linha de uma nota (pelo
+  Formatar) manda essa linha ao mesmo provedor." (ADR-022, N5). A do app do celular: "Configurações do
+  celular", abaixo (ADR-021, D0).
 - **Para ver as telas** sem Agent nem nuvem: `pnpm -C web dev` e `/telas-dev.html?cenario=estados` (o
   painel do PC; também `so-estados`, `pergunta`, `so-trocas`, `conectado` e `freio` e, para a orientação
   das chaves, `primeiro-uso` (o histórico vazio; abra com `&config=0`), `chaves` e `chaves-anthropic` (a
@@ -1214,18 +1220,23 @@ onda (hoje -48 a -14 dBFS) e o bitrate (hoje 32 kbit/s), que partem dos valores 
   aparelho" e não tem botão; as outras têm **Encerrar** (o aviso: "Sessão encerrada."). Sem outra:
   "Nenhuma outra sessão aberta."
 - **Privacidade** (ADR-021, D0; o texto é o da `docs/politica-de-privacidade.md`):
-  - "Vão para a nuvem: o texto dos ditados, com a data, o PC de origem e os detalhes da transcrição, e as
-    trocas aprendidas. O texto fica legível para quem administra o servidor." (as trocas entraram na F8h)
-  - "Ficam 6 meses (a lixeira, 30 dias). Uma cópia cifrada guarda tudo por cerca de 30 dias além disso."
+  - "Vão para a nuvem: o texto dos ditados, com a data, o PC de origem e os detalhes da transcrição, as
+    notas, com os marcadores, e as trocas aprendidas. O texto fica legível para quem administra o
+    servidor." (as trocas entraram na F8h; as notas, em 28-out-2026, ADR-022)
+  - "Os ditados ficam 6 meses; as notas, até você apagar (a lixeira, 30 dias). Uma cópia cifrada guarda
+    tudo por cerca de 30 dias além disso."
   - "Do PC nunca vão: o áudio, o que está nas outras janelas, a chave do Polish e as configurações dos
     PCs; **a chave do PC continua no PC**." (A frase não cita onde a chave mora: o build da nuvem não
     pode trazer "Gerenciador de Credenciais", e o `bundle.test.ts` a recusa.)
   - "Ditar pelo celular é opcional. Se você ligar, a voz de cada ditado vai ao provedor que você escolher
     (OpenAI ou Groq), com a sua chave, que o servidor guarda cifrada. A voz não é gravada: fica na
     memória e é descartada ao fim."
+  - "As notas ficam guardadas também neste aparelho, para abrir sem internet. O Sair as apaga daqui."
+    (ADR-022, N8: o IndexedDB da conta)
   - Depois, **Apagar meus dados da nuvem** (botão de risco), que abre ali mesmo: "Apaga tudo desta conta
     na nuvem e desconecta os PCs. Os PCs ficam com a cópia deles. A cópia de segurança guarda por até
-    cerca de 30 dias. Apaga também o aceite do ditado no celular, as preferências e as chaves.", o campo
+    cerca de 30 dias. Apaga também o aceite do ditado no celular, as preferências, as chaves e as notas
+    guardadas neste aparelho.", o campo
     "Para confirmar, digite apagar", **Apagar tudo** (só funciona com "apagar" digitado) e **Cancelar**
     (Esc também). Feito: o aviso "Seus dados foram apagados da nuvem.", e o histórico lê de novo.
 

@@ -432,11 +432,11 @@ ADR-019, "Decisões da F3"). O que vale, e onde cada coisa é provada (a suíte
     "Logging proibido"). O servidor registra só o padrão da rota, o status e contagens (`mutacoes`,
     `mudancas`, `itens`).
 - **No servidor:** o texto fica legível para quem administra a VPS (THR-023). A revisão de LGPD é
-  pré-condição do deploy (abaixo; o dossiê é `docs/lgpd-dossie.md`). **Pendência, não feita na N7:** a
-  revisão de LGPD da F11 foi escrita antes das notas, e nem o dossiê nem a política de privacidade falam
-  delas ainda. A ADR-022 já previa "a política de privacidade ganha uma linha" (título, corpo e marcador no
-  servidor, o ditado que virou nota); fica para o Mauro decidir quando, e vale lembrar antes do deploy da
-  N7 (`docs/deploy-notas-n7.md`).
+  pré-condição do deploy (abaixo; o dossiê é `docs/lgpd-dossie.md`). **Feito em 28-out-2026, depois do
+  deploy da N8:** o dossiê e a política de privacidade falam das notas (o que sobe, os prazos, o celular,
+  a separação em itens com o Polish), e as frases de Privacidade do app e a pergunta do envio também. Ficam
+  com o Mauro as decisões 10 (o aviso a quem já usava a nuvem) e 11 (o ditado que virou nota sem prazo no
+  PC) do dossiê, seção 7.
 - **Notas no celular (ADR-022, N8; 27-out-2026):** o app da nuvem passa a ler e escrever as notas pela
   sessão, e **guarda no aparelho**, num banco IndexedDB por conta (`aurora-notas-<id da conta>`,
   `web/src/nuvem/notas/armazem.ts`), a última lista de notas (título e corpo), os marcadores (o nome) e a

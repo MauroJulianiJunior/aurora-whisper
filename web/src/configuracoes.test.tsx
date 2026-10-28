@@ -1340,7 +1340,7 @@ describe('Sistema e Privacidade', () => {
     await abrir()
     const secao = screen.getByRole('region', { name: 'Privacidade' })
     const fatos = within(secao).getAllByRole('listitem').map((li) => li.textContent)
-    expect(fatos).toHaveLength(4)
+    expect(fatos).toHaveLength(5)
     expect(fatos[0]).toContain('áudio não é salvo')
     expect(fatos[1]).toContain('outras janelas não é guardado')
     expect(fatos[2]).toContain('Gerenciador de Credenciais do Windows')
@@ -1349,12 +1349,15 @@ describe('Sistema e Privacidade', () => {
     expect(fatos[3]).toBe(
       'No modo Polish, o texto ditado (nunca o áudio nem o que está nas outras janelas) vai ao provedor de IA escolhido, com a sua chave; OpenAI e Anthropic podem guardá-lo por até 30 dias e dizem não usá-lo para treinar modelos.',
     )
+    // A separação em itens com IA (ADR-022, N5; a política, seção 10).
+    expect(fatos[4]).toBe('Com o Polish ligado, separar em itens uma linha de uma nota (pelo Formatar) manda essa linha ao mesmo provedor.')
   })
 
   it('a frase do Polish está na Privacidade também sem o Polish liberado no Agent: é aviso, não recurso', async () => {
     await abrir({ config: { polish_disponivel: false } })
     const secao = screen.getByRole('region', { name: 'Privacidade' })
     expect(within(secao).getByText(/No modo Polish, o texto ditado/)).toBeTruthy()
+    expect(within(secao).getByText(/separar em itens uma linha de uma nota/)).toBeTruthy()
   })
 })
 

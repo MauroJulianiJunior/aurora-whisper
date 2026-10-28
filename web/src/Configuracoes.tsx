@@ -863,6 +863,9 @@ export function Configuracoes({ cliente, visivel, aoPerderLigacao, avisar, apren
             No modo Polish, o texto ditado (nunca o áudio nem o que está nas outras janelas) vai ao provedor de IA escolhido, com a sua chave; OpenAI e
             Anthropic podem guardá-lo por até 30 dias e dizem não usá-lo para treinar modelos.
           </li>
+          {/* A separação em itens com IA (ADR-022, N5): é aviso, como a frase
+              do Polish, e por isso aparece também com o Polish desligado. */}
+          <li>Com o Polish ligado, separar em itens uma linha de uma nota (pelo Formatar) manda essa linha ao mesmo provedor.</li>
           {/* A frase da nuvem (ADR-019; pendente desde a F6, entra com o
               envio, F7c): só com o PC conectado. Desde a F8, as trocas
               aprendidas vão junto (06 e 09: a variante, o termo, a restrição e
@@ -871,7 +874,7 @@ export function Configuracoes({ cliente, visivel, aoPerderLigacao, avisar, apren
           {seisMesesLigados && <li>O que completa 6 meses é apagado deste computador.</li>}
           {nuvemConectada && (
             <li>
-              Com a nuvem conectada, o texto dos seus ditados e as trocas que você aprendeu vão para a sua nuvem, em{' '}
+              Com a nuvem conectada, o texto dos seus ditados, as suas notas e as trocas que você aprendeu vão para a sua nuvem, em{' '}
               <span className="email">{nuvemConectada}</span>. O áudio e o que está nas outras janelas nunca vão.
             </li>
           )}

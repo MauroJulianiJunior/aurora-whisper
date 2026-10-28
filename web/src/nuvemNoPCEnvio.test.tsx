@@ -66,7 +66,7 @@ describe('o envio do histórico', () => {
   it('pergunta uma vez, com o número, a lixeira e a cópia', async () => {
     await abrir({ nuvem: conectado({ previa: 800, aceito: false, conferido_em: CONF }) })
     const grupo = await within(secao()).findByRole('group', {
-      name: 'Vão subir 800 ditados dos últimos 6 meses. A lixeira não vai. Antes, uma cópia do histórico fica neste PC.',
+      name: 'Vão subir 800 ditados dos últimos 6 meses. As suas notas vão junto. A lixeira não vai. Antes, uma cópia do histórico fica neste PC.',
     })
     expect(within(grupo).getByRole('button', { name: 'Enviar o histórico' })).toBeTruthy()
     expect(grupo.textContent).not.toContain('outra nuvem')
@@ -74,7 +74,7 @@ describe('o envio do histórico', () => {
 
   it('no singular, e o número com o ponto do milhar', async () => {
     await abrir({ nuvem: conectado({ previa: 1, aceito: false, conferido_em: CONF }) })
-    await within(secao()).findByText('Vai subir 1 ditado dos últimos 6 meses. A lixeira não vai. Antes, uma cópia do histórico fica neste PC.')
+    await within(secao()).findByText('Vai subir 1 ditado dos últimos 6 meses. As suas notas vão junto. A lixeira não vai. Antes, uma cópia do histórico fica neste PC.')
     cleanup()
     await abrir({ nuvem: conectado({ previa: 7000, aceito: false, conferido_em: CONF }) })
     await within(secao()).findByText(/^Vão subir 7\.000 ditados/)
@@ -195,7 +195,9 @@ describe('o envio do histórico', () => {
 // trocas aprendidas"), também quando não há ditado a enviar (N = 0). O Agent
 // de antes da F8 não manda previa_trocas: a frase é a de sempre.
 describe('o envio com trocas aprendidas', () => {
-  const resto = ' A lixeira não vai. Antes, uma cópia do histórico fica neste PC.'
+  // As notas sobem pelo mesmo clique (ADR-022, N7), e a pergunta o diz.
+  const notas = ' As suas notas vão junto.'
+  const resto = `${notas} A lixeira não vai. Antes, uma cópia do histórico fica neste PC.`
   const pergunta = async () => within(secao()).findByRole('group')
   // A frase da pergunta (o grupo leva também o botão).
   const frase = async () => textoDa((await pergunta()).querySelector('#cfg-envio')!)
@@ -222,13 +224,13 @@ describe('o envio com trocas aprendidas', () => {
   it('sem ditado a enviar (N = 0) e com trocas: a pergunta aparece, sem a lixeira e sem a cópia', async () => {
     await abrir({ nuvem: conectado({ previa: 0, previa_trocas: 3, aceito: false, conferido_em: CONF }) })
     const grupo = await pergunta()
-    expect(await frase()).toBe('Vão subir 3 trocas aprendidas.')
+    expect(await frase()).toBe(`Vão subir 3 trocas aprendidas.${notas}`)
     expect(within(grupo).getByRole('button', { name: 'Enviar o histórico' })).toBeTruthy()
     expect(grupo.textContent).not.toContain('lixeira')
     expect(grupo.textContent).not.toContain('cópia')
     cleanup()
     await abrir({ nuvem: conectado({ previa: 0, previa_trocas: 1, aceito: false, conferido_em: CONF }) })
-    expect(await frase()).toBe('Vai subir 1 troca aprendida.')
+    expect(await frase()).toBe(`Vai subir 1 troca aprendida.${notas}`)
   })
 
   it('com N = 0, a frase dos ditados que "podem já estar na nuvem" não cabe', async () => {
@@ -420,9 +422,10 @@ describe('o Esquecer esta nuvem', () => {
 })
 
 describe('a Privacidade do PC', () => {
-  // F8h: as trocas aprendidas também vão para a nuvem (06 e 09).
+  // F8h: as trocas aprendidas também vão para a nuvem (06 e 09); desde a N7
+  // (ADR-022), as notas também.
   const frase =
-    'Com a nuvem conectada, o texto dos seus ditados e as trocas que você aprendeu vão para a sua nuvem, em http://localhost:8080. O áudio e o que está nas outras janelas nunca vão.'
+    'Com a nuvem conectada, o texto dos seus ditados, as suas notas e as trocas que você aprendeu vão para a sua nuvem, em http://localhost:8080. O áudio e o que está nas outras janelas nunca vão.'
   const privacidade = () => screen.getByRole('region', { name: 'Privacidade' })
 
   it('diz para onde o texto e as trocas aprendidas vão, só com o PC conectado', async () => {

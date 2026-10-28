@@ -443,6 +443,9 @@ function Envio({
         {h.outra_nuvem && comDitados && <p className="ajuda">Alguns destes ditados podem já estar na nuvem que este PC esqueceu.</p>}
         <p className="ajuda" id="cfg-envio">
           {vaoSubir(h.previa, h.previa_trocas ?? 0)}
+          {/* As notas sobem pelo mesmo clique (ADR-022, N7): dito aqui, onde a
+              pessoa aceita. */}
+          {' As suas notas vão junto.'}
           {comDitados && ' A lixeira não vai. Antes, uma cópia do histórico fica neste PC.'}
         </p>
         <div className="acoes">
