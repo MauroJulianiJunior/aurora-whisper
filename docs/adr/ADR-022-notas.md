@@ -660,6 +660,58 @@ Anexar imagem à nota (o ícone do Keep). Desenho prévio, a confirmar quando a 
 - **ponto de parada:** volume novo no servidor, espaço em disco e a revisão de LGPD (foto de
   documento de cliente é dado pessoal) precisam do OK do Mauro antes da N10.
 
+**[mudou em 28-out-2026]** O ponto de parada foi feito: o Mauro respondeu às quatro perguntas e aprovou a
+prévia (abaixo). Na nuvem, as imagens ficam **no banco**, e não no volume do desenho prévio.
+
+### As imagens (N10): as decisões e a prévia aprovada (28-out-2026)
+
+**As quatro perguntas da parada (Mauro, 28-out-2026):**
+- **Na nuvem, no banco** (Postgres), e não num volume próprio. Por quê: as imagens entram sozinhas no backup
+  cifrado (o `pg_dump` de todo dia), na restauração e no "Apagar meus dados", na mesma transação da nota; a
+  API continua `read_only`, sem volume novo nem backup novo. O preço: um **teto para o total de imagens da
+  conta**, porque a restauração abre o dump decifrado na memória só do usuário da VPS (`/run/user/<uid>`,
+  `deploy/scripts/restaurar.sh`), e as imagens quase não comprimem. O número sai do tamanho dessa pasta na
+  VPS (o Mauro roda o comando que só lê); até lá, o código usa um valor provisório, numa constante só.
+  Alternativa: o volume no disco (o desenho prévio), sem o teto, mas com volume novo, a API gravando em
+  disco e um backup e uma restauração só das imagens.
+- **O celular anexa**, pela câmera ou pela galeria, **só com rede** (a foto sobe direto para a nuvem e de lá
+  chega ao PC).
+- **No celular, a imagem não fica guardada para abrir sem rede.** Sem rede, no lugar dela aparece "Imagem sem
+  rede"; a que já abriu na visita continua aparecendo enquanto a página não fecha (só na memória). Nem o
+  IndexedDB nem o cache do navegador guardam a imagem.
+- **Até 10 imagens por nota.**
+
+**A prévia (`docs/notas-previa-n10.html`), aprovada pelo Mauro em 28-out-2026 ("ficou maravilhoso!
+Aprovado!!!"), com as cinco escolhas do fim dela:**
+- **A imagem no topo do cartão e da nota, em grade, como no Keep:** uma, de ponta a ponta; duas, lado a lado;
+  três ou mais, a primeira larga e duas embaixo, com "+N" no último quadrado. Uma nota pode ser só a imagem,
+  sem texto (o cartão mostra só ela). O campo "Criar uma nota…" ganha o ícone de imagem (nota nova com
+  imagem).
+- **No PC, colar com Ctrl+V e arrastar o arquivo** para dentro da nota aberta ("Solte para anexar à nota"),
+  além do ícone de imagem da barra (que deixa de estar apagado). A imagem nova mostra "guardando…" até ficar
+  guardada.
+- **A imagem grande:** o clique abre sobre a tela escura (escura nos dois temas), com "3 de 5", as setas para
+  as outras da nota, **Baixar** (a cópia reduzida, a única que existe), **Tirar da nota** e fechar (Esc).
+- **Tirar da nota** (o × sobre a imagem, ou o botão da imagem grande) tem **Desfazer** por alguns segundos;
+  depois, a imagem sai de vez, no PC e na nuvem. Não há lixeira só de imagens: a imagem vai para a lixeira,
+  e volta dela, junto com a nota inteira, e sai de vez com ela (os 30 dias, ou o "Apagar para sempre").
+- **O teto** para o total de imagens (acima).
+
+**Os padrões que valem sem pergunta** (ditos ao Mauro na parada, sem objeção):
+- **Reduzir no navegador**, antes de guardar: no máximo 2.000 px no lado maior, em JPEG, respeitando a
+  orientação da foto. Isso tira a localização (GPS) e o resto dos metadados que a foto do celular carrega; o
+  Agent e o servidor conferem (só aceitam JPEG que decodifica, dentro do tamanho, e guardam sem os
+  segmentos de metadados). Só a versão reduzida é guardada; o original nunca sai do aparelho. Arquivo
+  original acima de **10 MB** é recusado.
+- **A imagem segue a nota:** sobe à nuvem sob a mesma permissão das notas ("Enviar o histórico"), vai e
+  volta da lixeira com ela, e sai no "Apagar meus dados".
+- **Nunca vai à IA** (nem ao Polish, nem ao ASR) e **não entra na busca** (sem OCR). O "Copiar para
+  WhatsApp" continua só com o texto.
+- **Os avisos** (a cena 7): "Imagem tirada da nota." com Desfazer; "A imagem passou de 10 MB."; "A nota já
+  tem 10 imagens."; "Esse arquivo não é uma imagem que o navegador abra."; "As imagens das notas chegaram ao
+  limite de [teto]. Apague algumas para anexar outras."; "A rede caiu antes de a imagem subir. Tente de
+  novo."
+
 ## Alternativas descartadas
 
 - **Usar o Keep pela API do Google.** O Keep não tem API para conta pessoal; e o pedido é justamente
