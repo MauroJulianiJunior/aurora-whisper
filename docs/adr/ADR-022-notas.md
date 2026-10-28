@@ -690,7 +690,8 @@ Anexar imagem à nota (o ícone do Keep). Desenho prévio, a confirmar quando a 
   testes de propriedade e revisão adversarial. (N7: a mescla é pura e tem tabela de casos e teste de
   propriedade, `cloudstore/lista_de_marcar_test.go`; ver Decisões da N7.)
 - **Texto da nota no servidor:** mesmo tratamento dos ditados (ADR-019); a política de privacidade
-  ganha uma linha.
+  ganha uma linha. (Feito em 28-out-2026: a política, o dossiê e as frases do app falam das notas; ver
+  `docs/lgpd-dossie.md`, seção 7, decisões 10 e 11.)
 - **Custo da IA na conversão:** uma chamada por conversão de texto corrido, na chave da pessoa
   (centavos por mês no uso esperado).
 

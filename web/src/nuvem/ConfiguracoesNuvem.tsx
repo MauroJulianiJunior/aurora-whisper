@@ -509,10 +509,10 @@ export function ConfiguracoesNuvem({
         </h2>
         <ul className="fatos">
           <li>
-            Vão para a nuvem: o texto dos ditados, com a data, o PC de origem e os detalhes da transcrição, e as trocas aprendidas. O texto fica legível para quem
-            administra o servidor.
+            Vão para a nuvem: o texto dos ditados, com a data, o PC de origem e os detalhes da transcrição, as notas, com os marcadores, e as trocas aprendidas. O
+            texto fica legível para quem administra o servidor.
           </li>
-          <li>Ficam 6 meses (a lixeira, 30 dias). Uma cópia cifrada guarda tudo por cerca de 30 dias além disso.</li>
+          <li>Os ditados ficam 6 meses; as notas, até você apagar (a lixeira, 30 dias). Uma cópia cifrada guarda tudo por cerca de 30 dias além disso.</li>
           <li>
             Do PC nunca vão: o áudio, o que está nas outras janelas, a chave do Polish e as configurações dos PCs; a chave do PC continua no PC.
           </li>
@@ -520,6 +520,9 @@ export function ConfiguracoesNuvem({
             Ditar pelo celular é opcional. Se você ligar, a voz de cada ditado vai ao provedor que você escolher (OpenAI ou Groq), com a sua chave, que o servidor guarda
             cifrada. A voz não é gravada: fica na memória e é descartada ao fim.
           </li>
+          {/* As notas no aparelho (ADR-022, N8): o IndexedDB da conta, para a
+              lista abrir sem rede; o Sair e o "Apagar meus dados" o apagam. */}
+          <li>As notas ficam guardadas também neste aparelho, para abrir sem internet. O Sair as apaga daqui.</li>
         </ul>
 
         <div className="ajuste apagar">
@@ -534,7 +537,7 @@ export function ConfiguracoesNuvem({
               </p>
               <p className="ajuda" id="cfg-apagar-efeito">
                 Apaga tudo desta conta na nuvem e desconecta os PCs. Os PCs ficam com a cópia deles. A cópia de segurança guarda por até cerca de 30 dias. Apaga também o
-                aceite do ditado no celular, as preferências e as chaves.
+                aceite do ditado no celular, as preferências, as chaves e as notas guardadas neste aparelho.
               </p>
               <label className="ajuste-nome rotulo-campo" htmlFor="cfg-apagar">
                 Para confirmar, digite <span className="termo">apagar</span>

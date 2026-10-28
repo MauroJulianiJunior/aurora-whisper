@@ -326,7 +326,7 @@ describe('Configurações da nuvem', () => {
     expect(document.activeElement).toBe(campo)
     expect(
       screen.getByText(
-        'Apaga tudo desta conta na nuvem e desconecta os PCs. Os PCs ficam com a cópia deles. A cópia de segurança guarda por até cerca de 30 dias. Apaga também o aceite do ditado no celular, as preferências e as chaves.',
+        'Apaga tudo desta conta na nuvem e desconecta os PCs. Os PCs ficam com a cópia deles. A cópia de segurança guarda por até cerca de 30 dias. Apaga também o aceite do ditado no celular, as preferências, as chaves e as notas guardadas neste aparelho.',
       ),
     ).toBeTruthy()
     const apagarTudo = screen.getByRole('button', { name: 'Apagar tudo' })

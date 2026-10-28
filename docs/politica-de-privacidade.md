@@ -1,7 +1,8 @@
 # Política de privacidade: a nuvem do Aurora Whisper (modelo)
 
 > **Modelo para quem hospeda a própria nuvem** (ADR-019, F11b; revisado com o dossiê de LGPD,
-> `docs/lgpd-dossie.md`; **reescrito em 10-out-2026 com o ditado no celular, ADR-021, D0**). O projeto
+> `docs/lgpd-dossie.md`; **reescrito em 10-out-2026 com o ditado no celular, ADR-021, D0, e atualizado em
+> 28-out-2026 com as notas, ADR-022**). O projeto
 > Aurora Whisper não tem servidor central: cada nuvem é de quem a sobe, e quem a sobe responde pelos
 > dados dela. O texto descreve o que o código faz. Antes de pôr na sua nuvem outra pessoa além de você
 > (`CONTAS_PERMITIDAS`), copie este modelo, preencha os campos **[A PREENCHER]** (o responsável, o
@@ -31,8 +32,11 @@ Este texto é para quem usa o Aurora Whisper. Está em português simples de pro
   gravado. O provedor, porém, pode guardar por conta própria (seções 6 e 7), e nenhum dos dois diz
   processar no Brasil: tratamos o envio como transferência internacional. A sua chave fica no
   servidor, **cifrada**, mas **quem administra o servidor consegue decifrá-la**.
-- O texto fica **6 meses**, a lixeira **30 dias**. Uma cópia de segurança, cifrada, guarda tudo por
-  mais **cerca de 30 dias**.
+- O texto dos ditados fica **6 meses**; o das **notas**, **até você apagar**. A lixeira, **30 dias**. Uma
+  cópia de segurança, cifrada, guarda tudo por mais **cerca de 30 dias**.
+- **As notas** (a aba Notas) vão para a nuvem junto com os ditados, se você conectar. No **celular**, o
+  app guarda a última lista das suas notas no próprio aparelho, para abrir sem internet; o **Sair** a
+  apaga de lá.
 - Você pode **apagar tudo da nuvem** quando quiser, **desconectar** o PC a qualquer hora e **desligar o
   ditado no celular**, que revoga o seu aceite e apaga as suas chaves.
 - A nuvem **não transcreve nem analisa** o que você dita no PC. Só guarda e sincroniza. No ditado do
@@ -54,8 +58,8 @@ nuvem não paga nada deles por você.
 
 ## 3. O que a gente guarda
 
-**No seu PC (com ou sem nuvem):** o histórico dos ditados, as preferências e o dicionário, em arquivos
-na pasta de dados do programa. Eles não são cifrados pelo Aurora Whisper: quem entra na sua conta do
+**No seu PC (com ou sem nuvem):** o histórico dos ditados, as notas, as preferências e o dicionário, em
+arquivos na pasta de dados do programa. Eles não são cifrados pelo Aurora Whisper: quem entra na sua conta do
 Windows os alcança.
 
 **Na nuvem (só se você conectar):**
@@ -65,6 +69,13 @@ Windows os alcança.
   confiança);
 - as trocas que o programa aprendeu com você (a palavra que ele escrevia errado, a certa, a restrição e
   o nome do domínio);
+- **as suas notas**: o título e o texto, a cor, se está fixada, arquivada ou na lixeira, a posição na
+  tela, os marcadores (o nome de cada um) e, se a nota nasceu de um ditado, o número desse ditado. Se a
+  mesma nota mudou em dois aparelhos ao mesmo tempo, a outra versão (o título, o texto, o aparelho e a
+  hora) fica na nota até você escolher qual vale;
+- **o ditado que virou nota** ("Virar nota", o ditado feito dentro de uma nota, o "Ditar para nota" do
+  celular): ele sai do histórico, mas continua guardado, escondido e ligado à nota, com os 6 meses de todo
+  ditado;
 - o nome do seu computador, o sistema, a versão do programa e um número aleatório da instalação;
 - do seu login Google: o **e-mail, o identificador da conta e o nome**. Não guardamos a foto nem a
   senha;
@@ -86,16 +97,23 @@ Windows os alcança.
   cair depois de o provedor responder, o **texto** que seria gravado fica até 10 minutos na memória,
   para o reenvio gravar sem cobrar de novo; ele some se o servidor reiniciar e nunca vai a log.
 
+**No celular, quando você usa as notas no app:** o aparelho guarda, no navegador, a última lista de notas
+que a nuvem mandou (o título e o texto), os marcadores e as mudanças feitas sem internet, esperando a
+rede; e, à parte, o e-mail e o nome da última conta que abriu o app, para ele abrir sem internet. **Os
+ditados, o histórico e a voz nunca ficam no aparelho.** O **Sair** e o **Apagar meus dados** apagam isso
+do aparelho (o Sair com mudança esperando a rede pergunta antes, porque ela se perderia); a sessão que
+vence não apaga. Quem pega o celular desbloqueado lê essas notas, como lê as que estão na tela.
+
 **O que nunca sai do PC:** o áudio do PC; o que está em outras janelas (o programa em uso, o título, o
 texto em volta); a chave do Polish **do PC**; os logs; as preferências do PC; o mapa de domínios. O
 app do celular nem enxerga outras janelas.
 
 ## 4. Para que usamos
 
-Só para mostrar o seu histórico nos seus aparelhos (o PC e o celular), manter o aprendido igual em todos
-e deixar você editar, apagar e restaurar. Não usamos seus ditados para treinar modelos nem para
-anúncios, e a nuvem, por si, não os processa com inteligência artificial (no ditado do celular, quem
-o faz é o provedor que você escolheu, como está logo abaixo).
+Só para mostrar o seu histórico e as suas notas nos seus aparelhos (o PC e o celular), manter o
+aprendido igual em todos e deixar você editar, apagar e restaurar. Não usamos seus ditados nem suas notas
+para treinar modelos nem para anúncios, e a nuvem, por si, não os processa com inteligência artificial
+(no ditado do celular, quem o faz é o provedor que você escolheu, como está logo abaixo).
 
 **Ditado no celular:** a voz serve **só** para virar o texto do ditado que você pediu; a chave, só para
 chamar o provedor que você escolheu, por você; os termos da dica, só para ajudar o provedor a escrever
@@ -107,7 +125,9 @@ escolheu e, se você ligar, o provedor do Polish.
 
 Pelo seu **consentimento** (art. 7º, I e art. 8º): a nuvem só liga quando você a conecta; os ditados
 novos sobem sozinhos enquanto o PC está conectado, e o histórico antigo só sobe depois que o programa
-mostra quantos ditados vão subir e você clica em "Enviar o histórico". Você pode
+mostra quantos ditados vão subir e você clica em "Enviar o histórico". As notas vão pelo mesmo
+consentimento: o clique leva também as que você já tinha (as da lixeira, não), e a nota criada ou mudada
+com a nuvem conectada sobe sozinha, como o ditado novo. Você pode
 **revogar** quando quiser, sem custo (art. 8º, §5º): é o "Desconectar" e o "Apagar meus dados da
 nuvem". O programa guarda no seu PC o instante do seu clique. Se esta política mudar de um jeito que
 mexa no que você aceitou, avisamos com destaque (art. 8º, §6º).
@@ -132,7 +152,7 @@ muda**; mudar só o modelo não pede. Você revoga a qualquer momento em **Desli
 | O servidor de entrada (o que atende o https, no mesmo servidor) | o endereço IP de quem acessa e o endereço pedido, só de passagem: o registro de acesso dele fica **desligado** para a nuvem. Ele ainda pode registrar um pedido que chegue com a nuvem fora do ar, ou pelo http sem o "s" (que ele manda para o https). **No ditado do celular, a voz passa por ele**, e ele pode segurar pedaços dela na memória dele | o mesmo lugar da VPS |
 | **OpenAI** (ditado no celular), se você a escolher para transcrever | a voz; com a dica ligada, os termos do que você ensinou. Com o Polish: o texto | nos EUA ou na Europa, **se o projeto da sua chave tiver a residência de dados fixada** (uma opção para contas elegíveis; a página manda falar com o comercial da OpenAI para saber); **sem isso, a documentação que lemos não diz em que país**. O Brasil não aparece nela |
 | **Groq** (ditado no celular), se você a escolher para transcrever | a voz; com a dica ligada, os termos do que você ensinou | o que ela guarda fica em servidores nos **EUA**; **a documentação não diz onde a transcrição roda**; o contrato dela prevê tratamento nos EUA e em outros países |
-| **OpenAI ou Anthropic** (Polish, no PC ou no celular), se você ligar | o texto final (4 palavras ou mais) | a confirmar. No PC a chamada sai do seu PC; no celular, do servidor da nuvem |
+| **OpenAI ou Anthropic** (Polish, no PC ou no celular), se você ligar | o texto final (4 palavras ou mais); **no PC, também a linha de uma nota que você pede para separar em itens** (pelo Formatar) | a confirmar. No PC a chamada sai do seu PC; no celular, do servidor da nuvem |
 
 Com a VPS no Brasil, o texto legível dos seus ditados fica no Brasil. O que sai do Brasil é a cópia de
 segurança, **cifrada** (o Backblaze não consegue lê-la), o seu login, que passa pelo Google, e, **no
@@ -169,6 +189,11 @@ que o provedor diz hoje, vale o que o provedor diz. As páginas lidas estão cit
 | Ditados na nuvem | 6 meses, contados da data do ditado. O servidor confere de hora em hora |
 | Lixeira | 30 dias depois de você mandar para lá (nunca além dos 6 meses do ditado). Se o PC ficou sem internet, a lixeira que chega atrasada fica pelo menos 24 horas |
 | Ditado apagado de vez | some na hora. Fica só uma marca (o número do ditado e a data, sem texto) até 6 meses e 24 horas depois da data do ditado, para o ditado não voltar de um PC desligado |
+| **Notas e marcadores** | **até você apagar**: não têm os 6 meses dos ditados |
+| Lixeira das notas | 30 dias depois de você mandar para lá, no PC e na nuvem |
+| Nota ou marcador apagado de vez | some na hora. Fica só o número dele, sem texto, **enquanto a sua conta existir**, para a nota não voltar de um PC que ficou desligado muito tempo |
+| Ditado que virou nota | na nuvem, os 6 meses de todo ditado (o texto continua na nota). **No PC, não tem prazo** (seção 10) |
+| Notas guardadas no celular | até o Sair ou o "Apagar meus dados". O navegador pode apagá-las antes, se faltar espaço no aparelho |
 | Trocas aprendidas | enquanto você não as desfaz. **Depois de desfeita, a nuvem guarda a troca (a palavra e a certa), marcada como desfeita, enquanto a sua conta existir** (seção 10) |
 | Sessão do navegador | 30 dias sem uso, e no máximo 90 desde o login |
 | PC conectado | 180 dias sem uso |
@@ -178,7 +203,7 @@ que o provedor diz hoje, vale o que o provedor diz. As páginas lidas estão cit
 | Cópia de segurança | cerca de **30 dias**, mais o tempo que o provedor da cópia leva para apagar o que a regra dele escondeu **[A PREENCHER: conferir no painel do provedor]**. A cópia tem também o que a regra de 6 meses já apagou, até ela girar |
 | Cópia cifrada no servidor | 3 dias |
 | Banco anterior, depois de uma restauração | 7 dias |
-| No seu PC | a lixeira, 30 dias (depois de a nuvem saber dela); os 6 meses só depois do seu OK na tela Histórico; as cópias de segurança do PC não têm prazo (seção 10) |
+| No seu PC | a lixeira, 30 dias (depois de a nuvem saber dela); os 6 meses só depois do seu OK na tela Histórico; as notas, até você apagar; as cópias de segurança do PC não têm prazo (seção 10) |
 
 ## 8. Seus direitos, e como exercer
 
@@ -186,13 +211,14 @@ Você tem direito a (art. 18): confirmar que tratamos seus dados, acessá-los, c
 eliminação, pedir cópia, saber com quem compartilhamos e revogar o consentimento. Sem pedir a ninguém,
 **no app**:
 
-- **ver e buscar** seu histórico, seus aparelhos e suas sessões, e o que foi aprendido;
-- **corrigir** o texto de um ditado;
-- **mandar para a lixeira**, **restaurar**, e **excluir definitivamente** (só de um ditado que está na
-  lixeira);
-- **Apagar meus dados da nuvem**: apaga seus ditados, as marcas, o aprendido, os PCs conectados, as
-  outras sessões e, se você ligou o ditado no celular, **o aceite, as preferências e as chaves**. Os
-  seus PCs ficam com a cópia deles, e a cópia de segurança guarda o que apagamos até girar (seção 7);
+- **ver e buscar** seu histórico, suas notas, seus aparelhos e suas sessões, e o que foi aprendido;
+- **corrigir** o texto de um ditado ou de uma nota;
+- **mandar para a lixeira**, **restaurar**, e **excluir definitivamente** (só de um ditado ou de uma nota
+  que está na lixeira);
+- **Apagar meus dados da nuvem**: apaga seus ditados, suas notas e marcadores, as marcas, o aprendido, os
+  PCs conectados, as outras sessões, as notas guardadas no celular em que você clicou e, se você ligou o
+  ditado no celular, **o aceite, as preferências e as chaves**. Os seus PCs ficam com a cópia deles, e a
+  cópia de segurança guarda o que apagamos até girar (seção 7);
 - **Desconectar** um PC, revogar um aparelho, encerrar uma sessão, ou **Sair**;
 - **Desligar o ditado no celular**: revoga o seu aceite (art. 8º, §5º) e apaga as suas chaves do
   servidor. Não apaga os ditados já feitos, e o que já foi tratado com o seu aceite fica ratificado
@@ -216,8 +242,8 @@ Você também pode reclamar à autoridade de proteção de dados (art. 18, §1º
 
 O acesso é por https. A nuvem só aceita as contas de uma lista, e quem não está nela não cria nada. Sessões
 e PCs conectados ficam no banco só como um resumo irreversível. **O áudio do PC nunca sai do PC.** Os
-registros de funcionamento do servidor não têm texto ditado, e-mail, cookie, endereço IP nem a busca que
-você fez, e **nunca têm a voz, a sua chave nem o que o provedor devolve num erro**. O banco não tem porta
+registros de funcionamento do servidor não têm texto ditado, o título ou o texto de uma nota, o nome de um
+marcador, e-mail, cookie, endereço IP nem a busca que você fez, e **nunca têm a voz, a sua chave nem o que o provedor devolve num erro**. O banco não tem porta
 aberta para a internet, e a cópia de segurança é cifrada com uma chave que só o responsável tem.
 
 **No ditado do celular:** a voz fica só na memória do servidor, num pedido de cada vez por conta, e é
@@ -228,8 +254,8 @@ que mora num arquivo do servidor, nunca no banco nem na cópia de segurança, e 
 servidor só chama o provedor que você escolheu e para o qual você deu o aceite, e não troca de provedor
 sozinho: se ele falha, o ditado falha.
 
-**O que isso não impede:** quem administra o servidor lê o texto dos seus ditados, e quem invadisse o
-servidor leria o mesmo. **No ditado do celular, quem tem a raiz da VPS também pode ouvir a voz em
+**O que isso não impede:** quem administra o servidor lê o texto dos seus ditados e das suas notas, e
+quem invadisse o servidor leria o mesmo. **No ditado do celular, quem tem a raiz da VPS também pode ouvir a voz em
 trânsito e decifrar as suas chaves**, porque o arquivo da chave de cifra e o banco moram no mesmo
 servidor. Por isso: use **uma chave de API só para o celular, com limite de gasto no provedor**, e, se
 houver um incidente, **revogue a chave no provedor**. **[A PREENCHER, se for o caso: O servidor é
@@ -237,7 +263,7 @@ compartilhado com outros serviços do responsável, atrás da mesma entrada do h
 deles poderia chegar até aqui.]** Se acontecer um incidente com risco relevante para você, o
 responsável comunica você e a autoridade (art. 48).
 
-## 10. Quatro coisas que valem ser lidas com calma
+## 10. Cinco coisas que valem ser lidas com calma
 
 1. **A troca desfeita fica na nuvem.** Quando você desfaz uma troca aprendida, a nuvem continua
    guardando a palavra e a certa, marcada como desfeita, enquanto a sua conta existir. Sem isso, um PC
@@ -249,8 +275,9 @@ responsável comunica você e a autoridade (art. 48).
    botão **Apagar as cópias** (Configurações, Histórico). Apague depois de conferir o histórico.
 3. **O Polish do PC fica fora da nuvem.** Se você ligar o Polish no PC, o texto final (com 4 palavras
    ou mais) vai para a OpenAI ou a Anthropic, com a sua chave, a cada ditado. Elas podem guardá-lo por
-   até 30 dias e dizem não usá-lo para treinar modelos. Isso não depende da nuvem e acontece só se você
-   ligar. A chave do PC fica no Gerenciador de Credenciais do Windows.
+   até 30 dias e dizem não usá-lo para treinar modelos. Com ele ligado, **separar em itens uma linha de
+   uma nota** (pelo Formatar) também manda essa linha, e só ela, ao mesmo provedor. Isso não depende da
+   nuvem e acontece só se você ligar. A chave do PC fica no Gerenciador de Credenciais do Windows.
 4. **O ditado no celular manda a sua voz a um provedor que não diz processar no Brasil, e a sua chave
    fica no servidor.** Isto é o contrário da regra do PC, e só acontece depois do seu aceite:
    - a **voz** vai ao provedor que você escolheu (OpenAI ou Groq) e pode ficar lá até 30 dias, nos
@@ -269,6 +296,14 @@ responsável comunica você e a autoridade (art. 48).
      casos raros: o prazo cortou uma transcrição que o provedor já tinha cobrado; o servidor reiniciou
      no meio; ou o reenvio veio mais de 10 minutos depois de uma gravação que falhou. São centavos por
      ditado.
+5. **As notas não vencem.** Ao contrário dos ditados, elas ficam na nuvem até você apagar, e quem
+   administra o servidor as lê, como lê os ditados:
+   - a nota apagada de vez some na hora, mas o número dela (sem texto) fica enquanto a sua conta
+     existir, e a cópia de segurança guarda o texto até girar;
+   - **no PC, o ditado que virou nota fica sem prazo**: ele sai do histórico, mas o texto dele continua
+     guardado no PC, escondido, mesmo com os 6 meses ligados e mesmo depois de você apagar a nota. Na
+     nuvem, ele segue os 6 meses de todo ditado;
+   - no celular, a última lista das notas fica no aparelho até você **Sair** (seção 3).
 
 ## 11. Se for preciso restaurar a cópia de segurança
 
@@ -278,6 +313,10 @@ a nuvem apaga antes de abrir. O que só existia na nuvem depois da cópia pode s
 e sessões são desligados, e cada PC conecta de novo. O banco de antes da restauração fica 7 dias com
 outro nome, e depois é apagado.
 
+**Notas:** a nota que você apagou de vez depois da última cópia também pode reaparecer, e para ela não há
+o limite dos 6 meses; você a apaga de novo. A nota criada ou mudada só no celular depois da cópia pode se
+perder.
+
 **Ditado no celular:** o aceite, as preferências e as chaves voltam como estavam na cópia (se você
 desligou o ditado ou trocou a chave depois dela, faça de novo). Se a cópia for restaurada **sem** a mesma
 chave de cifra, cada chave guardada vira "sem chave": o app pede para você colar de novo, e o servidor
@@ -285,8 +324,8 @@ não dá erro.
 
 ## 12. Dados de outras pessoas
 
-O que você dita pode falar de outras pessoas (clientes, por exemplo) e, sem querer, trazer dado
-sensível, como saúde. A nuvem **não separa nem filtra** nada: esse texto tem os mesmos prazos e o mesmo
+O que você dita, e o que você escreve nas notas, pode falar de outras pessoas (clientes, por exemplo) e,
+sem querer, trazer dado sensível, como saúde. A nuvem **não separa nem filtra** nada: esse texto tem os mesmos prazos e o mesmo
 acesso que o resto. Se a pessoa de quem você falou pedir os dados dela (art. 18), o pedido vai ao contato
 da seção 2. Se você dita dado de terceiros no seu trabalho, veja se isso cabe nas suas obrigações com
 eles antes de conectar a nuvem.
@@ -315,35 +354,50 @@ Quem já usa a nuvem é avisado com destaque, no app, antes de isso valer para a
 sem o aceite**: sem ele, o microfone nem abre. Trocar de provedor ou mudar o texto do aviso pede o aceite
 de novo.
 
+**28-out-2026 (ADR-022):** esta política ganhou as notas. Elas trazem um dado novo na nuvem (o título e o
+texto das notas, e os marcadores), um prazo diferente (as notas não têm os 6 meses) e um lugar novo onde o
+texto fica (o celular, para abrir sem internet). A finalidade é a mesma (mostrar nos seus aparelhos) e
+ninguém novo recebe os dados; só a separação em itens com o Polish ligado manda uma linha da nota ao
+provedor do Polish, que você já tinha ligado. **[A PREENCHER: como o responsável avisou quem já usava a
+nuvem antes das notas.]**
+
 ---
 
 # Os textos do app sobre privacidade
 
-Aplicados no app em 11-out-2026 (subfatia C6b da ADR-021), com os testes que conferem as frases. O
+Aplicados no app em 11-out-2026 (subfatia C6b da ADR-021) e atualizados em 28-out-2026 com as notas
+(ADR-022), com os testes que conferem as frases. O
 código é a fonte: se este anexo e o app divergirem, vale o app, e este anexo se corrige. **Duas regras de código:** o build da nuvem não pode trazer a frase
 "Gerenciador de Credenciais" (o `bundle.test` a recusa), e a tela não afirma o que não foi medido.
 
 **App da nuvem, seção Privacidade** (`web/src/nuvem/ConfiguracoesNuvem.tsx`, no lugar das duas frases de
 hoje):
 
-- Vão para a nuvem: o texto dos ditados, com a data, o PC de origem e os detalhes da transcrição, e as
-  trocas aprendidas. O texto fica legível para quem administra o servidor.
-- Ficam 6 meses (a lixeira, 30 dias). Uma cópia cifrada guarda tudo por cerca de 30 dias além disso.
+- Vão para a nuvem: o texto dos ditados, com a data, o PC de origem e os detalhes da transcrição, as
+  notas, com os marcadores, e as trocas aprendidas. O texto fica legível para quem administra o servidor.
+- Os ditados ficam 6 meses; as notas, até você apagar (a lixeira, 30 dias). Uma cópia cifrada guarda tudo
+  por cerca de 30 dias além disso.
 - Do PC nunca vão: o áudio, o que está nas outras janelas, a chave do Polish e as configurações dos PCs.
   A chave do PC continua no PC.
 - Ditar pelo celular é opcional. Se você ligar, a voz de cada ditado vai ao provedor que você escolher
   (OpenAI ou Groq), com a sua chave, que o servidor guarda cifrada. A voz não é gravada: fica na
   memória e é descartada ao fim.
+- As notas ficam guardadas também neste aparelho, para abrir sem internet. O Sair as apaga daqui.
 - Um link para esta política, quando ela estiver publicada.
 
 **Abaixo de "Apagar meus dados da nuvem"**: "Apaga tudo desta conta na nuvem e desconecta os PCs. Os PCs
 ficam com a cópia deles. A cópia de segurança guarda por até cerca de 30 dias. Apaga também o aceite do
-ditado no celular, as preferências e as chaves. [Seu cadastro (e-mail e nome) fica; para tirá-lo, peça
-pelo contato.]" (a frase entre colchetes depende da decisão 2 do dossiê).
+ditado no celular, as preferências, as chaves e as notas guardadas neste aparelho. [Seu cadastro (e-mail e
+nome) fica; para tirá-lo, peça pelo contato.]" (a frase entre colchetes depende da decisão 2 do dossiê).
 
-**PC, perto de "Enviar o histórico"** (`web/src/NuvemNoPC.tsx`): "Na nuvem, o texto fica legível para quem
-administra o servidor, no Brasil." (com a VPS no Brasil; a cópia de segurança cifrada fora do Brasil é
-dita na política, junto da condição do art. 33).
+**PC, perto de "Enviar o histórico"** (`web/src/NuvemNoPC.tsx`): a contagem ("Vão subir 120 ditados.")
+ganha "As suas notas vão junto." A frase "Na nuvem, o texto fica legível para quem administra o servidor,
+no Brasil." (com a VPS no Brasil; a cópia de segurança cifrada fora do Brasil é dita na política, junto da
+condição do art. 33) foi proposta aqui e **não está no app** (conferido em 28-out-2026).
+
+**PC, seção Privacidade** (`web/src/Configuracoes.tsx`): com a nuvem conectada, "o texto dos seus ditados,
+as suas notas e as trocas que você aprendeu vão para a sua nuvem"; e "Com o Polish ligado, separar em
+itens uma linha de uma nota (pelo Formatar) manda essa linha ao mesmo provedor."
 
 ## A folha do aceite do ditado no celular (versão 1 do aviso; proposta)
 
