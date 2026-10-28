@@ -283,7 +283,13 @@ export function Painel({ ambiente, focarNoTitulo = false, emNotas: abrirEmNotas 
   // nem tirar rascunho (mesclarRecarga). Ler o contador é também o aviso ao
   // Agent de que o painel está aberto, e ele busca a nuvem a cada 10 s
   // (ADR-021, S). Na nuvem não há contador (ambiente.mudancasDoSync).
-  useMudancasDoSync(ambiente.mudancasDoSync, () => setRecarga((n) => n + 1))
+  // A aba Notas recebe o mesmo sinal, num contador à parte: o recarga daqui
+  // sobe também ao voltar para a aba, e ela já tem o seu "voltar à aba".
+  const [mudancasDoSync, setMudancasDoSync] = useState(0)
+  useMudancasDoSync(ambiente.mudancasDoSync, () => {
+    setRecarga((n) => n + 1)
+    setMudancasDoSync((n) => n + 1)
+  })
 
   // Os atalhos da página, num ouvinte só, que existe desde a montagem e lê
   // o aviso do momento: um ouvinte que nascesse junto com o aviso só
@@ -1132,6 +1138,7 @@ export function Painel({ ambiente, focarNoTitulo = false, emNotas: abrirEmNotas 
             abrirNota={notaPedida}
             oculta={buscaUnicaAtiva}
             aoTerminarNota={() => setRecargaDaNota((n) => n + 1)}
+            mudancasDoSync={mudancasDoSync}
             abrirConfiguracoes={() => abrirConfiguracoes('ditar')}
           />
         )}

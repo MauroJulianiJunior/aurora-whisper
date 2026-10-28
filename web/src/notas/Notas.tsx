@@ -45,6 +45,9 @@ interface Props {
   // oculta e aoTerminarNota: a busca única (N6) está à vista; ver PropsDasNotas.
   oculta?: boolean
   aoTerminarNota?(): void
+  // mudancasDoSync: sobe quando o sync do PC trouxe algo da nuvem (a nota
+  // feita no celular); a lista é lida de novo. A janela aberta não muda.
+  mudancasDoSync?: number
   // celular: o que só o app do celular tem (N8): a rede e a fila das mudanças
   // feitas sem rede, o "Ditar para nota" embaixo e o microfone dentro da nota.
   // O PC não passa nada.
@@ -110,6 +113,7 @@ export function Notas({
   abrirNota,
   oculta,
   aoTerminarNota,
+  mudancasDoSync,
   celular,
   abrirConfiguracoes,
 }: Props) {
@@ -190,7 +194,7 @@ export function Notas({
       },
     )
     return () => ctrl.abort()
-  }, [cliente, vista, marcador, busca, consulta, recarga, aoPerderLigacao])
+  }, [cliente, vista, marcador, busca, consulta, recarga, mudancasDoSync, aoPerderLigacao])
 
   // O "Abrir" do aviso "Virou nota": lê a nota e abre a janela dela. A lista
   // também é lida de novo (a nota nova não estava nela).
