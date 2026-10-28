@@ -1,4 +1,4 @@
-import { type KeyboardEvent, type ReactNode, useEffect, useLayoutEffect, useRef } from 'react'
+import { type KeyboardEvent, type ReactNode, type RefObject, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useImagensNaTela } from './contextoDasImagens'
 import { Icone } from './Icone'
 import type { Guardando } from './imagensNaTela'
@@ -32,19 +32,48 @@ interface PropsDaFoto {
   children?: ReactNode
 }
 
-// Foto é um quadrado da grade: a imagem (lida agora, se ainda não foi), o
-// "guardando…" de quem está subindo, ou o aviso de que não deu para abrir.
+// A folga com que a imagem é lida antes de entrar na tela: a rolagem não espera,
+// e a nota lá embaixo da grade não ocupa memória à toa.
+const folgaDaLeitura = '600px'
+
+// useVisivel diz se o quadrado já esteve perto da tela. Sem o IntersectionObserver
+// (o jsdom), vale sempre.
+function useVisivel<T extends Element>(): [RefObject<T | null>, boolean] {
+  const ref = useRef<T>(null)
+  const [visivel, setVisivel] = useState(() => typeof IntersectionObserver === 'undefined')
+  useEffect(() => {
+    const el = ref.current
+    if (visivel || !el) return
+    const obs = new IntersectionObserver(
+      (es) => {
+        if (es.some((e) => e.isIntersecting)) {
+          setVisivel(true)
+          obs.disconnect()
+        }
+      },
+      { rootMargin: folgaDaLeitura },
+    )
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [visivel])
+  return [ref, visivel]
+}
+
+// Foto é um quadrado da grade: a imagem (lida quando chega perto da tela, se
+// ainda não foi), o "guardando…" de quem está subindo, ou o aviso de que não deu
+// para abrir.
 function Foto({ notaId, item, larga, noCartao, children }: PropsDaFoto) {
   const loja = useImagensNaTela()
+  const [ref, visivel] = useVisivel<HTMLDivElement>()
   const id = item.tipo === 'imagem' ? item.imagem.id : null
   useEffect(() => {
-    if (id) loja?.pedir(notaId, id)
-  }, [loja, notaId, id])
+    if (id && visivel) loja?.pedir(notaId, id)
+  }, [loja, notaId, id, visivel])
   const [w, h] = item.tipo === 'imagem' ? [item.imagem.largura, item.imagem.altura] : [item.g.largura, item.g.altura]
   const estilo = noCartao && larga ? { aspectRatio: proporcao(w, h) } : undefined
   if (item.tipo === 'guardando') {
     return (
-      <div className="foto guardando" style={estilo}>
+      <div ref={ref} className="foto guardando" style={estilo}>
         <img src={item.g.url} alt="" draggable={false} />
         <span className="estado">guardando…</span>
       </div>
@@ -53,7 +82,7 @@ function Foto({ notaId, item, larga, noCartao, children }: PropsDaFoto) {
   const url = id ? loja?.url(id) : undefined
   const falhou = id ? loja?.falhou(id) : false
   return (
-    <div className={falhou ? 'foto sem-imagem' : 'foto'} style={estilo}>
+    <div ref={ref} className={falhou ? 'foto sem-imagem' : 'foto'} style={estilo}>
       {url ? <img src={url} alt="" draggable={false} /> : falhou ? <span className="foto-aviso">Imagem indisponível</span> : null}
       {children}
     </div>

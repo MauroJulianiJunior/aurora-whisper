@@ -181,11 +181,15 @@ func ehCopia(e fs.DirEntry, casa *regexp.Regexp) bool {
 
 // semCaminho tira o caminho de um erro do sistema de arquivos (ele leva o
 // nome de usuário do Windows, que não vai para log nem para a tela) e deixa só
-// o motivo.
+// o motivo. O erro do rename (os.LinkError) leva os dois caminhos.
 func semCaminho(err error) error {
 	var pe *fs.PathError
 	if errors.As(err, &pe) {
 		return pe.Err
+	}
+	var le *os.LinkError
+	if errors.As(err, &le) {
+		return le.Err
 	}
 	return err
 }
