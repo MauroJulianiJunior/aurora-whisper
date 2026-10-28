@@ -2771,11 +2771,13 @@ resposta traz texto, id ou caminho.** Erros no envelope da Local API (`CONFLICT`
 `UNAVAILABLE`), com a `message` em português para a tela. Um Agent sem a retenção montada responde
 `503` (`UNAVAILABLE`); um Agent de antes da F10 responde `404`, e o painel mostra "Este Agent ainda
 não tem os 6 meses. Reinicie o Agent." A retenção não depende da nuvem: vale no PC que nunca conectou.
-- `GET /api/retencao`: `{ "previa": 1240, "na_lixeira": 3, "com_selo": 0, "de_outro_dono": 0,
-  "ligada": false, "pausada": false, "copias": 2, "copias_apagaveis": 2, "copia_dos_6_meses": false }`.
-  `previa` é quantos ditados **do dono** o OK
-  apagaria agora (os fora da janela de 6 meses, ativos ou na lixeira); `na_lixeira` e `com_selo` são
-  subconjuntos dela (o selo, "2 versões", sai sem a escolha de quem usa); `de_outro_dono` são os fora
+- `GET /api/retencao`: `{ "previa": 1240, "na_lixeira": 3, "com_selo": 0, "viraram_nota": 0,
+  "de_outro_dono": 0, "ligada": false, "pausada": false, "copias": 2, "copias_apagaveis": 2,
+  "copia_dos_6_meses": false }`. `previa` é quantos ditados **do dono** o OK
+  apagaria agora (os fora da janela de 6 meses, ativos ou na lixeira); `na_lixeira`, `com_selo` e
+  `viraram_nota` são subconjuntos dela (o selo, "2 versões", sai sem a escolha de quem usa; o que virou
+  nota sai e a nota fica, desde 28-out-2026: o dossiê de LGPD, decisão 11; um Agent de antes não manda
+  `viraram_nota`, e o painel o lê como 0); `de_outro_dono` são os fora
   da janela de outro `user_id`, que **ficam** e não entram em `previa`; `ligada` é o OK gravado;
   `pausada`, o freio ter pausado a regra (o Agent ficou mais de 7 dias parado, ou o relógio pulou);
   `copias`, quantos arquivos `historico.db.antes-(do-dono|da-nuvem|dos-6-meses)-…db` há ao lado do

@@ -22,6 +22,7 @@ import {
   restoDeApagarCopias,
   tituloDeApagar,
   tituloDeApagarCopias,
+  viraramNota,
 } from './textosDoHistorico'
 
 // O bloco "Histórico" das Configurações do PC (ADR-019, "Decisões da F10";
@@ -322,6 +323,7 @@ export function HistoricoNoPC({ cliente, visivel, aoPerderLigacao, avisar, aoMud
           </p>
           {e.na_lixeira > 0 && <p className="ajuda">{naLixeira(e.na_lixeira, e.previa)}</p>}
           {e.com_selo > 0 && <p className="ajuda">{comDuasVersoes(e.com_selo, e.previa)}</p>}
+          {(e.viraram_nota ?? 0) > 0 && <p className="ajuda">{viraramNota(e.viraram_nota ?? 0, e.previa)}</p>}
           {e.de_outro_dono > 0 && <p className="ajuda">{deOutroDono(e.de_outro_dono)}</p>}
           {confirmando === 'ligar' ? (
             <div className="confirmar" role="group" aria-labelledby="cfg-hist-confirma" onKeyDown={escCancela}>

@@ -408,29 +408,47 @@ func TestVirarNota_ExpurgoDaLixeiraNaoApagaODitado(t *testing.T) {
 	}
 }
 
-// A retenção de 6 meses não alcança o ditado que virou nota, nem na prévia.
-func TestVirarNota_SeisMesesNaoAlcancaODitado(t *testing.T) {
+// A retenção de 6 meses alcança o ditado que virou nota (o dossiê de LGPD,
+// decisão 11, 28-out-2026): ele sai, e a nota, com o texto, fica. A prévia o
+// conta no total e à parte (ViraramNota), porque o histórico não o mostra.
+func TestVirarNota_SeisMesesApagaODitadoEANotaFica(t *testing.T) {
 	s := novosSeisMesesDeTeste(t)
 	notas := storage.NewSQLiteNotaRepository(s.db)
 	ctx := context.Background()
 	s.ditado(t, idSM(1), agoraSM.AddDate(0, -8, 0))
 	s.ditado(t, idSM(2), agoraSM.AddDate(0, -8, 0))
 	s.ditado(t, idSM(3), agoraSM.AddDate(0, -1, 0))
-	if _, err := notas.VirarNota(ctx, s.dono, idSM(1)); err != nil {
+	s.ditado(t, idSM(4), agoraSM.AddDate(0, -1, 0))
+	nota, err := notas.VirarNota(ctx, s.dono, idSM(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// O que virou nota e ainda está na janela não conta nem sai.
+	if _, err := notas.VirarNota(ctx, s.dono, idSM(4)); err != nil {
 		t.Fatal(err)
 	}
 	s.ligar(t)
-	if c := s.previa(t, agoraSM); c.Total != 1 {
-		t.Errorf("a prévia contou %d; quero só o idSM(2): o que virou nota fica de fora", c.Total)
+	if c := s.previa(t, agoraSM); c.Total != 2 || c.ViraramNota != 1 {
+		t.Errorf("a prévia contou %+v; quero Total 2 (idSM(1) e idSM(2)) e ViraramNota 1", c)
 	}
-	if n := s.apagar(t, agoraSM); n != 1 {
-		t.Errorf("apagou %d; quero 1", n)
+	if n := s.apagar(t, agoraSM); n != 2 {
+		t.Errorf("apagou %d; quero 2", n)
 	}
-	if !s.tem(t, idSM(1)) {
-		t.Error("a retenção de 6 meses apagou o ditado que virou nota")
+	if s.tem(t, idSM(1)) {
+		t.Error("a retenção de 6 meses não apagou o ditado vencido que virou nota")
 	}
 	if s.tem(t, idSM(2)) {
-		t.Error("a retenção não apagou o ditado vencido comum (o teste não prova nada)")
+		t.Error("a retenção não apagou o ditado vencido comum")
+	}
+	if !s.tem(t, idSM(3)) || !s.tem(t, idSM(4)) {
+		t.Error("a retenção apagou um ditado dentro da janela")
+	}
+	ficou, err := notas.Get(ctx, s.dono, nota.ID)
+	if err != nil {
+		t.Fatalf("a nota do ditado apagado sumiu: %v", err)
+	}
+	if ficou.Corpo != nota.Corpo || ficou.Corpo == "" {
+		t.Errorf("o corpo da nota mudou: %q; quero %q", ficou.Corpo, nota.Corpo)
 	}
 }
 

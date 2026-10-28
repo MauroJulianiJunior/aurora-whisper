@@ -74,10 +74,11 @@ var rotasDaRetencao = []struct{ metodo, caminho, corpo string }{
 	{"POST", "/api/retencao/copias/apagar", ""},
 }
 
-// O GET devolve exatamente as nove chaves do contrato, e só números e
+// O GET devolve exatamente as dez chaves do contrato, e só números e
 // booleanos; com a contagem do ciclo.
 func TestRetencao_GetSoDevolveNumeros(t *testing.T) {
 	f := &retencaoFalsa{estado: emRetencao(1240, 3, 2, 5)}
+	f.estado.ViraramNota = 4
 	f.estado.Ligada, f.estado.Pausada, f.estado.Copias, f.estado.CopiasApagaveis, f.estado.CopiaDosSeisMeses = false, true, 2, 1, true
 	w := fazer(t, apiComRetencao(t, f), "GET", "/api/retencao", nil)
 	if w.Code != 200 {
@@ -88,7 +89,7 @@ func TestRetencao_GetSoDevolveNumeros(t *testing.T) {
 		t.Fatal(err)
 	}
 	quer := map[string]any{
-		"previa": 1240.0, "na_lixeira": 3.0, "com_selo": 2.0, "de_outro_dono": 5.0,
+		"previa": 1240.0, "na_lixeira": 3.0, "com_selo": 2.0, "viraram_nota": 4.0, "de_outro_dono": 5.0,
 		"ligada": false, "pausada": true, "copias": 2.0, "copias_apagaveis": 1.0, "copia_dos_6_meses": true,
 	}
 	if len(campos) != len(quer) {

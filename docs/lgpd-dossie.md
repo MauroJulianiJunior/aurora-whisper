@@ -21,8 +21,8 @@ navegador, para a lista do mercado abrir sem sinal). A finalidade é a mesma (mo
 pessoa) e **ninguém novo recebe os dados**: o único caminho novo para fora é a separação em itens com o
 Polish ligado, que manda uma linha da nota ao provedor do Polish que a pessoa já tinha ligado, a partir do
 PC. As notas sobem pelo mesmo consentimento do "Enviar o histórico". Na instância de referência, as notas
-estão no ar desde 27-out-2026 (N8), **antes desta revisão**: as decisões 10 e 11 (seção 7) são do
-responsável.
+estão no ar desde 27-out-2026 (N8), **antes desta revisão**; o Mauro decidiu as decisões 10 e 11
+(seção 7) em 28-out-2026.
 
 **Por que isto existe.** Até aqui o que se dita ficava só no PC. Com a nuvem, o texto passa a morar,
 **legível**, num servidor, e uma cópia cifrada vai para um backup. **Com o ditado no celular, a voz
@@ -111,7 +111,7 @@ ligado a ela, fora do histórico, com os 6 meses de todo ditado.
 | Lixeira das notas | **30 dias**, no PC e, desde a N8, na nuvem (o job de hora em hora) |
 | Nota ou marcador apagado de vez | sai na hora; fica uma **lápide só com o id** (`note_tombstones`), **sem prazo**, para um PC parado não ressuscitar a nota; só o "Apagar meus dados" a tira |
 | Eventos do sync das notas (`note_sync_events`, só ids) | o órfão sai em 90 dias, como o do ditado |
-| Ditado que virou nota | **na nuvem, os 6 meses** (a ligação sai junto); **no PC, sem prazo**, mesmo com os 6 meses ligados e depois de a nota ser apagada (seção 7, decisão 11) |
+| Ditado que virou nota | **os 6 meses de todo ditado**: na nuvem (a ligação sai junto) e, desde 28-out-2026, no PC (quando a pessoa os liga); a nota fica (seção 7, decisão 11) |
 | Notas no celular (IndexedDB) | até o Sair ou o "Apagar meus dados" naquele aparelho; o navegador pode apagar antes, sob falta de espaço (o app não pede armazenamento persistente) |
 | Sessão / token do PC | 30 dias sem uso, teto de 90 / 180 dias sem uso |
 | **Backup no B2** | **30 dias** (regra do bucket) mais o tempo do B2 para apagar o que a regra escondeu (conferir no painel); guarda também texto que a retenção já apagou |
@@ -254,15 +254,18 @@ está.
    esse aviso. **Se só o responsável está em `CONTAS_PERMITIDAS`**, ele decidiu as notas e não há a quem
    avisar: escrever isso na seção 13 da cópia da política. **Se há outras pessoas**, avisá-las (uma
    mensagem dele basta) antes de elas usarem as notas, ou pedir um aviso no app. Desde 28-out-2026, a
-   pergunta do envio diz "As suas notas vão junto." para quem conecta depois. **[A PREENCHER]**
-11. **Notas: o ditado que virou nota fica sem prazo no PC** (ADR-022, "Riscos"). No PC, o ditado que
-   virou nota sai do histórico, mas o texto bruto e o final continuam no `historico.db`, escondidos, fora
-   dos 6 meses (quando a pessoa os liga) e mesmo depois de a nota ser apagada de vez. Na nuvem, ele segue
-   os 6 meses. A política diz isso (seções 7 e 10). As saídas: **(a)** o ditado que virou nota volta à
-   regra dos 6 meses do PC, como na nuvem (nada visível se perde: o texto está na nota, e o Desfazer é
-   do momento); **(b)** apagar o ditado quando a nota for apagada de vez; **(c)** aceitar como está.
-   **Sugestão: (a)**, uma fatia pequena no PC (`internal/storage/seis_meses_sqlite.go`), e a política
-   tira a frase. **[A PREENCHER]**
+   pergunta do envio diz "As suas notas vão junto." para quem conecta depois. **Na instância de
+   referência, o Mauro confirmou em 28-out-2026 que só ele usa a nuvem ("Só eu")**: não há a quem avisar,
+   e isso vai para a seção 13 da cópia preenchida da política.
+11. **Notas: o ditado que virou nota ficava sem prazo no PC** (ADR-022, "Riscos"). No PC, o ditado que
+   virou nota sai do histórico, mas o texto bruto e o final continuavam no `historico.db`, escondidos, fora
+   dos 6 meses (quando a pessoa os liga) e mesmo depois de a nota ser apagada de vez. Na nuvem, ele já
+   seguia os 6 meses. As saídas eram: **(a)** o ditado que virou nota volta à regra dos 6 meses do PC,
+   como na nuvem (nada visível se perde: o texto está na nota, e o Desfazer é do momento); **(b)** apagar
+   o ditado quando a nota for apagada de vez; **(c)** aceitar como está. **Decidido pelo Mauro em
+   28-out-2026: (a)** ("Segue os 6 meses"). Feito em `internal/storage/seis_meses_sqlite.go`; a pergunta
+   dos 6 meses conta esses ditados à parte ("N deles viraram nota: saem os ditados, e as notas ficam."),
+   porque o histórico não os mostra.
 
 Já aceitos no projeto (D3 da ADR-019) e descritos na política: o aprendido desfeito na nuvem e no
 backup; as cópias do banco no PC; o Polish fora da nuvem (no PC). Na instância de referência, a revisão
@@ -319,7 +322,7 @@ entra aqui.
 | **Notas:** sem os 6 meses; a lixeira de 30 dias expurgada na nuvem | ADR-022, "A nota" e "Decisões da N8"; `internal/server/pgstore/retencao.go:206-209` (`sqlNotasVencidas`) |
 | **Notas:** a lápide só com o id, sem prazo; o evento órfão em 90 dias | `migrations/0023_note_tombstones_table.sql`; `pgstore/retencao.go:107` (`sqlArrumarEventosDasNotas`); `09`, "Retenção" |
 | **Notas:** o "Apagar meus dados" apaga as seis tabelas | `internal/server/pgstore/contas.go:96-105` |
-| **Notas:** o ditado que virou nota fica fora dos 6 meses no PC, e dentro deles na nuvem | `internal/storage/seis_meses_sqlite.go:40`, `:133` (`virou_nota IS NULL`); ADR-022, "Decisões da N7" |
+| **Notas:** o ditado que virou nota segue os 6 meses no PC (desde 28-out-2026) e na nuvem; a prévia o conta à parte | `internal/storage/seis_meses_sqlite.go` ("O ditado que virou nota"; `ViraramNota`); `internal/storage/nota_ditado_test.go` (`TestVirarNota_SeisMesesApagaODitadoEANotaFica`); ADR-022, "Decisões da N7" e "Riscos" |
 | **Notas no celular:** o IndexedDB da conta, e o Sair que o apaga | `web/src/nuvem/notas/armazem.ts:220`, `:271` (`esquecerConta`); `09`, "Notas no celular"; o `bundle.test.ts` prende que só o banco das notas usa o IndexedDB |
 | **Notas:** a separação em itens com o Polish, só a linha, só no PC | `09`, "Polish: o que sai da máquina" (a nota da N5); ADR-022, "Formatar: converter trecho" e "Decisões da N8" |
 
@@ -334,7 +337,7 @@ entra aqui.
 | País e região | a VPS (no exemplo, Brasil) e o bucket do B2 **em branco, marcados**. **Ditado no celular:** a voz e a dica vão a provedores que não dizem processar no Brasil; a hipótese do art. 33 fica **em branco, marcada** | seção 4 |
 | Dados de terceiros | a nuvem não separa; decisão de quem usa. **Ditado no celular:** vale para a voz e a dica; o Mauro confirmou que dita dado de cliente às vezes | seção 7, ponto 4 |
 | Quem administra o servidor e lê o texto | quem administra a VPS lê; alcance de invasão. **Ditado no celular:** ouve a voz em trânsito e decifra as chaves | seções 2 e 6 |
-| **Notas (ADR-022)** | o mesmo tratamento do texto do ditado, sem os 6 meses; o celular guarda a lista; duas decisões abertas (o aviso a quem já usava; o ditado que virou nota no PC) | seções 1 a 3 e 7, pontos 10 e 11 |
+| **Notas (ADR-022)** | o mesmo tratamento do texto do ditado, sem os 6 meses; o celular guarda a lista; duas decisões, tomadas em 28-out-2026 (o aviso a quem já usava; o ditado que virou nota no PC) | seções 1 a 3 e 7, pontos 10 e 11 |
 
 ## O que a conferência achou e o `09` não dizia
 

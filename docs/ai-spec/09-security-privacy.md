@@ -423,20 +423,19 @@ ADR-019, "Decisões da F3"). O que vale, e onde cada coisa é provada (a suíte
     o texto apagado até a cópia girar, como o do ditado.
   - **O ditado que virou nota** some do histórico do celular (a nuvem esconde o ditado ligado), mas a
     **retenção de 6 meses continua valendo** para ele na nuvem: depois dela, o ditado sai e a ligação sai
-    junto; o texto fica na nota. **Ponto aberto, que a N7 não muda (ADR-022, "Riscos"):** no PC, o ditado
-    que virou nota fica fora dos 6 meses, e o `raw_text` dele (e o `final_text`) segue no PC sem prazo,
-    mesmo que a nota seja apagada de vez depois. Se isso incomodar na revisão de LGPD, a saída é limpar o
-    `raw_text` quando a nota for apagada de vez, ou deixar o ditado voltar à regra dos 6 meses. Não foi
-    decidido.
+    junto; o texto fica na nota. **No PC, desde 28-out-2026 (decisão do Mauro; o dossiê de LGPD, decisão
+    11):** o ditado que virou nota também segue os 6 meses (quando a pessoa os liga): sai a linha
+    escondida, e a nota fica. Até então o `raw_text` e o `final_text` dele ficavam no PC sem prazo, mesmo
+    depois de a nota ser apagada de vez.
   - **A pílula e o log:** nenhum log do Agent nem do servidor leva título, corpo ou nome de marcador (abaixo,
     "Logging proibido"). O servidor registra só o padrão da rota, o status e contagens (`mutacoes`,
     `mudancas`, `itens`).
 - **No servidor:** o texto fica legível para quem administra a VPS (THR-023). A revisão de LGPD é
   pré-condição do deploy (abaixo; o dossiê é `docs/lgpd-dossie.md`). **Feito em 28-out-2026, depois do
   deploy da N8:** o dossiê e a política de privacidade falam das notas (o que sobe, os prazos, o celular,
-  a separação em itens com o Polish), e as frases de Privacidade do app e a pergunta do envio também. Ficam
-  com o Mauro as decisões 10 (o aviso a quem já usava a nuvem) e 11 (o ditado que virou nota sem prazo no
-  PC) do dossiê, seção 7.
+  a separação em itens com o Polish), e as frases de Privacidade do app e a pergunta do envio também. O
+  Mauro decidiu no mesmo dia as decisões 10 (só ele usa a nuvem de referência: não há a quem avisar) e 11
+  (o ditado que virou nota segue os 6 meses no PC) do dossiê, seção 7.
 - **Notas no celular (ADR-022, N8; 27-out-2026):** o app da nuvem passa a ler e escrever as notas pela
   sessão, e **guarda no aparelho**, num banco IndexedDB por conta (`aurora-notas-<id da conta>`,
   `web/src/nuvem/notas/armazem.ts`), a última lista de notas (título e corpo), os marcadores (o nome) e a
@@ -857,7 +856,8 @@ protegido"; ADR-011, nota de 29-set-2026).
   não depende de um PC para sair); o expurgo do PC sobe como `delete`. A lápide da nota e a do
   marcador (só ids) não vencem e o job de retenção não as toca. O evento do log das notas
   (`note_sync_events`) sai com a mesma arrumação de 90 dias, só o órfão. **O ditado que virou nota** continua
-  sujeito aos 6 meses na nuvem; no PC, não (ADR-022, "Riscos").
+  sujeito aos 6 meses na nuvem e, desde 28-out-2026, também no PC (o dossiê de LGPD, decisão 11; a
+  prévia o conta em `viraram_nota`).
 - **Nuvem (ADR-019):** os prazos contam pela data do ditado que o PC mandou; o que foi apagado de vez
   dentro da janela deixa lápide, para não ressuscitar; o backup guarda texto apagado até a cópia
   girar (30 dias no Backblaze B2, mais o tempo do B2 para apagar o que a regra escondeu: D2 da F11;

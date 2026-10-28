@@ -100,6 +100,9 @@ export interface EstadoRetencao {
   // sem a escolha de quem usa).
   na_lixeira: number
   com_selo: number
+  // viraram_nota: subconjunto da previa, os que viraram nota (fora do
+  // histórico; sai o ditado, e a nota fica). Um Agent de antes não o manda.
+  viraram_nota?: number
   // de_outro_dono: os fora da janela de outro dono, que ficam e não entram na
   // previa.
   de_outro_dono: number
