@@ -486,7 +486,7 @@ func run(pp pastas.Pastas) error {
 	var abrirPainel func() error
 	// resumoDaNuvem é a linha da nuvem na bandeja; sem histórico, não há sync.
 	resumoDaNuvem := func() string { return "" }
-	if h, err := abrirHistoricoComRetencao(slog.Default(), cam.Historico, usuario, clock.NewSystem()); err != nil {
+	if h, err := abrirHistoricoComRetencao(slog.Default(), cam.Historico, cam.ImagensDasNotas, usuario, clock.NewSystem()); err != nil {
 		slog.Default().Warn("historico: seguindo SEM registro; o laço de aprendizado fica sem o texto bruto", "err", err)
 	} else {
 		hist, prefs, dono, fecharHist := h.hist, h.prefs, h.dono, h.fechar
@@ -549,7 +549,10 @@ func run(pp pastas.Pastas) error {
 			Retencao: h.retencao,
 			// As notas e os marcadores (ADR-022, N1): /api/notas e /api/marcadores.
 			Notas: h.notas,
-			Foco:  focoDaNota,
+			// As imagens das notas (N10): o mesmo repositório, com a pasta das
+			// imagens da tabela de caminhos (abrirHistoricoComRetencao).
+			Imagens: h.notas,
+			Foco:    focoDaNota,
 			// A separação em itens das notas (ADR-022, N5): o cliente do Polish,
 			// com a chave lida do cofre a cada chamada.
 			ClienteDaLista: polish.clienteDaLista,
@@ -1217,7 +1220,12 @@ type historicoAberto struct {
 // os 6 meses depois do OK de quem usa (ADR-019, "Decisões da F10"). Quem abre
 // o banco não tem como esquecer dele, e a função de fechar devolvida
 // interrompe o expurgo ANTES de fechar o banco.
-func abrirHistoricoComRetencao(log *slog.Logger, caminho, usuarioDoDicionario string, relogio clock.Clock) (historicoAberto, error) {
+//
+// imagens é a pasta das imagens das notas (ADR-022, N10; cam.ImagensDasNotas):
+// o repositório das notas grava ali, e a varredura da subida
+// (varrerImagensDasNotas) põe a pasta e a tabela de acordo antes de o expurgo e
+// o painel começarem.
+func abrirHistoricoComRetencao(log *slog.Logger, caminho, imagens, usuarioDoDicionario string, relogio clock.Clock) (historicoAberto, error) {
 	db, err := abrirBancoDoHistorico(caminho)
 	if err != nil {
 		return historicoAberto{}, err
@@ -1242,11 +1250,30 @@ func abrirHistoricoComRetencao(log *slog.Logger, caminho, usuarioDoDicionario st
 	// As notas (ADR-022, N1) moram no mesmo banco, e a lixeira delas é
 	// expurgada na mesma rodada. Não têm os 6 meses nem sync nesta fase.
 	notas := storage.NewSQLiteNotaRepository(db)
+	notas.UsarPastaDasImagens(imagens)
+	varrerImagensDasNotas(context.Background(), log, notas)
 	ciclo := expurgo.Iniciar(relogio, hist, hist.SeisMeses(caminho), log, expurgo.ComNotas(notas))
 	return historicoAberto{
 		hist: hist, notas: notas, prefs: storage.NewSQLiteSettingsRepository(db), dono: dono, retencao: ciclo,
 		fechar: func() { ciclo.Parar(); db.Close() },
 	}, nil
+}
+
+// varrerImagensDasNotas é a varredura da subida das imagens das notas: o arquivo
+// sem linha, a linha sem arquivo e o temporário que sobrou saem
+// (storage.VarrerImagens). Achou algo, um WARN só com as contagens: nada da nota,
+// nem id, nem nome, nem caminho. Falhar aqui não impede de abrir: a próxima
+// subida tenta de novo.
+func varrerImagensDasNotas(ctx context.Context, log *slog.Logger, notas *storage.SQLiteNotaRepository) {
+	v, err := notas.VarrerImagens(ctx)
+	if err != nil {
+		log.Warn("notas: não consegui varrer as imagens das notas; tento na próxima subida", "err", err)
+		return
+	}
+	if !v.Vazia() {
+		log.Warn("notas: a varredura das imagens tirou o que estava sem par",
+			"arquivos_sem_linha", v.ArquivosSemLinha, "linhas_sem_arquivo", v.LinhasSemArquivo, "temporarios", v.Temporarios)
+	}
 }
 
 // abrirBancoDoHistorico abre o historico.db em caminho com uma conexão só e

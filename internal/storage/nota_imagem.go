@@ -206,17 +206,17 @@ func escreverArquivoDaImagem(dir, id string, b []byte) (string, error) {
 		return "", err
 	}
 	if err := os.MkdirAll(dir, permissaoDaPasta); err != nil {
-		return "", fmt.Errorf("storage: criando a pasta das imagens: %w", err)
+		return "", fmt.Errorf("storage: criando a pasta das imagens: %w", semCaminho(err))
 	}
 	tmp, err := os.CreateTemp(dir, prefixoTemporario+id+"-*"+sufixoTemporario)
 	if err != nil {
-		return "", fmt.Errorf("storage: criando o arquivo da imagem: %w", err)
+		return "", fmt.Errorf("storage: criando o arquivo da imagem: %w", semCaminho(err))
 	}
 	nomeTmp := tmp.Name()
 	falhou := func(e error) (string, error) {
 		_ = tmp.Close()
 		_ = os.Remove(nomeTmp)
-		return "", fmt.Errorf("storage: gravando o arquivo da imagem: %w", e)
+		return "", fmt.Errorf("storage: gravando o arquivo da imagem: %w", semCaminho(e))
 	}
 	// O CreateTemp já cria só para o dono (0600). No Windows quem vale é a
 	// permissão herdada da pasta de dados (só a conta de quem usa, ADR-018).
@@ -228,11 +228,11 @@ func escreverArquivoDaImagem(dir, id string, b []byte) (string, error) {
 	}
 	if err := tmp.Close(); err != nil {
 		_ = os.Remove(nomeTmp)
-		return "", fmt.Errorf("storage: gravando o arquivo da imagem: %w", err)
+		return "", fmt.Errorf("storage: gravando o arquivo da imagem: %w", semCaminho(err))
 	}
 	if err := os.Rename(nomeTmp, destino); err != nil {
 		_ = os.Remove(nomeTmp)
-		return "", fmt.Errorf("storage: gravando o arquivo da imagem: %w", err)
+		return "", fmt.Errorf("storage: gravando o arquivo da imagem: %w", semCaminho(err))
 	}
 	return destino, nil
 }
@@ -379,7 +379,7 @@ func (r *SQLiteNotaRepository) LerImagem(ctx context.Context, userID, notaID, id
 		return ImagemDaNota{}, nil, ErrNotFound
 	}
 	if err != nil {
-		return ImagemDaNota{}, nil, fmt.Errorf("storage: lendo o arquivo da imagem: %w", err)
+		return ImagemDaNota{}, nil, fmt.Errorf("storage: lendo o arquivo da imagem: %w", semCaminho(err))
 	}
 	soma := sha256.Sum256(b)
 	if int64(len(b)) != im.Bytes || hex.EncodeToString(soma[:]) != im.SHA256 {
@@ -447,7 +447,7 @@ func (r *SQLiteNotaRepository) varrer(ctx context.Context, comLinhas bool) (Varr
 	defer r.imagensMu.Unlock()
 	entradas, err := os.ReadDir(dir)
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return v, fmt.Errorf("storage: lendo a pasta das imagens: %w", err)
+		return v, fmt.Errorf("storage: lendo a pasta das imagens: %w", semCaminho(err))
 	}
 	noDisco := map[string]bool{}
 	for _, e := range entradas {

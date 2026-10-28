@@ -107,6 +107,7 @@ func TestCaminhos_DadosEmDadosEProgramaEmPrograma(t *testing.T) {
 		"dicionario.json":    c.Dicionario,
 		"agent.log":          c.LogDoAgent,
 		"whisper-server.log": c.LogDoServidor,
+		"notas-imagens":      c.ImagensDasNotas,
 	}
 	for nome, caminho := range daqui {
 		if !dentroDe(caminho, dados) || dentroDe(caminho, prog) {
@@ -605,6 +606,8 @@ func TestRun_LigaCadaConsumidorAoCaminhoCerto(t *testing.T) {
 		// O histórico com o ciclo do expurgo (F10d): é o que run chama; o
 		// abrirHistoricoEm é o mesmo sem devolver o ciclo, e só os testes o usam.
 		{"abrirHistoricoComRetencao", 1, "cam.Historico"},
+		// As imagens das notas (N10): a pasta da tabela, na pasta de dados.
+		{"abrirHistoricoComRetencao", 2, "cam.ImagensDasNotas"},
 		{"subirPainel", 2, "cam.Painel"},
 		// A nuvem (F6): o modo das MESMAS pastas decide a D7 (o build de
 		// desenvolvimento só conecta no portátil) e o alvo do token no

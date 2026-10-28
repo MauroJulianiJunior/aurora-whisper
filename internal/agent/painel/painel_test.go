@@ -200,6 +200,35 @@ func TestRotas_ReferrerNuncaVaza(t *testing.T) {
 	}
 }
 
+// TestRotas_ACSPDasImagensDasNotas: as imagens das notas (ADR-022, N10) chegam à
+// tela por uma URL blob:, que a CSP libera só no img-src. Nada de fora: nem
+// esquema http(s), nem curinga, e o blob: não vale para script nem para
+// conexão.
+func TestRotas_ACSPDasImagensDasNotas(t *testing.T) {
+	h, _ := montar(t, dirComPainel(t))
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req("GET", "/", hostCerto, nil))
+	csp := w.Header().Get("Content-Security-Policy")
+	diretivas := map[string]string{}
+	for _, d := range strings.Split(csp, ";") {
+		campos := strings.Fields(d)
+		if len(campos) > 0 {
+			diretivas[campos[0]] = strings.Join(campos[1:], " ")
+		}
+	}
+	if got := diretivas["img-src"]; got != "'self' data: blob:" {
+		t.Errorf("img-src = %q, quero 'self' data: blob:", got)
+	}
+	for _, d := range []string{"default-src", "connect-src"} {
+		if got := diretivas[d]; got != "'self'" {
+			t.Errorf("%s = %q, quero só 'self'", d, got)
+		}
+	}
+	if _, tem := diretivas["script-src"]; tem || strings.Contains(csp, "*") || strings.Contains(csp, "http") {
+		t.Errorf("a CSP abriu para fora: %q", csp)
+	}
+}
+
 // TestRotas_SemBuildExplica: um 404 mudo não diria à pessoa o que fazer.
 func TestRotas_SemBuildExplica(t *testing.T) {
 	h, _ := montar(t, t.TempDir())

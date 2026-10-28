@@ -166,6 +166,11 @@ func arquivos(dir string) http.Handler {
 // o bilhete na URL (?t=...), e se ela carregasse qualquer coisa de fora,
 // o cabeçalho Referer levaria o bilhete junto. A página apaga o bilhete
 // da URL assim que o lê, mas a regra não pode depender disso.
+//
+// O img-src tem blob: por causa das imagens das notas (ADR-022, N10): o painel
+// as lê por fetch com o token (um <img> apontando para /api não levaria o token)
+// e as mostra por uma URL blob: criada na própria página. Nada de fora entra:
+// blob: só nasce de bytes que a página já tem.
 func cabecalhosDeSeguranca(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		cab := w.Header()
@@ -173,7 +178,7 @@ func cabecalhosDeSeguranca(h http.Handler) http.Handler {
 		cab.Set("X-Content-Type-Options", "nosniff")
 		cab.Set("X-Frame-Options", "DENY")
 		cab.Set("Content-Security-Policy",
-			"default-src 'self'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
+			"default-src 'self'; connect-src 'self'; img-src 'self' data: blob:; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
 		h.ServeHTTP(w, r)
 	})
 }

@@ -1931,14 +1931,17 @@ A nota nos corpos de resposta:
   "deleted_at": "só na lixeira",
   "posicao": "V",
   "version": 1,
-  "conflito": { "titulo": "...", "corpo": "...", "device_id": "uuid ou null", "conflict_at": "..." }
+  "conflito": { "titulo": "...", "corpo": "...", "device_id": "uuid ou null", "conflict_at": "..." },
+  "imagens": [ { "id": "uuid v7", "largura": 1600, "altura": 1200, "bytes": 412873, "created_at": "..." } ]
 }
 ```
 `posicao` é a chave da ordem manual (N2b); o painel não a interpreta, só a lista já vem na ordem dela. `cor` é sempre presente (`null` sem cor); `marcadores` é sempre uma lista (`[]`), na ordem do nome do
 marcador; `ditado_de_origem` e `deleted_at` só aparecem quando há. **`conflito` (N7) só aparece quando a
 nota tem o selo:** o título e o corpo que perderam um conflito de conteúdo na nuvem, guardados até a
-pessoa escolher (`device_id` é `null` quando o aparelho saiu da conta). O marcador:
-`{"id", "nome", "created_at", "updated_at", "version"}`.
+pessoa escolher (`device_id` é `null` quando o aparelho saiu da conta). **`imagens` (N10) é sempre uma
+lista** (`[]` sem imagem), na ordem em que foram anexadas, só com os metadados (`bytes` é o tamanho do
+arquivo); os bytes vêm por `GET /api/notas/{id}/imagens/{imagem}` (abaixo, "Imagens das notas"). O
+marcador: `{"id", "nome", "created_at", "updated_at", "version"}`.
 
 #### GET `/api/notas`
 Query: `vista` (`ativas`, o padrão; `arquivo`; `lixeira`), `marcador` (id; só as notas que o têm) e `q`
@@ -2103,6 +2106,55 @@ e `internal/resolver/notas_lista.go`.
   `503`).
 - O log leva só `como`, o motivo (o enum: `palavras`, `numeros`, `um_item`, `prazo`...) e a versão do
   prompt; nunca o trecho nem a resposta.
+
+#### Imagens das notas (ADR-022, N10, a primeira metade: o PC)
+Fonte: `internal/agent/localapi/notas_imagens.go`, `internal/storage/nota_imagem.go` e
+`internal/imagemdanota`. Atrás da mesma cadeia das outras rotas (Host, Origin e o token): o painel lê a
+imagem por `fetch` com o token e a mostra por uma URL `blob:` (a CSP do painel tem `img-src 'self' data:
+blob:`, "Cabeçalhos em toda resposta"); um `<img>` apontando para cá não levaria o token. Sem o
+repositório das imagens ou sem a pasta delas, as quatro rotas respondem `503 UNAVAILABLE`, e a nota
+continua com `"imagens": []`.
+
+O corpo dos dois `POST` é o **JPEG já reduzido** pelo painel (no máximo 2.000 px no lado maior, sem os
+metadados que o navegador não copia), com `Content-Type: image/jpeg` e até **4 MB**
+(`http.MaxBytesReader`); nada de multipart, e nunca o nome do arquivo. O Agent confere de novo
+(`imagemdanota.Conferir`: só JPEG, o cabeçalho antes de decodificar, a decodificação inteira) e guarda a
+cópia **sem os segmentos de metadados** (APP1 a APP15, COM, e o que vier depois do fim da imagem), sem
+recomprimir. Os bytes ficam em `<dados>\notas-imagens\<id>.jpg`, fora do banco (`09-security-privacy.md`).
+
+**POST `/api/notas/{id}/imagens`**: anexa no fim das imagens da nota. `201` com a imagem
+(`{"id", "largura", "altura", "bytes", "created_at"}`). A nota **não** muda de versão nem de
+`updated_at` (a imagem é uma linha à parte): a janela aberta da nota segue salvando sem `409`.
+
+**POST `/api/notas/com-imagem`**: a nota nova **só com a imagem** (o ícone de imagem do "Criar uma
+nota…"), sem título nem corpo, no topo das outras. `201` com a nota (`version` 1, uma imagem). A nota
+nasce na fila do sync como qualquer nota nova; a imagem, não (a segunda metade da N10).
+
+**GET `/api/notas/{id}/imagens/{imagem}`**: os bytes. `200` com `Content-Type: image/jpeg`,
+`X-Content-Type-Options: nosniff`, `Cache-Control: no-store` e `Content-Length`. Vale também para a nota
+da lixeira. O Agent confere o tamanho e o SHA-256 do arquivo contra a linha a cada leitura.
+
+**DELETE `/api/notas/{id}/imagens/{imagem}`**: tira a imagem da nota **de vez** (a linha e o arquivo).
+`204`. O Desfazer é do painel: ele só manda o `DELETE` quando o aviso "Imagem tirada da nota." sai sem
+Desfazer. Vale também na nota da lixeira (o aviso pode vencer depois de a nota ir para lá).
+
+Erros, com código estável (o painel os traduz nas frases da ADR):
+
+| Status | `code` | Quando |
+|---|---|---|
+| `415` | `IMAGE_INVALID` | `Content-Type` que não é `image/jpeg` |
+| `400` | `IMAGE_INVALID` | não é JPEG, não decodifica, estrutura estranha, cores só explicadas pelos metadados (CMYK, RGB da Adobe), mais de 2.000 px |
+| `413` | `IMAGE_TOO_LARGE` | mais de 4 MB, mesmo reduzida |
+| `409` | `TOO_MANY_IMAGES` | a nota já tem 10 imagens |
+| `409` | `IMAGES_FULL` | o total das imagens da pessoa passaria do teto (400 MB, `imagemdanota.TetoDoTotal`); a `message` é a frase da tela, com o número |
+| `409` | `CONFLICT` | anexar numa nota da lixeira |
+| `404` | `NOT_FOUND` | a nota ou a imagem não existe, é de outra nota ou de outro dono, ou o arquivo sumiu |
+| `500` | `INTERNAL` | o arquivo não confere com a linha (tamanho ou SHA-256) |
+
+A imagem segue a nota: vai e volta da lixeira com ela; o expurgo de 30 dias e o "Apagar para sempre"
+(`DELETE /api/notas/{id}/definitivo`) apagam as linhas e os arquivos. A busca (`q`), o "Copiar para
+WhatsApp", o Formatar e a sugestão de marcador não olham as imagens, e nada da imagem vai à IA. O log não
+leva os bytes, o tamanho nem o nome: só o `guard: <método> <caminho> -> <status>` de sempre, com os ids.
 
 ### Configurações
 Acrescentado em 29-set-2026 (tela de Configurações do painel). Fonte da verdade:
@@ -2857,9 +2909,11 @@ certa do Windows; ele nunca liga a permissão sozinho.
 - `Referrer-Policy: no-referrer` — a página abre com o bilhete na URL; se carregasse algo de
   fora, o `Referer` levaria o bilhete junto.
 - `X-Content-Type-Options: nosniff` e `X-Frame-Options: DENY`.
-- `Content-Security-Policy: default-src 'self'; connect-src 'self'; img-src 'self' data:;
+- `Content-Security-Policy: default-src 'self'; connect-src 'self'; img-src 'self' data: blob:;
   frame-ancestors 'none'; base-uri 'none'; form-action 'none'` — nada de script embutido nem
-  recurso de fora (THR-015).
+  recurso de fora (THR-015). O `blob:` do `img-src` (ADR-022, N10) é das imagens das notas, que a
+  página lê por `fetch` com o token e mostra por uma URL `blob:` criada por ela mesma; não vale para
+  script nem para conexão.
 - Exceção, só na página `503` do painel não construído: ela se formata com `style` embutido, que
   a CSP acima bloqueia. Outra frente da revisão de 29-set-2026 dá a essa resposta uma CSP
   própria, ainda mais fechada no resto (`default-src 'none'; style-src 'unsafe-inline'; ...`).

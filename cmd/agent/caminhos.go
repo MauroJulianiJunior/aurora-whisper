@@ -15,6 +15,10 @@ const (
 	nomePainel        = "painel"             // programa
 	nomeLogDoAgent    = "agent.log"          // dados
 	nomeLogDoServidor = "whisper-server.log" // dados
+	// nomeImagensDasNotas é a pasta das imagens das notas (ADR-022, N10): um
+	// arquivo <id>.jpg por imagem, fora do historico.db, para as cópias do banco
+	// não levarem as fotos.
+	nomeImagensDasNotas = "notas-imagens" // dados
 )
 
 // caminhosDoAgent é onde cada arquivo do Agent mora. É o ÚNICO lugar que
@@ -34,10 +38,11 @@ type caminhosDoAgent struct {
 	Painel   string // a pasta painel\
 
 	// Dos DADOS: o que o Agent grava.
-	Historico     string // historico.db; as cópias antes-do-dono ficam ao lado
-	Dicionario    string // dicionario.json, inclusive o aprendido no painel
-	LogDoAgent    string
-	LogDoServidor string
+	Historico       string // historico.db; as cópias antes-do-dono ficam ao lado
+	Dicionario      string // dicionario.json, inclusive o aprendido no painel
+	LogDoAgent      string
+	LogDoServidor   string
+	ImagensDasNotas string // a pasta notas-imagens\, ao lado do historico.db
 }
 
 func caminhosDe(p pastas.Pastas) caminhosDoAgent {
@@ -46,10 +51,11 @@ func caminhosDe(p pastas.Pastas) caminhosDoAgent {
 		Servidor: filepath.Join(p.Programa(), nomeServidor),
 		Painel:   filepath.Join(p.Programa(), nomePainel),
 
-		Historico:     filepath.Join(p.Dados(), pastas.BancoDoHistorico),
-		Dicionario:    filepath.Join(p.Dados(), nomeDicionario),
-		LogDoAgent:    filepath.Join(p.Dados(), nomeLogDoAgent),
-		LogDoServidor: filepath.Join(p.Dados(), nomeLogDoServidor),
+		Historico:       filepath.Join(p.Dados(), pastas.BancoDoHistorico),
+		Dicionario:      filepath.Join(p.Dados(), nomeDicionario),
+		LogDoAgent:      filepath.Join(p.Dados(), nomeLogDoAgent),
+		LogDoServidor:   filepath.Join(p.Dados(), nomeLogDoServidor),
+		ImagensDasNotas: filepath.Join(p.Dados(), nomeImagensDasNotas),
 	}
 }
 

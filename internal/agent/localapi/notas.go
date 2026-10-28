@@ -38,6 +38,10 @@ import (
 //	PUT    /api/notas/foco                             o cursor está dentro da nota (204; notas_foco.go)
 //	DELETE /api/notas/foco                             o cursor saiu (204; corpo opcional)
 //	POST   /api/notas/separar-itens                    uma linha em itens, com IA ou por regra (notas_lista.go)
+//	POST   /api/notas/com-imagem                       a nota nova com a imagem (notas_imagens.go)
+//	POST   /api/notas/{id}/imagens                     anexa a imagem (notas_imagens.go)
+//	GET    /api/notas/{id}/imagens/{imagem}            os bytes da imagem (notas_imagens.go)
+//	DELETE /api/notas/{id}/imagens/{imagem}            tira a imagem da nota (notas_imagens.go)
 //
 // Sem o repositório montado (Preferencias.Notas nil), 503.
 //
@@ -77,6 +81,10 @@ type notaDTO struct {
 	// Conflito é o selo (ADR-022, N7): o título e o corpo que perderam um
 	// conflito na nuvem, guardados até a pessoa escolher. Ausente sem selo.
 	Conflito *seloDaNotaDTO `json:"conflito,omitempty"`
+	// Imagens são as imagens da nota (N10), na ordem em que foram anexadas: só
+	// os metadados (os bytes vêm por GET /api/notas/{id}/imagens/{imagem}).
+	// Sempre uma lista.
+	Imagens []imagemDTO `json:"imagens"`
 }
 
 // seloDaNotaDTO é o selo da nota como o painel o lê, no formato do selo do
@@ -101,7 +109,7 @@ func toNotaDTO(n storage.Nota) notaDTO {
 		ID: n.ID, Titulo: n.Titulo, Corpo: n.Corpo, Cor: n.Cor, Fixada: n.Fixada, Arquivada: n.Arquivada,
 		Marcadores: ms, Posicao: n.Posicao, DitadoDeOrigem: n.DitadoDeOrigem,
 		CreatedAt: n.CreatedAt, UpdatedAt: n.UpdatedAt, DeletedAt: n.DeletedAt, Version: n.Version,
-		Conflito: selo,
+		Conflito: selo, Imagens: toImagensDTO(n.Imagens),
 	}
 }
 
