@@ -56,7 +56,8 @@ seu PC está conectado à nuvem, uma nota que só tem imagem aparece no celular 
 2. Arraste de novo e solte dentro da nota: o PNG entra, com **fundo branco** (e não preto) onde era
    transparente.
 3. Arraste a foto do celular e solte no **escuro em volta da nota** (fora dela): nada acontece, e o painel
-   **não** é trocado pela imagem.
+   **não** é trocado pela imagem. Feche a nota e solte a foto **em cima da grade**, sem nota aberta: também
+   nada acontece, e o painel continua lá (sem perder a sessão).
 4. Agora há 4 imagens: na nota, a primeira larga e duas embaixo, e o último quadrado diz **"+1"** (a quarta não
    cabe na grade). No cartão, o mesmo.
 

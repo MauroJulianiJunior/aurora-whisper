@@ -219,6 +219,22 @@ describe('anexar', () => {
     expect(anexos(srv, 'n4')).toHaveLength(1)
   })
 
+  it('soltar um arquivo fora da nota aberta não faz o navegador trocar o painel pela imagem', async () => {
+    const srv = await abrirNotas()
+    // Sem nota aberta, na grade: o navegador não abre o arquivo (o evento sai
+    // cancelado), e nada é anexado.
+    expect(fireEvent.dragOver(cartao('n4'), { dataTransfer: { types: ['Files'], files: [] } })).toBe(false)
+    expect(fireEvent.drop(cartao('n4'), { dataTransfer: { types: ['Files'], files: [jpg()] } })).toBe(false)
+    // Um arrastar de texto segue o caminho de sempre.
+    expect(fireEvent.drop(cartao('n4'), { dataTransfer: { types: ['text/plain'], files: [] } })).toBe(true)
+    // Com a nota aberta, o soltar no véu também não sai do painel.
+    const d = await abrir('n4')
+    const veu = d.parentElement!
+    expect(fireEvent.drop(veu, { dataTransfer: { types: ['Files'], files: [jpg()] } })).toBe(false)
+    await act(async () => {})
+    expect(anexos(srv, 'n4')).toHaveLength(0)
+  })
+
   it('o ícone de imagem do "Criar uma nota…" cria a nota só com a imagem e a abre', async () => {
     const srv = await abrirNotas([texto()])
     const campo = screen.getByLabelText<HTMLInputElement>('Escolher a imagem da nota nova')

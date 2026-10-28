@@ -8,7 +8,7 @@ import { CriarNota } from './CriarNota'
 import { DialogoDaNota, type FimDaNota } from './DialogoDaNota'
 import { EditarMarcadores } from './EditarMarcadores'
 import { Icone } from './Icone'
-import { fraseDoErro } from './imagens'
+import { arrastaArquivos, fraseDoErro } from './imagens'
 import { ContextoDasImagens } from './contextoDasImagens'
 import { ImagensNaTela } from './imagensNaTela'
 import { acharPorNome, limparNome, ordenarPorNome } from './marcadores'
@@ -166,6 +166,24 @@ export function Notas({
   useEffect(() => {
     imagens?.abrir()
     return () => imagens?.fechar()
+  }, [imagens])
+  // Um arquivo solto fora da nota aberta (na grade, no véu, na barra do painel, sem
+  // nota nenhuma aberta) não pode fazer o navegador abrir a imagem no lugar do
+  // painel, e o painel recarregado perde a sessão: o soltar ali não faz nada. A
+  // nota aberta trata o dela antes (o preventDefault do React vem primeiro).
+  useEffect(() => {
+    if (!imagens) return
+    const segurar = (e: DragEvent) => {
+      if (e.defaultPrevented || !arrastaArquivos(e.dataTransfer)) return
+      e.preventDefault()
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'none'
+    }
+    window.addEventListener('dragover', segurar)
+    window.addEventListener('drop', segurar)
+    return () => {
+      window.removeEventListener('dragover', segurar)
+      window.removeEventListener('drop', segurar)
+    }
   }, [imagens])
 
   const consulta = `${vista}\u0000${marcador ?? ''}\u0000${busca}`

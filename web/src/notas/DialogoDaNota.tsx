@@ -544,23 +544,8 @@ export function DialogoDaNota({ nota, cliente, marcadores, notasParaSugerir, cri
     })
   }
 
-  // Um arquivo solto fora da nota (no véu, na barra do painel) não pode fazer o
-  // navegador abrir a imagem no lugar do painel: enquanto a nota está aberta, o
-  // soltar fora dela não faz nada.
-  useEffect(() => {
-    if (!loja) return
-    const segurar = (e: globalThis.DragEvent) => {
-      if (!arrastaArquivos(e.dataTransfer)) return
-      if (dialogo.current?.contains(e.target as Node)) return
-      e.preventDefault()
-    }
-    window.addEventListener('dragover', segurar)
-    window.addEventListener('drop', segurar)
-    return () => {
-      window.removeEventListener('dragover', segurar)
-      window.removeEventListener('drop', segurar)
-    }
-  }, [loja])
+  // O soltar fora da nota (no véu, na barra do painel) não faz nada: quem segura
+  // é a aba Notas (Notas.tsx), com ou sem nota aberta.
 
   function aoEntrarArrastando(e: DragEvent<HTMLDivElement>) {
     if (!loja || !arrastaArquivos(e.dataTransfer)) return
