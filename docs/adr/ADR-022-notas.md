@@ -712,6 +712,116 @@ Aprovado!!!"), com as cinco escolhas do fim dela:**
   limite de [teto]. Apague algumas para anexar outras."; "A rede caiu antes de a imagem subir. Tente de
   novo."
 
+### Decisões da N10 (implementação)
+
+A N10 foi feita em duas metades. **A primeira (28-out-2026, branch `notas/n10a`) é a do PC**: o pacote que
+confere a imagem, o SQLite, a pasta das imagens, a API local e o painel do PC. **A segunda é a do sync, da
+nuvem e do celular**, de outro trabalho, depois desta; o que ela precisa saber está no fim. As marcadas
+**[desvio]** mudam algo escrito acima (ou na prévia); as **[derivada]** são escolhas desta implementação.
+Roteiro do Mauro: `docs/teste-manual-notas-n10.md`.
+
+- **O teto do total: 400 MB** (o Mauro escolheu em 28-out-2026, no lugar do valor provisório). Por quê: a
+  restauração abre o dump decifrado em `/run/user/<uid>` da VPS, um tmpfs de 795 MB, e as imagens quase não
+  comprimem; com 400 MB de imagens, o dump fica em uns 450 MB, pouco mais da metade, com folga para o resto do
+  banco crescer. Mora numa constante só, `imagemdanota.TetoDoTotal`, que o PC já usa e o servidor vai usar.
+  Contam as imagens de todas as notas da pessoa, as da lixeira também (elas voltam com a nota). A frase do
+  aviso é montada com o número (`imagemdanota.FraseDoTeto`) e chega ao painel pronta, na resposta
+  `IMAGES_FULL`.
+- **A conferência, num pacote puro** (`internal/imagemdanota`, só a biblioteca padrão), para o servidor reusar:
+  só JPEG; até **4 MB** a cópia reduzida e **2.000 px** no lado maior; o cabeçalho lido com `DecodeConfig`
+  **antes** de decodificar (a bomba de descompressão é recusada sem alocar a imagem); a decodificação
+  inteira da original e da limpa; e os bytes devolvidos **sem APP1 a APP15, sem COM e sem nada depois do EOI**
+  (o vídeo da "foto em movimento"), sem recomprimir (os dados comprimidos saem byte a byte). **[derivada]** Só
+  as cores YCbCr e cinza (o que o canvas grava): o CMYK e o RGB da Adobe dependem do APP14 para as cores, e
+  tirá-lo as trocaria. A estrutura é lida de forma estrita (um byte solto entre segmentos é recusado) e com
+  até 100 varreduras. Testes de tabela, o da foto com EXIF e localização, e o alvo de fuzz `FuzzConferir`.
+- **No PC, a linha e o arquivo** (migration `0014`, `local_note_images`: id, nota, largura, altura, bytes,
+  sha256, created_at). Os bytes ficam em `<dados>\notas-imagens\<id>.jpg` (a tabela de caminhos do Agent,
+  `cam.ImagensDasNotas`), gravados com temporário e rename **dentro** da transação que insere a linha: com a
+  linha, o arquivo existe. O SHA-256 é conferido a cada leitura. Apagar é a linha na transação e o arquivo
+  depois do commit. **A varredura** da subida (antes do expurgo e do painel) tira o arquivo sem linha, a linha
+  sem arquivo e o temporário que sobrou, com um WARN só de contagens; a rodada do expurgo, a cada hora, tira o
+  arquivo sem linha (a nota que a lápide da nuvem apaga pela `Fila`, que não conhece a pasta).
+- **[derivada] Anexar e tirar não mudam a versão nem a hora de edição da nota.** A imagem é uma linha à parte,
+  imutável (o id nasce no PC e não muda; não há "editar imagem"). Por quê: a janela aberta salva o texto com a
+  `base_version`, e o cartão faz o PATCH da cor e do fixar com a versão que tem; anexar subindo a versão daria
+  `409` à toa em quem não mexeu no texto, e o "Tirar da nota" que vence depois de a janela fechar deixaria o
+  cartão com a versão velha. Alternativa: subir a versão e adotar a nova na janela, como o marcador (N4).
+- **[desvio da N3] O Desfazer do "Virar nota" deixa a nota que ganhou imagem.** Ele apagava a nota "na versão
+  1"; como anexar não sobe a versão, a regra passa a ser "na versão 1 **e sem imagem**" (a pessoa já mexeu na
+  nota).
+- **Tirar da nota, com o Desfazer** (a prévia): a imagem some da tela na hora, e o `DELETE` só vai ao Agent
+  quando o aviso "Imagem tirada da nota." sai **sem** o Desfazer: o tempo da pílula (os 8 s de sempre, parados
+  com o ponteiro ou o foco nela), outro aviso no lugar dela, ou a página fechando (`pagehide`, com
+  `keepalive`). O `avisar` do Painel ganhou o `aoVencer` para isso. **[derivada]** O tirar vale também na nota
+  da lixeira (o aviso pode vencer depois de a nota ir para lá); anexar, não (`409`).
+- **[derivada] A nota só com imagem nasce de uma rota própria**, `POST /api/notas/com-imagem` (a nota e a
+  imagem numa transação): o ícone de imagem do "Criar uma nota…" cria a nota com a primeira imagem escolhida,
+  a põe no topo e a abre; as outras escolhidas entram nela. A nota sem texto só vale com imagem (o `POST
+  /api/notas` continua recusando a nota vazia).
+- **A redução no navegador** (`web/src/notas/reduzirImagem.ts`): `createImageBitmap` com `imageOrientation:
+  'from-image'`, canvas com fundo branco, 2.000 px no lado maior, `toBlob('image/jpeg', 0.85)`; **[derivada]**
+  se passar de 4 MB, 0,72 e 0,6 antes de recusar, com a frase a mais "A imagem ficou grande demais mesmo
+  reduzida." O original acima de 10 MB e o que o navegador não abre (o HEIC, o PDF) são recusados antes de
+  qualquer pedido. Só a cópia reduzida sai; o nome do arquivo nunca.
+- **[derivada] O colar:** o Ctrl+V anexa quando o que se colou é **só** imagem (o print do Win+Shift+S); com
+  texto junto (a célula do Excel, o trecho do Word), o colar é o de sempre. **O arrastar:** só um arrastar de
+  arquivos mostra "Solte para anexar à nota"; o arquivo solto fora da nota (no véu) não faz nada, para o
+  navegador não trocar o painel pela imagem.
+- **[derivada] Na tela:** o cartão inteiro continua sendo o botão que abre a nota (a imagem grande abre de
+  dentro da nota); o × fica só na nota aberta (como a prévia). A primeira imagem do cartão tem a proporção dela,
+  contida entre 3:4 e 2:1 (o print de celular não estica o cartão). Na imagem grande, as setas dão a volta, e o
+  Baixar grava `nota-imagem-N.jpg`. A nota que só tem imagem se chama "Nota com imagem" (ou "com N imagens").
+  A forma "lista" e a Lixeira contam as imagens. A imagem do cartão só é lida quando ele chega perto da tela
+  (600 px de folga), e o cartão que muda de altura sozinho (a imagem que entra, sai ou volta no Desfazer) pede a
+  medida da grade de novo (o `ResizeObserver` da ordem manual, N2b, passou a olhar cada cartão).
+- **A imagem chega à tela** por `fetch` com o token (`GET /api/notas/{id}/imagens/{imagem}`), vira uma URL
+  `blob:` guardada na loja da aba (`web/src/notas/imagensNaTela.ts`) e é solta quando a aba sai. A CSP do painel
+  passou a `img-src 'self' data: blob:`. **[derivada]** A URL `blob:` nasce **só no cliente do PC**
+  (`ClienteDeImagens.paraATela`, em `clienteLocal.ts`): o build da nuvem ainda não mostra imagem, e o
+  `bundle.test.ts` prende que ele não cria URL de blob (a garantia do áudio do ditado). O app do celular segue
+  sem imagens nesta metade: o `ClienteDeNotas.imagens` é opcional, e sem ele a aba não mostra nem anexa.
+- **Nada da imagem vai à IA nem à busca**: a busca (`q`), o "Copiar texto", o "Copiar para WhatsApp", o
+  Formatar e a sugestão de marcador só olham o título e o corpo. O log nunca leva os bytes, o tamanho nem o nome.
+- **Riscos desta metade:** (1) com a nuvem conectada, a nota só com imagem sobe (N7) como uma nota de título e
+  corpo vazios, e no celular aparece "Nota vazia" até a segunda metade levar as imagens; (2) a aba derrubada
+  sem `pagehide` (o Agent ou o navegador que caem) com o aviso "Imagem tirada da nota." na tela deixa a imagem
+  na nota (nada some calado; a pessoa tira de novo); (3) a miniatura que o Explorador do Windows guarda, se a
+  pessoa abrir a pasta `notas-imagens` nele, fica no cache do Windows, fora do alcance do Agent; (4) a
+  conferência visual (a grade, a imagem grande, o arrastar de verdade) é do roteiro manual: os testes do painel
+  rodam no jsdom, com dublês do canvas; (5) a aba guarda na memória as imagens que já mostrou (a cópia de até
+  2.000 px, que serve também de miniatura do cartão) até sair dela, sem descartar as mais antigas: com centenas
+  de notas com imagem rolando na grade, isso pesa (uma miniatura própria, ou um descarte das mais antigas, fica
+  para quando fizer falta).
+
+**O que a segunda metade (o sync, a nuvem e o celular) precisa saber:**
+- **Os nomes.** No PC: a tabela `local_note_images`; o tipo `storage.ImagemDaNota` (e `Nota.Imagens`); o
+  contrato `storage.ImagemDaNotaRepository` (`AnexarImagem`, `CriarNotaComImagem`, `LerImagem`, `TirarImagem`),
+  cumprido pelo `*storage.SQLiteNotaRepository`, com `UsarPastaDasImagens` e `VarrerImagens`; as rotas
+  `POST /api/notas/com-imagem`, `POST /api/notas/{id}/imagens`, `GET` e `DELETE
+  /api/notas/{id}/imagens/{imagem}`; os códigos `IMAGE_INVALID`, `IMAGE_TOO_LARGE`, `TOO_MANY_IMAGES`,
+  `IMAGES_FULL`. No painel: `ImagemDaNota` e `ClienteDeImagens` (`web/src/notas/tipos.ts`), a loja
+  `ImagensNaTela`, a redução `reduzirImagem`.
+- **O teto e os limites** moram em `internal/imagemdanota` (`MaxBytes`, `MaxLado`, `MaxPorNota`,
+  `TetoDoTotal`, `FraseDoTeto`); o servidor confere com o mesmo `Conferir` antes do Postgres. O PC deve aceitar
+  a imagem que vem da nuvem mesmo acima do teto local (quem decide o teto é a nuvem).
+- **O que já pensa no sync:** o id é um UUID v7 gerado no PC (a nuvem pode guardá-lo como está); a imagem é
+  imutável (só criar e apagar, como uma entidade à parte da nota); o SHA-256 vai junto para conferir o que
+  chegou; anexar e tirar não sobem a versão da nota (a segunda metade decide se a imagem viaja como entidade
+  própria, que é o que o desenho pede, ou se mexe na versão); a ordem é a de `created_at`. **A tabela não tem
+  `server_version` nem `sync_state`**: entram por `ALTER TABLE ... ADD COLUMN`, como na `0013`. Nada desta
+  metade põe marcador na `sync_outbox`.
+- **A ordem das gravações que a varredura supõe:** o arquivo antes da linha (com a linha, o arquivo existe). A
+  imagem que desce da nuvem deve fazer o mesmo (baixar, conferir, gravar o arquivo, inserir a linha); e a linha
+  sem arquivo é apagada na subida, então uma imagem "à espera de baixar" precisa de um estado próprio que a
+  varredura respeite. A lápide da nuvem que apaga a nota pela `Fila` já leva as linhas (`apagarNotaDaTabela`),
+  e o arquivo sai na rodada do expurgo.
+- **A imagem chega ao painel** por `ClienteDeImagens.ler` (os bytes) e `paraATela`/`soltar` (a URL `blob:`). O
+  celular precisa do próprio `ClienteDeImagens` (a `/api/v1`), da redução no aparelho (a mesma
+  `reduzirImagem`) e de: mudar o `bundle.test.ts` ("a URL blob: só no cliente do PC") e a CSP da nuvem (que hoje
+  não tem `img-src blob:`). O "Imagem sem rede" da prévia (cena 6) é dela.
+- **O Desfazer do tirar** já é do painel (o `aoVencer`), e serve ao celular igual.
+
 ## Alternativas descartadas
 
 - **Usar o Keep pela API do Google.** O Keep não tem API para conta pessoal; e o pedido é justamente
@@ -774,7 +884,7 @@ deploy e release só com a autorização do Mauro.
 | N7 | Sync das notas e marcadores: migrations do Postgres, entidades no motor, mescla da lista de marcar, rotas da nuvem (a `posicao` da N2b viaja com a nota). **Deploy: ponto de parada.** **Feita localmente (26-out-2026), nos dublês, em quatro commits na branch `notas/n7`; o deploy espera o Mauro** (`docs/deploy-notas-n7.md`, depois `docs/teste-manual-notas-n7.md`). Ver "Decisões da N7" | N1-N6, N2b |
 | N8 | Aba Notas no celular (PWA), com "Ditar para nota" e a fila offline (marcar, desmarcar e acrescentar item sem rede). **Feita localmente (27-out-2026), na branch `notas/n8`; o deploy espera o Mauro** (`docs/deploy-notas-n8.md`, depois `docs/teste-manual-notas-n8.md`). Ver "Decisões da N8" | N7 |
 | N9 | Gatilho "ditar para nota" no PC, com o destino pelo nome | N2 |
-| N10 | Imagens. **Ponto de parada antes** (servidor, disco, LGPD) | N7 |
+| N10 | Imagens. **Ponto de parada antes** (servidor, disco, LGPD; feito em 28-out-2026). **A primeira metade, o PC, feita localmente (28-out-2026), na branch `notas/n10a`** (`docs/teste-manual-notas-n10.md`); a segunda, o sync, a nuvem e o celular, vem depois. Ver "Decisões da N10 (implementação)" | N7 |
 
 Ordem sugerida: L e N1 em paralelo; depois N2, N3, N6, N4, N5, N9; e N7, N8, N10.
 
