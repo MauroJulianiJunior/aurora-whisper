@@ -23,6 +23,8 @@ export type NomeDoIcone =
   | 'lista'
   | 'detalhes'
   | 'seta'
+  | 'fechar'
+  | 'baixar'
 
 const traco = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.7, strokeLinejoin: 'round', strokeLinecap: 'round' } as const
 
@@ -109,6 +111,9 @@ const desenhos: Record<NomeDoIcone, ReactNode> = {
     </>
   ),
   seta: <path d="m7 10 5 5 5-5" {...traco} />,
+  // As da imagem (a prévia da N10): o × sobre a imagem e na imagem grande, e o Baixar.
+  fechar: <path d="M6.5 6.5l11 11M17.5 6.5l-11 11" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" />,
+  baixar: <path d="M12 4v11 M7.5 10.5 12 15l4.5-4.5 M5 19.5h14" {...traco} />,
 }
 
 export function Icone({ nome }: { nome: NomeDoIcone }) {

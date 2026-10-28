@@ -122,8 +122,10 @@ export interface PropsDasNotas {
   busca: string
   aoPerderLigacao(e: unknown): void
   // avisar: a pílula de baixo da tela; com desfazer, ela oferece o Desfazer;
-  // com abrir, o "Abrir" (o aviso do "Ditar para nota" no celular, N8).
-  avisar(texto: ReactNode, desfazer?: () => void, abrir?: () => void): void
+  // com abrir, o "Abrir" (o aviso do "Ditar para nota" no celular, N8). aoVencer
+  // roda quando a pílula sai sem o Desfazer (o tempo, outro aviso, a página
+  // fechando): a imagem tirada da nota só sai de vez aí (N10).
+  avisar(texto: ReactNode, desfazer?: () => void, abrir?: () => void, aoVencer?: () => void): void
   // abrirNota: o pedido do "Abrir" do aviso "Virou nota": a nota que a janela
   // abre. vez sobe a cada pedido, para o mesmo pedido de novo valer de novo.
   abrirNota?: { id: string; vez: number } | null

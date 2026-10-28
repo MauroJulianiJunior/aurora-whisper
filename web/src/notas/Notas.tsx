@@ -1,4 +1,4 @@
-import { type ReactNode, useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { Conflito, ErroDaApi, problemaDe } from '../api'
 import { Aurora } from '../Aurora'
 import { type AcoesDaNota, CartaoDaNota, LinhaDaNota, TabelaDeNotas } from './CartaoDaNota'
@@ -8,10 +8,14 @@ import { CriarNota } from './CriarNota'
 import { DialogoDaNota, type FimDaNota } from './DialogoDaNota'
 import { EditarMarcadores } from './EditarMarcadores'
 import { Icone } from './Icone'
+import { fraseDoErro } from './imagens'
+import { ContextoDasImagens } from './contextoDasImagens'
+import { ImagensNaTela } from './imagensNaTela'
 import { acharPorNome, limparNome, ordenarPorNome } from './marcadores'
 import { NotaNaLixeira } from './NotaNaLixeira'
 import { aplicarOrdem, fraseNaPonta, frasePosicao, moverNaLista, vizinhasDe } from './ordem'
 import { type FormaDeVer, FORMAS, gravarColunas, gravarForma, lerColunas, lerForma, limitar, limitesDeColunas } from './preferencias'
+import { ferramentasDoNavegador, reduzirImagem } from './reduzirImagem'
 import {
   type ChegadaNaNota,
   type ClienteDeNotas,
@@ -37,8 +41,9 @@ interface Props {
   busca: string
   aoPerderLigacao(e: unknown): void
   // avisar: a pílula do Painel; desfazer, quando existe, vira o botão e o Ctrl+Z;
-  // abrir, o botão "Abrir" (o aviso do "Ditar para nota" no celular).
-  avisar(texto: ReactNode, desfazer?: () => void, abrir?: () => void): void
+  // abrir, o botão "Abrir" (o aviso do "Ditar para nota" no celular); aoVencer, o
+  // que roda quando a pílula sai sem o Desfazer (a imagem tirada da nota, N10).
+  avisar(texto: ReactNode, desfazer?: () => void, abrir?: () => void, aoVencer?: () => void): void
   // abrirNota: o "Abrir" do aviso "Virou nota" (N3): a nota que a janela abre
   // assim que a aba aparece. vez sobe a cada pedido.
   abrirNota?: { id: string; vez: number } | null
@@ -151,6 +156,17 @@ export function Notas({
   const [anuncioDaOrdem, setAnuncioDaOrdem] = useState('')
   const filaDaEdicao = useRef<Promise<unknown>>(Promise.resolve())
   const versoesMovidas = useRef(new Map<string, number>())
+  // As imagens das notas (ADR-022, N10): a loja das URLs blob:, das anexadas e
+  // das tiradas, enquanto a aba vive (ImagensNaTela). Só quem tem o cliente das
+  // imagens (o PC) a tem; sair da aba solta as URLs.
+  const imagens = useMemo(
+    () => (cliente.imagens ? new ImagensNaTela(cliente.imagens, (arquivo) => reduzirImagem(arquivo, ferramentasDoNavegador)) : null),
+    [cliente],
+  )
+  useEffect(() => {
+    imagens?.abrir()
+    return () => imagens?.fechar()
+  }, [imagens])
 
   const consulta = `${vista}\u0000${marcador ?? ''}\u0000${busca}`
   const recarregar = useCallback(() => setRecarga((n) => n + 1), [])
@@ -542,6 +558,25 @@ export function Notas({
     recarregar()
   }
 
+  // criarComImagens é o ícone de imagem do "Criar uma nota…": a nota nasce com a
+  // primeira imagem e abre, e as outras escolhidas entram nela ("guardando…").
+  async function criarComImagens(arquivos: File[]) {
+    if (!imagens) return
+    const [primeira, ...resto] = arquivos
+    if (!primeira) return
+    let nova: Nota
+    try {
+      nova = await imagens.criarNotaComImagem(primeira)
+    } catch (e) {
+      if (problemaDe(e)) aoPerderLigacao(e)
+      return avisar(fraseDoErro(e))
+    }
+    mudarItens((itens) => (marcador || busca ? itens : [nova, ...itens.filter((n) => n.id !== nova.id)]))
+    recarregar()
+    setAberta(nova)
+    if (resto.length > 0) void imagens.anexar(nova, resto, (texto) => avisar(texto), aoPerderLigacao)
+  }
+
   function escolherForma(f: FormaDeVer) {
     setForma(f)
     gravarForma(f)
@@ -684,6 +719,7 @@ export function Notas({
   const anuncio = total === null ? '' : total === 1 ? '1 nota.' : `${total} notas.`
 
   return (
+    <ContextoDasImagens.Provider value={imagens}>
     <div className={celular ? 'notas no-celular' : 'notas'} ref={raiz} data-oculta={oculta ? '' : undefined}>
       <p className="so-leitor anuncio" role="status">
         {anuncio}
@@ -759,6 +795,7 @@ export function Notas({
             recarregar()
           }}
           aoPerderLigacao={aoPerderLigacao}
+          aoEscolherImagens={imagens ? (arquivos) => void criarComImagens(arquivos) : undefined}
         />
       )}
 
@@ -804,5 +841,6 @@ export function Notas({
         />
       )}
     </div>
+    </ContextoDasImagens.Provider>
   )
 }

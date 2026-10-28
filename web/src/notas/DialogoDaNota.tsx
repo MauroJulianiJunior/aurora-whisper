@@ -1,4 +1,4 @@
-import { type KeyboardEvent, type ReactNode, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { type DragEvent, type KeyboardEvent, type ReactNode, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Conflito, ErroDaApi, problemaDe } from '../api'
 import { formatarCurta, formatarHora } from '../datas'
 import { BotaoComMenu } from './BotaoComMenu'
@@ -7,11 +7,24 @@ import { type TipoDaLinha, escreverCorpo, garantirUma, lerCorpo, nomeDaNota, nor
 import { copiarParaWhatsApp } from './copiarParaWhatsApp'
 import { EscolherMarcadores } from './EscolherMarcadores'
 import { Icone } from './Icone'
+import { arquivosDoArrastar, arrastaArquivos, contaDeImagens, FRASES, imagensDaNota, imagensDoColar, nomeComImagens } from './imagens'
+import { useImagensNaTela } from './contextoDasImagens'
+import { GradeDeImagens, ImagemGrande } from './ImagensDaNota'
 import { PaletaDeCores } from './PaletaDeCores'
 import { dispensarSugestao, sugestaoDispensada } from './preferencias'
 import { prenderOFoco } from './prenderOFoco'
 import { sugerirMarcador } from './sugestao'
-import { type ClienteDeNotas, type CorDaNota, type EscolhaDoConflito, FRASE_SEM_REDE, type Marcador, type MudancaDaNota, type Nota, type NotasNoCelular } from './tipos'
+import {
+  type ClienteDeNotas,
+  type CorDaNota,
+  type EscolhaDoConflito,
+  FRASE_SEM_REDE,
+  type ImagemDaNota,
+  type Marcador,
+  type MudancaDaNota,
+  type Nota,
+  type NotasNoCelular,
+} from './tipos'
 import { useAdiado } from './useAdiado'
 import { useEditorDeLinhas } from './useEditorDeLinhas'
 import { useTelaEstreita } from './useTelaEstreita'
@@ -36,7 +49,9 @@ interface Props {
   // criarMarcador cria um marcador novo (o Notas o guarda). Devolve o marcador, ou a
   // frase de erro para o menu.
   criarMarcador(nome: string): Promise<Marcador | string>
-  avisar(texto: ReactNode): void
+  // avisar: a pílula do Painel. Com desfazer e aoVencer, o "Imagem tirada da
+  // nota." (N10): o Desfazer devolve a imagem, e ela só sai de vez no aoVencer.
+  avisar(texto: ReactNode, desfazer?: () => void, abrir?: () => void, aoVencer?: () => void): void
   // aoPerderLigacao: a falha foi da ligação (sem sessão, Agent fora do ar); o
   // Painel acende a faixa do topo.
   aoPerderLigacao(e: unknown): void
@@ -96,7 +111,15 @@ export function DialogoDaNota({ nota, cliente, marcadores, notasParaSugerir, cri
   const dialogo = useRef<HTMLDivElement>(null)
   const estreita = useTelaEstreita()
   // O nome da janela é o da nota quando ela abriu: não muda a cada tecla.
-  const [nome] = useState(() => nomeDaNota(nota.titulo, lerCorpo(nota.corpo)))
+  const [nome] = useState(() => nomeComImagens(nomeDaNota(nota.titulo, lerCorpo(nota.corpo)), imagensDaNota(nota).length))
+  // As imagens (N10): a loja da aba (sem ela, o celular, não há imagem), a imagem
+  // grande aberta (o índice), e o arrastar de arquivos por cima da nota.
+  const loja = useImagensNaTela()
+  const [grande, setGrande] = useState<number | null>(null)
+  const [soltando, setSoltando] = useState(false)
+  const arrastes = useRef(0)
+  const escolherImagens = useRef<HTMLInputElement>(null)
+  const quemAbriuAGrande = useRef<HTMLElement | null>(null)
 
   // Os campos de agora, lidos pela fila de gravação (que roda depois de
   // renders) sem ficar com o valor velho de um fechamento.
@@ -484,6 +507,93 @@ export function DialogoDaNota({ nota, cliente, marcadores, notasParaSugerir, cri
   })
   const quando = formatarHora(ultima.updated_at)
 
+  // ─── As imagens (N10) ───────────────────────────────────────────────
+  const imagens = loja ? loja.imagensDe(ultima) : []
+  const nImagens = imagens.length + (loja?.guardandoDe(nota.id).length ?? 0)
+
+  // anexarImagens reduz e manda as imagens escolhidas, coladas ou soltas. A nota da
+  // lixeira (outra aba) não recebe: o aviso diz por quê.
+  function anexarImagens(arquivos: File[]) {
+    if (!loja || arquivos.length === 0) return
+    if (parado.current === 'lixeira') return avisar('Esta nota está na lixeira: restaure antes de anexar imagem.')
+    void loja.anexar(ultimaRef.current, arquivos, (texto) => avisar(texto), aoPerderLigacao)
+  }
+
+  function tirarImagem(imagem: ImagemDaNota) {
+    if (!loja) return
+    const ultimaQueSobrava = imagens.length === 1 && imagens[0]?.id === imagem.id
+    loja.tirar(nota.id, imagem, avisar, aoPerderLigacao)
+    // A imagem grande da última imagem tirada fecha; com outras, mostra a seguinte.
+    if (grande !== null && ultimaQueSobrava) fecharGrande()
+  }
+
+  function abrirGrande(indice: number) {
+    quemAbriuAGrande.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    setGrande(indice)
+  }
+
+  function fecharGrande() {
+    setGrande(null)
+    // O foco volta a quem abriu; se ele saiu da tela (a imagem tirada), ao botão
+    // de imagem da barra.
+    const volta = quemAbriuAGrande.current
+    quemAbriuAGrande.current = null
+    requestAnimationFrame(() => {
+      if (volta?.isConnected) volta.focus()
+      else dialogo.current?.querySelector<HTMLElement>('button[aria-label="Imagem"]')?.focus()
+    })
+  }
+
+  // Um arquivo solto fora da nota (no véu, na barra do painel) não pode fazer o
+  // navegador abrir a imagem no lugar do painel: enquanto a nota está aberta, o
+  // soltar fora dela não faz nada.
+  useEffect(() => {
+    if (!loja) return
+    const segurar = (e: globalThis.DragEvent) => {
+      if (!arrastaArquivos(e.dataTransfer)) return
+      if (dialogo.current?.contains(e.target as Node)) return
+      e.preventDefault()
+    }
+    window.addEventListener('dragover', segurar)
+    window.addEventListener('drop', segurar)
+    return () => {
+      window.removeEventListener('dragover', segurar)
+      window.removeEventListener('drop', segurar)
+    }
+  }, [loja])
+
+  function aoEntrarArrastando(e: DragEvent<HTMLDivElement>) {
+    if (!loja || !arrastaArquivos(e.dataTransfer)) return
+    e.preventDefault()
+    arrastes.current += 1
+    setSoltando(true)
+  }
+
+  function aoArrastarPorCima(e: DragEvent<HTMLDivElement>) {
+    if (!loja || !arrastaArquivos(e.dataTransfer)) return
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'copy'
+  }
+
+  function aoSairArrastando(e: DragEvent<HTMLDivElement>) {
+    if (!loja || !arrastaArquivos(e.dataTransfer)) return
+    arrastes.current = Math.max(0, arrastes.current - 1)
+    if (arrastes.current === 0) setSoltando(false)
+  }
+
+  function aoSoltar(e: DragEvent<HTMLDivElement>) {
+    if (!loja || !arrastaArquivos(e.dataTransfer)) return
+    e.preventDefault()
+    arrastes.current = 0
+    setSoltando(false)
+    const { imagens: soltas, tudo } = arquivosDoArrastar(e.dataTransfer)
+    if (soltas.length === 0) {
+      if (tudo.length > 0) avisar(FRASES.naoAbre)
+      return
+    }
+    anexarImagens(soltas)
+  }
+
   // formatarComItens é o Formatar de lista: numa linha de texto corrido, o Agent
   // separa os itens (editor.formatarComItens). O aviso só aparece quando algo não
   // saiu como pedido; a separação feita se mostra embaixo dos itens, com o
@@ -513,28 +623,45 @@ export function DialogoDaNota({ nota, cliente, marcadores, notasParaSugerir, cri
         aria-label={`Nota: ${nome}`}
         data-cor={cor ?? undefined}
         onKeyDown={aoTeclar}
+        onPaste={(e) => {
+          // Ctrl+V de um print: a imagem entra na nota. Com texto junto, o colar é o
+          // de sempre (imagensDoColar).
+          if (!loja) return
+          const coladas = imagensDoColar(e.clipboardData)
+          if (coladas.length === 0) return
+          e.preventDefault()
+          anexarImagens(coladas)
+        }}
+        onDragEnter={aoEntrarArrastando}
+        onDragOver={aoArrastarPorCima}
+        onDragLeave={aoSairArrastando}
+        onDrop={aoSoltar}
       >
-        <button
-          type="button"
-          className="icone-botao fixar-no-dialogo"
-          aria-pressed={fixada}
-          aria-label={fixada ? 'Desafixar' : 'Fixar'}
-          title={fixada ? 'Desafixar' : 'Fixar'}
-          disabled={semRede}
-          onClick={alternarFixada}
-        >
-          <Icone nome="fixar" />
-        </button>
+        <GradeDeImagens nota={ultima} aoAbrir={abrirGrande} aoTirar={tirarImagem} />
 
-        <CamposDaNota
-          titulo={titulo}
-          aoMudarTitulo={setTitulo}
-          editor={editor}
-          rotulo="Texto da nota"
-          foco={{ cliente, nota: nota.id }}
-          soMarcar={semRede}
-          comItemNovo={Boolean(celular)}
-        />
+        <div className="com-fixar">
+          <button
+            type="button"
+            className="icone-botao fixar-no-dialogo"
+            aria-pressed={fixada}
+            aria-label={fixada ? 'Desafixar' : 'Fixar'}
+            title={fixada ? 'Desafixar' : 'Fixar'}
+            disabled={semRede}
+            onClick={alternarFixada}
+          >
+            <Icone nome="fixar" />
+          </button>
+
+          <CamposDaNota
+            titulo={titulo}
+            aoMudarTitulo={setTitulo}
+            editor={editor}
+            rotulo="Texto da nota"
+            foco={{ cliente, nota: nota.id }}
+            soMarcar={semRede}
+            comItemNovo={Boolean(celular)}
+          />
+        </div>
 
         {etiquetas.length > 0 && (
           <div className="pe">
@@ -631,6 +758,7 @@ export function DialogoDaNota({ nota, cliente, marcadores, notasParaSugerir, cri
         <p className="meta">
           editada às {quando}
           {ultima.ditado_de_origem && ' · veio de um ditado'}
+          {nImagens > 0 && ` · ${contaDeImagens(nImagens)}`}
           {estado.tipo === 'salvando' && ' · salvando…'}
         </p>
 
@@ -675,12 +803,36 @@ export function DialogoDaNota({ nota, cliente, marcadores, notasParaSugerir, cri
             {() => <EscolherMarcadores marcadores={marcadores} marcados={ultima.marcadores} aoAlternar={alternarMarcador} aoCriar={criarEMarcar} />}
           </BotaoComMenu>
 
-          {/* No celular, a barra é a da prévia (N8): sem a imagem (ainda não existe)
-              e com o Arquivar no Mais, para caber o microfone. */}
-          {!celular && (
-            <button type="button" className="icone-botao" aria-label="Imagem" title="Imagens chegam depois" disabled>
-              <Icone nome="imagem" />
-            </button>
+          {/* A imagem (N10): a escolha de arquivos do Windows, aberta pelo clique de
+              quem usa. No celular, a barra é a da prévia da N8 (sem a imagem, que lá
+              é a segunda metade da N10, e com o Arquivar no Mais). */}
+          {loja && (
+            <>
+              <button
+                type="button"
+                className="icone-botao"
+                aria-label="Imagem"
+                title="Anexar imagem"
+                disabled={estado.tipo === 'lixeira'}
+                onClick={() => escolherImagens.current?.click()}
+              >
+                <Icone nome="imagem" />
+              </button>
+              <input
+                ref={escolherImagens}
+                type="file"
+                accept="image/*"
+                multiple
+                hidden
+                tabIndex={-1}
+                aria-label="Escolher imagens para a nota"
+                onChange={(e) => {
+                  const arquivos = Array.from(e.currentTarget.files ?? [])
+                  e.currentTarget.value = ''
+                  anexarImagens(arquivos)
+                }}
+              />
+            </>
           )}
 
           {!celular && (
@@ -787,7 +939,26 @@ export function DialogoDaNota({ nota, cliente, marcadores, notasParaSugerir, cri
             Fechar
           </button>
         </div>
+
+        {soltando && (
+          <div className="soltar" aria-hidden="true">
+            <Icone nome="imagem" />
+            Solte para anexar à nota
+          </div>
+        )}
       </div>
+
+      {grande !== null && imagens.length > 0 && (
+        <ImagemGrande
+          notaId={nota.id}
+          imagens={imagens}
+          indice={Math.min(grande, imagens.length - 1)}
+          titulo={nomeComImagens(nomeDaNota(titulo, lerCorpo(corpo)), imagens.length)}
+          aoMudar={setGrande}
+          aoFechar={fecharGrande}
+          aoTirar={tirarImagem}
+        />
+      )}
     </div>
   )
 }

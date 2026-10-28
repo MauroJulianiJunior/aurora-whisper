@@ -526,13 +526,14 @@ describe('a nota aberta', () => {
     expect(pedidosA(srv, '/api/notas/separar-itens')).toHaveLength(0)
   })
 
-  it('o botão de imagem existe e está desligado ("Imagens chegam depois")', async () => {
+  // Na N10 o botão de imagem passou a funcionar (notasImagensNoPC.test.tsx).
+  it('o botão de imagem existe e está ligado ("Anexar imagem")', async () => {
     await abrirNotas([compras()])
     await screen.findByText('Compras', { selector: 'h3' })
     abrir('n1')
     const imagem = within(dialogo()).getByRole<HTMLButtonElement>('button', { name: 'Imagem' })
-    expect(imagem.disabled).toBe(true)
-    expect(imagem.title).toBe('Imagens chegam depois')
+    expect(imagem.disabled).toBe(false)
+    expect(imagem.title).toBe('Anexar imagem')
   })
 
   it('Esc num menu fecha só o menu, não a janela', async () => {
