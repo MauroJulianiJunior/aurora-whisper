@@ -3032,6 +3032,7 @@ tbody[data-pronto] tr[data-arrastando] {
   left: 0;
   z-index: 3;
   min-width: 15rem;
+  max-width: calc(100vw - 16px);
   padding: 6px;
   border: 1px solid var(--linha);
   border-radius: var(--raio-md);
@@ -3044,16 +3045,11 @@ tbody[data-pronto] tr[data-arrastando] {
   bottom: calc(100% + 4px);
 }
 
-/* Sem lugar em cima (uma nota curta no alto da tela), abre para baixo; sem lugar
-   à direita, alinha pela ponta direita do botão (BotaoComMenu). */
+/* Sem lugar em cima (uma nota curta no alto da tela), abre para baixo; o que
+   passa da borda direita, o BotaoComMenu empurra para a esquerda. */
 .barra-nota .menu[data-lado='baixo'] {
   top: calc(100% + 4px);
   bottom: auto;
-}
-
-.menu[data-ponta='direita'] {
-  left: auto;
-  right: 0;
 }
 
 .menu button {
@@ -3237,6 +3233,13 @@ tbody[data-pronto] tr[data-arrastando] {
 
   .menu {
     min-width: 13rem;
+  }
+
+  /* As nove cores numa fileira, com os círculos de 36 px do toque, são mais
+     largas que o celular: viram duas fileiras, de cinco e de quatro. */
+  .menu .cores {
+    display: grid;
+    grid-template-columns: repeat(5, max-content);
   }
 }
 

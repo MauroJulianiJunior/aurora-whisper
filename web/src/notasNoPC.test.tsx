@@ -498,27 +498,34 @@ describe('a nota aberta', () => {
     expect(within(dialogo()).queryByRole('button', { name: /\d+ marcados?/ })).toBeNull()
   })
 
-  it('Mais: o menu que não cabe em cima abre para baixo, e o que não cabe à direita se alinha pela direita', async () => {
+  it('Mais: o menu que não cabe em cima abre para baixo, e o que passa da direita vai para a esquerda', async () => {
     // O jsdom não tem layout: a caixa do menu aberto (para cima, a partir da ponta
     // esquerda do botão) é a de mentira, numa janela de 1024 px.
-    let caixa = { top: -120, left: 300 }
+    let caixa = { top: -120, left: 300, largura: 208 }
     vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
       if (!this.classList.contains('menu')) return new DOMRect(0, 0, 0, 0)
-      return new DOMRect(caixa.left, caixa.top, 208, 300)
+      return new DOMRect(caixa.left, caixa.top, caixa.largura, 300)
     })
     await abrirNotas([compras()])
     await screen.findByText('Compras', { selector: 'h3' })
     abrir('n1')
     const mais = within(dialogo()).getByRole('button', { name: 'Mais' })
     const menu = () => within(dialogo()).getByRole('group', { name: 'Mais' })
+    const reabrir = (c: typeof caixa) => {
+      fireEvent.click(mais)
+      caixa = c
+      fireEvent.click(mais)
+    }
     fireEvent.click(mais)
-    expect(menu().dataset).toMatchObject({ lado: 'baixo' })
-    expect(menu().dataset.ponta).toBeUndefined()
-    fireEvent.click(mais)
-    caixa = { top: 200, left: 900 }
-    fireEvent.click(mais)
-    expect(menu().dataset).toMatchObject({ ponta: 'direita' })
+    expect(menu().dataset.lado).toBe('baixo')
+    expect(menu().style.left).toBe('')
+    // Passa 92 px da borda direita (1024 - 8): vai 92 px para a esquerda.
+    reabrir({ top: 200, left: 900, largura: 208 })
     expect(menu().dataset.lado).toBeUndefined()
+    expect(menu().style.left).toBe('-92px')
+    // Mais largo que a janela: vai para a esquerda só até a borda esquerda (8 px).
+    reabrir({ top: 200, left: 20, largura: 1100 })
+    expect(menu().style.left).toBe('-12px')
   })
 
   it('Formatar troca o prefixo da linha do cursor', async () => {
