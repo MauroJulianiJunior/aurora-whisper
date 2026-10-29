@@ -30,15 +30,17 @@ export function BotaoComMenu({ icone, rotulo, desabilitado, titulo, classe, chil
   // pulo). Na barra da nota aberta ele abre para cima: numa nota curta no alto da
   // tela (o celular), a parte de cima ficava fora dela, e o que passa da borda de
   // cima de uma área de rolagem não volta com a rolagem. Aí ele abre para baixo,
-  // onde a janela da nota rola até ele. E o botão perto da borda direita (o Mais
-  // da coluna da direita, no celular) alinha o menu pela ponta direita dele.
+  // onde a janela da nota rola até ele. E o menu que passa da borda direita (o
+  // Mais e a Cor da coluna da direita, no celular) vai para a esquerda o que
+  // passou, sem sair pela borda esquerda.
   useLayoutEffect(() => {
     const m = menu.current
     if (!aberto || !m) return
     const r = m.getBoundingClientRect()
     if (r.height === 0) return
     if (r.top < 8) m.dataset.lado = 'baixo'
-    if (r.right > (document.documentElement.clientWidth || window.innerWidth) - 8) m.dataset.ponta = 'direita'
+    const passou = r.right - ((document.documentElement.clientWidth || window.innerWidth) - 8)
+    if (passou > 0) m.style.left = `${-Math.min(passou, Math.max(0, r.left - 8))}px`
   }, [aberto])
 
   useEffect(() => {
