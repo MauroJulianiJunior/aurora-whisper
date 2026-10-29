@@ -34,7 +34,7 @@ resto do EXIF saem antes de ela deixar o aparelho); **o original nunca sai dele*
 mesmo consentimento das notas ("Enviar o histórico"), ficam no banco, legíveis para quem administra o
 servidor, entram no backup cifrado e seguem a nota até o fim (a lixeira de 30 dias, "Apagar para sempre",
 "Apagar meus dados"). O **celular não guarda a imagem**: só a mostra, na memória da página; sem rede, diz
-"Imagem sem rede". A decisão 12 (seção 7) é do responsável.
+"Imagem sem rede". A decisão 12 (seção 7): o Mauro decidiu em 29-out-2026 ("Só eu uso"; a imagem segue a nota).
 
 **Por que isto existe.** Até aqui o que se dita ficava só no PC. Com a nuvem, o texto passa a morar,
 **legível**, num servidor, e uma cópia cifrada vai para um backup. **Com o ditado no celular, a voz
@@ -292,8 +292,11 @@ está.
    10, diz). Duas perguntas ao responsável: **(a)** o aviso a quem já usava a nuvem, como na decisão 10
    (na instância de referência, só o Mauro usa a nuvem: o mesmo raciocínio vale, e isso vai para a seção
    13 da cópia preenchida da política); **(b)** se o teto de 400 MB por conta e a retenção "a vida da
-   nota" servem, ou se ele quer um prazo para a imagem da nota arquivada. **Sugestão:** manter como está
-   (a imagem segue a nota). **[A PREENCHER]**
+   nota" servem, ou se ele quer um prazo para a imagem da nota arquivada. **Decidido pelo Mauro em
+   29-out-2026: (a) "Só eu uso"**: na instância de referência, só ele usa a nuvem, e não há a quem avisar
+   (vai para a seção 13 da cópia preenchida da política); **(b) "Segue a nota"**: a imagem fica enquanto a
+   nota existir e sai com ela (a lixeira de 30 dias, "Apagar para sempre", "Apagar meus dados"), com o teto
+   de 400 MB por conta, sem prazo à parte para a nota arquivada.
 
 Já aceitos no projeto (D3 da ADR-019) e descritos na política: o aprendido desfeito na nuvem e no
 backup; as cópias do banco no PC; o Polish fora da nuvem (no PC). Na instância de referência, a revisão

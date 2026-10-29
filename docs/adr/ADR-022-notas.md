@@ -1059,8 +1059,9 @@ O Mauro quer "o menor que funciona".
   uma, duas, cinco imagens e uma só com imagem) e `?cenario=notas-sem-rede` (o mesmo, sem rede); no painel do
   PC, `?cenario=notas-imagens` (imagens presentes e a caminho). Os bytes são JPEGs desenhados no canvas na
   hora. O `notasFalsas.ts` da nuvem ganhou as rotas das imagens (as dez por nota, a lixeira, `409`).
-- **A LGPD:** a política de privacidade, o dossiê (que abre a **decisão 12**, do responsável: o aviso e o
-  dado de terceiros na foto) e o `09` dizem o que sobe, onde fica, o prazo e que o celular não guarda; as
+- **A LGPD:** a política de privacidade, o dossiê (com a **decisão 12**, o aviso e o dado de terceiros na
+  foto, decidida pelo Mauro em 29-out-2026: "Só eu uso" e "Segue a nota") e o `09` dizem o que sobe, onde
+  fica, o prazo e que o celular não guarda; as
   frases do app (a Privacidade do celular e a do PC, e a pergunta do "Enviar o histórico") também.
 - **O que não foi feito:** a imagem **não entra na fila offline** do celular (anexar exige rede, a decisão da
   cena 6); a **busca** não olha a imagem; o "Copiar para WhatsApp" a deixa de fora; uma **miniatura própria**
