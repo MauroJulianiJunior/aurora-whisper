@@ -781,6 +781,8 @@ Roteiro do Mauro: `docs/teste-manual-notas-n10.md`.
   (`ClienteDeImagens.paraATela`, em `clienteLocal.ts`): o build da nuvem ainda não mostra imagem, e o
   `bundle.test.ts` prende que ele não cria URL de blob (a garantia do áudio do ditado). O app do celular segue
   sem imagens nesta metade: o `ClienteDeNotas.imagens` é opcional, e sem ele a aba não mostra nem anexa.
+  **[desvio, N10b]** Superada: a nuvem também cria a URL `blob:` (`nuvem/notas/urlDaImagem.ts`), com a garantia
+  do áudio refeita no `bundle.test.ts` (ver "Decisões da N10b (o celular)").
 - **Nada da imagem vai à IA nem à busca**: a busca (`q`), o "Copiar texto", o "Copiar para WhatsApp", o
   Formatar e a sugestão de marcador só olham o título e o corpo. O log nunca leva os bytes, o tamanho nem o nome.
 - **Riscos desta metade:** (1) com a nuvem conectada, a nota só com imagem sobe (N7) como uma nota de título e
@@ -982,10 +984,96 @@ ponto de parada: o roteiro do Mauro é o `docs/deploy-notas-n10.md`.
 - **A nota** (`GET /notes`, `GET /notes/{id}`, as respostas das escritas) traz `imagens`: sempre um array, na
   ordem da nota, com os mesmos campos da imagem acima. No PC (a API local), o item tem `estado: "a_caminho"`
   enquanto não baixou, e os bytes dela são `409 IMAGE_PENDING`: é o "a caminho" do painel do PC.
-- **O que ainda falta (é dela):** o `ClienteDeImagens` do celular sobre estas rotas; a CSP da nuvem com
-  `img-src blob:` e o `bundle.test.ts` (a URL `blob:` no cliente da nuvem); o "Imagem sem rede" (cena 6) e o
-  ícone apagado sem rede; o lugar da imagem "a caminho" no painel do PC; a política de privacidade, o dossiê
-  e os textos do app.
+- **O que faltava (era dela, e está feito, abaixo):** o `ClienteDeImagens` do celular sobre estas rotas; a
+  CSP da nuvem com `img-src blob:` e o `bundle.test.ts` (a URL `blob:` no cliente da nuvem); o "Imagem sem
+  rede" (cena 6) e o ícone apagado sem rede; o lugar da imagem "a caminho" no painel do PC; a política de
+  privacidade, o dossiê e os textos do app.
+
+### Decisões da N10b (o celular)
+
+A tela das imagens no app do celular e o que ficou da N10b no painel do PC (29-out-2026). Valem as decisões
+do Mauro da prévia aprovada (cenas 5, 6 e 7); o que segue é o que a implementação decidiu por cima delas.
+O Mauro quer "o menor que funciona".
+
+- **O `ClienteDeImagens` do celular** (`web/src/nuvem/notas/notasNaNuvem.ts`) fala as quatro rotas da
+  `/api/v1`: anexa pelo `POST /notes/{id}/images` (o JPEG cru, já reduzido no navegador pela mesma
+  `reduzirImagem` do PC), cria a nota com a imagem pelo `POST /notes/with-image`, lê pelo `GET` e tira pelo
+  `DELETE` (com `keepalive`, para o pedido do Desfazer vencido sair mesmo se a aba fechar). **Anexar e criar
+  exigem rede** (o `exigirRede`): sem ela é um `SoComRede`, e nada vai para a fila offline (a fila é só do
+  texto da nota). O `fraseDoErro` ganhou o `SoComRede` e usa os mesmos códigos e frases do PC; o `IMAGES_FULL`
+  mostra a frase do servidor. A tela é **a mesma `Notas` do PC**: o que muda é o `celular` que ela já recebia.
+- **A barra da nota e o "Criar uma nota…"** (cena 5): o ícone de imagem abre um menu com **Tirar foto** (um
+  `<input type="file" accept="image/*" capture="environment">`) e **Escolher da galeria** (sem `capture`, com
+  `multiple`; entram uma por vez, até as 10). No PC o ícone continua um botão só, que abre a escolha de
+  arquivos (o `BotaoDeImagem`). A ordem da barra no celular é a da prévia: Formatar, Cor, Marcadores, Imagem,
+  Ditar aqui, Mais, Fechar (o Arquivar segue dentro do Mais). O "Criar uma nota…" cria pelo `with-image` com
+  a primeira foto e anexa as outras escolhidas nela.
+- **[derivada] A barra cabe numa linha a 360 px:** o toque deixa o `.icone-botao` em 44 px, e com isso o
+  **Fechar** caía para uma segunda linha. No celular (`pointer: coarse`) a barra da nota usa ícones de 40 px
+  e sem folga entre eles (o alvo ainda passa dos 36 px); conferido a 360 e a 384 px, nos dois temas.
+- **A imagem não fica no aparelho** (a decisão do Mauro): a imagem lida vira uma URL `blob:` na loja da aba
+  (`ImagensNaTela`, a mesma do PC), solta ao sair; **nada de IndexedDB, Cache API nem service worker**. O
+  service worker nunca toca `/api/v1/notes/*/images/*` (o `bundle.test.ts` ganhou as linhas, para GET, POST
+  e DELETE), e o `GET` responde `no-store`. O IndexedDB das notas leva **só os metadados** da imagem (o id, o
+  tamanho, o SHA-256), que vêm na nota e que o app mantém em dia ao anexar e tirar (`mudarImagens`).
+- **O "Imagem sem rede"** (cena 6): sem rede, a imagem que **nunca foi lida nesta visita** aparece como um
+  quadrado com a **proporção dela** (a grade não pula quando a rede volta) e o texto "Imagem sem rede"; só o
+  primeiro quadrado de cada nota leva o texto, os outros ficam só com o ícone **[derivada]** (o texto
+  repetido em cada quadrado pesava). A imagem que **já apareceu nesta visita continua aparecendo**. O
+  ícone de imagem fica apagado sem rede. **[derivada]** A imagem que faltou por falta de rede **se pede
+  sozinha quando a rede volta** (a loja separa "sem rede", que se repete, da falha de verdade, que não):
+  sem isso, a pessoa teria de sair e voltar da aba.
+- **[derivada] Tirar a imagem sem rede no celular** não esconde a imagem com o Desfazer e falha depois: o
+  pedido sairia para lugar nenhum. A imagem **fica**, e o aviso diz **"Sem rede: a imagem só sai da nota
+  quando a rede voltar."** É uma frase a mais fora da cena 7; a "A rede caiu antes de a imagem subir. Tente de
+  novo." continua sendo a do anexo.
+- **[derivada] A resposta que não é JPEG:** a leitura confere o `Content-Type` da resposta (`image/jpeg`) antes de
+  fazer a URL `blob:`; qualquer outra coisa vira "Imagem indisponível". É a segunda trava da garantia do áudio
+  (abaixo).
+- **[desvio da N10a] A URL `blob:` agora também nasce no cliente da nuvem.** A N10a escreveu "a URL `blob:`
+  nasce só no cliente do PC" e prendeu isso no `bundle.test.ts` (a garantia do áudio do ditado: o gravador
+  do celular nunca cria URL de áudio). Isso não podia ficar: a imagem do celular precisa dela, e a ADR já
+  previa mudar o teste. **Como a garantia continua:** o `createObjectURL` só existe em dois arquivos
+  (`clienteLocal.ts` e `nuvem/notas/urlDaImagem.ts`); o segundo **recusa tudo o que não é `image/jpeg`**
+  (o áudio do ditado é `audio/webm`, `audio/mp4`…); nada de `nuvem/ditar/` menciona `blob:`, o
+  `createObjectURL` nem o `urlDaImagem`, e só o `notasNaNuvem.ts` o importa; e o `urlDaImagem.ts` não fala de
+  áudio, `MediaRecorder` nem `getUserMedia`. O teste foi conferido por mutação: pôr um `createObjectURL` em
+  `nuvem/ditar/` o quebra.
+- **A CSP da nuvem** ganhou `img-src 'self' blob:` (`internal/server/seguranca.go`; o `06` e o `09` dizem). O
+  `blob:` vale só para imagem: script, estilo e conexão continuam `'self'`. Os scripts que conferem a nuvem
+  (`deploy-teste.ps1` e `conferir-nuvem.ps1`) e o teste do servidor comparam o texto inteiro, e foram
+  atualizados; **uma nuvem com a API antiga falha nessa conferência até o deploy** (`docs/deploy-notas-n10.md`).
+- **O "a caminho" no painel do PC:** a imagem com `estado: "a_caminho"` não é pedida (o `GET` dela é `409
+  IMAGE_PENDING`) e aparece como um quadrado quieto, **na proporção dela**, com "Imagem a caminho", **nunca
+  como erro**; o × dela funciona (sobe o `DELETE`). Quando a imagem chega (o painel lê a lista de novo), o
+  quadrado vira a imagem. **[derivada]** Se o `GET` responder `IMAGE_PENDING` mesmo assim (a lista estava velha),
+  a loja não marca falha: espera a lista nova.
+- **[derivada] O painel do PC nunca mostra "Imagem sem rede":** a API local é o próprio PC. A loja e o
+  quadrado são os mesmos, mas só o celular acende o `semRede`; a imagem do PC que não abre continua sendo
+  "Imagem indisponível".
+- **[derivada] A imagem grande no celular:** a barra do alto tem o "N de M" e os botões **Baixar** e **Tirar da
+  nota**; abaixo de 480 px os dois viram só o ícone (com o nome no `title` e no leitor de tela), porque o
+  título da nota e o "N de M" não cabiam. Na imagem grande de uma imagem sem rede ou a caminho, o texto
+  aparece no lugar da imagem.
+- **As telas de mentira** (só do `pnpm dev`, fora de toda build): no app da nuvem, `?cenario=notas` (notas com
+  uma, duas, cinco imagens e uma só com imagem) e `?cenario=notas-sem-rede` (o mesmo, sem rede); no painel do
+  PC, `?cenario=notas-imagens` (imagens presentes e a caminho). Os bytes são JPEGs desenhados no canvas na
+  hora. O `notasFalsas.ts` da nuvem ganhou as rotas das imagens (as dez por nota, a lixeira, `409`).
+- **A LGPD:** a política de privacidade, o dossiê (que abre a **decisão 12**, do responsável: o aviso e o
+  dado de terceiros na foto) e o `09` dizem o que sobe, onde fica, o prazo e que o celular não guarda; as
+  frases do app (a Privacidade do celular e a do PC, e a pergunta do "Enviar o histórico") também.
+- **O que não foi feito:** a imagem **não entra na fila offline** do celular (anexar exige rede, a decisão da
+  cena 6); a **busca** não olha a imagem; o "Copiar para WhatsApp" a deixa de fora; uma **miniatura própria**
+  (a grade baixa a imagem inteira de cada cartão, como no PC) fica para se o peso incomodar.
+- **Riscos desta parte:** (1) a conferência com **câmera, galeria, sinal e dedo de verdade** é do roteiro
+  manual (`docs/teste-manual-notas-n10.md`, partes 11 a 19): os testes rodam no jsdom, e as telas foram vistas
+  num Edge sem cabeça, que não é um Chrome de Android nem um Safari; (2) o `capture="environment"` se comporta
+  de um jeito em cada navegador (alguns celulares mostram a câmera direto, outros um seletor); (3) um iPhone
+  manda HEIC, e o navegador que não o abre recebe "Esse arquivo não é uma imagem que o navegador abra." (o
+  Safari o abre); (4) a loja guarda na memória as imagens já vistas até a aba sair, e uma lista com muitas
+  imagens grandes pesa no celular (a mesma ressalva do PC); (5) "sem rede" e "a nuvem fora do ar" dão o mesmo
+  quadrado (o app não distingue); (6) o celular desbloqueado mostra as imagens que estão na tela, como o
+  resto.
 
 ## Alternativas descartadas
 
@@ -1049,7 +1137,7 @@ deploy e release só com a autorização do Mauro.
 | N7 | Sync das notas e marcadores: migrations do Postgres, entidades no motor, mescla da lista de marcar, rotas da nuvem (a `posicao` da N2b viaja com a nota). **Deploy: ponto de parada.** **Feita localmente (26-out-2026), nos dublês, em quatro commits na branch `notas/n7`; o deploy espera o Mauro** (`docs/deploy-notas-n7.md`, depois `docs/teste-manual-notas-n7.md`). Ver "Decisões da N7" | N1-N6, N2b |
 | N8 | Aba Notas no celular (PWA), com "Ditar para nota" e a fila offline (marcar, desmarcar e acrescentar item sem rede). **Feita localmente (27-out-2026), na branch `notas/n8`; o deploy espera o Mauro** (`docs/deploy-notas-n8.md`, depois `docs/teste-manual-notas-n8.md`). Ver "Decisões da N8" | N7 |
 | N9 | Gatilho "ditar para nota" no PC, com o destino pelo nome | N2 |
-| N10 | Imagens. **Ponto de parada antes** (servidor, disco, LGPD; feito em 28-out-2026). **A primeira metade, o PC, feita localmente (28-out-2026), na branch `notas/n10a`** (`docs/teste-manual-notas-n10.md`); a segunda, o sync, a nuvem e o celular, vem depois. Ver "Decisões da N10 (implementação)". **A parte do Go da segunda metade (o Postgres, o servidor, o sync do PC e a API local) feita localmente (29-out-2026), na branch `notas/n10b`** (`docs/deploy-notas-n10.md`); a tela do celular vem por cima dela. Ver "Decisões da N10b" | N7 |
+| N10 | Imagens. **Ponto de parada antes** (servidor, disco, LGPD; feito em 28-out-2026). **A primeira metade, o PC, feita localmente (28-out-2026), na branch `notas/n10a`** (`docs/teste-manual-notas-n10.md`); a segunda, o sync, a nuvem e o celular, vem depois. Ver "Decisões da N10 (implementação)". **A parte do Go da segunda metade (o Postgres, o servidor, o sync do PC e a API local) feita localmente (29-out-2026), na branch `notas/n10b`** (`docs/deploy-notas-n10.md`); a tela do celular vem por cima dela. Ver "Decisões da N10b". **A parte do celular (a tela das imagens no app, o "Imagem sem rede" e o "a caminho" no painel do PC) e os textos de LGPD, feitas localmente (29-out-2026), na mesma branch `notas/n10b`**; a conferência no celular de verdade é do roteiro (`docs/teste-manual-notas-n10.md`, partes 11 a 19), e o deploy espera o Mauro. Ver "Decisões da N10b (o celular)" | N7 |
 
 Ordem sugerida: L e N1 em paralelo; depois N2, N3, N6, N4, N5, N9; e N7, N8, N10.
 

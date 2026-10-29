@@ -11,6 +11,12 @@ Agent dos PCs ganha o envio e o download delas.
 do celular). A imagem da API leva o app do celular junto, então um deploy só leva as duas. Se você quiser
 subir antes, o servidor sozinho funciona: os PCs já trocam imagens, e o celular só não as mostra ainda.
 
+**A parte do celular (N10b) mexe num cabeçalho:** a CSP que a nuvem manda em toda resposta ganha
+`img-src 'self' blob:` (as imagens das notas aparecem no app por uma URL `blob:` que ele mesmo cria). Os dois
+scripts que conferem a nuvem (`deploy-teste.ps1` e `conferir-nuvem.ps1`) já comparam com a CSP nova: **uma
+nuvem ainda com a API antiga falha na conferência da CSP**, e isso é esperado até o passo 5. Nada mais muda
+no servidor além do que o roteiro já diz.
+
 Este roteiro é o que **você** roda; eu não rodo nada no servidor. Ele usa os mesmos scripts do
 `docs/deploy-f11.md` e do `docs/deploy-notas-n7.md` (o `deploy-teste.ps1`, o `enviar-para-servidor.ps1` e o
 `subir.sh`), na mesma VPS que já está no ar.
