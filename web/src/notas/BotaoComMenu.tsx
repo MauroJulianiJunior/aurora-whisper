@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useRef, useState } from 'react'
+import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Icone, type NomeDoIcone } from './Icone'
 
 interface Props {
@@ -24,6 +24,22 @@ export function BotaoComMenu({ icone, rotulo, desabilitado, titulo, classe, chil
   const [aberto, setAberto] = useState(false)
   const raiz = useRef<HTMLSpanElement>(null)
   const botao = useRef<HTMLButtonElement>(null)
+  const menu = useRef<HTMLDivElement>(null)
+
+  // O menu tem de caber na tela, e isso só se sabe medindo (antes de pintar, sem
+  // pulo). Na barra da nota aberta ele abre para cima: numa nota curta no alto da
+  // tela (o celular), a parte de cima ficava fora dela, e o que passa da borda de
+  // cima de uma área de rolagem não volta com a rolagem. Aí ele abre para baixo,
+  // onde a janela da nota rola até ele. E o botão perto da borda direita (o Mais
+  // da coluna da direita, no celular) alinha o menu pela ponta direita dele.
+  useLayoutEffect(() => {
+    const m = menu.current
+    if (!aberto || !m) return
+    const r = m.getBoundingClientRect()
+    if (r.height === 0) return
+    if (r.top < 8) m.dataset.lado = 'baixo'
+    if (r.right > (document.documentElement.clientWidth || window.innerWidth) - 8) m.dataset.ponta = 'direita'
+  }, [aberto])
 
   useEffect(() => {
     if (!aberto) return
@@ -62,7 +78,7 @@ export function BotaoComMenu({ icone, rotulo, desabilitado, titulo, classe, chil
         <Icone nome={icone} />
       </button>
       {aberto && (
-        <div className={classe ? `menu ${classe}` : 'menu'} role="group" aria-label={rotulo}>
+        <div ref={menu} className={classe ? `menu ${classe}` : 'menu'} role="group" aria-label={rotulo}>
           {children(() => setAberto(false))}
         </div>
       )}
