@@ -324,3 +324,17 @@ func FuzzConferir(f *testing.F) {
 		}
 	})
 }
+
+// TestConferir_ALimpaPassaIgual: conferir de novo a cópia limpa devolve os
+// mesmos bytes e o mesmo SHA-256. O sync das imagens (N10b) depende disso: o
+// servidor guarda a cópia que o Conferir dele limpou, e o PC que a baixa a
+// confere de novo e exige o SHA-256 da linha (storage.GuardarBaixada).
+func TestConferir_ALimpaPassaIgual(t *testing.T) {
+	for _, b := range [][]byte{fotoDeCelular(t), jpegDe(t, 64, 48, true), jpegDe(t, 2000, 10, false)} {
+		uma := conferirOuFalha(t, b)
+		duas := conferirOuFalha(t, uma.Bytes)
+		if !bytes.Equal(uma.Bytes, duas.Bytes) || uma.SHA256 != duas.SHA256 || uma.Largura != duas.Largura || uma.Altura != duas.Altura {
+			t.Errorf("a cópia limpa mudou ao ser conferida de novo (%d -> %d bytes)", len(uma.Bytes), len(duas.Bytes))
+		}
+	}
+}

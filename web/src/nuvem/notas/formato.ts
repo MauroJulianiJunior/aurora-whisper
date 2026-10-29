@@ -4,13 +4,25 @@
 // deleted_at e versao_em_conflito. O painel quer o que não há ausente, e o selo
 // em "conflito", como a API local do PC.
 
-import { CORES, type CorDaNota, type Marcador, type Nota } from '../../notas/tipos'
+import { CORES, type CorDaNota, type ImagemDaNota, type Marcador, type Nota } from '../../notas/tipos'
 
 export interface SeloDaNuvem {
   titulo: string
   corpo: string
   device_id: string | null
   conflict_at: string
+}
+
+// ImagemDaNuvem é a imagem como a nuvem a manda (06, "Imagens das notas (nuvem)"):
+// só os metadados, nunca os bytes (que vêm do GET da imagem, com a sessão).
+export interface ImagemDaNuvem {
+  id: string
+  note_id?: string
+  largura: number
+  altura: number
+  bytes: number
+  sha256?: string
+  created_at: string
 }
 
 export interface NotaDaNuvem {
@@ -28,11 +40,21 @@ export interface NotaDaNuvem {
   deleted_at: string | null
   version: number
   versao_em_conflito: SeloDaNuvem | null
+  // imagens: sempre um array na nuvem (N10b); ausente num servidor de antes.
+  imagens?: ImagemDaNuvem[] | null
   // gravacao: só na resposta do PATCH (N8): "mesclada" ou "no_selo".
   gravacao?: string
 }
 
 const ehCor = (c: unknown): c is CorDaNota => typeof c === 'string' && (CORES as readonly string[]).includes(c)
+
+// imagemDaNuvem traduz a imagem da nuvem para a do painel (sem o note_id, que o
+// painel já sabe pela nota).
+export function imagemDaNuvem(i: ImagemDaNuvem): ImagemDaNota {
+  const im: ImagemDaNota = { id: i.id, largura: i.largura, altura: i.altura, bytes: i.bytes, created_at: i.created_at }
+  if (i.sha256) im.sha256 = i.sha256
+  return im
+}
 
 // daNuvem traduz a nota da nuvem para a do painel.
 export function daNuvem(n: NotaDaNuvem): Nota {
@@ -48,6 +70,7 @@ export function daNuvem(n: NotaDaNuvem): Nota {
     created_at: n.created_at,
     updated_at: n.updated_at,
     version: n.version,
+    imagens: (n.imagens ?? []).map(imagemDaNuvem),
   }
   if (n.ditado_de_origem) nota.ditado_de_origem = n.ditado_de_origem
   if (n.deleted_at) nota.deleted_at = n.deleted_at

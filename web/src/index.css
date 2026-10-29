@@ -3174,6 +3174,18 @@ tbody[data-pronto] tr[data-arrastando] {
     height: 40px;
   }
 
+  /* A barra da nota aberta leva seis ícones e o Fechar (a imagem entrou na N10b, e o
+     microfone vem antes do Mais, como na prévia): a 44 px cada, o Fechar descia para
+     uma segunda linha em 360 px. A 40 px, sem folga entre eles, cabe numa linha só. */
+  .barra-nota {
+    gap: 0;
+  }
+
+  .barra-nota .icone-botao {
+    width: 40px;
+    height: 40px;
+  }
+
   .criar-abrir {
     height: 52px;
   }
@@ -3963,6 +3975,31 @@ body:has(.ditar-para-nota) .aviso-regiao {
   font-size: 11px;
 }
 
+/* O lugar de uma imagem que não está à vista, sem erro (cena 6 da prévia): a que
+   ainda está a caminho do PC e a que não carrega sem rede (o celular). Mesma
+   proporção da imagem; o texto só no primeiro quadrado da grade. */
+.foto.vazia {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+}
+
+.foto-vazia {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  color: var(--texto-3);
+  font-family: var(--fonte-mono);
+  font-size: 11px;
+  text-align: center;
+}
+
+.foto-vazia svg {
+  width: 20px;
+  height: 20px;
+}
+
 /* A nota só com imagem: o cartão é a imagem, sem o respiro do texto. */
 .cartao.so-imagem .cartao-abrir {
   padding: 0;
@@ -4157,6 +4194,24 @@ body:has(.ditar-para-nota) .aviso-regiao {
 .botao-luz svg {
   width: 16px;
   height: 16px;
+}
+
+/* Na tela estreita (o celular), o Baixar e o Tirar da nota ficam só com o ícone: com
+   os rótulos, o "3 de 5 · nome da nota" ficava sem lugar. O nome continua para o leitor
+   de tela (o texto fica escondido, não removido) e na dica. */
+@media (max-width: 480px) {
+  .botao-luz {
+    padding: 0 10px;
+  }
+
+  .botao-luz .rotulo-luz {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
 }
 
 .imagem-grande {

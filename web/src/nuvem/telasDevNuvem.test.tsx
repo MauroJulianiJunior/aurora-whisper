@@ -4,7 +4,7 @@
 // sem Google e sem servidor. Importa a página de verdade, com o endereço do
 // cenário, e olha o que ela desenhou.
 
-import { act, cleanup, screen, within } from '@testing-library/react'
+import { act, cleanup, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.setConfig({ testTimeout: 20_000 })
@@ -74,5 +74,36 @@ describe('os cenários do ditado pelo celular em /telas-dev-nuvem.html', () => {
     expect(within(secao()).getByLabelText('Chave da OpenAI')).toBeTruthy()
     expect(within(secao()).getByLabelText('Chave da Anthropic')).toBeTruthy()
     expect(Array.from(secao().querySelectorAll('a'), (a) => a.getAttribute('href'))).toEqual(['https://platform.openai.com/api-keys', 'https://platform.claude.com/settings/keys'])
+  })
+})
+
+describe('os cenários das notas com imagem em /telas-dev-nuvem.html (N10b)', () => {
+  const cartao = (id: string) => document.querySelector<HTMLElement>(`[data-nota="${id}"]`)!
+
+  beforeEach(() => {
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, writable: true, value: vi.fn(() => 'blob:dev') })
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, writable: true, value: vi.fn() })
+  })
+
+  it('notas: uma, duas, cinco imagens e uma nota só com imagem', async () => {
+    await montar('notas')
+    await screen.findByText('Mercado N8', undefined, espera)
+    expect(cartao('n1').querySelectorAll('.fotos.um .foto')).toHaveLength(1)
+    expect(cartao('n2').querySelectorAll('.fotos.dois .foto')).toHaveLength(2)
+    expect(cartao('n3').querySelectorAll('.fotos.tres .foto')).toHaveLength(3)
+    expect(cartao('n3').querySelector('.faltam')?.textContent).toBe('+2')
+    expect(cartao('n5').classList.contains('so-imagem')).toBe(true)
+    expect(cartao('n4').querySelector('.fotos')).toBeNull()
+    await waitFor(() => expect(cartao('n1').querySelector('.foto img')).toBeTruthy())
+  })
+
+  it('notas-sem-rede: a faixa, as imagens como "Imagem sem rede" e o ícone de imagem apagado', async () => {
+    await montar('notas-sem-rede')
+    await screen.findByText('Mercado N8', undefined, espera)
+    await waitFor(() => expect(document.querySelector('.faixa-rede')?.textContent).toBe('Sem rede'))
+    expect(within(cartao('n1')).getByText('Imagem sem rede')).toBeTruthy()
+    expect(cartao('n3').querySelectorAll('.foto.sem-rede')).toHaveLength(3)
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Nova nota com imagem' }).disabled).toBe(true)
+    expect(document.body.textContent).not.toContain('Imagem indisponível')
   })
 })

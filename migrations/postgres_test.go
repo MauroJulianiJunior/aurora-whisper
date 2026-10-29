@@ -1524,9 +1524,13 @@ func TestPostgres_AsMigrationsDasNotasAplicamSobreUmBancoComDados(t *testing.T) 
 		"0020_labels_table.sql", "0021_notes_table.sql", "0022_note_labels_table.sql",
 		"0023_note_tombstones_table.sql", "0024_note_sync_events_table.sql", "0025_transcription_note_links_table.sql",
 	}
-	if len(migs) != emProducao+len(novas) {
-		t.Fatalf("%d migrations, quero %d (as 19 de antes e as 6 das notas)", len(migs), emProducao+len(novas))
+	// As que vieram depois das notas (a 0026 das imagens, N10b) têm o teste
+	// delas (TestPostgres_AMigrationDasImagensAplicaSobreUmBancoComDados): aqui,
+	// só até a 0025.
+	if len(migs) < emProducao+len(novas) {
+		t.Fatalf("%d migrations, quero pelo menos %d (as 19 de antes e as 6 das notas)", len(migs), emProducao+len(novas))
 	}
+	migs = migs[:emProducao+len(novas)]
 	for i, f := range novas {
 		if migs[emProducao+i].File != f {
 			t.Fatalf("a migration %d é %s, quero %s", emProducao+i+1, migs[emProducao+i].File, f)
@@ -1620,6 +1624,136 @@ func TestPostgres_AsMigrationsDasNotasAplicamSobreUmBancoComDados(t *testing.T) 
 	p.accept("ligação do ditado de antes", newRow("transcription_note_links").val("user_id", a).val("transcription_id", tid).lit("note_id", "gen_random_uuid()"))
 
 	if res, err := pgmigrate.Run(ctx, conn, migs); err != nil || len(res.Applied) != 0 || res.AlreadyApplied != len(migs) {
+		t.Errorf("rodar de novo: %+v, %v", res, err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// As imagens das notas (ADR-022, N10b): a 0026
+// ---------------------------------------------------------------------------
+
+// imageRow é uma imagem viva válida, de 4 bytes, da nota note.
+func imageRow(user, note string, seq int64) *row {
+	return newRow("note_images").
+		lit("id", "gen_random_uuid()").
+		val("user_id", user).
+		val("note_id", note).
+		lit("largura", "30").
+		lit("altura", "20").
+		lit("bytes", "4").
+		lit("sha256", "repeat('ab', 32)").
+		lit("conteudo", `'\xffd8ffd9'::bytea`).
+		lit("created_at", "now()").
+		val("last_seq", seq)
+}
+
+func TestPostgres_ImagensDasNotas(t *testing.T) {
+	p := newPG(t)
+	user := p.newUser()
+	note := p.newID()
+	p.accept("a nota", noteRow(user, 1).val("id", note))
+	var seq int64 = 1
+	next := func() int64 { seq++; return seq }
+
+	p.accept("imagem viva", imageRow(user, note, next()))
+	p.accept("a lápide, sem os bytes e sem os metadados", newRow("note_images").lit("id", "gen_random_uuid()").val("user_id", user).
+		val("note_id", note).lit("created_at", "now()").lit("removed_at", "now()").val("last_seq", next()))
+	p.accept("a lápide com os metadados de quando era viva", imageRow(user, note, next()).lit("conteudo", "NULL").lit("removed_at", "now()"))
+	p.reject(checkViolation, "viva sem os bytes", imageRow(user, note, next()).lit("conteudo", "NULL"))
+	p.reject(checkViolation, "a lápide com os bytes", imageRow(user, note, next()).lit("removed_at", "now()"))
+	p.reject(checkViolation, "viva sem o sha256", imageRow(user, note, next()).lit("sha256", "NULL"))
+	p.reject(checkViolation, "viva sem a largura", imageRow(user, note, next()).lit("largura", "NULL"))
+	p.reject(checkViolation, "o tamanho que não é o dos bytes", imageRow(user, note, next()).lit("bytes", "5"))
+	p.reject(checkViolation, "o sha256 em maiúsculas", imageRow(user, note, next()).lit("sha256", "repeat('AB', 32)"))
+	p.reject(checkViolation, "o sha256 curto", imageRow(user, note, next()).lit("sha256", "'abcd'"))
+	p.reject(checkViolation, "largura zero", imageRow(user, note, next()).lit("largura", "0"))
+	p.reject(checkViolation, "seq zero", imageRow(user, note, 0))
+	p.reject(notNullViolation, "sem a hora (sem DEFAULT)", imageRow(user, note, next()).drop("created_at"))
+	p.reject(foreignKeyViolation, "a imagem de uma nota que não existe", imageRow(user, p.newID(), next()))
+	p.reject(foreignKeyViolation, "a imagem com a nota de outra conta", imageRow(p.newUser(), note, 1))
+	dup := next()
+	p.accept("last_seq novo", imageRow(user, note, dup))
+	p.reject(uniqueViolation, "last_seq repetido", imageRow(user, note, dup))
+	shared := p.newID()
+	p.accept("imagem com id escolhido", imageRow(user, note, next()).val("id", shared))
+	p.reject(uniqueViolation, "o mesmo id na mesma conta", imageRow(user, note, next()).val("id", shared))
+
+	// Os bytes moram fora da linha, sem a tentativa de compressão.
+	var storage string
+	p.scan(&storage, `SELECT attstorage::text FROM pg_attribute WHERE attrelid = 'note_images'::regclass AND attname = 'conteudo'`)
+	if storage != "e" {
+		t.Errorf("o STORAGE de conteudo = %q, quero \"e\" (EXTERNAL)", storage)
+	}
+
+	// A cascata: apagar a nota leva as imagens, as lápides também.
+	p.exec("DELETE FROM notes WHERE user_id = $1 AND id = $2", user, note)
+	var sobrou int
+	p.scan(&sobrou, "SELECT count(*) FROM note_images WHERE user_id = $1", user)
+	if sobrou != 0 {
+		t.Errorf("apagar a nota deixou %d imagem(ns) (ON DELETE CASCADE)", sobrou)
+	}
+}
+
+// A 0026 é SÓ ADITIVA: aplicada sobre o banco das notas (as 0001 a 0025, o que
+// o Mauro tem no ar depois da N8), com dados, cria a note_images vazia e não
+// muda uma linha das que existiam.
+func TestPostgres_AMigrationDasImagensAplicaSobreUmBancoComDados(t *testing.T) {
+	url := pgtest.NewDB(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	t.Cleanup(cancel)
+	migs, err := pgmigrate.Load(migrations.FS)
+	if err != nil {
+		t.Fatalf("Load(migrations.FS): %v", err)
+	}
+	const emProducao = 25
+	if len(migs) != emProducao+1 || migs[emProducao].File != "0026_note_images_table.sql" {
+		t.Fatalf("%d migrations, quero as 25 de antes e a 0026 das imagens", len(migs))
+	}
+	conn := pgtest.Connect(t, url)
+	if res, err := pgmigrate.Run(ctx, conn, migs[:emProducao]); err != nil || len(res.Applied) != emProducao {
+		t.Fatalf("aplicar as 0001 a 0025: %+v, %v", res, err)
+	}
+	p := &pg{t: t, ctx: ctx, conn: conn, url: url}
+	a := p.newUser()
+	device := p.newDevice(a)
+	note := p.newID()
+	p.accept("ditado", tRow(a, 1).val("device_id", device))
+	p.accept("nota", noteRow(a, 2).val("id", note).val("content_device_id", device))
+	p.accept("marcador", labelRow(a, 3))
+	p.accept("lápide de nota", newRow("note_tombstones").val("user_id", a).lit("entity_type", "'note'").
+		lit("entity_id", "gen_random_uuid()").val("seq", int64(4)))
+
+	contar := func() map[string]string {
+		out := map[string]string{}
+		for _, tabela := range []string{"users", "devices", "transcriptions", "notes", "labels", "note_tombstones", "user_sync_counters"} {
+			var n int
+			var resumo *string
+			p.scan(&n, "SELECT count(*) FROM "+pgx.Identifier{tabela}.Sanitize())
+			p.scan(&resumo, "SELECT md5(string_agg(t::text, '|' ORDER BY t::text)) FROM "+pgx.Identifier{tabela}.Sanitize()+" t")
+			out[tabela] = fmt.Sprintf("%d:%v", n, resumo != nil)
+			if resumo != nil {
+				out[tabela] += ":" + *resumo
+			}
+		}
+		return out
+	}
+	antes := contar()
+	res, err := pgmigrate.Run(ctx, conn, migs)
+	if err != nil || len(res.Applied) != 1 || res.AlreadyApplied != emProducao {
+		t.Fatalf("aplicar a 0026 sobre o banco com dados: %+v, %v", res, err)
+	}
+	for tabela, quero := range contar() {
+		if antes[tabela] != quero {
+			t.Errorf("a tabela %s mudou com a 0026: %s -> %s", tabela, antes[tabela], quero)
+		}
+	}
+	var n int
+	p.scan(&n, "SELECT count(*) FROM note_images")
+	if n != 0 {
+		t.Errorf("a note_images nasceu com %d linhas", n)
+	}
+	p.accept("a imagem da nota de antes", imageRow(a, note, 5))
+	if res, err := pgmigrate.Run(ctx, conn, migs); err != nil || len(res.Applied) != 0 {
 		t.Errorf("rodar de novo: %+v, %v", res, err)
 	}
 }

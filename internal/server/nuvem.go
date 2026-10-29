@@ -214,6 +214,10 @@ type Cloud struct {
 	conhecidos *modelosConhecidos
 	prazos     PrazosDoDitado
 
+	// vagasDeImagem são as vagas de quem lê e confere uma imagem de nota ao
+	// mesmo tempo (N10b; imagens_routes.go, VagasDeImagem).
+	vagasDeImagem chan struct{}
+
 	// saude é a última rodada do Reter, para a rota da saúde do job (F11c;
 	// saude.go).
 	saude saudeDoJob
@@ -312,6 +316,8 @@ func NewCloud(cfg CloudConfig) (*Cloud, error) {
 		callbackPath: callbackPath,
 		painel:       app,
 		intervalo:    cfg.IntervaloDaArrumacao,
+
+		vagasDeImagem: make(chan struct{}, VagasDeImagem),
 
 		limPareamento:      cloudauth.NovoLimite(lim.PareamentoPorIP, cfg.Now),
 		limPareamentoTotal: cloudauth.NovoLimite(lim.PareamentoTotal, cfg.Now),

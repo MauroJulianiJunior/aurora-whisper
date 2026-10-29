@@ -781,6 +781,8 @@ Roteiro do Mauro: `docs/teste-manual-notas-n10.md`.
   (`ClienteDeImagens.paraATela`, em `clienteLocal.ts`): o build da nuvem ainda não mostra imagem, e o
   `bundle.test.ts` prende que ele não cria URL de blob (a garantia do áudio do ditado). O app do celular segue
   sem imagens nesta metade: o `ClienteDeNotas.imagens` é opcional, e sem ele a aba não mostra nem anexa.
+  **[desvio, N10b]** Superada: a nuvem também cria a URL `blob:` (`nuvem/notas/urlDaImagem.ts`), com a garantia
+  do áudio refeita no `bundle.test.ts` (ver "Decisões da N10b (o celular)").
 - **Nada da imagem vai à IA nem à busca**: a busca (`q`), o "Copiar texto", o "Copiar para WhatsApp", o
   Formatar e a sugestão de marcador só olham o título e o corpo. O log nunca leva os bytes, o tamanho nem o nome.
 - **Riscos desta metade:** (1) com a nuvem conectada, a nota só com imagem sobe (N7) como uma nota de título e
@@ -821,6 +823,258 @@ Roteiro do Mauro: `docs/teste-manual-notas-n10.md`.
   `reduzirImagem`) e de: mudar o `bundle.test.ts` ("a URL blob: só no cliente do PC") e a CSP da nuvem (que hoje
   não tem `img-src blob:`). O "Imagem sem rede" da prévia (cena 6) é dela.
 - **O Desfazer do tirar** já é do painel (o `aoVencer`), e serve ao celular igual.
+
+### Decisões da N10b (o sync e a nuvem)
+
+A segunda metade da N10 foi feita em duas partes. **Esta (28 e 29-out-2026, branch `notas/n10b`) é a do Go**:
+o Postgres, o servidor, o motor do sync do PC e a API local. **A parte do celular** (a tela, a CSP da nuvem, o
+`bundle.test.ts`, a política e o dossiê) vem depois, por cima desta; o que ela precisa saber está no fim. As
+marcadas **[desvio]** mudam algo escrito acima; as **[derivada]**, escolhas desta implementação. O deploy é
+ponto de parada: o roteiro do Mauro é o `docs/deploy-notas-n10.md`.
+
+- **[derivada] A imagem é uma entidade própria do sync, `note_image`, imutável** (só nasce e sai), como o
+  desenho da N10a pedia. Anexar e tirar continuam sem subir a versão da nota, na nuvem também. O id é o
+  UUID v7 de onde a imagem foi anexada, guardado como veio. Por quê: a imagem não tem campo que mude, e
+  levá-la na versão da nota daria conflito de conteúdo onde não há. Alternativa: um campo `imagens` na
+  mutação da nota, com a versão (o desenho do marcador, N4).
+- **[derivada] Os bytes nunca vão no push nem no pull.** O PC sobe pelo `PUT /api/v1/sync/notes/{nota}/
+  images/{imagem}` (o JPEG cru, com o `Imagem-SHA256` da cópia que ele guardou e o `Imagem-Criada-Em`),
+  baixa pelo `GET` e tira pelo `DELETE` do mesmo caminho, com o token do aparelho. O push recusa
+  `note_image` (`tipo_desconhecido`). O pull leva só os metadados: a mudança `note_image` (upsert com `id`,
+  `note_id`, `largura`, `altura`, `bytes`, `sha256`, `created_at`; a lápide como `tombstone`, sem payload) e a
+  lista `imagens` de cada nota. Por quê: o push é um lote JSON de até 1 MiB, e uma página do pull já tem o
+  orçamento de texto; 4 MB por imagem num deles prenderia o resto. Alternativa: base64 no push (33% a mais, e
+  o teto do corpo do push).
+- **[derivada] O PUT é idempotente e não ressuscita.** O mesmo id com os mesmos bytes (o SHA-256 da cópia
+  limpa) é `200` com o que está gravado, sem gastar seq, e é respondido **antes de ler o corpo** quando o
+  `Imagem-SHA256` já bate (o reenvio não gasta a banda de novo); o mesmo id com outros bytes, ou de outra
+  nota, é `409 IMAGE_CONFLICT`; o SHA-256 que não é o da cópia limpa, `400 IMAGE_SHA_MISMATCH`. **A lápide fica
+  na própria linha** (`removed_at`, sem os bytes): o PUT atrasado de um id tirado é `410 IMAGE_GONE`, e o
+  `DELETE` de um id que a nuvem nunca teve, numa nota que existe, grava a lápide do mesmo jeito (o PUT que
+  ainda estava na rede chega depois e recebe `410`). A lápide sai com a nota (a cascata), e a da nota cobre o
+  PUT atrasado de qualquer imagem dela (`410`). Alternativa: uma tabela de lápides à parte, sem a nota (uma
+  tabela a mais, e o "Apagar meus dados" a mais).
+- **[derivada] Uma tabela só, a `0026` (`note_images`).** Os bytes em
+  `bytea` com `STORAGE EXTERNAL` (fora da linha, sem a tentativa de compressão, que num JPEG só gasta CPU;
+  Postgres 16 ou mais novo), a chave estrangeira `(user_id, note_id) → notes` com `ON DELETE CASCADE`, o
+  `last_seq` único por usuário (o pull lê as imagens que mudaram depois do cursor, como as notas) e a lápide
+  na linha. **Sem tabela de eventos:** a mudança de imagem não tem aparelho de origem no pull (o `device_id`
+  da mudança vem nulo; ele só serve para mostrar de onde veio). Os limites (2.000 px, 4 MB, 10, o teto) ficam
+  em Go, como na `0014` do PC.
+- **As regras, puras** (`cloudstore/imagens.go`): `DecidirAnexo` e `DecidirTirar`, as mesmas no Store em
+  memória e no do Postgres, testadas em tabela. **Anexar:** a nota que não existe é `404` (com a lápide dela,
+  `410`); **na lixeira, `409 CONFLICT`** (como no PC: restaure antes); 10 na nota, `409 TOO_MANY_IMAGES`; o
+  total passaria de 400 MB, `409 IMAGES_FULL` com a `FraseDoTeto`. **O teto conta as imagens vivas de todas as
+  notas da conta, as da lixeira também**, e não conta as lápides. **Tirar** vale na nota da lixeira e é
+  idempotente (`204`). A contagem e a soma são lidas depois da trava do contador do usuário: dois anexos ao
+  mesmo tempo da mesma conta não passam os dois.
+- **[derivada] A hora do anexo é a do PC** (`Imagem-Criada-Em`), dentro da folga para o futuro (24 h; além
+  dela, a de agora): a ordem das imagens na nota é a mesma em todo aparelho. No celular, a do servidor.
+- **[derivada] O servidor confere antes do Postgres e com teto próprio.** Os bytes passam pelo mesmo
+  `imagemdanota.Conferir` do Agent **fora da transação**, e o servidor guarda a cópia limpa. Só as rotas que
+  sobem imagem têm o teto de `MaxBytes` (4 MB; o Conferir recusa o que passa disso, então não há folga a dar),
+  e o prazo de 2 min para o corpo chegar (o `ReadTimeout` de 30 s continua o de todo o resto); as de JSON
+  continuam em 1 MiB. **Duas vagas** de leitura ao mesmo tempo (`VagasDeImagem`): o corpo na memória e as
+  duas decodificações do Conferir são até uns 30 MB por imagem, e o contêiner da API tem 256 MB. O `GET` dos
+  bytes leva `Cache-Control: no-store` (a decisão do Mauro: o celular nunca guarda a imagem) e
+  `X-Content-Type-Options: nosniff`, e **tira os bytes da resposta do log de acesso** (seriam o tamanho da
+  imagem).
+- **[derivada] As rotas do celular, pela sessão:** `POST /api/v1/notes/{id}/images` (o anexo; **o id é do
+  servidor**, como o `POST /api/notas/{id}/imagens` do PC, que o mesmo painel já fala), `POST /api/v1/notes/
+  with-image` (a nota nova só com a imagem, o ícone do "Criar uma nota…"), `GET` e `DELETE /api/v1/notes/
+  {id}/images/{imagem}`. Por quê o id do servidor: o celular só anexa com rede e com a pessoa olhando; a
+  resposta que se perde no meio pode deixar a imagem duas vezes, visível e removível, e nunca some nada.
+  Alternativa: o id do app (o `uuidV7` do ditado), com o PUT idempotente do PC (fica para se fizer falta).
+  O token de um PC nessas rotas recebe `403`, e a sessão nas rotas do sync também.
+- **A nota no fio ganha `imagens`** (sempre um array, na ordem da nota, só os metadados das vivas), no pull,
+  no `GET /notes`, no `GET /notes/{id}` e nas respostas das escritas. O PC de antes da N10b ignora a chave.
+- **[derivada] A capacidade `note_image`** entra no `entidades` do pull. O PC só sobe e baixa imagem depois de
+  vê-la (a chave `nuvem_imagens`), e na primeira vez **lê tudo de novo uma vez** (o cursor volta a 0, como na
+  N7): um Agent de antes da N10b passou pelas mudanças `note_image` sem gravá-las (para ele são "não
+  aplicadas", e o cursor andou), e as notas voltam com a lista `imagens`.
+- **No PC, a migration `0015` (só colunas, por `ALTER TABLE ... ADD COLUMN`, como a `0013`):** em
+  `local_note_images`, `na_nuvem`, `sync_state` (`pending`, a situação normal de todas as tabelas do sync;
+  `aguardando`; `recusado`), `last_sync_error`, `tentativas` e `tentou_em`; e **em `sync_outbox`, `nota_id`**
+  (o caminho do `DELETE` da imagem que já saiu da tabela). **[desvio da N10a]** O "o que a segunda metade
+  precisa saber" falava em `server_version`; entrou **`na_nuvem`**: a nuvem tem, **ou pode ter**, a imagem
+  (veio dela, ou este PC já mandou o PUT pelo menos uma vez, **gravado antes da rede**). Por quê: a imagem
+  não tem versão (é imutável), e é isso, e não o envio em voo, que decide se tirar a imagem manda o
+  `DELETE`: o envio em voo é esquecido na reconexão e no recomeço, e o PUT que valeu sem resposta deixaria a
+  imagem na nuvem (e ela voltaria ao PC pelo pull). E a coluna na `sync_outbox` (e não só na tabela das
+  imagens) porque a lápide local não tem mais a linha da imagem para dizer a nota. Alternativa: manter a
+  linha da imagem tirada até a nuvem confirmar (um estado a mais em toda leitura das imagens).
+- **A emissão:** anexar com a nuvem conectada põe o marcador de criar na mesma transação (como a nota da N7);
+  tirar põe a lápide (`CampoApagado`, com a nota) se `na_nuvem`, senão tira o marcador; a nota que sai de vez
+  (a lixeira de 30 dias, o "Apagar para sempre", a lápide da nuvem) leva os marcadores das imagens dela.
+  **O PUT só sai se a imagem ainda está lá** (correção da revisão, 29-out-2026): o motor lê as imagens da
+  rodada de uma vez e as sobe uma depois da outra; a que a pessoa tira da nota nesse meio-tempo, sem
+  `na_nuvem`, sai sem lápide, e o PUT dela (com os bytes já lidos) deixaria a imagem na nuvem, de onde o pull
+  a traria de volta. O `MarcarEnvioDaImagem` grava `na_nuvem` só se a linha e o marcador de criar ainda
+  existem, e o motor pula a imagem quando não gravou.
+- **[derivada] A ordem:** a fase das imagens vem **depois do push** (a nota criada no lote já tem a versão da
+  nuvem) e antes do pull; a imagem cuja nota ainda não tem `server_version` (o criar dela ainda na fila, ou
+  recusado) **espera a rodada seguinte**, com o marcador, sem pedido nem erro; a da nota da lixeira daqui
+  também (sobe se a nota voltar). Até 20 envios e 20 downloads por rodada.
+- **[derivada] O que cada resposta do envio faz** (`DecidirEnvioDaImagem`, puro): `200` e `201`, subiu; `410`,
+  o marcador sai (a lápide, ou a da nota, vem pelo pull e tira a daqui); `IMAGE_INVALID`, `IMAGE_TOO_LARGE`,
+  `IMAGE_SHA_MISMATCH`, `IMAGE_CONFLICT`, **recusada de vez**: a linha fica `recusado` e a imagem fica **só
+  neste PC** (nada some); o resto (`TOO_MANY_IMAGES`, `IMAGES_FULL`, a nota da lixeira na nuvem, a nota que a
+  nuvem não tem, um 5xx), **espera e tenta de novo**. O `DELETE` `204`, `404` ou `410` termina a lápide.
+- **[derivada] A espera é por imagem e não segura o sync.** `EsperaDasImagens`, a `BackoffPolicy` do sync
+  com outra escala (de 1 min a 6 h, sem o jitter, contada de `tentou_em`), porque cada tentativa pode custar
+  4 MB. Uma imagem que não sobe ou não baixa **nunca falha a rodada**: só o `401` (o token caiu) a derruba; a
+  rede que cai e o `429` só param a fase, e a rodada seguinte continua. Por quê: um arquivo estragado, ou uma
+  recusa da nuvem, não pode prender o push e o pull de todo o resto. A bandeja continua "em dia" com uma
+  imagem esperando (o log da rodada a conta).
+- **[derivada] A imagem que vem da nuvem** (a mudança `note_image`, ou a lista `imagens` de uma nota que
+  chegou depois dela) **nasce `aguardando`**: a linha com os metadados e sem o arquivo, que **a varredura da
+  subida respeita**. O download (`GET`) confere o tamanho, o SHA-256 da linha e o `Conferir` (a cópia que o
+  servidor guardou já é a limpa, e conferir de novo a deixa igual: `TestConferir_ALimpaPassaIgual`), grava o
+  arquivo com temporário e rename **dentro** da transação e só então põe a linha normal. `404` e `410` tiram a
+  linha que espera; o resto espera a vez. **O PC aceita a imagem da nuvem acima do teto local** (quem decide
+  o teto é a nuvem): ela entra e baixa, e o teto daqui passa a contá-la. A lápide da nuvem tira a linha na
+  página do pull, e o arquivo sai logo depois (a varredura sem linhas), e não só na rodada do expurgo.
+- **[derivada] O eco:** a imagem daqui que o pull mostra com o mesmo SHA-256 (o PUT cuja resposta se perdeu)
+  ganha `na_nuvem`, e o marcador de criar sai; a imagem tirada aqui (a lápide na fila) não volta.
+- **O envio inicial:** as imagens anexadas antes desta versão (a N10a não punha marcador) entram na fila pela
+  completação de cada rodada (`CompletarImagens`), **sob o mesmo aceite das notas** ("Enviar o histórico") e
+  com a capacidade: toda imagem com o arquivo aqui que a nuvem nunca viu, de nota fora da lixeira. É o que
+  leva a imagem que o Mauro já anexou.
+- **O recomeço** (o epoch novo) põe de volta na fila as imagens que a nuvem tinha ou podia ter (o PUT
+  idempotente responde `200` sem ler o corpo se a nuvem restaurada já as tem); as que esperam o download
+  continuam esperando. **O "Esquecer esta nuvem"** tira as que esperavam (sem arquivo, e sem a nuvem de onde
+  viriam) e zera o resto.
+- **[derivada] Na API local:** o item da nota leva `"estado": "a_caminho"` na imagem que ainda não baixou (a
+  presente não leva a chave), e o `GET` dos bytes dela é **`409 IMAGE_PENDING`**, não um `404` qualquer.
+  Tirar da nota vale do mesmo jeito (sobe o `DELETE`). O painel do PC que mostra o lugar dela é da parte do
+  celular.
+- **O "Apagar meus dados"** apaga as imagens da conta (o `DELETE FROM note_images` antes das notas, e a
+  cascata como segunda guarda); **a restauração** traz as do backup, como o resto; **o job de retenção** não
+  muda (o expurgo das notas leva as imagens pela cascata).
+- **O log** nunca leva os bytes, o tamanho de uma imagem, o id, o SHA-256, um nome de arquivo nem o texto da
+  nota: o PC conta por tipo (`imagens_subiram`, `imagens_baixadas`, `imagens_esperando`…), e o log de acesso
+  da nuvem tem o padrão da rota.
+- **Riscos desta parte:** (1) **o proxy da VPS**: o Traefik que já roda não é nosso; sem um middleware de
+  buffering, ele não limita o corpo, mas o `readTimeout` padrão do entrypoint no Traefik v3 é de 60 s, e uma
+  imagem de 4 MB por uma rede de menos de ~0,55 Mbit/s não sobe (fica esperando a vez; nada se perde). O
+  roteiro do deploy confere de fora; (2) **o tamanho do backup e da restauração** cresce com as imagens (elas
+  quase não comprimem): o teto de 400 MB por conta foi escolhido pelo tmpfs da restauração, mas o volume do
+  backup guarda 3 dias de dumps, e o B2, 30; (3) a resposta do anexo do celular que se perde pode deixar a
+  imagem duas vezes (visível, removível); (4) a imagem recusada de vez fica só neste PC, sem aviso na tela
+  (só a linha `recusado`); (5) voltar o Agent para a versão de antes com imagens a caminho deixa a varredura
+  dela apagar essas linhas (sem arquivo); de volta à N10b, elas só voltam com o recomeço ou um "Esquecer";
+  (6) duas imagens anexadas no mesmo microssegundo, em aparelhos diferentes, ficam na ordem do id.
+
+**O que a parte do celular precisa saber:**
+- **As rotas do celular** (sessão; o token de um PC é `403`):
+  - `POST /api/v1/notes/{id}/images`: o corpo é o JPEG cru (`Content-Type: image/jpeg`), já reduzido pela
+    `reduzirImagem`; `201` com a imagem: `{"id", "note_id", "largura", "altura", "bytes", "sha256",
+    "created_at"}`. O id é do servidor.
+  - `POST /api/v1/notes/with-image`: o mesmo corpo; `201` com a nota (o `noteDTO` de sempre, sem título nem
+    corpo, no topo das ativas, com `imagens` de um item).
+  - `GET /api/v1/notes/{id}/images/{imagem}`: os bytes (`image/jpeg`, `Cache-Control: no-store`), também da
+    nota da lixeira; `404 NOT_FOUND` sem a imagem (tirada, de outra nota, ou de outra conta).
+  - `DELETE /api/v1/notes/{id}/images/{imagem}`: `204`, idempotente (tirar de novo é `204`), vale na nota da
+    lixeira; `404` só sem a nota.
+- **Os erros** (o JSON `{"error": {"code", "message"}}` de sempre): `415 IMAGE_INVALID` (o Content-Type),
+  `400 IMAGE_INVALID` (não é um JPEG que se abra, ou passa de 2.000 px), `413 IMAGE_TOO_LARGE` (mais de 4 MB),
+  `409 TOO_MANY_IMAGES` (a nota com 10), `409 IMAGES_FULL` (o `message` é a `FraseDoTeto`, pronta para a tela),
+  `409 CONFLICT` (a nota na lixeira), `404 NOT_FOUND` (a nota). Os códigos são os mesmos da API local, e as
+  frases da cena 7 já estão no `imagens.ts`.
+- **A nota** (`GET /notes`, `GET /notes/{id}`, as respostas das escritas) traz `imagens`: sempre um array, na
+  ordem da nota, com os mesmos campos da imagem acima. No PC (a API local), o item tem `estado: "a_caminho"`
+  enquanto não baixou, e os bytes dela são `409 IMAGE_PENDING`: é o "a caminho" do painel do PC.
+- **O que faltava (era dela, e está feito, abaixo):** o `ClienteDeImagens` do celular sobre estas rotas; a
+  CSP da nuvem com `img-src blob:` e o `bundle.test.ts` (a URL `blob:` no cliente da nuvem); o "Imagem sem
+  rede" (cena 6) e o ícone apagado sem rede; o lugar da imagem "a caminho" no painel do PC; a política de
+  privacidade, o dossiê e os textos do app.
+
+### Decisões da N10b (o celular)
+
+A tela das imagens no app do celular e o que ficou da N10b no painel do PC (29-out-2026). Valem as decisões
+do Mauro da prévia aprovada (cenas 5, 6 e 7); o que segue é o que a implementação decidiu por cima delas.
+O Mauro quer "o menor que funciona".
+
+- **O `ClienteDeImagens` do celular** (`web/src/nuvem/notas/notasNaNuvem.ts`) fala as quatro rotas da
+  `/api/v1`: anexa pelo `POST /notes/{id}/images` (o JPEG cru, já reduzido no navegador pela mesma
+  `reduzirImagem` do PC), cria a nota com a imagem pelo `POST /notes/with-image`, lê pelo `GET` e tira pelo
+  `DELETE` (com `keepalive`, para o pedido do Desfazer vencido sair mesmo se a aba fechar). **Anexar e criar
+  exigem rede** (o `exigirRede`): sem ela é um `SoComRede`, e nada vai para a fila offline (a fila é só do
+  texto da nota). O `fraseDoErro` ganhou o `SoComRede` e usa os mesmos códigos e frases do PC; o `IMAGES_FULL`
+  mostra a frase do servidor. A tela é **a mesma `Notas` do PC**: o que muda é o `celular` que ela já recebia.
+- **A barra da nota e o "Criar uma nota…"** (cena 5): o ícone de imagem abre um menu com **Tirar foto** (um
+  `<input type="file" accept="image/*" capture="environment">`) e **Escolher da galeria** (sem `capture`, com
+  `multiple`; entram uma por vez, até as 10). No PC o ícone continua um botão só, que abre a escolha de
+  arquivos (o `BotaoDeImagem`). A ordem da barra no celular é a da prévia: Formatar, Cor, Marcadores, Imagem,
+  Ditar aqui, Mais, Fechar (o Arquivar segue dentro do Mais). O "Criar uma nota…" cria pelo `with-image` com
+  a primeira foto e anexa as outras escolhidas nela.
+- **[derivada] A barra cabe numa linha a 360 px:** o toque deixa o `.icone-botao` em 44 px, e com isso o
+  **Fechar** caía para uma segunda linha. No celular (`pointer: coarse`) a barra da nota usa ícones de 40 px
+  e sem folga entre eles (o alvo ainda passa dos 36 px); conferido a 360 e a 384 px, nos dois temas.
+- **A imagem não fica no aparelho** (a decisão do Mauro): a imagem lida vira uma URL `blob:` na loja da aba
+  (`ImagensNaTela`, a mesma do PC), solta ao sair; **nada de IndexedDB, Cache API nem service worker**. O
+  service worker nunca toca `/api/v1/notes/*/images/*` (o `bundle.test.ts` ganhou as linhas, para GET, POST
+  e DELETE), e o `GET` responde `no-store`. O IndexedDB das notas leva **só os metadados** da imagem (o id, o
+  tamanho, o SHA-256), que vêm na nota e que o app mantém em dia ao anexar e tirar (`mudarImagens`).
+- **O "Imagem sem rede"** (cena 6): sem rede, a imagem que **nunca foi lida nesta visita** aparece como um
+  quadrado com a **proporção dela** (a grade não pula quando a rede volta) e o texto "Imagem sem rede"; só o
+  primeiro quadrado de cada nota leva o texto, os outros ficam só com o ícone **[derivada]** (o texto
+  repetido em cada quadrado pesava). A imagem que **já apareceu nesta visita continua aparecendo**. O
+  ícone de imagem fica apagado sem rede. **[derivada]** A imagem que faltou por falta de rede **se pede
+  sozinha quando a rede volta** (a loja separa "sem rede", que se repete, da falha de verdade, que não):
+  sem isso, a pessoa teria de sair e voltar da aba.
+- **[derivada] Tirar a imagem sem rede no celular** não esconde a imagem com o Desfazer e falha depois: o
+  pedido sairia para lugar nenhum. A imagem **fica**, e o aviso diz **"Sem rede: a imagem só sai da nota
+  quando a rede voltar."** É uma frase a mais fora da cena 7; a "A rede caiu antes de a imagem subir. Tente de
+  novo." continua sendo a do anexo.
+- **[derivada] A resposta que não é JPEG:** a leitura confere o `Content-Type` da resposta (`image/jpeg`) antes de
+  fazer a URL `blob:`; qualquer outra coisa vira "Imagem indisponível". É a segunda trava da garantia do áudio
+  (abaixo).
+- **[desvio da N10a] A URL `blob:` agora também nasce no cliente da nuvem.** A N10a escreveu "a URL `blob:`
+  nasce só no cliente do PC" e prendeu isso no `bundle.test.ts` (a garantia do áudio do ditado: o gravador
+  do celular nunca cria URL de áudio). Isso não podia ficar: a imagem do celular precisa dela, e a ADR já
+  previa mudar o teste. **Como a garantia continua:** o `createObjectURL` só existe em dois arquivos
+  (`clienteLocal.ts` e `nuvem/notas/urlDaImagem.ts`); o segundo **recusa tudo o que não é `image/jpeg`**
+  (o áudio do ditado é `audio/webm`, `audio/mp4`…); nada de `nuvem/ditar/` menciona `blob:`, o
+  `createObjectURL` nem o `urlDaImagem`, e só o `notasNaNuvem.ts` o importa; e o `urlDaImagem.ts` não fala de
+  áudio, `MediaRecorder` nem `getUserMedia`. O teste foi conferido por mutação: pôr um `createObjectURL` em
+  `nuvem/ditar/` o quebra.
+- **A CSP da nuvem** ganhou `img-src 'self' blob:` (`internal/server/seguranca.go`; o `06` e o `09` dizem). O
+  `blob:` vale só para imagem: script, estilo e conexão continuam `'self'`. Os scripts que conferem a nuvem
+  (`deploy-teste.ps1` e `conferir-nuvem.ps1`) e o teste do servidor comparam o texto inteiro, e foram
+  atualizados; **uma nuvem com a API antiga falha nessa conferência até o deploy** (`docs/deploy-notas-n10.md`).
+- **O "a caminho" no painel do PC:** a imagem com `estado: "a_caminho"` não é pedida (o `GET` dela é `409
+  IMAGE_PENDING`) e aparece como um quadrado quieto, **na proporção dela**, com "Imagem a caminho", **nunca
+  como erro**; o × dela funciona (sobe o `DELETE`). Quando a imagem chega (o painel lê a lista de novo), o
+  quadrado vira a imagem. **[derivada]** Se o `GET` responder `IMAGE_PENDING` mesmo assim (a lista estava velha),
+  a loja não marca falha: espera a lista nova.
+- **[derivada] O painel do PC nunca mostra "Imagem sem rede":** a API local é o próprio PC. A loja e o
+  quadrado são os mesmos, mas só o celular acende o `semRede`; a imagem do PC que não abre continua sendo
+  "Imagem indisponível".
+- **[derivada] A imagem grande no celular:** a barra do alto tem o "N de M" e os botões **Baixar** e **Tirar da
+  nota**; abaixo de 480 px os dois viram só o ícone (com o nome no `title` e no leitor de tela), porque o
+  título da nota e o "N de M" não cabiam. Na imagem grande de uma imagem sem rede ou a caminho, o texto
+  aparece no lugar da imagem.
+- **As telas de mentira** (só do `pnpm dev`, fora de toda build): no app da nuvem, `?cenario=notas` (notas com
+  uma, duas, cinco imagens e uma só com imagem) e `?cenario=notas-sem-rede` (o mesmo, sem rede); no painel do
+  PC, `?cenario=notas-imagens` (imagens presentes e a caminho). Os bytes são JPEGs desenhados no canvas na
+  hora. O `notasFalsas.ts` da nuvem ganhou as rotas das imagens (as dez por nota, a lixeira, `409`).
+- **A LGPD:** a política de privacidade, o dossiê (com a **decisão 12**, o aviso e o dado de terceiros na
+  foto, decidida pelo Mauro em 29-out-2026: "Só eu uso" e "Segue a nota") e o `09` dizem o que sobe, onde
+  fica, o prazo e que o celular não guarda; as
+  frases do app (a Privacidade do celular e a do PC, e a pergunta do "Enviar o histórico") também.
+- **O que não foi feito:** a imagem **não entra na fila offline** do celular (anexar exige rede, a decisão da
+  cena 6); a **busca** não olha a imagem; o "Copiar para WhatsApp" a deixa de fora; uma **miniatura própria**
+  (a grade baixa a imagem inteira de cada cartão, como no PC) fica para se o peso incomodar.
+- **Riscos desta parte:** (1) a conferência com **câmera, galeria, sinal e dedo de verdade** é do roteiro
+  manual (`docs/teste-manual-notas-n10.md`, partes 11 a 19): os testes rodam no jsdom, e as telas foram vistas
+  num Edge sem cabeça, que não é um Chrome de Android nem um Safari; (2) o `capture="environment"` se comporta
+  de um jeito em cada navegador (alguns celulares mostram a câmera direto, outros um seletor); (3) um iPhone
+  manda HEIC, e o navegador que não o abre recebe "Esse arquivo não é uma imagem que o navegador abra." (o
+  Safari o abre); (4) a loja guarda na memória as imagens já vistas até a aba sair, e uma lista com muitas
+  imagens grandes pesa no celular (a mesma ressalva do PC); (5) "sem rede" e "a nuvem fora do ar" dão o mesmo
+  quadrado (o app não distingue); (6) o celular desbloqueado mostra as imagens que estão na tela, como o
+  resto.
 
 ## Alternativas descartadas
 
@@ -884,7 +1138,7 @@ deploy e release só com a autorização do Mauro.
 | N7 | Sync das notas e marcadores: migrations do Postgres, entidades no motor, mescla da lista de marcar, rotas da nuvem (a `posicao` da N2b viaja com a nota). **Deploy: ponto de parada.** **Feita localmente (26-out-2026), nos dublês, em quatro commits na branch `notas/n7`; o deploy espera o Mauro** (`docs/deploy-notas-n7.md`, depois `docs/teste-manual-notas-n7.md`). Ver "Decisões da N7" | N1-N6, N2b |
 | N8 | Aba Notas no celular (PWA), com "Ditar para nota" e a fila offline (marcar, desmarcar e acrescentar item sem rede). **Feita localmente (27-out-2026), na branch `notas/n8`; o deploy espera o Mauro** (`docs/deploy-notas-n8.md`, depois `docs/teste-manual-notas-n8.md`). Ver "Decisões da N8" | N7 |
 | N9 | Gatilho "ditar para nota" no PC, com o destino pelo nome | N2 |
-| N10 | Imagens. **Ponto de parada antes** (servidor, disco, LGPD; feito em 28-out-2026). **A primeira metade, o PC, feita localmente (28-out-2026), na branch `notas/n10a`** (`docs/teste-manual-notas-n10.md`); a segunda, o sync, a nuvem e o celular, vem depois. Ver "Decisões da N10 (implementação)" | N7 |
+| N10 | Imagens. **Ponto de parada antes** (servidor, disco, LGPD; feito em 28-out-2026). **A primeira metade, o PC, feita localmente (28-out-2026), na branch `notas/n10a`** (`docs/teste-manual-notas-n10.md`); a segunda, o sync, a nuvem e o celular, vem depois. Ver "Decisões da N10 (implementação)". **A parte do Go da segunda metade (o Postgres, o servidor, o sync do PC e a API local) feita localmente (29-out-2026), na branch `notas/n10b`** (`docs/deploy-notas-n10.md`); a tela do celular vem por cima dela. Ver "Decisões da N10b". **A parte do celular (a tela das imagens no app, o "Imagem sem rede" e o "a caminho" no painel do PC) e os textos de LGPD, feitas localmente (29-out-2026), na mesma branch `notas/n10b`**; a conferência no celular de verdade é do roteiro (`docs/teste-manual-notas-n10.md`, partes 11 a 19), e o deploy espera o Mauro. Ver "Decisões da N10b (o celular)" | N7 |
 
 Ordem sugerida: L e N1 em paralelo; depois N2, N3, N6, N4, N5, N9; e N7, N8, N10.
 

@@ -709,6 +709,7 @@ func rotaConcreta(padrao string) (method, path string) {
 		return "", ""
 	}
 	path = strings.ReplaceAll(strings.TrimSuffix(path, "{$}"), "{id}", contracttest.NewID())
+	path = strings.ReplaceAll(path, "{imagem}", contracttest.NewID())
 	return method, strings.ReplaceAll(path, "{provedor}", "openai")
 }
 
@@ -763,9 +764,12 @@ func testEscopo(t *testing.T, b Backend) {
 			t.Errorf("%s com aparelho revogado: %d, quero 401", rt.Padrao, res.Code)
 		}
 	}
-	if seen[server.AcessoSessao] < 15 || seen[server.AcessoAparelho] != 2 || seen[server.AcessoQualquer] != 2 {
+	// O sync com aparelho: o push, o pull e as três rotas das imagens das notas
+	// (N10b: o PUT, o GET e o DELETE dos bytes).
+	if seen[server.AcessoSessao] < 15 || seen[server.AcessoAparelho] != 5 || seen[server.AcessoQualquer] != 2 {
 		t.Errorf("a tabela tem %v rotas por acesso; quero o CRUD, as sessões, a lista de aparelhos, a aprovação "+
-			"de um PC e o aprendido do celular só com sessão, o sync com aparelho, e o /me e o revogar com qualquer", seen)
+			"de um PC e o aprendido do celular só com sessão, o sync (e as imagens dele) com aparelho, e o /me e o "+
+			"revogar com qualquer", seen)
 	}
 	// O aprendido do celular (F8d): só a sessão, e sem parâmetro de caminho (o
 	// texto nunca vai na URL; o id do desfazer vai no corpo).
@@ -932,7 +936,7 @@ func testCSRF(t *testing.T, b Backend) {
 }
 
 func testCabecalhos(t *testing.T, b Backend) {
-	const cspWant = "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'"
+	const cspWant = "default-src 'self'; img-src 'self' blob:; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'"
 	bases := []string{"https://nuvem.exemplo.test", "http://localhost:8080"}
 	if server.LoginDeTesteCompilado {
 		bases = bases[1:] // com a tag, o servidor só sobe em localhost

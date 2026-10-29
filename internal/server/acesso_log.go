@@ -20,6 +20,9 @@ type acessoInfo struct {
 	rota      string
 	motivo    string
 	contagens []any
+	// semBytes tira os bytes da resposta da linha (ocultarBytes): na leitura
+	// de uma imagem de nota, eles seriam o tamanho dela (N10b).
+	semBytes bool
 }
 
 func acessoDe(ctx context.Context) *acessoInfo {
@@ -30,6 +33,14 @@ func acessoDe(ctx context.Context) *acessoInfo {
 func anotarMotivo(ctx context.Context, motivo string) {
 	if info := acessoDe(ctx); info != nil {
 		info.motivo = motivo
+	}
+}
+
+// ocultarBytes tira os bytes da resposta da linha de log deste pedido: a
+// resposta é uma imagem de nota, e o tamanho dela não vai para o log (N10b).
+func ocultarBytes(ctx context.Context) {
+	if info := acessoDe(ctx); info != nil {
+		info.semBytes = true
 	}
 }
 
@@ -89,7 +100,10 @@ func (c *Cloud) registrarAcesso(next http.Handler) http.Handler {
 		}
 		attrs := []any{
 			"metodo", method, "rota", rota, "status", g.status,
-			"ms", time.Since(start).Milliseconds(), "bytes", g.bytes,
+			"ms", time.Since(start).Milliseconds(),
+		}
+		if !info.semBytes {
+			attrs = append(attrs, "bytes", g.bytes)
 		}
 		if info.motivo != "" {
 			attrs = append(attrs, "motivo", info.motivo)

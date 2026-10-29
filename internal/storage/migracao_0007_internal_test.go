@@ -143,6 +143,9 @@ func TestMigracao0007_NaoPerdeNemMudaNada(t *testing.T) {
 	}
 
 	depois := todasAsTabelas(t, db)
+	// A 0015 (N10b) põe a nota do marcador das imagens na sync_outbox: sai
+	// daqui, conferida nula.
+	semAsColunasDa0015(t, depois)
 	// Tabela por tabela, linha por linha: as que existiam estão iguais (a
 	// 0007 não põe coluna em nenhuma, então nem a coluna nova é tirada aqui;
 	// a schema_migrations só ganha as linhas da 0007 e das seguintes).
@@ -224,7 +227,9 @@ func TestMigracao0007_NaoPerdeNemMudaNada(t *testing.T) {
 	if err := NewMigrator().Migrate(ctx, db); err != nil {
 		t.Fatalf("Migrate de novo: %v", err)
 	}
-	if !reflect.DeepEqual(todasAsTabelas(t, db), depois) {
+	denovo := todasAsTabelas(t, db)
+	semAsColunasDa0015(t, denovo)
+	if !reflect.DeepEqual(denovo, depois) {
 		t.Error("migrar de novo mudou o banco")
 	}
 }

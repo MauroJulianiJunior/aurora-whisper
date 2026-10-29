@@ -18,8 +18,10 @@
 import { type Buscador, Conflito, ErroDaApi, ForaDoAr, SemSessao, buscadorPadrao, pedir } from '../../api'
 import { itensDaEnumeracao, lerCorpo, nomeDaNota, soMarcouOuAcrescentou } from '../../notas/corpo'
 import {
+  type ClienteDeImagens,
   type ClienteDeNotas,
   type EstadoDaRede,
+  type ImagemDaNota,
   type Marcador,
   type MudancaDaNota,
   type Nota,
@@ -28,7 +30,8 @@ import {
   SoComRede,
 } from '../../notas/tipos'
 import type { Armazem, MudancaEsperando } from './armazem'
-import { type NotaDaNuvem, antesNaLista, daNuvem, doMarcador, vistaDa } from './formato'
+import { type ImagemDaNuvem, type NotaDaNuvem, antesNaLista, daNuvem, doMarcador, imagemDaNuvem, vistaDa } from './formato'
+import { soltarUrlDaImagem, urlDaImagem } from './urlDaImagem'
 
 // Quanto espera para tentar subir de novo a fila que não subiu.
 export const TENTAR_DE_NOVO_EM = 30_000
@@ -283,6 +286,14 @@ export class NotasNaNuvem {
     void this.armazem.apagarNota(id).catch(() => undefined)
   }
 
+  // mudarImagens põe no que o aparelho guarda da nota (só os metadados) a imagem que
+  // entrou ou saiu: a lista sem rede e as caixas "Imagem sem rede" ficam certas. Os
+  // bytes nunca passam por aqui.
+  private mudarImagens(notaId: string, mudar: (imagens: ImagemDaNota[]) => ImagemDaNota[]): void {
+    const n = this.notas.get(notaId)
+    if (n) this.guardar({ ...n, imagens: mudar(n.imagens ?? []) })
+  }
+
   // comFila é a nota como a tela a vê: a da nuvem, com o que espera na fila por
   // cima.
   private comFila(n: Nota): Nota {
@@ -483,6 +494,47 @@ export class NotasNaNuvem {
     return out
   }
 
+  // criarClienteDeImagens é o ClienteDeImagens do celular (ADR-022, N10b) sobre as
+  // rotas da sessão: anexar e tirar só com rede; ler a cada vez que a imagem vai à
+  // tela. Os bytes só passam pela memória da página (a URL blob: de urlDaImagem.ts);
+  // a resposta do GET é no-store, e o service worker nem toca nessa rota.
+  private criarClienteDeImagens(): ClienteDeImagens {
+    const daNota = (id: string) => `/api/v1/notes/${encodeURIComponent(id)}`
+    const daImagem = (notaId: string, id: string) => `${daNota(notaId)}/images/${encodeURIComponent(id)}`
+    // O corpo é o JPEG cru, já reduzido no aparelho (reduzirImagem), sem multipart e
+    // sem o nome do arquivo.
+    const comJpeg = (jpeg: Blob) => this.daOrigem({ method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: jpeg })
+    return {
+      anexar: async (notaId, jpeg) => {
+        this.exigirRede()
+        // conflitoEhVersao false: os 409 daqui são a nota cheia, o teto e a lixeira.
+        const r = await this.pedido(`${daNota(notaId)}/images`, comJpeg(jpeg), false)
+        const im = imagemDaNuvem((await r.json()) as ImagemDaNuvem)
+        this.mudarImagens(notaId, (l) => [...l.filter((x) => x.id !== im.id), im])
+        return im
+      },
+      criarNotaComImagem: async (jpeg) => {
+        this.exigirRede()
+        return this.lerNota(await this.pedido('/api/v1/notes/with-image', comJpeg(jpeg), false))
+      },
+      ler: async (notaId, id, sinal) => {
+        const r = await this.pedido(daImagem(notaId, id), this.daOrigem({ signal: sinal }), false)
+        const tipo = r.headers.get('Content-Type') ?? ''
+        if (!tipo.toLowerCase().startsWith('image/jpeg')) throw new Error('a nuvem não devolveu um JPEG')
+        // O tipo vem da resposta conferida acima: a URL blob: só nasce de um JPEG.
+        return new Blob([await r.blob()], { type: 'image/jpeg' })
+      },
+      tirar: async (notaId, id) => {
+        this.exigirRede()
+        // keepalive: o aviso que vence com a página fechando ainda tira a imagem.
+        await this.pedido(daImagem(notaId, id), { ...this.daOrigem({ method: 'DELETE' }), keepalive: true }, false)
+        this.mudarImagens(notaId, (l) => l.filter((x) => x.id !== id))
+      },
+      paraATela: urlDaImagem,
+      soltar: soltarUrlDaImagem,
+    }
+  }
+
   private criarCliente(): ClienteDeNotas {
     const daNota = (id: string) => `/api/v1/notes/${encodeURIComponent(id)}`
     const doMarcadorUrl = (id: string) => `/api/v1/labels/${encodeURIComponent(id)}`
@@ -618,6 +670,7 @@ export class NotasNaNuvem {
         this.exigirRede()
         return this.lerNota(await this.pedido(`${daNota(notaId)}/labels/${encodeURIComponent(marcadorId)}`, this.daOrigem({ method: 'DELETE' })))
       },
+      imagens: this.criarClienteDeImagens(),
       // O "nota em foco" é do PC (o ditado do Agent que cai na nota aberta); no
       // celular, o microfone da nota está no próprio app (DitarNaNota).
       definirFoco: async () => {},

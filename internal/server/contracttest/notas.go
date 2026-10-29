@@ -108,6 +108,8 @@ type notaJSON struct {
 	DeletedAt        *time.Time    `json:"deleted_at"`
 	Version          int64         `json:"version"`
 	VersaoEmConflito *notaSeloJSON `json:"versao_em_conflito"`
+	// Imagens (N10b): os metadados das imagens vivas, sempre um array.
+	Imagens []imagemJSON `json:"imagens"`
 }
 
 type marcadorJSON struct {
@@ -126,10 +128,11 @@ type notasPullJSON struct {
 	Entidades []string          `json:"entidades"`
 }
 
-// As chaves exatas do fio (o contrato da N7): nenhuma a mais, nenhuma a menos.
+// As chaves exatas do fio (o contrato da N7, com as imagens da N10b): nenhuma a
+// mais, nenhuma a menos.
 var (
 	chavesDaNota = []string{"arquivada", "cor", "corpo", "created_at", "deleted_at", "ditado_de_origem", "fixada", "id",
-		"marcadores", "posicao", "titulo", "updated_at", "version", "versao_em_conflito"}
+		"imagens", "marcadores", "posicao", "titulo", "updated_at", "version", "versao_em_conflito"}
 	chavesDoMarcador = []string{"created_at", "id", "nome", "updated_at", "version"}
 	chavesDoSelo     = []string{"conflict_at", "corpo", "device_id", "titulo"}
 )
@@ -165,6 +168,14 @@ func lerNota(t *testing.T, raw json.RawMessage) notaJSON {
 	}
 	if n.Marcadores == nil {
 		t.Fatalf("a nota sem marcadores (quero sempre o array): %s", raw)
+	}
+	if n.Imagens == nil {
+		t.Fatalf("a nota sem imagens (quero sempre o array): %s", raw)
+	}
+	for _, im := range n.Imagens {
+		if im.NoteID != n.ID {
+			t.Fatalf("a imagem %s da nota %s diz ser da nota %s", im.ID, n.ID, im.NoteID)
+		}
 	}
 	return n
 }
@@ -293,8 +304,8 @@ func idsDe(ns []notaJSON) []string {
 // PC recebe tudo no pull, em ordem de seq, no formato do contrato, e a
 // capacidade "entidades" vem sempre.
 func testNotasCriaEPull(t *testing.T, w *world) {
-	if p := w.pullNotas(pcA2, 0, 0); strings.Join(p.Entidades, ",") != "transcription,learned,note,label" {
-		t.Fatalf("entidades = %v, quero transcription,learned,note,label (mesmo sem nada)", p.Entidades)
+	if p := w.pullNotas(pcA2, 0, 0); strings.Join(p.Entidades, ",") != "transcription,learned,note,label,note_image" {
+		t.Fatalf("entidades = %v, quero transcription,learned,note,label,note_image (mesmo sem nada)", p.Entidades)
 	}
 	label, note, unknown, dict := newID(), newID(), newID(), newID()
 	w.mustNota(pcA1, criarMarcador(label, "  Mercado   do mês "), 1, false) // seq 1
@@ -311,7 +322,7 @@ func testNotasCriaEPull(t *testing.T, w *world) {
 	if len(p.Changes) != 3 || p.LastSeq != 3 || p.HasMore {
 		t.Fatalf("o pull = %+v, quero as 3 mudanças", p)
 	}
-	if strings.Join(p.Entidades, ",") != "transcription,learned,note,label" {
+	if strings.Join(p.Entidades, ",") != "transcription,learned,note,label,note_image" {
 		t.Errorf("entidades = %v", p.Entidades)
 	}
 	for i, quero := range []string{"label", "note", "transcription"} {

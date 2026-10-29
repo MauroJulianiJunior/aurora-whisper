@@ -6,7 +6,7 @@
 // e a frase dele vem pronta na resposta IMAGES_FULL, com o número.
 
 import { ErroDaApi, ForaDoAr, problemaDe } from '../api'
-import type { ImagemDaNota, Nota } from './tipos'
+import { type ImagemDaNota, type Nota, SoComRede } from './tipos'
 
 // Os limites do painel. MAX_POR_NOTA e MAX_LADO são os mesmos do Agent
 // (internal/imagemdanota); MAX_ORIGINAL é o do arquivo que a pessoa escolhe,
@@ -24,6 +24,9 @@ export const FRASES = {
   cheia: 'A nota já tem 10 imagens.',
   naoAbre: 'Esse arquivo não é uma imagem que o navegador abra.',
   semRede: 'A rede caiu antes de a imagem subir. Tente de novo.',
+  // [derivada, N10b] Tirar a imagem no celular também pede rede (o pedido vai à
+  // nuvem): sem ela, a imagem fica onde está, e o aviso diz.
+  tirarSemRede: 'Sem rede: a imagem só sai da nota quando a rede voltar.',
   // [derivada] A cópia reduzida que ainda passa de 4 MB (a redução tenta três
   // qualidades antes): na prática não acontece, e a frase diz o que houve.
   grandeReduzida: 'A imagem ficou grande demais mesmo reduzida.',
@@ -48,7 +51,8 @@ const mensagemDe = (e: unknown) => (e instanceof Error ? e.message : String(e))
 // pronta, com o teto.
 export function fraseDoErro(e: unknown): string {
   if (e instanceof ErroDaImagem) return e.message
-  if (e instanceof ForaDoAr || problemaDe(e) === 'fora-do-ar') return FRASES.semRede
+  // SoComRede é o celular sem rede (N10b): o pedido nem saiu, ou não chegou.
+  if (e instanceof ForaDoAr || e instanceof SoComRede || problemaDe(e) === 'fora-do-ar') return FRASES.semRede
   if (e instanceof ErroDaApi) {
     switch (e.codigo) {
       case 'IMAGES_FULL':

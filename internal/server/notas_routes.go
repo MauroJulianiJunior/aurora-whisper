@@ -28,6 +28,9 @@ type noteConflictDTO struct {
 // noteDTO é a nota no JSON (o payload do pull, o state do conflict e o item do
 // GET /notes). cor, ditado_de_origem, deleted_at e versao_em_conflito vêm
 // sempre (null quando não há), e marcadores é sempre um array, em ordem de id.
+// imagens (N10b) é sempre um array, na ordem da nota (created_at, e o id no
+// empate): só os metadados das imagens vivas (imageDTO), nunca os bytes. O PC
+// de antes da N10b ignora a chave.
 type noteDTO struct {
 	ID               string           `json:"id"`
 	Titulo           string           `json:"titulo"`
@@ -43,6 +46,7 @@ type noteDTO struct {
 	DeletedAt        *time.Time       `json:"deleted_at"`
 	Version          int64            `json:"version"`
 	VersaoEmConflito *noteConflictDTO `json:"versao_em_conflito"`
+	Imagens          []imageDTO       `json:"imagens"`
 }
 
 func toNoteDTO(n cloudstore.Note) noteDTO {
@@ -54,6 +58,7 @@ func toNoteDTO(n cloudstore.Note) noteDTO {
 		ID: n.ID, Titulo: n.Titulo, Corpo: n.Corpo, Cor: n.Cor, Fixada: n.Fixada, Arquivada: n.Arquivada,
 		Posicao: n.Posicao, Marcadores: marcadores, DitadoDeOrigem: n.DitadoDeOrigem,
 		CreatedAt: n.CreatedAt, UpdatedAt: n.UpdatedAt, DeletedAt: n.DeletedAt, Version: n.Version,
+		Imagens: toImagesDTO(n.Imagens),
 	}
 	if c := n.Conflict; c != nil {
 		d.VersaoEmConflito = &noteConflictDTO{Titulo: c.Titulo, Corpo: c.Corpo, DeviceID: c.DeviceID, ConflictAt: c.At}

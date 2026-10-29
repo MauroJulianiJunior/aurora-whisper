@@ -91,6 +91,10 @@ func (s *MemoryStore) copiar() *MemoryStore {
 		nu.labels = maps.Clone(u.labels)
 		nu.noteTombs = maps.Clone(u.noteTombs)
 		nu.noteEvents = append([]Event(nil), u.noteEvents...)
+		// As imagens das notas (N10b). Os bytes de cada uma nunca mudam no
+		// lugar (guardarImagem grava uma cópia): o slice é compartilhado.
+		nu.images = maps.Clone(u.images)
+		nu.imageBytes = maps.Clone(u.imageBytes)
 		c.users[id] = &nu
 	}
 	c.bySub, c.byEmail, c.pending = maps.Clone(s.bySub), maps.Clone(s.byEmail), maps.Clone(s.pending)

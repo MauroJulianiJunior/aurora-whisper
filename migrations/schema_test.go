@@ -267,6 +267,15 @@ var wantTables = []tableSpec{
 		table:   "transcription_note_links",
 		columns: []string{"user_id", "transcription_id", "note_id"},
 	},
+	// ADR-022, N10b: as imagens das notas, no banco.
+	{
+		file:  "0026_note_images_table.sql",
+		table: "note_images",
+		columns: []string{
+			"id", "user_id", "note_id", "largura", "altura", "bytes", "sha256", "conteudo",
+			"created_at", "removed_at", "last_seq",
+		},
+	},
 }
 
 // TestSchema_EveryMigrationIsCoveredBySpec garante que a lista acima e os
@@ -375,6 +384,10 @@ func TestSchema_UniqueConstraints(t *testing.T) {
 		{"0023_note_tombstones_table.sql", "UNIQUE (user_id, seq)"},
 		{"0024_note_sync_events_table.sql", "PRIMARY KEY (user_id, seq)"},
 		{"0025_transcription_note_links_table.sql", "PRIMARY KEY (user_id, transcription_id)"},
+		// N10b: a imagem tem o id de onde foi anexada (a PK por usuário) e o
+		// last_seq único por usuário, como a nota.
+		{"0026_note_images_table.sql", "PRIMARY KEY (user_id, id)"},
+		{"0026_note_images_table.sql", "UNIQUE (user_id, last_seq)"},
 	}
 	for _, c := range cases {
 		// Sem os comentários: eles explicam as constraints, e citam o texto delas.
@@ -546,6 +559,8 @@ func TestSchema_NoteIndexes(t *testing.T) {
 			"CREATE INDEX idx_notes_trash ON notes (user_id, deleted_at DESC) WHERE deleted_at IS NOT NULL;",
 		},
 		"0022_note_labels_table.sql": {"CREATE INDEX idx_note_labels_label ON note_labels (user_id, label_id);"},
+		// N10b: as imagens vivas de uma nota, na ordem dela.
+		"0026_note_images_table.sql": {"CREATE INDEX idx_note_images_note ON note_images (user_id, note_id, created_at, id) WHERE removed_at IS NULL;"},
 	} {
 		content := squashSQL(readMigration(t, file))
 		for _, frag := range frags {
@@ -633,6 +648,8 @@ func TestSchema_OptimisticConcurrencyVersionColumn(t *testing.T) {
 		"0023_note_tombstones_table.sql":          false,
 		"0024_note_sync_events_table.sql":         false,
 		"0025_transcription_note_links_table.sql": false,
+		// N10b: a imagem é imutável (nasce e sai), sem concorrência otimista.
+		"0026_note_images_table.sql": false,
 	}
 
 	re := regexp.MustCompile(`(?im)^\s*version\s+BIGINT`)
@@ -975,6 +992,20 @@ var sqlContracts = []struct {
 	{"0025_transcription_note_links_table.sql", "transcription_note_links", []string{
 		"FOREIGN KEY (user_id, transcription_id) REFERENCES transcriptions (user_id, id) ON DELETE CASCADE",
 		"note_id UUID NOT NULL,",
+	}},
+	// A imagem sai com a nota (a cascata); os bytes ficam fora da linha e sem
+	// compressão; a lápide é a linha sem os bytes, e a viva tem todos os
+	// metadados; o tamanho guardado é o dos bytes.
+	{"0026_note_images_table.sql", "note_images", []string{
+		"user_id UUID NOT NULL REFERENCES users (id)",
+		"FOREIGN KEY (user_id, note_id) REFERENCES notes (user_id, id) ON DELETE CASCADE",
+		"sha256 TEXT CHECK (sha256 ~ '^[0-9a-f]{64}$')",
+		"conteudo BYTEA STORAGE EXTERNAL CHECK (octet_length(conteudo) = bytes)",
+		"created_at TIMESTAMPTZ NOT NULL,",
+		"removed_at TIMESTAMPTZ,",
+		"last_seq BIGINT NOT NULL CHECK (last_seq > 0)",
+		"CHECK ((removed_at IS NULL) = (conteudo IS NOT NULL))",
+		"CHECK (removed_at IS NOT NULL OR (largura IS NOT NULL AND altura IS NOT NULL AND bytes IS NOT NULL AND sha256 IS NOT NULL))",
 	}},
 }
 

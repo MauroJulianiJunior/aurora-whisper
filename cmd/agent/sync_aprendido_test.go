@@ -43,7 +43,7 @@ func TestSync_GanchoDoPainelSobeAVersaoLocal(t *testing.T) {
 	defer fechar()
 	m := montarAprendizado(t, dicionarioDoAprendizado, "mauro")
 	n := montarNuvem(prefs.Instalacao(), nil, pastas.ModoPortatil, logger)
-	montarSync(hist, dono, n, m.a, logger)
+	montarSync(hist, dono, n, m.a, nil, logger)
 	fila := hist.Fila(dono)
 	ctx := context.Background()
 

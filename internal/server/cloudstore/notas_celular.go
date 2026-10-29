@@ -383,6 +383,19 @@ func PlanejarNovaNota(id string, n NovaNotaDoCelular, topo string, now time.Time
 	if strings.TrimSpace(n.Titulo) == "" && strings.TrimSpace(n.Corpo) == "" {
 		return Mutation{}, ErrEmptyNote
 	}
+	return mutacaoDeNotaNova(id, n, topo, now)
+}
+
+// PlanejarNotaComImagem é a mutação da nota que nasce do ícone de imagem do
+// "Criar uma nota…" (N10b; Store.CreateNoteWithImage): sem título, sem corpo,
+// sem cor nem marcador, no topo das ativas. A nota vazia vale aqui só porque a
+// imagem nasce com ela, na mesma transação (a nota "só imagem" da prévia).
+func PlanejarNotaComImagem(id, topo string, now time.Time) (Mutation, error) {
+	return mutacaoDeNotaNova(id, NovaNotaDoCelular{}, topo, now)
+}
+
+// mutacaoDeNotaNova é o miolo das duas: a nota id no topo do grupo.
+func mutacaoDeNotaNova(id string, n NovaNotaDoCelular, topo string, now time.Time) (Mutation, error) {
 	k, err := notas.PosicaoEntre("", topo)
 	if err != nil {
 		return Mutation{}, fmt.Errorf("%w: %s", ErrInvalidNote, CodeInvalidField)

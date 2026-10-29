@@ -14,8 +14,11 @@ import (
 
 // csp vale para toda resposta: só a própria origem, nada de plugin, de
 // <base>, de moldura nem de formulário para outro site. A página (pagina/)
-// não tem script nem estilo embutido para caber nela.
-const csp = "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'"
+// não tem script nem estilo embutido para caber nela. O img-src ganha o blob:
+// (ADR-022, N10b) para as imagens das notas, que o app lê por fetch com a sessão
+// e mostra por uma URL blob: criada por ele mesmo; não vale para script, estilo
+// nem conexão, e a imagem de outra origem continua barrada.
+const csp = "default-src 'self'; img-src 'self' blob:; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'"
 
 // permissionsPolicy deixa o microfone só para a própria origem (ADR-021,
 // escolha menor 18). O app grava o ditado do celular, e nenhuma moldura nem

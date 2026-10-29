@@ -99,6 +99,11 @@ func (p *porteiro) envolver(next http.Handler) http.Handler {
 				p.pushes = append(p.pushes, ids)
 				p.entidades = append(p.entidades, ents)
 			default:
+				if strings.Contains(r.URL.Path, "/images/") {
+					// As imagens das notas (N10b): o PUT, o GET e o DELETE.
+					p.pedidos = append(p.pedidos, "imagem:"+r.Method)
+					break
+				}
 				p.pedidos = append(p.pedidos, "pull:"+r.URL.Query().Get("after_seq"))
 			}
 		}

@@ -92,7 +92,8 @@ func TestMigracao0006_NaoPerdeNemMudaNada(t *testing.T) {
 		t.Fatalf("Migrate: %v", err)
 	}
 
-	novas := map[string]map[string]any{"sync_outbox": {"inicial": int64(0), "selo_escolha": nil, "selo_em": nil}}
+	// A 0015 (N10b) também põe, nula, a nota do marcador das imagens.
+	novas := map[string]map[string]any{"sync_outbox": {"inicial": int64(0), "selo_escolha": nil, "selo_em": nil, "nota_id": nil}}
 	for _, tb := range tabelas {
 		depois := linhasDe(t, db, tb)
 		if len(depois) != len(antes[tb]) {

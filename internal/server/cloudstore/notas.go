@@ -66,6 +66,12 @@ type Note struct {
 
 	// Conflict é o selo: o título e o corpo que perderam um conflito.
 	Conflict *NoteConflict
+
+	// Imagens são as imagens vivas da nota (N10b; imagens.go), só os
+	// metadados, na ordem da nota (OrdenarImagens). Lidas junto com a nota
+	// (o pull, as listagens, o GET), nunca gravadas pelas regras: anexar e
+	// tirar não mudam a nota. Nil numa nota que as regras acabaram de montar.
+	Imagens []NoteImage
 }
 
 // NoteConflict é a versão da nota que perdeu um conflito de conteúdo: o título

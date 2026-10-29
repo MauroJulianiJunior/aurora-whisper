@@ -46,7 +46,7 @@ func TestPainel_ServeOBuild(t *testing.T) {
 		h.ServeHTTP(rec, req)
 		return rec
 	}
-	const csp = "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'"
+	const csp = "default-src 'self'; img-src 'self' blob:; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'"
 	painel := contracttest.PainelDeTeste()
 
 	for _, c := range []struct {

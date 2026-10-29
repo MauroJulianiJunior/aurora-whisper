@@ -84,7 +84,7 @@ func (s *MemoryStore) GetNote(_ context.Context, userID, id string) (Note, error
 	defer s.mu.Unlock()
 	if u, ok := s.users[userID]; ok {
 		if n, ok := u.notes[canon]; ok {
-			return n, nil
+			return u.comImagens(n), nil
 		}
 	}
 	return Note{}, ErrNoteNotFound
@@ -115,7 +115,7 @@ func (s *MemoryStore) CreateNote(_ context.Context, a Actor, n NovaNotaDoCelular
 			return false, err
 		}
 		u.gravarNota(o, id, seq, a, now)
-		out = u.notes[id]
+		out = u.comImagens(u.notes[id])
 		return true, nil
 	})
 	return out, err
@@ -140,7 +140,7 @@ func (s *MemoryStore) ChangeNote(_ context.Context, a Actor, id string, p Pedido
 			return false, err
 		}
 		if plano.Nada {
-			g = NotaGravada{Nota: cur}
+			g = NotaGravada{Nota: u.comImagens(cur)}
 			return false, nil
 		}
 		o := DecideNote(plano.Mutation, &cur, false, u.marcadoresMortos(NoteLabelIDs(plano.Mutation)), a, now)
@@ -148,11 +148,15 @@ func (s *MemoryStore) ChangeNote(_ context.Context, a Actor, id string, p Pedido
 			return false, err
 		}
 		if o.Write == WriteNone {
-			g.Nota = cur
+			g.Nota = u.comImagens(cur)
 			return false, nil
 		}
 		u.gravarNota(o, canon, seq, a, now)
-		g.Nota = u.notes[canon]
+		if n, ok := u.notes[canon]; ok {
+			g.Nota = u.comImagens(n)
+		} else {
+			g.Nota = Note{}
+		}
 		return true, nil
 	})
 	return g, err

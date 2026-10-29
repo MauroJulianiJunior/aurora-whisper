@@ -602,6 +602,12 @@ type RespostaDasNotas struct {
 	DecidirMarcador func(EstadoDoMarcadorDeNota) AcaoDoMarcadorDeNota
 	Notas           []string
 	DecidirNota     func(EstadoDaNota) AcaoDaNota
+	// Imagens são as imagens das notas que o pull trouxe (N10b;
+	// nota_imagem_sync.go): as mudanças note_image da página e as das listas
+	// imagens das notas dela. Aplicadas depois das notas, para a imagem achar
+	// a nota que chegou na mesma página.
+	Imagens       []ImagemNoPull
+	DecidirImagem func(EstadoDaImagem) AcaoDaImagem
 }
 
 // aplicarNotas executa, na transação de AplicarTudo, os marcadores e depois
@@ -625,7 +631,10 @@ func (f *Fila) aplicarNotas(ctx context.Context, tx *sql.Tx, r RespostaDasNotas)
 			return err
 		}
 	}
-	return nil
+	if len(r.Imagens) == 0 {
+		return nil
+	}
+	return f.aplicarImagens(ctx, tx, r.Imagens, r.DecidirImagem)
 }
 
 // marcadorDaFila lê o marcador da fila de uma entidade, ou nil.

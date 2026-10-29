@@ -479,6 +479,11 @@ func handleStorePull(store cloudstore.Store) http.HandlerFunc {
 			case c.Label != nil:
 				label := toLabelDTO(*c.Label)
 				d.Payload = &label
+			case c.Image != nil:
+				// A imagem da nota (N10b): só os metadados; os bytes descem
+				// pelo GET /sync/notes/{id}/images/{imagem}.
+				img := toImageDTO(*c.Image)
+				d.Payload = &img
 			}
 			changes = append(changes, d)
 		}

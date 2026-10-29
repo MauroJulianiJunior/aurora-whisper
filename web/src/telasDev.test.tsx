@@ -84,6 +84,16 @@ describe('os cenários das Notas em /telas-dev.html', () => {
     await waitFor(() => expect(within(fila).getByRole('button', { name: 'Escritório 1' })).toBeTruthy())
   })
 
+  it('notas-imagens: a aba abre sozinha, com imagens a caminho como quadrados quietos', async () => {
+    window.history.replaceState(null, '', '/telas-dev.html?cenario=notas-imagens')
+    vi.resetModules()
+    await import('./testes/telasDev')
+    await screen.findByText('Veio do celular', { selector: 'h3' }, { timeout: 4000 })
+    await waitFor(() => expect(document.querySelectorAll('.foto.a-caminho').length).toBeGreaterThan(0))
+    expect(screen.queryByText('Imagem indisponível')).toBeNull()
+    expect(document.querySelector('.foto-vazia')?.textContent).toContain('Imagem a caminho')
+  })
+
   it('notas-vazio: a aba abre sozinha e diz que não há nota', async () => {
     window.history.replaceState(null, '', '/telas-dev.html?cenario=notas-vazio')
     vi.resetModules()

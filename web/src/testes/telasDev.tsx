@@ -34,6 +34,10 @@
 //                      (uma fixada, uma lista de marcar, uma que veio de um ditado, uma no
 //                      Arquivo, uma na Lixeira) e três marcadores;
 //   notas-vazio        a aba Notas sem nenhuma nota.
+//   notas-imagens      (ADR-022, N10b) a aba Notas com imagens: uma, duas, três ou mais, e as
+//                      "a caminho" (o Agent ainda não baixou da nuvem): o lugar quieto, com
+//                      a proporção da imagem e "Imagem a caminho". Os bytes são JPEGs que o
+//                      canvas desenha na hora.
 //   virar-nota         (ADR-022, N3) o Histórico com três ditados (abra com ?config=0): o
 //                      editor de um deles tem o "Virar nota", e o aviso "Virou nota" tem
 //                      Abrir (leva à aba Notas, com a nota na janela) e Desfazer.
@@ -66,8 +70,8 @@ import type { Aprendida } from '../api'
 import type { EstadoNuvem, EstadoRetencao } from '../clienteLocal'
 import '../fontes.css'
 import '../index.css'
-import type { Nota } from '../notas/tipos'
-import { ditado, marcador, nota, servidorFalso } from './servidorFalso'
+import type { ImagemDaNota, Nota } from '../notas/tipos'
+import { ditado, imagem, marcador, nota, servidorFalso } from './servidorFalso'
 
 const busca = new URLSearchParams(window.location.search)
 const cenario = busca.get('cenario') ?? 'estados'
@@ -164,6 +168,47 @@ const notasDeExemplo: Nota[] = [
   nota({ id: 'n13', titulo: 'Lista do sábado', corpo: '- [ ] leite\n- [ ] pão\n- [ ] ovos\n- [ ] manteiga', updated_at: hora(14) }),
 ]
 
+// As notas com imagem (N10b): as presentes têm bytes desenhados no canvas (abaixo); as
+// "a caminho" são as que o Agent ainda não baixou da nuvem.
+const imagemDev = (id: string, largura: number, altura: number, resto: Partial<ImagemDaNota> = {}) =>
+  imagem({ id, largura, altura, created_at: new Date(2026, 9, 25, 9, id.charCodeAt(id.length - 1) % 50).toISOString(), ...resto })
+const notasComImagens: Nota[] = [
+  nota({ id: 'i1', titulo: 'Recibo do táxi', corpo: 'reembolso até sexta', cor: 'amarelo', updated_at: hora(12), imagens: [imagemDev('taxi-a', 800, 600)] }),
+  nota({ id: 'i2', titulo: 'Veio do celular', corpo: 'foto do boleto', updated_at: hora(11), imagens: [imagemDev('boleto-a', 1280, 720, { estado: 'a_caminho' })] }),
+  nota({ id: 'i3', titulo: 'Quadro da reunião', corpo: 'os prazos', cor: 'roxo', updated_at: hora(10), imagens: [imagemDev('quadro-a', 1280, 720), imagemDev('quadro-b', 800, 800, { estado: 'a_caminho' })] }),
+  nota({
+    id: 'i4',
+    titulo: 'Obra da sala',
+    corpo: 'fotos do dia',
+    cor: 'verde',
+    updated_at: hora(9),
+    imagens: [imagemDev('obra-a', 1280, 720), imagemDev('obra-b', 800, 800, { estado: 'a_caminho' }), imagemDev('obra-c', 800, 800, { estado: 'a_caminho' }), imagemDev('obra-d', 800, 800)],
+  }),
+  nota({ id: 'i5', updated_at: hora(8), imagens: [imagemDev('so-a', 600, 800, { estado: 'a_caminho' })] }),
+]
+// jpegDeMentira desenha o JPEG de uma imagem presente (só aqui, no pnpm dev).
+function jpegDeMentira(id: string, largura: number, altura: number): Promise<Blob> {
+  const c = document.createElement('canvas')
+  c.width = 480
+  c.height = Math.max(1, Math.round((480 * altura) / largura))
+  const g = c.getContext('2d')!
+  const fundo = g.createLinearGradient(0, 0, c.width, c.height)
+  fundo.addColorStop(0, '#6f9bc4')
+  fundo.addColorStop(1, '#2b3a33')
+  g.fillStyle = fundo
+  g.fillRect(0, 0, c.width, c.height)
+  g.fillStyle = 'rgba(255,255,255,0.22)'
+  g.beginPath()
+  g.arc(c.width * 0.3, c.height * 0.38, c.height * 0.22, 0, Math.PI * 2)
+  g.fill()
+  g.fillStyle = 'rgba(255,255,255,0.92)'
+  g.font = '600 30px sans-serif'
+  g.textAlign = 'center'
+  g.textBaseline = 'middle'
+  g.fillText(id, c.width / 2, c.height / 2)
+  return new Promise((ok) => c.toBlob((b) => ok(b ?? new Blob([], { type: 'image/jpeg' })), 'image/jpeg', 0.8))
+}
+
 const srv = servidorFalso(ditados, {
   ...(cenario === 'busca'
     ? {
@@ -178,6 +223,7 @@ const srv = servidorFalso(ditados, {
   ...(cenario === 'notas'
     ? { notas: notasDeExemplo, marcadores: [marcador({ id: 'm1', nome: 'Compras' }), marcador({ id: 'm2', nome: 'Escritório' }), marcador({ id: 'm3', nome: 'Ideias' })] }
     : {}),
+  ...(cenario === 'notas-imagens' ? { notas: notasComImagens, marcadores: [] } : {}),
   aprendidas,
   ...(provedorDaIA ? { config: { ai_provider: provedorDaIA } } : {}),
   ...(nuvem ? { nuvem } : {}),
@@ -192,11 +238,20 @@ if (cenario === 'historico-velho') srv.agentSemRetencao()
 const formaPedida = busca.get('forma')
 if (formaPedida) localStorage.setItem('aurora.notas.forma', formaPedida)
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App sessao={Promise.resolve('tok')} buscar={srv.buscar} />
-  </StrictMode>,
-)
+const montar = () =>
+  createRoot(document.getElementById('root')!).render(
+    <StrictMode>
+      <App sessao={Promise.resolve('tok')} buscar={srv.buscar} />
+    </StrictMode>,
+  )
+
+// No cenário das imagens, os bytes das presentes são desenhados antes de a tela abrir.
+if (cenario === 'notas-imagens') {
+  const presentes = notasComImagens.flatMap((n) => (n.imagens ?? []).filter((i) => i.estado !== 'a_caminho'))
+  void Promise.all(presentes.map(async (i) => srv.bytesDasImagens.set(i.id, await jpegDeMentira(i.id, i.largura, i.altura)))).then(montar, montar)
+} else {
+  montar()
+}
 
 // Abre as Configurações sozinha (ou as Notas, nos cenários delas): o botão da
 // barra é o único com esse nome.

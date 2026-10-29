@@ -120,6 +120,14 @@ func Run(t *testing.T, b Backend) {
 		{"NotasCelular_MesclaDaListaESelo", testNotasCelularMesclaESelo},
 		{"NotasCelular_LixeiraApagarDeVezEExpurgo", testNotasCelularLixeira},
 		{"NotasCelular_MoverEMarcadores", testNotasCelularMoverEMarcadores},
+		// As imagens das notas (ADR-022, N10b; imagens.go).
+		{"Imagens_SobemEDescemSemOsBytesNoPull", testImagensSobemEDescem},
+		{"Imagens_TirarDeixaALapideQueNaoRessuscita", testImagensTirarELapide},
+		{"Imagens_LimitePorNotaELixeira", testImagensLimitesELixeira},
+		{"Imagens_SaemComANota", testImagensSaemComANota},
+		{"Imagens_RotasDoCelular", testImagensDoCelular},
+		{"Imagens_OPCDeAntesLeENaoAplica", testImagensNoPCDeAntes},
+		{"Imagens_NadaNoLog", testImagensNadaNoLog},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) { c.fn(t, newWorld(t, b)) })

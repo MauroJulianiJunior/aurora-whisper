@@ -400,7 +400,7 @@ describe('a Privacidade do celular', () => {
     await abrirConfiguracoes()
     const priv = screen.getByRole('region', { name: 'Privacidade' })
     expect(priv.textContent).toContain(
-      'Vão para a nuvem: o texto dos ditados, com a data, o PC de origem e os detalhes da transcrição, as notas, com os marcadores, e as trocas aprendidas.',
+      'Vão para a nuvem: o texto dos ditados, com a data, o PC de origem e os detalhes da transcrição, as notas, com os marcadores e as imagens, e as trocas aprendidas.',
     )
     expect(priv.textContent).toContain('Do PC nunca vão: o áudio, o que está nas outras janelas, a chave do Polish e as configurações dos PCs; a chave do PC continua no PC.')
   })

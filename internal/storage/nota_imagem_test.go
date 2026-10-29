@@ -492,20 +492,23 @@ func TestImagens_CriarNotaComImagem(t *testing.T) {
 
 // TestSchema_VarreduraVeAsColunasDa0014 prova que a varredura de nomes
 // proibidos (TestSchema_NoAudioOrContextColumns) lê as colunas da tabela das
-// imagens: cada coluna do SQLite migrado aparece como linha de coluna na 0014.
+// imagens: cada coluna do SQLite migrado aparece como linha de coluna na 0014,
+// ou na 0015 (as do sync delas, N10b).
 func TestSchema_VarreduraVeAsColunasDa0014(t *testing.T) {
 	db := openTestDB(t)
 	if err := storage.NewMigrator().Migrate(context.Background(), db); err != nil {
 		t.Fatal(err)
 	}
-	conteudo, err := os.ReadFile(filepath.Join("migrations", "0014_notas_imagens.sql"))
-	if err != nil {
-		t.Fatal(err)
-	}
 	vistas := map[string]bool{}
-	for _, linha := range strings.Split(string(conteudo), "\n") {
-		if m := linhaDeColuna.FindStringSubmatch(linha); m != nil {
-			vistas[strings.ToLower(m[1])] = true
+	for _, arquivo := range []string{"0014_notas_imagens.sql", "0015_notas_imagens_sync.sql"} {
+		conteudo, err := os.ReadFile(filepath.Join("migrations", arquivo))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, linha := range strings.Split(string(conteudo), "\n") {
+			if m := linhaDeColuna.FindStringSubmatch(linha); m != nil {
+				vistas[strings.ToLower(m[1])] = true
+			}
 		}
 	}
 	cols, err := db.Query(`SELECT name FROM pragma_table_info('local_note_images')`)
@@ -524,8 +527,8 @@ func TestSchema_VarreduraVeAsColunasDa0014(t *testing.T) {
 			t.Errorf("local_note_images.%s não é vista pela varredura de nomes proibidos", c)
 		}
 	}
-	if total != 7 {
-		t.Errorf("a tabela das imagens tem %d colunas, esperava 7", total)
+	if total != 12 {
+		t.Errorf("a tabela das imagens tem %d colunas, esperava 12 (7 da 0014 e 5 da 0015)", total)
 	}
 }
 

@@ -63,7 +63,7 @@ func TestSync_MontagemDoAgentNaoPassaDoPortao(t *testing.T) {
 		t.Fatal(err)
 	}
 	n := montarNuvem(prefs.Instalacao(), nil, pastas.ModoPortatil, logger)
-	laco := montarSync(hist, dono, n, nil, logger)
+	laco := montarSync(hist, dono, n, nil, nil, logger)
 	parar := iniciarSync(laco, logger)
 	defer parar()
 

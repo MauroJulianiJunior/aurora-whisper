@@ -41,8 +41,7 @@ export interface Nota {
   // E4). Só o celular a marca; o cartão diz "esperando a rede".
   esperando?: boolean
   // imagens: as imagens da nota (ADR-022, N10), na ordem em que foram anexadas,
-  // só os metadados. O Agent manda sempre a lista; a nuvem ainda não a manda (a
-  // segunda metade da N10), e ausente vale [].
+  // só os metadados. O Agent e a nuvem mandam sempre a lista; ausente vale [].
   imagens?: ImagemDaNota[]
 }
 
@@ -55,10 +54,18 @@ export interface ImagemDaNota {
   altura: number
   bytes: number
   created_at: string
+  // sha256: só a nuvem o manda (o celular o guarda com o resto dos metadados da
+  // nota; nunca os bytes).
+  sha256?: string
+  // estado: só o Agent o manda, e só enquanto a imagem não baixou da nuvem
+  // ("a_caminho", N10b): o painel mostra o lugar dela, e os bytes ainda não existem
+  // aqui (a leitura é 409 IMAGE_PENDING). A presente não leva a chave.
+  estado?: 'a_caminho'
 }
 
-// ClienteDeImagens é o que a aba Notas usa das imagens. Só o PC o tem nesta fase
-// (clienteLocal.ts); sem ele, a aba fica sem imagens (o ícone some, o colar e o
+// ClienteDeImagens é o que a aba Notas usa das imagens. O PC o tem em
+// clienteLocal.ts (a Local API), e o celular em nuvem/notas/notasNaNuvem.ts (a
+// /api/v1, só com rede); sem ele, a aba fica sem imagens (o ícone some, o colar e o
 // arrastar não anexam). Os erros vêm como os do api.ts: ErroDaApi com o codigo
 // (IMAGE_INVALID, IMAGE_TOO_LARGE, TOO_MANY_IMAGES, IMAGES_FULL) que o painel
 // traduz nas frases da ADR (imagens.ts).
@@ -74,9 +81,9 @@ export interface ClienteDeImagens {
   tirar(notaId: string, imagemId: string): Promise<void>
   // paraATela e soltar fazem e desfazem a URL blob: com que a imagem aparece
   // (URL.createObjectURL e revokeObjectURL). Moram no cliente, e não na tela, de
-  // propósito: o build da nuvem ainda não mostra imagem, e o bundle.test.ts prende
-  // que ele não cria URL de blob nenhum (é a garantia de que o áudio do ditado não
-  // é guardado nem tocado).
+  // propósito: o bundle.test.ts prende quais arquivos criam URL de blob (o do PC e
+  // o das imagens do celular) e que o gravador do ditado não está entre eles (é a
+  // garantia de que o áudio do ditado não é guardado nem tocado).
   paraATela(blob: Blob): string
   soltar(url: string): void
 }
