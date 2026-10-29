@@ -509,6 +509,7 @@ de janela (`schema_test.go` confere).
 | `0023` | `note_tombstones` | a lápide da nota e a do marcador (só ids) |
 | `0024` | `note_sync_events` | o log de eventos das notas e dos marcadores |
 | `0025` | `transcription_note_links` | o ditado que virou nota |
+| `0026` | `note_images` | as imagens das notas, com os bytes e a lápide na linha (N10b) |
 
 **N8 (27-out-2026; ADR-022): sem migration nova.** As escritas do celular (`06`, "As escritas do
 celular") gravam nas mesmas seis tabelas, pelo mesmo ponto único, com o `device_id` nulo nas colunas de
@@ -590,6 +591,39 @@ notas: o `seq` vem do **mesmo contador do usuário** (`user_sync_counters`), ent
 mudança só, numa das duas tabelas, e o pull junta as listas por `seq`. **Sem payload:** o pull lê o
 estado atual das entidades e as lápides. A arrumação dos 90 dias apaga só o evento órfão (cujo `seq`
 nenhuma nota nem marcador vivo guarda como `last_seq`).
+
+#### note_images (0026; ADR-022, N10b)
+A imagem da nota, **no banco** (a decisão do Mauro de 28-out-2026: entra sozinha no backup cifrado, na
+restauração e no "apagar meus dados"). Só aditiva: uma tabela nova, vazia, e o índice dela. PK `(user_id,
+id)`; `UNIQUE (user_id, last_seq)`; `(user_id, note_id)` é chave estrangeira para `notes` com **`ON DELETE
+CASCADE`** (o expurgo de 30 dias, o "Apagar para sempre", a lápide da nota e o "apagar meus dados" levam as
+imagens).
+
+| Coluna | Tipo | Notas |
+|---|---|---|
+| `id` | UUID | o UUID v7 de onde a imagem foi anexada (o PC, ou o servidor no celular), como veio |
+| `user_id` | UUID | `REFERENCES users` |
+| `note_id` | UUID | a nota |
+| `largura`, `altura` | INTEGER nulos | em pixels, `> 0`; nulos só na lápide de um id que a nuvem nunca teve |
+| `bytes` | INTEGER nulo | o tamanho da cópia guardada, `> 0`; `CHECK (octet_length(conteudo) = bytes)` |
+| `sha256` | TEXT nulo | o dos bytes guardados, `CHECK (sha256 ~ '^[0-9a-f]{64}$')` |
+| `conteudo` | BYTEA `STORAGE EXTERNAL` nulo | os bytes do JPEG, já limpos (`imagemdanota.Conferir`: sem EXIF nem outro metadado). Fora da linha e sem a tentativa de compressão (PostgreSQL 16 ou mais novo). Nulo na lápide |
+| `created_at` | TIMESTAMPTZ | a hora do anexo: a do PC (dentro da folga de 24 h para o futuro) ou a do servidor; a ordem das imagens na nota é esta, e o id desempata |
+| `removed_at` | TIMESTAMPTZ nulo | **a lápide, na própria linha**: a imagem foi tirada da nota. `CHECK ((removed_at IS NULL) = (conteudo IS NOT NULL))`, e a viva tem todos os metadados (`CHECK`) |
+| `last_seq` | BIGINT | `CHECK (last_seq > 0)`; o seq do anexo, ou o da lápide, do mesmo contador do usuário |
+
+Índice: `idx_note_images_note (user_id, note_id, created_at, id) WHERE removed_at IS NULL` (as imagens vivas
+de uma nota, e a soma do teto da conta).
+
+- **Imutável**: nasce e sai. Anexar e tirar **não** mudam a versão da nota.
+- **A lápide não vence**: sai com a nota. O PUT atrasado de um id com lápide recebe `410`, e o da imagem de
+  uma nota apagada de vez também (a lápide da nota).
+- **Os limites ficam em Go** (`internal/imagemdanota`; como na `0014` do PC): 2.000 px, 4 MB, 10 por nota, e o
+  total das imagens **vivas** da conta (as das notas da lixeira contam; as lápides não) até 400 MB.
+- **Sem tabela de eventos**: a mudança de imagem não tem aparelho de origem no pull. O pull lê as linhas com
+  `last_seq` depois do cursor (a viva é `upsert`, só os metadados; a lápide, `tombstone`), e a lista `imagens`
+  de cada nota (uma subconsulta em JSON, só as vivas, nunca os bytes).
+- **Só a rota de leitura** toca `conteudo`; nenhum log leva os bytes, o tamanho de uma imagem nem o SHA-256.
 
 #### transcription_note_links (0025)
 PK `(user_id, transcription_id)` (no máximo uma nota por ditado); `note_id UUID NOT NULL`.
@@ -875,7 +909,32 @@ existente é tirado ou recriado, e nenhuma linha muda (toda nota de hoje fica se
 - **Os limites** (`internal/imagemdanota`): só JPEG, até 4 MB e 2.000 px no lado maior; 10 por nota; o total
   das imagens da pessoa (as da lixeira contam) até `TetoDoTotal`, 400 MB.
 - **O sync não entra nesta migration** (a segunda metade da N10): nada aqui põe marcador na `sync_outbox`, e a
-  tabela não tem `server_version` nem `sync_state`.
+  tabela não tem `server_version` nem `sync_state`. (Entram na `0015`, abaixo.)
+
+#### O sync das imagens das notas no PC (ADR-022, N10b; migration `0015_notas_imagens_sync`)
+**Não destrutiva.** Só colunas, com o valor de "nada ainda": a imagem de antes fica com o arquivo aqui, a
+nuvem sem saber dela e sem tentativa, e a completação do envio (`Fila.CompletarImagens`) a põe na fila depois
+do aceite do "Enviar o histórico" e da capacidade `note_image` da nuvem.
+
+| Tabela | Coluna | O que é |
+|---|---|---|
+| `local_note_images` | `na_nuvem` INTEGER NOT NULL DEFAULT 0 | 1 quando a nuvem tem, **ou pode ter**, a imagem: veio dela, ou este PC já mandou o PUT pelo menos uma vez (gravado **antes** da rede). Decide se tirar da nota sobe o `DELETE`. Só o "Esquecer esta nuvem" volta a 0 |
+| `local_note_images` | `sync_state` TEXT NOT NULL DEFAULT `'pending'` | `pending` (a `SituacaoNormal`: o arquivo está aqui), `aguardando` (veio da nuvem e o arquivo ainda não baixou: a linha sem arquivo que a varredura respeita, e que a API local mostra com `estado: "a_caminho"`) ou `recusado` (a nuvem a recusou de vez: fica só neste PC) |
+| `local_note_images` | `last_sync_error` TEXT | o código da recusa, ou da última espera |
+| `local_note_images` | `tentativas` INTEGER NOT NULL DEFAULT 0, `tentou_em` TEXT | a espera por imagem (de 1 min a 6 h, `syncengine.EsperaDasImagens`) de uma que não subiu por um motivo que pode passar, ou que não baixou; voltam a zero quando ela sobe ou baixa |
+| `sync_outbox` | `nota_id` TEXT | a nota de um marcador `note_image`: o caminho do `DELETE` da imagem que já saiu da tabela. Nulo em todo outro marcador |
+
+- **O marcador `note_image`**: `campos = 0` é o criar (o PUT); `campos = CampoApagado` (128) é a lápide local
+  (o `DELETE`). Anexar com a nuvem conectada o põe na mesma transação; tirar põe a lápide se `na_nuvem`, senão
+  tira o marcador; a nota que sai de vez tira os das imagens dela.
+- **A imagem sobe só depois da nota** (`local_notes.server_version` não nulo) e fora da lixeira daqui; senão,
+  espera a rodada seguinte, com o marcador.
+- **A que vem da nuvem** nasce `aguardando` (com `na_nuvem = 1`), sem o arquivo; o download confere o
+  tamanho, o SHA-256 e o `Conferir`, grava o arquivo (temporário e rename) dentro da transação e só então a
+  põe `pending`. Entra mesmo acima do teto daqui (quem decide o teto é a nuvem), e o teto daqui passa a
+  contá-la.
+- **O recomeço** (o epoch novo) põe de volta na fila as que a nuvem tinha ou podia ter; o **esquecer** apaga
+  as `aguardando` e zera o resto.
 
 ### local_dictionary_entries / aliases / corrections
 Espelhos sincronizáveis.

@@ -166,6 +166,23 @@ vivo fica).
 **Estado em 26-out-2026: nada da N7 rodou contra um Postgres** (o Docker estava parado na máquina em que foi
 escrita). Os testes com Postgres compilam e pulam; a primeira execução real é a do Mauro.
 
+## As imagens das notas (ADR-022, N10b)
+
+| Arquivo | Tabela | O quê |
+|---|---|---|
+| 0026 | `note_images` | a imagem da nota, **no banco** (a decisão do Mauro: entra sozinha no backup cifrado, na restauração e no "apagar meus dados"): os bytes já limpos em `bytea` `STORAGE EXTERNAL` (fora da linha, sem a tentativa de compressão; PostgreSQL 16 ou mais novo), a largura, a altura, o tamanho, o SHA-256, a hora do anexo, o `last_seq` e a **lápide na própria linha** (`removed_at`, sem os bytes). Sai com a nota (`ON DELETE CASCADE`) |
+
+Uma tabela só, sem eventos nem lápides à parte: a imagem é imutável (nasce e sai), a lápide sai com a nota
+(e a da nota cobre o PUT atrasado de qualquer imagem dela), e a mudança de imagem não tem aparelho de origem
+no pull. Os limites (2.000 px, 4 MB, 10 por nota, 400 MB por conta) ficam em Go, como na `0014` do PC.
+
+`schema_test.go` a lê (as colunas, os `CHECK`s, a chave estrangeira com cascata, o `STORAGE EXTERNAL`, o
+índice das vivas); `internal/server/pgstore` confere o SQL das imagens contra ela
+(`TestSQL_AsConsultasDasImagens`). Com um Postgres: `TestPostgres_ImagensDasNotas` (cada `CHECK`, a chave, o
+`attstorage` `e` e a cascata) e `TestPostgres_AMigrationDasImagensAplicaSobreUmBancoComDados` (aplica as
+0001 a 0025, põe dados, roda a 0026 e prova que nada de antes mudou). **Estado em 29-out-2026: rodaram
+contra o Postgres 18 de teste** (o `scripts/postgres-de-teste.ps1`), com a suíte de contrato inteira.
+
 ## Como rodar o `migrate`
 
 É um **subcomando do binário do servidor** (escolha da F1; a ADR e o `05` dizem só "comando próprio do

@@ -529,6 +529,22 @@ rota e o status.
   Agent do PC e não existem na nuvem: no celular, a conversão de trecho é a da regra (o cliente,
   `web/src/nuvem/notas/notasNaNuvem.ts`).
 
+### As imagens das notas no celular (ADR-022, N10b)
+As mesmas rotas de imagem da API local do PC (`/api/notas/.../imagens`, abaixo), pela sessão; o token de um
+PC recebe `403`. As regras são as do sync ("As imagens das notas no sync"); os códigos, os da API local. O
+corpo de quem anexa é o JPEG já reduzido no aparelho (`Content-Type: image/jpeg`, até 4 MB); o servidor o
+confere e guarda a cópia limpa (sem EXIF nem localização).
+
+| Rota | O quê | Resposta |
+|---|---|---|
+| `POST /notes/{id}/images` | anexa no fim das imagens da nota; **o id é do servidor** (UUID v7) | `201` o `imageDTO`; `409 CONFLICT` na lixeira; `409 TOO_MANY_IMAGES`; `409 IMAGES_FULL` (a `message` é a frase da tela) |
+| `POST /notes/with-image` | a nota nova **só com a imagem** (o ícone de imagem do "Criar uma nota…"), sem título nem corpo, no topo das ativas | `201` o `noteDTO`, com `imagens` de um item |
+| `GET /notes/{id}/images/{imagem}` | os bytes (também da nota da lixeira) | `200` `image/jpeg`, **`Cache-Control: no-store`** (o celular nunca guarda a imagem); `404` |
+| `DELETE /notes/{id}/images/{imagem}` | tira da nota, de vez (também na lixeira) | `204`, idempotente; `404` só sem a nota |
+
+O `noteDTO` (`GET /notes`, `GET /notes/{id}` e as respostas das escritas) traz `imagens` (acima). O log de
+acesso leva o padrão da rota e o status; a leitura dos bytes não leva nem o tamanho da resposta.
+
 ## As chaves da IA (ADR-021, C3a)
 Para ditar pelo celular, a pessoa cola no app a chave de API do provedor de IA **dela** (BYOK; a chave
 do PC continua só no PC). O servidor testa a chave no provedor, a guarda **só cifrada** (a
@@ -1340,10 +1356,11 @@ tipos que a nuvem sincroniza, sempre presente:
 ```json
 {
   "changes": [], "last_seq": 124, "has_more": false, "sync_epoch": "uuid",
-  "entidades": ["transcription", "learned", "note", "label"]
+  "entidades": ["transcription", "learned", "note", "label", "note_image"]
 }
 ```
-O PC só manda nota, marcador e o `virou_nota` do ditado depois de ver `note` ali (conferido na primeira
+(`note_image` desde a N10b: "As imagens das notas no sync", abaixo.) O PC só manda nota, marcador e o
+`virou_nota` do ditado depois de ver `note` ali (conferido na primeira
 página de cada pull). Na **primeira vez** que vê, o PC zera o cursor e lê tudo de novo uma vez. Se a nuvem
 deixa de dizer `note`, o PC para de mandar notas. O PC antigo ignora a chave.
 
@@ -1352,6 +1369,56 @@ resposta do push e cada página do pull numa transação só (`Fila.AplicarTudo`
 
 **Log.** O servidor registra, do push e do pull, só as contagens de sempre (`mutacoes`, `mudancas`), que
 agora incluem notas e marcadores; nunca título, corpo, nome de marcador nem id. Ver `11-observability.md`.
+
+### As imagens das notas no sync (ADR-022, N10b)
+Fonte: `internal/server/imagens_routes.go`, `internal/server/cloudstore/imagens.go` (as regras, puras),
+`internal/sync/motor_imagens.go` e `internal/sync/decisao_imagem.go` (o PC). A imagem é a entidade
+`note_image`, **imutável** (nasce e sai); anexar e tirar **não** sobem a versão da nota. **Os bytes nunca vão
+no push nem no pull**: o push recusa `note_image` (`tipo_desconhecido`), e o PC usa três rotas próprias, só
+com o token de um aparelho (a sessão recebe `403`):
+
+| Rota | O quê | Resposta |
+|---|---|---|
+| `PUT /sync/notes/{id}/images/{imagem}` | sobe a imagem que o PC anexou: o JPEG cru (`Content-Type: image/jpeg`), `Imagem-SHA256` (obrigatório: o SHA-256 da cópia que o PC guardou) e `Imagem-Criada-Em` (opcional, RFC 3339: a hora do anexo no PC) | `201` a imagem nova; `200` a mesma de novo |
+| `GET /sync/notes/{id}/images/{imagem}` | os bytes da imagem viva (também da nota da lixeira) | `200` `image/jpeg`, `Cache-Control: no-store`; `404` |
+| `DELETE /sync/notes/{id}/images/{imagem}` | tira da nota (também na lixeira) | `204`, idempotente; `404` só sem a nota |
+
+A imagem no JSON (o `imageDTO`; a resposta do `PUT`, o payload da mudança e o item da lista `imagens` da
+nota), só os metadados:
+```json
+{ "id": "uuid v7", "note_id": "uuid", "largura": 1600, "altura": 1200, "bytes": 412873,
+  "sha256": "64 dígitos hexadecimais", "created_at": "..." }
+```
+
+- **O PUT é idempotente.** O mesmo id com os mesmos bytes é `200` com o que está gravado, sem gastar seq, e é
+  respondido **antes de ler o corpo** quando o `Imagem-SHA256` já bate. O servidor passa os bytes pelo mesmo
+  `imagemdanota.Conferir` do Agent antes de abrir a transação e guarda a cópia limpa; o `Imagem-SHA256` tem
+  de ser o dela.
+- **A lápide fica na linha** (`note_images.removed_at`): o PUT de um id tirado é `410 IMAGE_GONE`, e o da
+  imagem de uma nota apagada de vez também. O `DELETE` de um id que a nuvem nunca teve, numa nota que
+  existe, grava a lápide do mesmo jeito (o PUT que ainda estava na rede recebe `410` depois).
+- **Os limites:** a nota que não existe é `404`; na lixeira, `409 CONFLICT`; com 10, `409 TOO_MANY_IMAGES`;
+  acima do teto da conta (400 MB, contando as imagens vivas de todas as notas, as da lixeira também), `409
+  IMAGES_FULL`. O corpo tem o teto de 4 MB (`413 IMAGE_TOO_LARGE`) **só nestas rotas** (as de JSON continuam
+  em 1 MiB) e 2 min para chegar. A hora do PC além da folga de 24 h para o futuro vira a de agora.
+- **Erros do PUT** (com os da API local, abaixo): `400 VALIDATION` (o `Imagem-SHA256` que falta, ou a data que
+  não se lê), `415 IMAGE_INVALID` (o `Content-Type`), `400 IMAGE_INVALID`, `400 IMAGE_SHA_MISMATCH`, `409
+  IMAGE_CONFLICT` (o id já é de outros bytes, ou de outra nota), `410 IMAGE_GONE`.
+
+**Pull: `note_image`.** A mudança da imagem viva é `upsert` com o `imageDTO` (`entity_version` 1, `device_id`
+nulo: a imagem não tem evento de origem); a da imagem tirada é `tombstone`, sem payload. E o `noteDTO` ganha
+**`imagens`**: sempre um array, na ordem da nota (`created_at`, e o id no empate), com o `imageDTO` das vivas.
+Um PC de antes da N10b ignora a chave e lê a mudança `note_image` como um item que não é dele ("não
+aplicado"; o cursor anda). A imagem não conta no orçamento de texto da página.
+
+**A capacidade:** `entidades` passa a ser `["transcription", "learned", "note", "label", "note_image"]`. O PC
+só sobe e baixa imagem depois de ver `note_image`, e na primeira vez lê tudo de novo uma vez (o cursor volta
+a 0): as notas voltam com a lista `imagens`, e a imagem que um Agent de antes passou sem gravar chega.
+
+**No PC:** a fase das imagens vem depois do push (a nota criada no lote já tem a versão da nuvem) e antes do
+pull; o download, depois do pull. A imagem cuja nota a nuvem ainda não tem, ou que está na lixeira daqui,
+espera a rodada seguinte. Uma imagem que não sobe ou não baixa espera a vez dela (de 1 min a 6 h, por
+imagem) e **não falha a rodada**; só o `401` a derruba. Detalhes na ADR-022, "Decisões da N10b".
 
 ## Ditar pelo celular (ADR-021, C5b; a antiga "ASR cloud")
 O ditado do celular é a única forma de áudio chegar à nuvem: o app manda a voz, o servidor a repassa ao
@@ -1940,7 +2007,8 @@ marcador; `ditado_de_origem` e `deleted_at` só aparecem quando há. **`conflito
 nota tem o selo:** o título e o corpo que perderam um conflito de conteúdo na nuvem, guardados até a
 pessoa escolher (`device_id` é `null` quando o aparelho saiu da conta). **`imagens` (N10) é sempre uma
 lista** (`[]` sem imagem), na ordem em que foram anexadas, só com os metadados (`bytes` é o tamanho do
-arquivo); os bytes vêm por `GET /api/notas/{id}/imagens/{imagem}` (abaixo, "Imagens das notas"). O
+arquivo); os bytes vêm por `GET /api/notas/{id}/imagens/{imagem}` (abaixo, "Imagens das notas"). A imagem
+que veio da nuvem e ainda não baixou traz `"estado": "a_caminho"` (N10b). O
 marcador: `{"id", "nome", "created_at", "updated_at", "version"}`.
 
 #### GET `/api/notas`
@@ -2107,7 +2175,7 @@ e `internal/resolver/notas_lista.go`.
 - O log leva só `como`, o motivo (o enum: `palavras`, `numeros`, `um_item`, `prazo`...) e a versão do
   prompt; nunca o trecho nem a resposta.
 
-#### Imagens das notas (ADR-022, N10, a primeira metade: o PC)
+#### Imagens das notas (ADR-022, N10: o PC, e o sync da N10b)
 Fonte: `internal/agent/localapi/notas_imagens.go`, `internal/storage/nota_imagem.go` e
 `internal/imagemdanota`. Atrás da mesma cadeia das outras rotas (Host, Origin e o token): o painel lê a
 imagem por `fetch` com o token e a mostra por uma URL `blob:` (a CSP do painel tem `img-src 'self' data:
@@ -2128,11 +2196,18 @@ recomprimir. Os bytes ficam em `<dados>\notas-imagens\<id>.jpg`, fora do banco (
 
 **POST `/api/notas/com-imagem`**: a nota nova **só com a imagem** (o ícone de imagem do "Criar uma
 nota…"), sem título nem corpo, no topo das outras. `201` com a nota (`version` 1, uma imagem). A nota
-nasce na fila do sync como qualquer nota nova; a imagem, não (a segunda metade da N10).
+nasce na fila do sync como qualquer nota nova; a imagem também (desde a N10b, com a nuvem conectada: ela
+sobe depois da nota).
 
 **GET `/api/notas/{id}/imagens/{imagem}`**: os bytes. `200` com `Content-Type: image/jpeg`,
 `X-Content-Type-Options: nosniff`, `Cache-Control: no-store` e `Content-Length`. Vale também para a nota
 da lixeira. O Agent confere o tamanho e o SHA-256 do arquivo contra a linha a cada leitura.
+
+**A imagem a caminho (N10b).** A imagem que veio da nuvem (anexada no celular ou em outro PC) entra na nota
+antes de o arquivo baixar: o item de `imagens` traz **`"estado": "a_caminho"`** (com a largura, a altura e o
+tamanho de verdade; a imagem presente não leva a chave), e o `GET` dos bytes dela é **`409 IMAGE_PENDING`**,
+não um `404`. O painel mostra o lugar da imagem e relê a nota quando o contador de mudanças do sync sobe (o
+download conta como mudança). Tirar a imagem a caminho vale como qualquer outra.
 
 **DELETE `/api/notas/{id}/imagens/{imagem}`**: tira a imagem da nota **de vez** (a linha e o arquivo).
 `204`. O Desfazer é do painel: ele só manda o `DELETE` quando o aviso "Imagem tirada da nota." sai sem
@@ -2149,6 +2224,7 @@ Erros, com código estável (o painel os traduz nas frases da ADR):
 | `409` | `IMAGES_FULL` | o total das imagens da pessoa passaria do teto (400 MB, `imagemdanota.TetoDoTotal`); a `message` é a frase da tela, com o número |
 | `409` | `CONFLICT` | anexar numa nota da lixeira |
 | `404` | `NOT_FOUND` | a nota ou a imagem não existe, é de outra nota ou de outro dono, ou o arquivo sumiu |
+| `409` | `IMAGE_PENDING` | ler os bytes de uma imagem que veio da nuvem e ainda não baixou (N10b) |
 | `500` | `INTERNAL` | o arquivo não confere com a linha (tamanho ou SHA-256) |
 
 A imagem segue a nota: vai e volta da lixeira com ela; o expurgo de 30 dias e o "Apagar para sempre"
