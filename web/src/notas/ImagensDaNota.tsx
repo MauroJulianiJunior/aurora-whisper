@@ -256,19 +256,19 @@ export function ImagemGrande({ notaId, imagens, indice, titulo, aoMudar, aoFecha
           {titulo && ` · ${titulo}`}
         </span>
         {url ? (
-          <a className="botao-luz" href={url} download={`nota-imagem-${atual}.jpg`}>
+          <a className="botao-luz" href={url} download={`nota-imagem-${atual}.jpg`} title="Baixar">
             <Icone nome="baixar" />
-            Baixar
+            <span className="rotulo-luz">Baixar</span>
           </a>
         ) : (
-          <button type="button" className="botao-luz" disabled>
+          <button type="button" className="botao-luz" disabled title="Baixar">
             <Icone nome="baixar" />
-            Baixar
+            <span className="rotulo-luz">Baixar</span>
           </button>
         )}
-        <button type="button" className="botao-luz" onClick={() => aoTirar(imagem)}>
+        <button type="button" className="botao-luz" title="Tirar da nota" onClick={() => aoTirar(imagem)}>
           <Icone nome="lixeira" />
-          Tirar da nota
+          <span className="rotulo-luz">Tirar da nota</span>
         </button>
         <button ref={fechar} type="button" className="botao-luz" aria-label="Fechar a imagem" title="Fechar (Esc)" onClick={aoFechar}>
           <Icone nome="fechar" />

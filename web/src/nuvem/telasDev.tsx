@@ -35,7 +35,14 @@
 //
 // As notas no celular (ADR-022, N8), com as notas de mentira (notas/notasFalsas.ts):
 //   notas            a aba Notas, com uma nota curta no alto da coluna da esquerda
-//                    (abrir uma nota e a Cor: a paleta tem de caber na tela).
+//                    (abrir uma nota e a Cor: a paleta tem de caber na tela). Desde a
+//                    N10b, com imagens: uma, duas, cinco e uma nota só com imagem (os
+//                    bytes são JPEGs que o canvas desenha na hora; o Imagem na barra da
+//                    nota abre o menu da câmera e da galeria, que escolhem arquivos de
+//                    verdade e sobem para a nuvem de mentira, em memória).
+//   notas-sem-rede   a mesma aba aberta sem rede, com as notas guardadas no aparelho:
+//                    a faixa "Sem rede", as imagens como "Imagem sem rede" e o ícone de
+//                    imagem apagado (cena 6 da prévia da N10).
 //
 // Claro e escuro seguem o sistema do navegador (no DevTools: Rendering,
 // "prefers-color-scheme"); 320 e 375 px, no modo de dispositivo.
@@ -49,7 +56,8 @@ import { plataformaFalsa } from './ditar/plataformaFalsa'
 import { type OpcoesDaNuvem, aprendido, itemNuvem, servidorFalsoNuvem } from '../testes/servidorFalsoNuvem'
 import AppNuvem from './AppNuvem'
 import { armazemNaMemoria } from './notas/armazem'
-import { juntar, notaDaNuvem, notasFalsasNaNuvem } from './notas/notasFalsas'
+import { daNuvem, type ImagemDaNuvem } from './notas/formato'
+import { imagemFalsa, juntar, notaDaNuvem, notasFalsasNaNuvem } from './notas/notasFalsas'
 
 const busca = new URLSearchParams(window.location.search)
 const cenario = busca.get('cenario') ?? 'lista'
@@ -118,21 +126,81 @@ const microfone = plataformaFalsa()
 // No "enviando", o servidor nunca responde ao ditado.
 const buscarDoHistorico: typeof srv.buscar = (entrada, init) =>
   cenario === 'enviando' && entrada === '/api/v1/dictations' ? new Promise(() => {}) : srv.buscar(entrada, init)
-const notas =
-  cenario === 'notas'
-    ? notasFalsasNaNuvem([
-        notaDaNuvem({ id: 'n1', titulo: 'recibos de outubro', posicao: 'U' }),
-        notaDaNuvem({ id: 'n2', titulo: 'Teste N8', corpo: 'primeira versão\nAdivinhado pelo celular', posicao: 'V' }),
-        notaDaNuvem({ id: 'n3', titulo: 'Mercado N8', corpo: '- [ ] Arroz\n- [ ] Feijão\n- [ ] Leite\n- [ ] Pão', posicao: 'W' }),
-        notaDaNuvem({ id: 'n4', titulo: 'mais um', corpo: '- [ ] Leite\n- [ ] Pão\n- [ ] Café', cor: 'verde', posicao: 'X' }),
-      ])
-    : undefined
-const buscar = notas ? juntar(notas, buscarDoHistorico) : buscarDoHistorico
-const armazem = armazemNaMemoria()
+// Os JPEGs de mentira das notas com imagem: um degradê com o id, desenhado no canvas
+// na hora (só aqui, no pnpm dev). Sem canvas (o jsdom), os bytes mínimos de um JPEG.
+const PALETA_DAS_IMAGENS = ['#7fae93', '#d29a5c', '#6f9bc4', '#c27a96', '#9d92c4', '#b8b36a']
+const jpegVazio = () => new Blob([new Uint8Array([0xff, 0xd8, 0xff, 0xd9])], { type: 'image/jpeg' })
+function jpegDeMentira(im: ImagemDaNuvem): Promise<Blob> {
+  try {
+    const c = document.createElement('canvas')
+    c.width = 480
+    c.height = Math.max(1, Math.round((480 * im.altura) / im.largura))
+    const g = c.getContext('2d')
+    if (!g) return Promise.resolve(jpegVazio())
+    const cor = PALETA_DAS_IMAGENS[im.id.split('').reduce((a, ch) => a + ch.charCodeAt(0), 0) % PALETA_DAS_IMAGENS.length]!
+    const fundo = g.createLinearGradient(0, 0, c.width, c.height)
+    fundo.addColorStop(0, cor)
+    fundo.addColorStop(1, '#2b3a33')
+    g.fillStyle = fundo
+    g.fillRect(0, 0, c.width, c.height)
+    // Duas formas e o id no meio: a imagem fica reconhecível em qualquer recorte (cover).
+    g.fillStyle = 'rgba(255,255,255,0.22)'
+    g.beginPath()
+    g.arc(c.width * 0.3, c.height * 0.38, c.height * 0.22, 0, Math.PI * 2)
+    g.fill()
+    g.fillRect(c.width * 0.5, c.height * 0.55, c.width * 0.36, c.height * 0.2)
+    g.fillStyle = 'rgba(255,255,255,0.92)'
+    g.font = '600 30px sans-serif'
+    g.textAlign = 'center'
+    g.textBaseline = 'middle'
+    g.fillText(im.id, c.width / 2, c.height / 2)
+    return new Promise((ok) => c.toBlob((b) => ok(b ?? jpegVazio()), 'image/jpeg', 0.8))
+  } catch {
+    return Promise.resolve(jpegVazio())
+  }
+}
+
+const notasDoCenario = [
+  notaDaNuvem({ id: 'n1', titulo: 'recibos de outubro', posicao: 'U', imagens: [imagemFalsa({ id: 'recibo', largura: 800, altura: 600 })] }),
+  notaDaNuvem({
+    id: 'n2',
+    titulo: 'Teste N8',
+    corpo: 'primeira versão\nAdivinhado pelo celular',
+    posicao: 'V',
+    imagens: [imagemFalsa({ id: 'duas-a', largura: 800, altura: 600 }), imagemFalsa({ id: 'duas-b', largura: 600, altura: 800, created_at: '2026-10-27T10:01:00Z' })],
+  }),
+  notaDaNuvem({
+    id: 'n3',
+    titulo: 'Mercado N8',
+    corpo: '- [ ] Arroz\n- [ ] Feijão\n- [ ] Leite\n- [ ] Pão',
+    posicao: 'W',
+    imagens: ['a', 'b', 'c', 'd', 'e'].map((x, i) =>
+      imagemFalsa({ id: `cinco-${x}`, largura: i === 0 ? 1280 : 800, altura: i === 0 ? 720 : 800, created_at: `2026-10-27T10:0${i}:00Z` }),
+    ),
+  }),
+  notaDaNuvem({ id: 'n4', titulo: 'mais um', corpo: '- [ ] Leite\n- [ ] Pão\n- [ ] Café', cor: 'verde', posicao: 'X' }),
+  notaDaNuvem({ id: 'n5', posicao: 'Y', cor: 'azul', imagens: [imagemFalsa({ id: 'so-imagem', largura: 600, altura: 800 })] }),
+]
+const comNotas = cenario === 'notas' || cenario === 'notas-sem-rede'
+const semRedeDeMentira = cenario === 'notas-sem-rede'
+const notas = comNotas ? notasFalsasNaNuvem(notasDoCenario, { bytesDaImagem: jpegDeMentira }) : undefined
+// Sem rede: nenhum pedido chega, e o app abre nas notas guardadas no aparelho.
+const buscar = notas
+  ? semRedeDeMentira
+    ? () => Promise.reject(new TypeError('Failed to fetch'))
+    : juntar(notas, buscarDoHistorico)
+  : buscarDoHistorico
+const armazem = armazemNaMemoria(semRedeDeMentira ? { notas: notasDoCenario.map(daNuvem) } : {})
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <AppNuvem buscar={buscar} irPara={() => {}} plataformaDeDitar={microfone.plataforma} armazemDasNotas={notas ? () => armazem : undefined} />
+    <AppNuvem
+      buscar={buscar}
+      irPara={() => {}}
+      plataformaDeDitar={microfone.plataforma}
+      armazemDasNotas={notas ? () => armazem : undefined}
+      contaGuardada={semRedeDeMentira ? async () => ({ id: 'u1', email: 'mauro@exemplo.test' }) : undefined}
+    />
   </StrictMode>,
 )
 
@@ -169,7 +237,7 @@ if (ditar) {
   // O primeiro toque no microfone de uma conta sem aceite: a folha, e o
   // microfone fechado.
   quandoHouver('Ditar', (mic) => mic.click())
-} else if (cenario === 'notas') {
+} else if (comNotas) {
   quandoHouver('Notas', (b) => b.click())
 } else if (busca.get('config') !== '0' && cenario !== 'entrar') {
   // Abre as Configurações sozinha: o botão da barra é o único com esse nome.
