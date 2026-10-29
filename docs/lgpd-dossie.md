@@ -24,6 +24,18 @@ PC. As notas sobem pelo mesmo consentimento do "Enviar o histórico". Na instân
 estão no ar desde 27-out-2026 (N8), **antes desta revisão**; o Mauro decidiu as decisões 10 e 11
 (seção 7) em 28-out-2026.
 
+**Atualizado em 29-out-2026 com as imagens das notas (ADR-022, fase N10).** A pessoa pode anexar a uma
+nota uma foto ou uma imagem, do PC ou do celular. É um **dado novo** na nuvem, e de outra natureza: uma
+foto pode mostrar um documento, um rosto, uma tela, e **a nuvem não separa nem lê o que há nela**. A
+finalidade é a mesma (mostrar nos aparelhos da pessoa) e **ninguém novo recebe a imagem**: ela **não vai a
+nenhuma IA** (nem à transcrição, nem ao Polish), não entra na busca e não vai ao "Copiar para WhatsApp".
+O que sobe é só a **cópia reduzida e sem metadado** que o aparelho faz (2.000 px, JPEG; a localização e o
+resto do EXIF saem antes de ela deixar o aparelho); **o original nunca sai dele**. As imagens sobem pelo
+mesmo consentimento das notas ("Enviar o histórico"), ficam no banco, legíveis para quem administra o
+servidor, entram no backup cifrado e seguem a nota até o fim (a lixeira de 30 dias, "Apagar para sempre",
+"Apagar meus dados"). O **celular não guarda a imagem**: só a mostra, na memória da página; sem rede, diz
+"Imagem sem rede". A decisão 12 (seção 7) é do responsável.
+
 **Por que isto existe.** Até aqui o que se dita ficava só no PC. Com a nuvem, o texto passa a morar,
 **legível**, num servidor, e uma cópia cifrada vai para um backup. **Com o ditado no celular, a voz
 também sai: ela passa pela memória do servidor e vai, legível, a um provedor de transcrição que a pessoa
@@ -62,6 +74,10 @@ cada ditado novo sobe sozinho; o histórico antigo só sobe depois do clique em 
   com o aceite do "Enviar o histórico" (as da lixeira, não); a criada ou mudada com o PC conectado sobe na
   hora. **Com o Polish ligado, a separação em itens (N5)** manda ao provedor do Polish, a partir do PC, a
   linha que a pessoa escolheu, e só ela.
+- **As imagens das notas (ADR-022, N10):** a cópia que o aparelho reduziu (JPEG de até 2.000 px de lado e
+  4 MB, sem metadado), o tamanho em pixels e em bytes, o SHA-256 e a hora. Sobem com o aceite do "Enviar
+  o histórico", junto com a nota deles; a anexada com o PC conectado sobe na hora. **O original e o
+  nome do arquivo nunca saem.** Nunca vão à IA, à busca nem ao "Copiar para WhatsApp".
 - **Nunca sai:** áudio; o que está em outras janelas (programa, título, texto de perto); a chave do
   Polish; logs; preferências; o mapa de domínios; a nota em foco (o aviso do painel ao Agent, só em
   memória); o `nova:<token>` da caixa "Criar uma nota".
@@ -78,7 +94,9 @@ cada ditado novo sobe sozinho; o histórico antigo só sobe depois do clique em 
 **As notas no celular (ADR-022, N8).** O app lê e escreve as notas pela sessão: o que a pessoa cria ou
 muda vai à nuvem como iria de um PC. O "Ditar para nota" e o microfone dentro da nota mandam a voz pelo
 caminho de cima (o mesmo aceite, o mesmo provedor); o texto vai para a nota, e o ditado fica na nuvem
-ligado a ela, fora do histórico, com os 6 meses de todo ditado.
+ligado a ela, fora do histórico, com os 6 meses de todo ditado. **As imagens das notas (N10b):** o celular
+tira a foto (ou escolhe da galeria), a reduz no aparelho e a sobe pela sessão; ele só anexa com rede. Lê a
+imagem por `fetch` com a sessão e a mostra por uma URL `blob:` que só existe na memória da página.
 
 - **Nunca sai do celular:** nada além do que está acima. O app não grava a voz em lugar nenhum. Não
   enxerga outras janelas. A chave **do PC** não vai (a pessoa cola outra no app, de propósito). O
@@ -92,12 +110,12 @@ ligado a ela, fora do histórico, com os 6 meses de todo ditado.
 | Lugar | O que tem | Quem lê |
 |---|---|---|
 | PC | tudo, em `historico.db` e `dicionario.json`, sem cifra própria | quem entrar na conta do Windows (no instalado, a pasta é só do dono, do SYSTEM e dos Administradores) |
-| Servidor (Postgres na VPS) | ditados **legíveis**, **notas e marcadores legíveis**, aprendido, cadastro; sessões e aparelhos só como HMAC. **Ditado no celular:** a **chave da pessoa cifrada**, o aceite e as preferências | **quem administra a VPS lê o texto**; cifra ponta a ponta fica para depois |
+| Servidor (Postgres na VPS) | ditados **legíveis**, **notas e marcadores legíveis**, **as imagens das notas (a cópia reduzida, sem metadado, em `note_images`)**, aprendido, cadastro; sessões e aparelhos só como HMAC. **Ditado no celular:** a **chave da pessoa cifrada**, o aceite e as preferências | **quem administra a VPS lê o texto**; cifra ponta a ponta fica para depois |
 | Servidor (memória da API) | **ditado no celular:** a **voz**, durante o pedido; o texto que seria gravado, 10 min, se a gravação falhar | quem administra a VPS (a voz passa pela memória do processo, e o arquivo da chave de cifra está no mesmo servidor) |
 | Servidor de entrada (o proxy) | o endereço pedido e o IP, de passagem; **ditado no celular: a voz passa por ele** (termina o https) e ele pode segurar pedaços na memória dele | quem administra o proxy (o mesmo servidor, na instância de referência) |
 | Provedor de transcrição | **ditado no celular:** a voz e, com a dica, os termos; o que ele retém, pela documentação dele (Anexo B) | o provedor, pelo contrato da conta da pessoa |
 | Backup no B2 | o banco cifrado com `age` (inclui as chaves da pessoa, já cifradas pela chave de cifra do servidor) | só quem tem a chave privada (a do responsável); o B2 vê o arquivo, o nome com data e hora, o tamanho |
-| Celular | nada do histórico (só na memória da página); a casca do app e o cookie. **Notas (N8):** num IndexedDB por conta, a última lista que a nuvem deu (título e corpo), os marcadores (o nome) e a fila das mudanças feitas sem rede; num banco à parte, o id, o e-mail e o nome da última conta que abriu o app. O Sair e o "Apagar meus dados" os apagam; a sessão que vence, não. **Ditado no celular:** a voz, numa variável de memória, até o envio dar certo ou a pessoa descartar | a pessoa, e quem pegar o aparelho desbloqueado |
+| Celular | nada do histórico (só na memória da página); a casca do app e o cookie. **Notas (N8):** num IndexedDB por conta, a última lista que a nuvem deu (título e corpo), os marcadores (o nome) e a fila das mudanças feitas sem rede; num banco à parte, o id, o e-mail e o nome da última conta que abriu o app. O Sair e o "Apagar meus dados" os apagam; a sessão que vence, não. **Imagens das notas (N10b): só os metadados** (id, tamanho, SHA-256), **nunca os pixels**: a imagem fica numa URL `blob:` na memória da aba, solta ao sair; nada de IndexedDB, Cache API nem service worker, e o `GET` responde `no-store`. **Ditado no celular:** a voz, numa variável de memória, até o envio dar certo ou a pessoa descartar | a pessoa, e quem pegar o aparelho desbloqueado |
 
 ## 3. Prazos
 
@@ -110,6 +128,7 @@ ligado a ela, fora do histórico, com os 6 meses de todo ditado.
 | **Notas e marcadores** | **até a pessoa apagar**: sem os 6 meses (ADR-022, decisão do Mauro: nota é o que a pessoa guardou de propósito) |
 | Lixeira das notas | **30 dias**, no PC e, desde a N8, na nuvem (o job de hora em hora) |
 | Nota ou marcador apagado de vez | sai na hora; fica uma **lápide só com o id** (`note_tombstones`), **sem prazo**, para um PC parado não ressuscitar a nota; só o "Apagar meus dados" a tira |
+| **Imagens das notas** | **a vida da nota**: sem os 6 meses. A lixeira de 30 dias, o "Apagar para sempre" e o "Apagar meus dados" as levam junto; "Tirar da nota" a apaga de vez depois do Desfazer. O backup as guarda como guarda o banco (30 dias). Teto de 400 MB por conta e 10 por nota |
 | Eventos do sync das notas (`note_sync_events`, só ids) | o órfão sai em 90 dias, como o do ditado |
 | Ditado que virou nota | **os 6 meses de todo ditado**: na nuvem (a ligação sai junto) e, desde 28-out-2026, no PC (quando a pessoa os liga); a nota fica (seção 7, decisão 11) |
 | Notas no celular (IndexedDB) | até o Sair ou o "Apagar meus dados" naquele aparelho; o navegador pode apagar antes, sob falta de espaço (o app não pede armazenamento persistente) |
@@ -162,7 +181,7 @@ proxy de terceiro (ele leria o texto e a voz): o domínio da nuvem aponta direto
 |---|---|
 | Confirmar e acessar (I, II) | o app da nuvem ou o painel do PC: lista, busca, **notas**, aparelhos, sessões, aprendido. Pedido fora do app: declaração em até 15 dias (art. 19, II) |
 | Corrigir (III) | editar o texto final; editar a nota |
-| Eliminar (IV, VI) | lixeira; **Excluir definitivamente** (só de ditado ou nota já na lixeira); **Apagar meus dados da nuvem** (digitar "apagar": ditados, lápides, aprendido, aparelhos e outras sessões, **as notas, os marcadores, as lápides e os eventos deles e as notas guardadas no celular em que se clicou**, e, no ditado do celular, o aceite, as preferências e as chaves; os PCs ficam com a cópia; o backup guarda até girar) |
+| Eliminar (IV, VI) | lixeira; **Excluir definitivamente** (só de ditado ou nota já na lixeira); **Apagar meus dados da nuvem** (digitar "apagar": ditados, lápides, aprendido, aparelhos e outras sessões, **as notas, as imagens delas, os marcadores, as lápides e os eventos deles e as notas guardadas no celular em que se clicou**, e, no ditado do celular, o aceite, as preferências e as chaves; os PCs ficam com a cópia; o backup guarda até girar) |
 | Revogar (IX) | Desconectar (revoga o PC na nuvem), revogar um aparelho, encerrar uma sessão, Sair. **Ditado no celular:** "Desligar o ditado no celular" revoga o aceite e apaga as chaves (art. 8º, §5º: o tratamento já feito com o aceite fica ratificado enquanto não houver pedido de eliminação) |
 | Cópia e portabilidade (V; art. 19, §3º) | o PC já tem tudo em `historico.db`. **Não há botão de exportar na nuvem** |
 | Saber com quem compartilhamos (VII) | a seção 4 e a tabela da política, seção 6 (**no ditado do celular, inclui o provedor escolhido e o do Polish**). Eliminar o que o provedor guardou da voz não é com a nuvem: o pedido vai ao provedor, pela conta da pessoa |
@@ -175,7 +194,8 @@ apaga de novo; o que os 6 meses já venceram, a nuvem apaga antes de abrir a por
 nuvem depois do backup pode se perder. Todas as sessões e todos os PCs são desligados, e cada PC
 conecta de novo. Pode aparecer um "selo" (duas versões do mesmo ditado; a pessoa escolhe). **Notas:** a
 nota apagada de vez depois do último backup também volta, e **sem o limite dos 6 meses** (a nota não
-vence); a pessoa a apaga de novo. **Ditado no
+vence); a pessoa a apaga de novo. **A imagem tirada da nota** depois do último backup também pode
+voltar nela, e a pessoa a tira de novo. **Ditado no
 celular:** o aceite, as preferências e as chaves voltam como estavam no backup; restaurado **sem** a
 mesma chave de cifra, cada chave vira `SEM_CHAVE`, a tela pede para colar de novo e o servidor não dá
 erro `500`.
@@ -183,7 +203,7 @@ erro `500`.
 **Alcance de uma invasão.** Se a nuvem divide a VPS com outros serviços expostos à internet (como na
 instância de referência, com outros sites atrás do mesmo Traefik), quem tomar um deles e chegar à raiz
 do Docker alcança o volume do Postgres e os arquivos de segredo, e leva os ditados dos últimos 6 meses
-e da lixeira, **todas as notas (que não vencem) e os marcadores**, o aprendido, o e-mail, o identificador
+e da lixeira, **todas as notas (que não vencem), as imagens delas e os marcadores**, o aprendido, o e-mail, o identificador
 e o nome. Sem chegar à raiz, quem divide a rede do
 proxy já alcança a porta da API direto (sem o Traefik): o login, as sessões e os tokens valem igual,
 mas ele pode driblar o limite de tentativas por IP. Não leva áudio do PC, contexto de janela nem os backups: eles são
@@ -266,6 +286,14 @@ está.
    28-out-2026: (a)** ("Segue os 6 meses"). Feito em `internal/storage/seis_meses_sqlite.go`; a pergunta
    dos 6 meses conta esses ditados à parte ("N deles viraram nota: saem os ditados, e as notas ficam."),
    porque o histórico não os mostra.
+12. **Imagens das notas: dado de terceiros na foto, e o aviso.** A imagem sobe pelo aceite do "Enviar o
+   histórico", dado antes de ela existir, e traz uma coisa que o texto não trazia: a foto pode mostrar um
+   documento, um rosto ou uma tela de cliente, e a nuvem não separa nem lê isso (a política, seções 3, 9 e
+   10, diz). Duas perguntas ao responsável: **(a)** o aviso a quem já usava a nuvem, como na decisão 10
+   (na instância de referência, só o Mauro usa a nuvem: o mesmo raciocínio vale, e isso vai para a seção
+   13 da cópia preenchida da política); **(b)** se o teto de 400 MB por conta e a retenção "a vida da
+   nota" servem, ou se ele quer um prazo para a imagem da nota arquivada. **Sugestão:** manter como está
+   (a imagem segue a nota). **[A PREENCHER]**
 
 Já aceitos no projeto (D3 da ADR-019) e descritos na política: o aprendido desfeito na nuvem e no
 backup; as cópias do banco no PC; o Polish fora da nuvem (no PC). Na instância de referência, a revisão
@@ -275,6 +303,11 @@ Já decididos com as notas (ADR-022) e descritos na política: a nota sem os 6 m
 notas guardadas no celular, para a lista abrir sem sinal (a E4, decisão do Mauro: "Marcar sem rede"); a
 lápide da nota sem prazo, só com o id (N7); a separação em itens com o Polish, só no PC e só com o Polish
 ligado (N5).
+
+Já decididos com as imagens das notas (ADR-022, N10) e descritos na política: a imagem no banco da nuvem,
+sob a mesma permissão das notas (decisão do Mauro, 28-out-2026); a redução e a limpeza de metadado no
+aparelho, antes de subir; o original que nunca sai; o celular que não guarda a imagem (decisão do Mauro:
+"Imagem sem rede"); o teto de 400 MB por conta.
 
 ---
 
@@ -324,6 +357,9 @@ entra aqui.
 | **Notas:** o "Apagar meus dados" apaga as seis tabelas | `internal/server/pgstore/contas.go:96-105` |
 | **Notas:** o ditado que virou nota segue os 6 meses no PC (desde 28-out-2026) e na nuvem; a prévia o conta à parte | `internal/storage/seis_meses_sqlite.go` ("O ditado que virou nota"; `ViraramNota`); `internal/storage/nota_ditado_test.go` (`TestVirarNota_SeisMesesApagaODitadoEANotaFica`); ADR-022, "Decisões da N7" e "Riscos" |
 | **Notas no celular:** o IndexedDB da conta, e o Sair que o apaga | `web/src/nuvem/notas/armazem.ts:220`, `:271` (`esquecerConta`); `09`, "Notas no celular"; o `bundle.test.ts` prende que só o banco das notas usa o IndexedDB |
+| **Imagens das notas:** a redução e a limpeza de metadado no aparelho; o servidor confere e guarda a cópia limpa | `web/src/notas/reduzirImagem.ts`; `internal/imagemdanota` (`Conferir`); `09`, "Imagens das notas na nuvem e no celular" |
+| **Imagens das notas no celular:** nada em disco (só a URL `blob:` na memória da aba); o `GET` responde `no-store`; o service worker não as toca | `web/src/nuvem/notas/urlDaImagem.ts`; `web/pwa/sw.js`; `bundle.test.ts` (as linhas do `/api/v1/notes/*/images/*` e a regra do `createObjectURL`); `06`, `GET /notes/{id}/images/{imagem}` |
+| **Imagens das notas:** o "Apagar meus dados" as apaga; a CSP deixa o `blob:` só no `img-src` | `internal/server/pgstore/contas.go:104` (`DELETE FROM note_images`); `internal/server/seguranca.go` (`csp`) |
 | **Notas:** a separação em itens com o Polish, só a linha, só no PC | `09`, "Polish: o que sai da máquina" (a nota da N5); ADR-022, "Formatar: converter trecho" e "Decisões da N8" |
 
 ## A pré-condição do `09`, item a item
@@ -338,6 +374,7 @@ entra aqui.
 | Dados de terceiros | a nuvem não separa; decisão de quem usa. **Ditado no celular:** vale para a voz e a dica; o Mauro confirmou que dita dado de cliente às vezes | seção 7, ponto 4 |
 | Quem administra o servidor e lê o texto | quem administra a VPS lê; alcance de invasão. **Ditado no celular:** ouve a voz em trânsito e decifra as chaves | seções 2 e 6 |
 | **Notas (ADR-022)** | o mesmo tratamento do texto do ditado, sem os 6 meses; o celular guarda a lista; duas decisões, tomadas em 28-out-2026 (o aviso a quem já usava; o ditado que virou nota no PC) | seções 1 a 3 e 7, pontos 10 e 11 |
+| **Imagens das notas (ADR-022, N10)** | a foto sobe reduzida e sem metadado, fica no banco e segue a nota; o original e o celular não guardam nada; nunca vai à IA; uma decisão aberta (a 12: o aviso e o dado de terceiros na foto) | seções 1 a 3 e 7, ponto 12 |
 
 ## O que a conferência achou e o `09` não dizia
 

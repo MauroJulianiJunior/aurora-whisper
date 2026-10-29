@@ -2,7 +2,7 @@
 
 > **Modelo para quem hospeda a própria nuvem** (ADR-019, F11b; revisado com o dossiê de LGPD,
 > `docs/lgpd-dossie.md`; **reescrito em 10-out-2026 com o ditado no celular, ADR-021, D0, e atualizado em
-> 28-out-2026 com as notas, ADR-022**). O projeto
+> 28-out-2026 com as notas, ADR-022, e em 29-out-2026 com as imagens das notas, N10**). O projeto
 > Aurora Whisper não tem servidor central: cada nuvem é de quem a sobe, e quem a sobe responde pelos
 > dados dela. O texto descreve o que o código faz. Antes de pôr na sua nuvem outra pessoa além de você
 > (`CONTAS_PERMITIDAS`), copie este modelo, preencha os campos **[A PREENCHER]** (o responsável, o
@@ -37,6 +37,11 @@ Este texto é para quem usa o Aurora Whisper. Está em português simples de pro
 - **As notas** (a aba Notas) vão para a nuvem junto com os ditados, se você conectar. No **celular**, o
   app guarda a última lista das suas notas no próprio aparelho, para abrir sem internet; o **Sair** a
   apaga de lá.
+- **As imagens das notas** (a foto ou a imagem que você anexa) sobem junto com a nota, pelo mesmo
+  clique, **reduzidas no seu aparelho** (no máximo 2.000 px de lado, em JPEG) e **sem a localização nem
+  qualquer outro dado escondido da foto**. A original **nunca sai do seu aparelho**. Ficam no banco da
+  nuvem, **legíveis para quem administra o servidor**, e **não vão a nenhuma inteligência artificial**. O
+  celular **não guarda a imagem**: sem internet, aparece "Imagem sem rede".
 - Você pode **apagar tudo da nuvem** quando quiser, **desconectar** o PC a qualquer hora e **desligar o
   ditado no celular**, que revoga o seu aceite e apaga as suas chaves.
 - A nuvem **não transcreve nem analisa** o que você dita no PC. Só guarda e sincroniza. No ditado do
@@ -73,6 +78,12 @@ Windows os alcança.
   tela, os marcadores (o nome de cada um) e, se a nota nasceu de um ditado, o número desse ditado. Se a
   mesma nota mudou em dois aparelhos ao mesmo tempo, a outra versão (o título, o texto, o aparelho e a
   hora) fica na nota até você escolher qual vale;
+- **as imagens das notas**: a foto ou a imagem que você anexou a uma nota, **como ficou depois de
+  reduzida no seu aparelho** (JPEG de até 2.000 px de lado e até 4 MB, **sem a localização, a data da
+  foto, o modelo do aparelho nem qualquer outro metadado**), mais o tamanho dela e uma impressão digital
+  (SHA-256) para conferir que chegou inteira. **A imagem original nunca sai do aparelho.** O que está
+  **dentro** da imagem (um documento, um rosto, uma tela) a nuvem não separa nem lê: é o que você
+  anexou. Cada conta tem um teto de **400 MB** em imagens;
 - **o ditado que virou nota** ("Virar nota", o ditado feito dentro de uma nota, o "Ditar para nota" do
   celular): ele sai do histórico, mas continua guardado, escondido e ligado à nota, com os 6 meses de todo
   ditado;
@@ -99,8 +110,10 @@ Windows os alcança.
 
 **No celular, quando você usa as notas no app:** o aparelho guarda, no navegador, a última lista de notas
 que a nuvem mandou (o título e o texto), os marcadores e as mudanças feitas sem internet, esperando a
-rede; e, à parte, o e-mail e o nome da última conta que abriu o app, para ele abrir sem internet. **Os
-ditados, o histórico e a voz nunca ficam no aparelho.** O **Sair** e o **Apagar meus dados** apagam isso
+rede; e, à parte, o e-mail e o nome da última conta que abriu o app, para ele abrir sem internet. **As
+imagens não ficam no aparelho**: o app só guarda que a nota tem imagem (o tamanho e a impressão digital,
+não os pixels) e a mostra enquanto você está com ela aberta, na memória do navegador. Ao fechar a aba,
+sai. **Os ditados, o histórico e a voz nunca ficam no aparelho.** O **Sair** e o **Apagar meus dados** apagam isso
 do aparelho (o Sair com mudança esperando a rede pergunta antes, porque ela se perderia); a sessão que
 vence não apaga. Quem pega o celular desbloqueado lê essas notas, como lê as que estão na tela.
 
@@ -113,7 +126,9 @@ app do celular nem enxerga outras janelas.
 Só para mostrar o seu histórico e as suas notas nos seus aparelhos (o PC e o celular), manter o
 aprendido igual em todos e deixar você editar, apagar e restaurar. Não usamos seus ditados nem suas notas
 para treinar modelos nem para anúncios, e a nuvem, por si, não os processa com inteligência artificial
-(no ditado do celular, quem o faz é o provedor que você escolheu, como está logo abaixo).
+(no ditado do celular, quem o faz é o provedor que você escolheu, como está logo abaixo). **As imagens
+das notas só são mostradas a você**: nunca vão à transcrição nem ao Polish, a busca não olha dentro
+delas e o "Copiar para o WhatsApp" não as leva.
 
 **Ditado no celular:** a voz serve **só** para virar o texto do ditado que você pediu; a chave, só para
 chamar o provedor que você escolheu, por você; os termos da dica, só para ajudar o provedor a escrever
@@ -127,7 +142,9 @@ Pelo seu **consentimento** (art. 7º, I e art. 8º): a nuvem só liga quando voc
 novos sobem sozinhos enquanto o PC está conectado, e o histórico antigo só sobe depois que o programa
 mostra quantos ditados vão subir e você clica em "Enviar o histórico". As notas vão pelo mesmo
 consentimento: o clique leva também as que você já tinha (as da lixeira, não), e a nota criada ou mudada
-com a nuvem conectada sobe sozinha, como o ditado novo. Você pode
+com a nuvem conectada sobe sozinha, como o ditado novo. **As imagens das notas vão com elas, pelo mesmo
+clique e sem outro aviso**: a imagem anexada com a nuvem conectada sobe sozinha, e a que já estava numa
+nota sobe junto com ela. Você pode
 **revogar** quando quiser, sem custo (art. 8º, §5º): é o "Desconectar" e o "Apagar meus dados da
 nuvem". O programa guarda no seu PC o instante do seu clique. Se esta política mudar de um jeito que
 mexa no que você aceitou, avisamos com destaque (art. 8º, §6º).
@@ -193,6 +210,7 @@ que o provedor diz hoje, vale o que o provedor diz. As páginas lidas estão cit
 | Lixeira das notas | 30 dias depois de você mandar para lá, no PC e na nuvem |
 | Nota ou marcador apagado de vez | some na hora. Fica só o número dele, sem texto, **enquanto a sua conta existir**, para a nota não voltar de um PC que ficou desligado muito tempo |
 | Ditado que virou nota | os 6 meses de todo ditado, na nuvem e no PC (no PC, depois do seu OK na tela Histórico). O texto continua na nota |
+| **Imagens das notas** | **a vida da nota**: não têm os 6 meses dos ditados. A imagem que você tira da nota (com o Desfazer de alguns segundos) some de vez, no PC e na nuvem. Com a nota na lixeira, ficam 30 dias, e "Apagar para sempre" as apaga junto. A **cópia de segurança** guarda as imagens como guarda o resto do banco: cerca de **30 dias** depois de apagadas |
 | Notas guardadas no celular | até o Sair ou o "Apagar meus dados". O navegador pode apagá-las antes, se faltar espaço no aparelho |
 | Trocas aprendidas | enquanto você não as desfaz. **Depois de desfeita, a nuvem guarda a troca (a palavra e a certa), marcada como desfeita, enquanto a sua conta existir** (seção 10) |
 | Sessão do navegador | 30 dias sem uso, e no máximo 90 desde o login |
@@ -214,8 +232,9 @@ eliminação, pedir cópia, saber com quem compartilhamos e revogar o consentime
 - **ver e buscar** seu histórico, suas notas, seus aparelhos e suas sessões, e o que foi aprendido;
 - **corrigir** o texto de um ditado ou de uma nota;
 - **mandar para a lixeira**, **restaurar**, e **excluir definitivamente** (só de um ditado ou de uma nota
-  que está na lixeira);
-- **Apagar meus dados da nuvem**: apaga seus ditados, suas notas e marcadores, as marcas, o aprendido, os
+  que está na lixeira; a nota leva as imagens dela). **Tirar da nota** uma imagem só (o × dela, com o
+  Desfazer) a apaga de vez, no PC e na nuvem;
+- **Apagar meus dados da nuvem**: apaga seus ditados, suas notas **e as imagens delas**, os marcadores, as marcas, o aprendido, os
   PCs conectados, as outras sessões, as notas guardadas no celular em que você clicou e, se você ligou o
   ditado no celular, **o aceite, as preferências e as chaves**. Os seus PCs ficam com a cópia deles, e a
   cópia de segurança guarda o que apagamos até girar (seção 7);
@@ -254,8 +273,12 @@ que mora num arquivo do servidor, nunca no banco nem na cópia de segurança, e 
 servidor só chama o provedor que você escolheu e para o qual você deu o aceite, e não troca de provedor
 sozinho: se ele falha, o ditado falha.
 
-**O que isso não impede:** quem administra o servidor lê o texto dos seus ditados e das suas notas, e
-quem invadisse o servidor leria o mesmo. **No ditado do celular, quem tem a raiz da VPS também pode ouvir a voz em
+**Nas imagens das notas:** a imagem é reduzida e limpa de metadado **no seu aparelho**, antes de sair, e o
+servidor a confere de novo e guarda a cópia limpa. Ela é servida só a você, sempre com a ordem de **não
+guardar em cache** (o navegador e o app não a gravam no disco), e a página da nuvem não carrega imagem de outro site.
+
+**O que isso não impede:** quem administra o servidor lê o texto dos seus ditados e das suas notas, **vê as
+suas imagens**, e quem invadisse o servidor leria o mesmo. **No ditado do celular, quem tem a raiz da VPS também pode ouvir a voz em
 trânsito e decifrar as suas chaves**, porque o arquivo da chave de cifra e o banco moram no mesmo
 servidor. Por isso: use **uma chave de API só para o celular, com limite de gasto no provedor**, e, se
 houver um incidente, **revogue a chave no provedor**. **[A PREENCHER, se for o caso: O servidor é
@@ -303,6 +326,11 @@ responsável comunica você e a autoridade (art. 48).
    - o ditado que virou nota sai do histórico, mas continua guardado, escondido, até completar os 6
      meses de todo ditado (no PC, quando você os liga); a nota fica;
    - no celular, a última lista das notas fica no aparelho até você **Sair** (seção 3).
+6. **As imagens das notas são fotos de verdade**, e quem administra o servidor as vê. A redução tira a
+   localização e o resto do que a foto carrega, **mas não o que aparece nela** (uma pessoa, um documento,
+   uma placa). Anexe só o que você aceita deixar no servidor, e **a original continua só no seu
+   aparelho**. Elas seguem a nota (a lixeira, "Apagar para sempre", "Apagar meus dados"), e a cópia de
+   segurança as guarda até girar. Não vão a nenhuma inteligência artificial.
 
 ## 11. Se for preciso restaurar a cópia de segurança
 
@@ -314,7 +342,8 @@ outro nome, e depois é apagado.
 
 **Notas:** a nota que você apagou de vez depois da última cópia também pode reaparecer, e para ela não há
 o limite dos 6 meses; você a apaga de novo. A nota criada ou mudada só no celular depois da cópia pode se
-perder.
+perder. O mesmo vale para as imagens: a que você tirou de vez depois da última cópia pode reaparecer
+na nota, e você a tira de novo; a anexada só depois da cópia pode se perder.
 
 **Ditado no celular:** o aceite, as preferências e as chaves voltam como estavam na cópia (se você
 desligou o ditado ou trocou a chave depois dela, faça de novo). Se a cópia for restaurada **sem** a mesma

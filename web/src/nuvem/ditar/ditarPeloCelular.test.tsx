@@ -963,15 +963,17 @@ describe('a Privacidade', () => {
     const priv = screen.getByRole('region', { name: 'Privacidade' })
     const t = priv.textContent!
     expect(t).toContain(
-      'Vão para a nuvem: o texto dos ditados, com a data, o PC de origem e os detalhes da transcrição, as notas, com os marcadores, e as trocas aprendidas. O texto fica legível para quem administra o servidor.',
+      'Vão para a nuvem: o texto dos ditados, com a data, o PC de origem e os detalhes da transcrição, as notas, com os marcadores e as imagens, e as trocas aprendidas. O texto e as imagens ficam legíveis para quem administra o servidor.',
     )
-    expect(t).toContain('Os ditados ficam 6 meses; as notas, até você apagar (a lixeira, 30 dias). Uma cópia cifrada guarda tudo por cerca de 30 dias além disso.')
+    expect(t).toContain('Os ditados ficam 6 meses; as notas e as imagens delas, até você apagar (a lixeira, 30 dias). Uma cópia cifrada guarda tudo por cerca de 30 dias além disso.')
     expect(t).toContain('Do PC nunca vão: o áudio, o que está nas outras janelas, a chave do Polish e as configurações dos PCs; a chave do PC continua no PC.')
     expect(t).toContain(
       'Ditar pelo celular é opcional. Se você ligar, a voz de cada ditado vai ao provedor que você escolher (OpenAI ou Groq), com a sua chave, que o servidor guarda cifrada. A voz não é gravada: fica na memória e é descartada ao fim.',
     )
     // As notas no aparelho (ADR-022, N8): o IndexedDB da conta.
     expect(t).toContain('As notas ficam guardadas também neste aparelho, para abrir sem internet. O Sair as apaga daqui.')
+    // As imagens das notas nunca ficam no aparelho (ADR-022, N10b).
+    expect(t).toContain('As imagens das notas não ficam neste aparelho: sem internet, aparece "Imagem sem rede".')
     // O build da nuvem não conhece o Gerenciador de Credenciais do Windows.
     expect(document.body.textContent).not.toContain('Gerenciador de Credenciais')
   })

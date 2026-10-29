@@ -874,7 +874,7 @@ export function Configuracoes({ cliente, visivel, aoPerderLigacao, avisar, apren
           {seisMesesLigados && <li>O que completa 6 meses é apagado deste computador.</li>}
           {nuvemConectada && (
             <li>
-              Com a nuvem conectada, o texto dos seus ditados, as suas notas e as trocas que você aprendeu vão para a sua nuvem, em{' '}
+              Com a nuvem conectada, o texto dos seus ditados, as suas notas com as imagens e as trocas que você aprendeu vão para a sua nuvem, em{' '}
               <span className="email">{nuvemConectada}</span>. O áudio e o que está nas outras janelas nunca vão.
             </li>
           )}

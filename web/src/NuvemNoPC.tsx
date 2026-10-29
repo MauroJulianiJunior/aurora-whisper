@@ -445,7 +445,7 @@ function Envio({
           {vaoSubir(h.previa, h.previa_trocas ?? 0)}
           {/* As notas sobem pelo mesmo clique (ADR-022, N7): dito aqui, onde a
               pessoa aceita. */}
-          {' As suas notas vão junto.'}
+          {' As suas notas vão junto, com as imagens.'}
           {comDitados && ' A lixeira não vai. Antes, uma cópia do histórico fica neste PC.'}
         </p>
         <div className="acoes">

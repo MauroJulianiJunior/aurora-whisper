@@ -7,7 +7,7 @@
 | Áudio (do PC) | Sensível efêmero | RAM | tentativa. Nunca sai do PC |
 | Contexto UIA | Sensível efêmero | RAM | resolução |
 | Título e corpo da nota, nome do marcador (ADR-022) | Confidencial; a nota pode ter dado pessoal e de terceiros (clientes, por exemplo), como o ditado | SQLite (`local_notes`, `local_labels`); no Postgres (`notes`, `labels`) **só depois que quem usa conecta a nuvem**, legível no servidor como o ditado (N7). A lápide (`note_tombstones`) e o log (`note_sync_events`) levam só ids e datas | a nota e o marcador: até quem usa apagar (a lixeira expurga em 30 dias; **sem** os 6 meses do histórico). O ditado que virou nota segue os 6 meses na nuvem (a ligação sai com ele). O backup da nuvem os guarda até a cópia girar |
-| Imagem da nota no PC (ADR-022, N10, a primeira metade: o PC). A foto de um documento de cliente é dado pessoal, e de terceiros | Confidencial | **a cópia reduzida**: o navegador a reduz (2.000 px no lado maior, JPEG) antes de ela sair da página, e o original e o nome do arquivo nunca saem dela. Os bytes ficam num arquivo `<dados>\notas-imagens\<id>.jpg`, **fora do `historico.db`** (as cópias do banco ao lado dele, a dos 6 meses e a do envio, não levam as fotos); a linha `local_note_images` guarda só o tamanho em pixels e em bytes, o SHA-256 e a hora. O Agent confere o JPEG e o guarda **sem os segmentos de metadados** (APP1 a APP15, COM e o que vem depois do fim da imagem: o EXIF com a localização, o XMP, o perfil de cor, o comentário, o vídeo da "foto em movimento"), sem recomprimir (`internal/imagemdanota`). **Nunca vai à IA** (nem ao Polish, nem ao ASR), **nem à busca** (sem OCR), nem ao "Copiar para WhatsApp". No painel, só na memória da aba (uma URL `blob:`, solta ao sair; nada em cache, `localStorage` ou IndexedDB). **Desde a N10b, sobe à nuvem** sob a mesma permissão das notas ("Enviar o histórico"): a cópia limpa, conferida de novo pelo servidor antes de entrar no banco (`note_images`, no backup cifrado), e só pelas rotas das imagens; os metadados (tamanho, SHA-256, hora) vão no pull, os bytes nunca (`05`, `06`, ADR-022 "Decisões da N10b"; a política e o dossiê são da parte do celular) | segue a nota: vai e volta da lixeira com ela; o expurgo de 30 dias e o "Apagar para sempre" apagam a linha e o arquivo; "Tirar da nota" a apaga de vez depois do Desfazer. Até 10 por nota, e o total de imagens da conta até 400 MB. O desinstalar com "apagar dados" leva a pasta junto |
+| Imagem da nota no PC (ADR-022, N10, a primeira metade: o PC). A foto de um documento de cliente é dado pessoal, e de terceiros | Confidencial | **a cópia reduzida**: o navegador a reduz (2.000 px no lado maior, JPEG) antes de ela sair da página, e o original e o nome do arquivo nunca saem dela. Os bytes ficam num arquivo `<dados>\notas-imagens\<id>.jpg`, **fora do `historico.db`** (as cópias do banco ao lado dele, a dos 6 meses e a do envio, não levam as fotos); a linha `local_note_images` guarda só o tamanho em pixels e em bytes, o SHA-256 e a hora. O Agent confere o JPEG e o guarda **sem os segmentos de metadados** (APP1 a APP15, COM e o que vem depois do fim da imagem: o EXIF com a localização, o XMP, o perfil de cor, o comentário, o vídeo da "foto em movimento"), sem recomprimir (`internal/imagemdanota`). **Nunca vai à IA** (nem ao Polish, nem ao ASR), **nem à busca** (sem OCR), nem ao "Copiar para WhatsApp". No painel, só na memória da aba (uma URL `blob:`, solta ao sair; nada em cache, `localStorage` ou IndexedDB). **Desde a N10b, sobe à nuvem** sob a mesma permissão das notas ("Enviar o histórico"): a cópia limpa, conferida de novo pelo servidor antes de entrar no banco (`note_images`, no backup cifrado), e só pelas rotas das imagens; os metadados (tamanho, SHA-256, hora) vão no pull, os bytes nunca (`05`, `06`, ADR-022 "Decisões da N10b"; a política e o dossiê dizem isso). **No celular** (N10b, a segunda metade): a mesma redução, no navegador, antes de subir; **o aparelho não guarda os bytes** (só a URL `blob:` na memória da aba, solta ao sair; nem IndexedDB, nem Cache API, nem service worker; o `GET` responde `no-store`), e o IndexedDB das notas leva só os metadados da imagem (id, tamanho, SHA-256) | segue a nota: vai e volta da lixeira com ela; o expurgo de 30 dias e o "Apagar para sempre" apagam a linha e o arquivo; "Tirar da nota" a apaga de vez depois do Desfazer. Até 10 por nota, e o total de imagens da conta até 400 MB. O desinstalar com "apagar dados" leva a pasta junto |
 | Nota em foco (ADR-022: em que nota está o cursor, o id dela ou o token da caixa "Criar uma nota") | Sensível efêmero | só na memória do Agent (`internal/agent/notafoco`). Nunca em disco, log, resposta de erro nem sync | 60 s sem renovação (o painel renova a cada ~20 s), ou o DELETE `/api/notas/foco`, ou o reinício. O que fica no banco é o efeito (`virou_nota` do ditado), não o aviso |
 | Dictionary/corrections | Confidencial | SQLite/Postgres; **hoje o `dicionario.json` local, em texto, na pasta de dados** (ADR-017; ADR-018: `%LOCALAPPDATA%\AuroraWhisper`, ou ao lado do executável no modo portátil), onde o painel grava o que aprende | até exclusão |
 | Email/google_sub/nome (`display_name`, o `name` do Google; o `avatar_url` existe na tabela e nunca é preenchido) | Pessoal | Postgres | vida da conta: o "apagar meus dados" **não** apaga o cadastro (dossiê de LGPD, `docs/lgpd-dossie.md`, decisão 2) |
@@ -351,7 +351,8 @@ ADR-019, "Decisões da F3"). O que vale, e onde cada coisa é provada (a suíte
   teto de 90 dias desde o login; sair e derrubar apagam a linha no servidor.
 - **O token do PC** (THR-025) só alcança `/sync/*` e `GET /me`; no CRUD, nas sessões e no "apagar meus
   dados", `403`. Bearer inválido é `401`, sem cair no cookie.
-- **Cabeçalhos:** CSP `default-src 'self'` com `base-uri 'none'`, `object-src 'none'`,
+- **Cabeçalhos:** CSP `default-src 'self'` com `img-src 'self' blob:` (o `blob:` é das imagens das
+  notas no celular, N10b: só imagem, nunca script nem conexão), `base-uri 'none'`, `object-src 'none'`,
   `frame-ancestors 'none'` e `form-action 'self'`; `nosniff`; `Referrer-Policy: no-referrer`; COOP
   `same-origin`; HSTS (1 ano, sem `includeSubDomains`) só em `https`; `no-store` em `/api` e `/auth`.
   Nenhum CORS.
@@ -456,6 +457,26 @@ ADR-019, "Decisões da F3"). O que vale, e onde cada coisa é provada (a suíte
     `Ditado-Nota` leva só `para-nota` ou o id da nota.
   - **O log:** as rotas novas registram só o padrão da rota, o status e contagens; a linha `retenção` ganha a
     contagem `notas` (o expurgo). Nenhum título, corpo, nome ou id.
+- **Imagens das notas na nuvem e no celular (ADR-022, N10b; 29-out-2026):** a foto ou a imagem anexada à
+  nota sobe sob a mesma permissão das notas ("Enviar o histórico") e fica **no banco** (`note_images`),
+  legível para quem administra a VPS, como o texto da nota (THR-023). Detalhes:
+  - **O que sobe:** só a cópia reduzida no aparelho (2.000 px no lado maior, JPEG, até 4 MB, sem EXIF nem
+    localização: o canvas não leva metadado, e o servidor confere e guarda a cópia limpa). **O original
+    nunca sai do aparelho**, nem o nome do arquivo.
+  - **Nunca vai** à IA nem à transcrição, nem à busca (não há OCR), nem ao "Copiar para WhatsApp".
+  - **Prazo:** o da nota. A lixeira de 30 dias a leva, o "Apagar para sempre" e o "Apagar meus dados" a
+    apagam (`DELETE FROM note_images`), e "Tirar da nota" a apaga de vez depois do Desfazer. O backup
+    cifrado diário a guarda, com a retenção dele (cerca de 30 dias), como guarda o resto do banco. Teto de
+    **400 MB** por conta (as da lixeira contam) e 10 por nota.
+  - **No celular não fica nada em disco:** o app lê a imagem por `fetch` com a sessão, a mostra por uma URL
+    `blob:` na memória da aba e a solta ao sair; o service worker nunca toca `/api/v1/notes/*/images/*`
+    (o `bundle.test.ts` prende), e o `GET` responde `Cache-Control: no-store`. Só os metadados (id, tamanho,
+    SHA-256) vão para o IndexedDB das notas. Sem rede, no lugar da imagem aparece "Imagem sem rede". Quem
+    tem o celular desbloqueado vê as imagens que estão na tela, como vê o resto.
+  - **A CSP** da nuvem ganhou `img-src 'self' blob:`. O `bundle.test.ts` deixa a URL `blob:` só no arquivo
+    `nuvem/notas/urlDaImagem.ts`, que recusa tudo o que não é `image/jpeg`: o gravador do ditado continua
+    sem criar URL de áudio.
+  - **O log:** o das rotas das imagens leva o padrão da rota e o status, sem id, tamanho nem conteúdo.
 - **Revogar ou desconectar** não apaga nada no PC: o Agent continua funcionando localmente.
 
 ## Ditar no celular: o que sai do aparelho (ADR-021)
@@ -868,6 +889,9 @@ protegido"; ADR-011, nota de 29-set-2026).
   (`note_sync_events`) sai com a mesma arrumação de 90 dias, só o órfão. **O ditado que virou nota** continua
   sujeito aos 6 meses na nuvem e, desde 28-out-2026, também no PC (o dossiê de LGPD, decisão 11; a
   prévia o conta em `viraram_nota`).
+- **Imagens das notas (ADR-022, N10b):** seguem a nota, sem os 6 meses: a lixeira de 30 dias (PC e nuvem),
+  o "Apagar para sempre" e o "Apagar meus dados" as apagam junto; "Tirar da nota" a apaga de vez depois do
+  Desfazer; o backup as guarda como guarda o banco.
 - **Nuvem (ADR-019):** os prazos contam pela data do ditado que o PC mandou; o que foi apagado de vez
   dentro da janela deixa lápide, para não ressuscitar; o backup guarda texto apagado até a cópia
   girar (30 dias no Backblaze B2, mais o tempo do B2 para apagar o que a regra escondeu: D2 da F11;

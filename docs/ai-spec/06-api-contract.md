@@ -40,8 +40,10 @@ Base: `https://exemplo.com/api/v1` (o domínio real vem de `PUBLIC_BASE_URL`)
     pegam o resto): `POST /transcriptions` deixa de dar `405`, e um `OPTIONS` também é `404`, sem
     `Access-Control-*`. `/devices` fica sem montar até a F6 (**F6:** `GET` e `DELETE /devices` montados;
     o `PATCH /devices/{id}`, o renomear, continua sem montar).
-  - **Cabeçalhos em toda resposta:** `Content-Security-Policy: default-src 'self'; base-uri 'none';
-    object-src 'none'; frame-ancestors 'none'; form-action 'self'`, `X-Content-Type-Options: nosniff`,
+  - **Cabeçalhos em toda resposta:** `Content-Security-Policy: default-src 'self'; img-src 'self' blob:;
+    base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'` (o `blob:` do
+    `img-src` é das imagens das notas, ADR-022, N10b: o app as lê por `fetch` com a sessão e as mostra por
+    uma URL `blob:` criada por ele; não vale para script, estilo nem conexão), `X-Content-Type-Options: nosniff`,
     `Referrer-Policy: no-referrer`, `Cross-Origin-Opener-Policy: same-origin`,
     `Permissions-Policy: microphone=(self)` (**ADR-021, escolha menor 18**: o app grava o ditado do
     celular, e o microfone fica só para a própria origem, mesmo que um dia o `frame-ancestors` deixe de

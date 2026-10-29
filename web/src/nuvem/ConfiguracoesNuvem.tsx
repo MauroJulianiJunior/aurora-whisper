@@ -509,10 +509,10 @@ export function ConfiguracoesNuvem({
         </h2>
         <ul className="fatos">
           <li>
-            Vão para a nuvem: o texto dos ditados, com a data, o PC de origem e os detalhes da transcrição, as notas, com os marcadores, e as trocas aprendidas. O
-            texto fica legível para quem administra o servidor.
+            Vão para a nuvem: o texto dos ditados, com a data, o PC de origem e os detalhes da transcrição, as notas, com os marcadores e as imagens, e as trocas aprendidas. O
+            texto e as imagens ficam legíveis para quem administra o servidor.
           </li>
-          <li>Os ditados ficam 6 meses; as notas, até você apagar (a lixeira, 30 dias). Uma cópia cifrada guarda tudo por cerca de 30 dias além disso.</li>
+          <li>Os ditados ficam 6 meses; as notas e as imagens delas, até você apagar (a lixeira, 30 dias). Uma cópia cifrada guarda tudo por cerca de 30 dias além disso.</li>
           <li>
             Do PC nunca vão: o áudio, o que está nas outras janelas, a chave do Polish e as configurações dos PCs; a chave do PC continua no PC.
           </li>
@@ -523,6 +523,8 @@ export function ConfiguracoesNuvem({
           {/* As notas no aparelho (ADR-022, N8): o IndexedDB da conta, para a
               lista abrir sem rede; o Sair e o "Apagar meus dados" o apagam. */}
           <li>As notas ficam guardadas também neste aparelho, para abrir sem internet. O Sair as apaga daqui.</li>
+          {/* As imagens das notas (ADR-022, N10b): nunca ficam no aparelho. */}
+          <li>As imagens das notas não ficam neste aparelho: sem internet, aparece &quot;Imagem sem rede&quot;.</li>
         </ul>
 
         <div className="ajuste apagar">
