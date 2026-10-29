@@ -96,8 +96,14 @@ func (m *Motor) EnviarImagens(ctx context.Context, rel *Relatorio) error {
 				}
 				continue
 			}
-			if err := m.Fila.MarcarEnvioDaImagem(ctx, it.ID); err != nil {
-				return err
+			marcou, merr := m.Fila.MarcarEnvioDaImagem(ctx, it.ID)
+			if merr != nil {
+				return merr
+			}
+			if !marcou {
+				// Tirada da nota depois de a fila ser lida: nada sobe.
+				rel.Imagens[TipoImagemTiradaAntes]++
+				continue
 			}
 			resp, err = cli.SubirImagem(ctx, it.NotaID, it.ID, jpeg, it.Linha.SHA256, it.Linha.CreatedAt)
 		}

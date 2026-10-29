@@ -26,13 +26,14 @@ const (
 	TipoImagemNaoAplicada = "nao_aplicada" // a nota não está aqui, ou os metadados não valem
 
 	// O envio.
-	TipoImagemSubiu      = "subiu"       // o PUT valeu (ou a nuvem já a tinha)
-	TipoImagemTirada     = "tirada"      // o DELETE valeu
-	TipoImagemEsperando  = "esperando"   // uma recusa que pode passar: tenta depois
-	TipoImagemRecusada   = "recusada"    // a nuvem recusou de vez: fica só neste PC
-	TipoImagemSumiu      = "sumiu"       // a nuvem tirou a imagem (ou apagou a nota)
-	TipoImagemSemArquivo = "sem_arquivo" // o arquivo daqui sumiu ou não confere
-	TipoImagemAdiada     = "adiada"      // a rede caiu (ou a nuvem pediu espera): a fase parou
+	TipoImagemSubiu       = "subiu"        // o PUT valeu (ou a nuvem já a tinha)
+	TipoImagemTirada      = "tirada"       // o DELETE valeu
+	TipoImagemEsperando   = "esperando"    // uma recusa que pode passar: tenta depois
+	TipoImagemRecusada    = "recusada"     // a nuvem recusou de vez: fica só neste PC
+	TipoImagemSumiu       = "sumiu"        // a nuvem tirou a imagem (ou apagou a nota)
+	TipoImagemSemArquivo  = "sem_arquivo"  // o arquivo daqui sumiu ou não confere
+	TipoImagemAdiada      = "adiada"       // a rede caiu (ou a nuvem pediu espera): a fase parou
+	TipoImagemTiradaAntes = "tirada_antes" // tirada da nota antes da vez dela: nada sobe
 
 	// O download.
 	TipoImagemBaixada        = "baixada"         // o arquivo chegou, conferido

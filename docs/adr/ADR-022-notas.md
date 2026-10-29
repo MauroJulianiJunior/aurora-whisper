@@ -904,6 +904,11 @@ ponto de parada: o roteiro do Mauro é o `docs/deploy-notas-n10.md`.
 - **A emissão:** anexar com a nuvem conectada põe o marcador de criar na mesma transação (como a nota da N7);
   tirar põe a lápide (`CampoApagado`, com a nota) se `na_nuvem`, senão tira o marcador; a nota que sai de vez
   (a lixeira de 30 dias, o "Apagar para sempre", a lápide da nuvem) leva os marcadores das imagens dela.
+  **O PUT só sai se a imagem ainda está lá** (correção da revisão, 29-out-2026): o motor lê as imagens da
+  rodada de uma vez e as sobe uma depois da outra; a que a pessoa tira da nota nesse meio-tempo, sem
+  `na_nuvem`, sai sem lápide, e o PUT dela (com os bytes já lidos) deixaria a imagem na nuvem, de onde o pull
+  a traria de volta. O `MarcarEnvioDaImagem` grava `na_nuvem` só se a linha e o marcador de criar ainda
+  existem, e o motor pula a imagem quando não gravou.
 - **[derivada] A ordem:** a fase das imagens vem **depois do push** (a nota criada no lote já tem a versão da
   nuvem) e antes do pull; a imagem cuja nota ainda não tem `server_version` (o criar dela ainda na fila, ou
   recusado) **espera a rodada seguinte**, com o marcador, sem pedido nem erro; a da nota da lixeira daqui

@@ -183,6 +183,71 @@ func TestMotor_AImagemEsperaANotaEARedeQueCaiSoParaAFase(t *testing.T) {
 	}
 }
 
+// imagensQueTiram lê os bytes da imagem e, logo em seguida, a tira da nota: a
+// pessoa que clica em "Tirar da nota" depois de o motor ler a fila e os bytes,
+// antes do PUT.
+type imagensQueTiram struct {
+	*storage.SQLiteNotaRepository
+	tirar string
+}
+
+func (i *imagensQueTiram) LerImagem(ctx context.Context, userID, notaID, id string) (storage.ImagemDaNota, []byte, error) {
+	im, b, err := i.SQLiteNotaRepository.LerImagem(ctx, userID, notaID, id)
+	if err == nil && id == i.tirar {
+		err = i.TirarImagem(ctx, userID, notaID, id)
+	}
+	return im, b, err
+}
+
+// A imagem tirada da nota depois de o motor ler a fila não sobe: a nuvem nunca
+// a viu, então o tirar não deixou lápide, e um PUT dela deixaria a imagem na
+// nuvem, de onde o pull a traria de volta à nota.
+func TestMotor_AImagemTiradaAntesDoPUTNaoSobe(t *testing.T) {
+	ctx := context.Background()
+	p := novoPC(t)
+	notas := notasDoPC(p)
+	notas.UsarPastaDasImagens(filepath.Join(t.TempDir(), "notas-imagens"))
+	n, err := notas.Criar(ctx, storage.NovaNota{UserID: donoDoMotor, Titulo: "Recibos"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fica, err := notas.AnexarImagem(ctx, donoDoMotor, n.ID, jpegDoMotor(t, 1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sai, err := notas.AnexarImagem(ctx, donoDoMotor, n.ID, jpegDoMotor(t, 2))
+	if err != nil {
+		t.Fatal(err)
+	}
+	nuvem := &nuvemComImagens{nuvemDeRoteiro: &nuvemDeRoteiro{push: aplicaTudo("e1"), pull: comNotasEImagens("e1", nil)}}
+	nuvem.subir = func(string, string) (RespostaDaImagem, error) {
+		return RespostaDaImagem{Status: http.StatusCreated}, nil
+	}
+	m := novoMotor(p, nuvem)
+	m.Imagens = &imagensQueTiram{SQLiteNotaRepository: notas, tirar: sai.ID}
+
+	// A primeira rodada vê a capacidade; a seguinte sobe as da fila.
+	viu := map[string]int{}
+	for i := 0; i < 3; i++ {
+		rel, err := m.Rodada(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for k, v := range rel.Imagens {
+			viu[k] += v
+		}
+	}
+	if len(nuvem.subidas) != 1 || nuvem.subidas[0] != fica.ID {
+		t.Fatalf("as subidas: %v (a que fica: %s)", nuvem.subidas, fica.ID)
+	}
+	if viu[TipoImagemTiradaAntes] != 1 || viu[TipoImagemSubiu] != 1 {
+		t.Fatalf("o relatório: %v", viu)
+	}
+	if temMarcadorDeImagem(t, p, sai.ID) {
+		t.Error("a imagem tirada antes do PUT deixou marcador")
+	}
+}
+
 func TestMotor_AImagemDoPullBaixaConferida(t *testing.T) {
 	ctx := context.Background()
 	p := novoPC(t)

@@ -337,12 +337,23 @@ func (f *Fila) PendentesDeImagens(ctx context.Context, limite int, agora time.Ti
 
 // MarcarEnvioDaImagem grava, ANTES da rede, que a nuvem pode ter a imagem
 // (na_nuvem = 1): o PUT que sai pode valer mesmo sem a resposta chegar, e daí em
-// diante tirar a imagem manda o DELETE.
-func (f *Fila) MarcarEnvioDaImagem(ctx context.Context, id string) error {
-	if _, err := f.db.ExecContext(ctx, `UPDATE local_note_images SET na_nuvem = 1 WHERE id = ? AND na_nuvem = 0`, id); err != nil {
-		return fmt.Errorf("storage: marcando o envio da imagem: %w", err)
+// diante tirar a imagem manda o DELETE. Devolve falso, sem gravar nada, se a
+// linha já saiu ou o marcador de criar já não está na fila: a imagem foi tirada
+// da nota depois de PendentesDeImagens (as da rodada sobem uma depois da outra,
+// e o tirar de uma imagem que a nuvem nunca viu não deixa lápide). O PUT não
+// pode sair: a nuvem ficaria com a imagem, e o pull a traria de volta.
+func (f *Fila) MarcarEnvioDaImagem(ctx context.Context, id string) (bool, error) {
+	res, err := f.db.ExecContext(ctx, `UPDATE local_note_images SET na_nuvem = 1 WHERE id = ?
+		AND EXISTS (SELECT 1 FROM sync_outbox WHERE entity_type = ? AND entity_id = ? AND campos = 0)`,
+		id, EntidadeImagemDaNota, id)
+	if err != nil {
+		return false, fmt.Errorf("storage: marcando o envio da imagem: %w", err)
 	}
-	return nil
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("storage: marcando o envio da imagem: %w", err)
+	}
+	return n > 0, nil
 }
 
 // AcaoDaImagemNoEnvio é o que a resposta de um PUT ou de um DELETE manda fazer

@@ -102,8 +102,8 @@ func TestSyncDasImagens_AnexarPoeOMarcadorETirarPoeALapide(t *testing.T) {
 
 	// Tirar a que a nuvem pode ter (o PUT já saiu uma vez): a lápide, com a nota.
 	outra := s.anexar(t, n.ID, 2)
-	if err := s.fila.MarcarEnvioDaImagem(ctx, outra.ID); err != nil {
-		t.Fatal(err)
+	if ok, err := s.fila.MarcarEnvioDaImagem(ctx, outra.ID); err != nil || !ok {
+		t.Fatalf("marcar o envio: %v %v", ok, err)
 	}
 	if err := s.notas.TirarImagem(ctx, dono, n.ID, outra.ID); err != nil {
 		t.Fatal(err)
@@ -242,10 +242,15 @@ func TestSyncDasImagens_PendentesEsperamANotaEAVez(t *testing.T) {
 	if err := s.notas.TirarImagem(ctx, dono, n.ID, outra.ID); err != nil {
 		t.Fatal(err)
 	}
+	// Tirada depois de a fila ser lida: marcar o envio dela não grava nada, e o
+	// motor não manda o PUT.
+	if ok, err := s.fila.MarcarEnvioDaImagem(ctx, outra.ID); err != nil || ok {
+		t.Fatalf("marcar o envio da imagem tirada: %v %v", ok, err)
+	}
 	// (na_nuvem 0: o tirar não deixou lápide; marca o envio e tira de novo.)
 	outra = s.anexar(t, n.ID, 3)
-	if err := s.fila.MarcarEnvioDaImagem(ctx, outra.ID); err != nil {
-		t.Fatal(err)
+	if ok, err := s.fila.MarcarEnvioDaImagem(ctx, outra.ID); err != nil || !ok {
+		t.Fatalf("marcar o envio: %v %v", ok, err)
 	}
 	its = pendentes()
 	if len(its) != 1 || its[0].ID != outra.ID {
