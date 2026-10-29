@@ -936,7 +936,7 @@ func testCSRF(t *testing.T, b Backend) {
 }
 
 func testCabecalhos(t *testing.T, b Backend) {
-	const cspWant = "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'"
+	const cspWant = "default-src 'self'; img-src 'self' blob:; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'"
 	bases := []string{"https://nuvem.exemplo.test", "http://localhost:8080"}
 	if server.LoginDeTesteCompilado {
 		bases = bases[1:] // com a tag, o servidor só sobe em localhost

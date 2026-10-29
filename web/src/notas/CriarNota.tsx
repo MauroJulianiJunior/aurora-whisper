@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { problemaDe } from '../api'
+import { BotaoDeImagem } from './BotaoDeImagem'
 import { CamposDaNota } from './CamposDaNota'
 import { Icone } from './Icone'
 import type { ClienteDeNotas, Nota } from './tipos'
@@ -14,7 +15,8 @@ interface Props {
   desligado?: boolean
   celular?: boolean
   // aoEscolherImagens: o ícone de imagem (N10), a nota nova com a imagem. Só
-  // quem tem as imagens (o PC) o passa; sem ele, o ícone não aparece.
+  // quem tem as imagens o passa; sem ele, o ícone não aparece. No celular o ícone
+  // abre o menu da câmera e da galeria.
   aoEscolherImagens?(arquivos: File[]): void
 }
 
@@ -32,12 +34,11 @@ function novoToken(): string {
 // CriarNota é o "Criar uma nota…" do alto da tela (ADR-022): uma barra
 // recolhida que abre num título e no corpo por linhas. Fechar com algo
 // escrito grava a nota; fechar vazio não grava nada.
-export function CriarNota({ cliente, aoCriar, aoPerderLigacao, desligado = false, aoEscolherImagens }: Props) {
+export function CriarNota({ cliente, aoCriar, aoPerderLigacao, desligado = false, celular = false, aoEscolherImagens }: Props) {
   // aberto: o corpo com que a caixa abriu ('' é a nota em branco; '- [ ] ' é a
   // "Nova lista de marcar"). A caixa nasce de novo a cada abertura.
   const [aberto, setAberto] = useState<string | null>(null)
   const barra = useRef<HTMLButtonElement>(null)
-  const escolher = useRef<HTMLInputElement>(null)
   const devolverFoco = useRef(false)
 
   // Fechou: o foco volta à barra (a caixa que tinha o foco saiu da tela).
@@ -63,8 +64,7 @@ export function CriarNota({ cliente, aoCriar, aoPerderLigacao, desligado = false
   }
 
   // Sem rede no celular (N8, E4), criar nota espera a rede: a barra fica
-  // apagada. No celular não há o botão da imagem (a prévia da N8; a imagem no
-  // celular é a segunda metade da N10).
+  // apagada, o ícone de imagem também (a imagem só se anexa com rede).
   return (
     <div className={desligado ? 'criar desligado' : 'criar'}>
       <button ref={barra} type="button" className="criar-abrir" disabled={desligado} onClick={() => setAberto('')}>
@@ -81,33 +81,14 @@ export function CriarNota({ cliente, aoCriar, aoPerderLigacao, desligado = false
         <Icone nome="marcar" />
       </button>
       {aoEscolherImagens && (
-        <>
-          <button
-            type="button"
-            className="icone-botao"
-            aria-label="Nova nota com imagem"
-            title="Nova nota com imagem"
-            disabled={desligado}
-            onClick={() => escolher.current?.click()}
-          >
-            <Icone nome="imagem" />
-          </button>
-          {/* A escolha de arquivos do Windows, aberta pelo clique de quem usa. */}
-          <input
-            ref={escolher}
-            type="file"
-            accept="image/*"
-            multiple
-            hidden
-            tabIndex={-1}
-            aria-label="Escolher a imagem da nota nova"
-            onChange={(e) => {
-              const arquivos = Array.from(e.currentTarget.files ?? [])
-              e.currentTarget.value = ''
-              if (arquivos.length > 0) aoEscolherImagens(arquivos)
-            }}
-          />
-        </>
+        <BotaoDeImagem
+          celular={celular}
+          desabilitado={desligado}
+          rotulo="Nova nota com imagem"
+          titulo="Nova nota com imagem"
+          rotuloDoCampo="Escolher a imagem da nota nova"
+          aoEscolher={aoEscolherImagens}
+        />
       )}
     </div>
   )

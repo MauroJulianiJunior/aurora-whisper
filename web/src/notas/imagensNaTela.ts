@@ -12,7 +12,7 @@
 import { ErroDaApi, problemaDe } from '../api'
 import { FRASES, MAX_POR_NOTA, fraseDoErro, imagensDaNota } from './imagens'
 import type { ImagemReduzida } from './reduzirImagem'
-import type { ClienteDeImagens, ImagemDaNota, Nota } from './tipos'
+import { type ClienteDeImagens, type ImagemDaNota, type Nota, SoComRede } from './tipos'
 
 // Guardando é a imagem que já foi reduzida e está subindo: o quadrado com o
 // "guardando…", desenhado da própria cópia reduzida.
@@ -33,6 +33,11 @@ export class ImagensNaTela {
   private readonly urls = new Map<string, string>()
   private readonly pedidos = new Set<string>()
   private readonly falhas = new Set<string>()
+  // semRedeIds: as imagens que não chegaram porque não havia rede (o celular, N10b).
+  // Diferente de falhas: a falha não se repete sozinha; esta se repete quando a rede
+  // volta (definirSemRede). semRedeAgora é o que a aba sabe da rede neste instante.
+  private readonly semRedeIds = new Set<string>()
+  private semRedeAgora = false
   // novas: as imagens anexadas nesta visita, por nota, até a lista das notas
   // as trazer (a lista e as novas se juntam pelo id).
   private readonly novas = new Map<string, ImagemDaNota[]>()
@@ -78,10 +83,27 @@ export class ImagensNaTela {
     return this.falhas.has(id)
   }
 
+  // semRede diz se a imagem não pode aparecer agora por falta de rede (o celular,
+  // cena 6 da prévia): a que já abriu nesta visita tem URL e continua aparecendo;
+  // a que não, aparece como "Imagem sem rede" enquanto a rede não voltar.
+  semRede(id: string): boolean {
+    return !this.urls.has(id) && (this.semRedeAgora || this.semRedeIds.has(id))
+  }
+
+  // definirSemRede é a aba dizendo o que sabe da rede. Com a rede de volta, as que
+  // ficaram sem ela voltam a ser pedidas (o quadrado repete o pedido ao redesenhar).
+  definirSemRede(semRede: boolean) {
+    if (this.semRedeAgora === semRede) return
+    this.semRedeAgora = semRede
+    if (!semRede) this.semRedeIds.clear()
+    this.mudou()
+  }
+
   // pedir lê a imagem, se ela ainda não foi lida nem está sendo. A falha fica
-  // anotada (o quadrado diz "Imagem indisponível") e não se repete sozinha.
+  // anotada (o quadrado diz "Imagem indisponível") e não se repete sozinha; a que
+  // faltou por falta de rede (SoComRede) espera a rede, sem passar por falha.
   pedir(notaId: string, id: string) {
-    if (this.fechada || this.urls.has(id) || this.pedidos.has(id) || this.falhas.has(id)) return
+    if (this.fechada || this.urls.has(id) || this.pedidos.has(id) || this.falhas.has(id) || this.semRedeIds.has(id)) return
     this.pedidos.add(id)
     this.cliente.ler(notaId, id).then(
       (blob) => {
@@ -90,10 +112,14 @@ export class ImagensNaTela {
         this.urls.set(id, this.cliente.paraATela(blob))
         this.mudou()
       },
-      () => {
+      (e: unknown) => {
         this.pedidos.delete(id)
         if (this.fechada) return
-        this.falhas.add(id)
+        // IMAGE_PENDING: a imagem ainda não chegou ao PC; a lista traz o "a_caminho" e
+        // o quadrado já diz isso. Não é falha, e a lista nova a pede de novo.
+        if (e instanceof ErroDaApi && e.codigo === 'IMAGE_PENDING') return
+        if (e instanceof SoComRede) this.semRedeIds.add(id)
+        else this.falhas.add(id)
         this.mudou()
       },
     )
@@ -192,6 +218,8 @@ export class ImagensNaTela {
   // (aoVencer) o pedido vai ao Agent, e a imagem sai de vez. A que já não estava lá
   // (404) conta como tirada; a falha devolve a imagem à tela, com o aviso.
   tirar(notaId: string, imagem: ImagemDaNota, avisar: AvisarComDesfazer, aoPerderLigacao?: (e: unknown) => void) {
+    // No celular sem rede o pedido não sairia: a imagem fica, com o aviso (N10b).
+    if (this.semRedeAgora) return avisar(FRASES.tirarSemRede)
     this.ocultas.add(imagem.id)
     this.mudou()
     let desfeita = false
@@ -209,6 +237,7 @@ export class ImagensNaTela {
           this.ocultas.delete(imagem.id)
           this.mudou()
           if (problemaDe(e)) aoPerderLigacao?.(e)
+          if (e instanceof SoComRede) return avisar(`${FRASES.tirarSemRede.replace(/\.$/, '')}. Ela continua lá.`)
           avisar(`Não consegui tirar a imagem da nota: ${mensagemDe(e).replace(/\.$/, '')}. Ela continua lá.`)
         },
       )

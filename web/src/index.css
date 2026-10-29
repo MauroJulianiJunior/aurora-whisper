@@ -3963,6 +3963,31 @@ body:has(.ditar-para-nota) .aviso-regiao {
   font-size: 11px;
 }
 
+/* O lugar de uma imagem que não está à vista, sem erro (cena 6 da prévia): a que
+   ainda está a caminho do PC e a que não carrega sem rede (o celular). Mesma
+   proporção da imagem; o texto só no primeiro quadrado da grade. */
+.foto.vazia {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+}
+
+.foto-vazia {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  color: var(--texto-3);
+  font-family: var(--fonte-mono);
+  font-size: 11px;
+  text-align: center;
+}
+
+.foto-vazia svg {
+  width: 20px;
+  height: 20px;
+}
+
 /* A nota só com imagem: o cartão é a imagem, sem o respiro do texto. */
 .cartao.so-imagem .cartao-abrir {
   padding: 0;

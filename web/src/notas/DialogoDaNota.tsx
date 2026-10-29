@@ -9,6 +9,7 @@ import { EscolherMarcadores } from './EscolherMarcadores'
 import { Icone } from './Icone'
 import { arquivosDoArrastar, arrastaArquivos, contaDeImagens, FRASES, imagensDaNota, imagensDoColar, nomeComImagens } from './imagens'
 import { useImagensNaTela } from './contextoDasImagens'
+import { BotaoDeImagem } from './BotaoDeImagem'
 import { GradeDeImagens, ImagemGrande } from './ImagensDaNota'
 import { PaletaDeCores } from './PaletaDeCores'
 import { dispensarSugestao, sugestaoDispensada } from './preferencias'
@@ -118,7 +119,6 @@ export function DialogoDaNota({ nota, cliente, marcadores, notasParaSugerir, cri
   const [grande, setGrande] = useState<number | null>(null)
   const [soltando, setSoltando] = useState(false)
   const arrastes = useRef(0)
-  const escolherImagens = useRef<HTMLInputElement>(null)
   const quemAbriuAGrande = useRef<HTMLElement | null>(null)
 
   // Os campos de agora, lidos pela fila de gravação (que roda depois de
@@ -788,36 +788,18 @@ export function DialogoDaNota({ nota, cliente, marcadores, notasParaSugerir, cri
             {() => <EscolherMarcadores marcadores={marcadores} marcados={ultima.marcadores} aoAlternar={alternarMarcador} aoCriar={criarEMarcar} />}
           </BotaoComMenu>
 
-          {/* A imagem (N10): a escolha de arquivos do Windows, aberta pelo clique de
-              quem usa. No celular, a barra é a da prévia da N8 (sem a imagem, que lá
-              é a segunda metade da N10, e com o Arquivar no Mais). */}
+          {/* A imagem (N10): no PC, a escolha de arquivos do Windows; no celular (N10b,
+              cena 5 da prévia), o menu "Tirar foto" / "Escolher da galeria", apagado
+              sem rede. A ordem no celular é a da prévia: Imagem, Ditar aqui, Mais. */}
           {loja && (
-            <>
-              <button
-                type="button"
-                className="icone-botao"
-                aria-label="Imagem"
-                title="Anexar imagem"
-                disabled={estado.tipo === 'lixeira'}
-                onClick={() => escolherImagens.current?.click()}
-              >
-                <Icone nome="imagem" />
-              </button>
-              <input
-                ref={escolherImagens}
-                type="file"
-                accept="image/*"
-                multiple
-                hidden
-                tabIndex={-1}
-                aria-label="Escolher imagens para a nota"
-                onChange={(e) => {
-                  const arquivos = Array.from(e.currentTarget.files ?? [])
-                  e.currentTarget.value = ''
-                  anexarImagens(arquivos)
-                }}
-              />
-            </>
+            <BotaoDeImagem
+              celular={Boolean(celular)}
+              desabilitado={estado.tipo === 'lixeira' || Boolean(celular?.semRede)}
+              rotulo="Imagem"
+              titulo="Anexar imagem"
+              rotuloDoCampo="Escolher imagens para a nota"
+              aoEscolher={anexarImagens}
+            />
           )}
 
           {!celular && (
@@ -830,6 +812,17 @@ export function DialogoDaNota({ nota, cliente, marcadores, notasParaSugerir, cri
             >
               <Icone nome={arquivada ? 'desarquivar' : 'arquivar'} />
             </button>
+          )}
+
+          {celular && (
+            <celular.DitarNaNota
+              notaId={nota.id}
+              desligado={semRede || estado.tipo === 'lixeira'}
+              aoComecar={editor.marcarLugarDoDitado}
+              aoTexto={editor.inserirDitadoNoCursor}
+              avisar={avisar}
+              aoPerderLigacao={aoPerderLigacao}
+            />
           )}
 
           <BotaoComMenu icone="mais" rotulo="Mais">
@@ -907,17 +900,6 @@ export function DialogoDaNota({ nota, cliente, marcadores, notasParaSugerir, cri
               </>
             )}
           </BotaoComMenu>
-
-          {celular && (
-            <celular.DitarNaNota
-              notaId={nota.id}
-              desligado={semRede || estado.tipo === 'lixeira'}
-              aoComecar={editor.marcarLugarDoDitado}
-              aoTexto={editor.inserirDitadoNoCursor}
-              avisar={avisar}
-              aoPerderLigacao={aoPerderLigacao}
-            />
-          )}
 
           <span className="empurra" />
           <button type="button" className="botao leve" onClick={() => void fechar()}>

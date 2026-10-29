@@ -44,7 +44,7 @@ $ErrorActionPreference = 'Stop'
 
 $Curl = Join-Path $env:SystemRoot 'System32\curl.exe'
 # A CSP e o HSTS do servidor (internal\server\seguranca.go).
-$CspDoServidor = 'default-src ''self''; base-uri ''none''; object-src ''none''; frame-ancestors ''none''; form-action ''self'''
+$CspDoServidor = 'default-src ''self''; img-src ''self'' blob:; base-uri ''none''; object-src ''none''; frame-ancestors ''none''; form-action ''self'''
 $HstsDoServidor = 'max-age=31536000'
 
 function Rodar-Silencioso([string]$Programa, [string[]]$Argumentos) {

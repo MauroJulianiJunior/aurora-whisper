@@ -865,6 +865,8 @@ export function servidorFalso(
     const im = (n.imagens ?? []).find((x) => x.id === imagemId)
     if (!im) return erro(404, 'NOT_FOUND', 'registro não encontrado')
     if (p.metodo === 'GET') {
+      // N10b: a imagem que ainda não baixou da nuvem não tem bytes aqui (409 IMAGE_PENDING).
+      if (im.estado === 'a_caminho') return erro(409, 'IMAGE_PENDING', 'a imagem ainda está a caminho')
       const b = bytesDasImagens.get(im.id) ?? new Blob([new Uint8Array([0xff, 0xd8, 0xff, 0xd9])], { type: 'image/jpeg' })
       return new Response(b, { status: 200, headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'no-store' } })
     }
@@ -1126,7 +1128,7 @@ export function servidorFalso(
     marcadores: bancoDeMarcadores,
     // notaPorFora simula outra aba mexendo na nota: a versão sobe, a data
     // também.
-    notaPorFora(id: string, parcial: Partial<Pick<Nota, 'titulo' | 'corpo' | 'cor' | 'fixada' | 'arquivada' | 'conflito'>>) {
+    notaPorFora(id: string, parcial: Partial<Pick<Nota, 'titulo' | 'corpo' | 'cor' | 'fixada' | 'arquivada' | 'conflito' | 'imagens'>>) {
       const n = bancoDeNotas.find((x) => x.id === id)
       if (!n) throw new Error(id)
       Object.assign(n, parcial)

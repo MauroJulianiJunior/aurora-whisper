@@ -318,8 +318,11 @@ describe('o bundle da nuvem (dist-nuvem)', () => {
   // localStorage (o it.each de baixo trava as três frases do armazenamento do
   // navegador), nem salvo em arquivo, nem tocado de volta. O analisador não é
   // ligado a nenhuma saída, e o AudioWorklet fica de fora: a CSP default-src
-  // 'self' não muda.
-  it.each(['caches.', 'createObjectURL', 'showSaveFilePicker', 'FileReader', 'new Audio(', 'audioWorklet', 'AudioWorklet', 'navigator.storage'])(
+  // 'self' não muda. O 'createObjectURL' saiu desta lista na N10b: o app passou a
+  // mostrar a imagem das notas por uma URL blob:, e o que prende o áudio fora dela
+  // é o teste "a URL blob: só para a imagem da nota" (em "quem guarda no aparelho"),
+  // que olha o código-fonte arquivo por arquivo, e não o bundle inteiro.
+  it.each(['caches.', 'showSaveFilePicker', 'FileReader', 'new Audio(', 'audioWorklet', 'AudioWorklet', 'navigator.storage'])(
     'o gravador não guarda nem toca o áudio: sem %s',
     (texto) => {
       expect(nuvem.js).not.toContain(texto)
@@ -418,6 +421,30 @@ describe('o bundle da nuvem (dist-nuvem)', () => {
     }
   })
 
+  // ADR-022, N10b: as imagens das notas no celular, pela sessão: as rotas de
+  // /api/v1/notes/.../images, o menu da câmera e da galeria, a guarda do JPEG e o
+  // "Imagem sem rede". E o que não: a rota do Agent e o nome do arquivo original.
+  it('tem as imagens das notas no celular: as rotas da nuvem, a câmera, a galeria e o "Imagem sem rede"', () => {
+    for (const texto of [
+      '/api/v1/notes/with-image',
+      '/images',
+      'image/jpeg',
+      'capture',
+      'Tirar foto',
+      'Escolher da galeria',
+      'Imagem sem rede',
+      'Imagem a caminho',
+      'Solte para anexar à nota',
+      'Imagem tirada da nota.',
+      'só a imagem da nota vira URL blob:',
+      'createObjectURL',
+    ]) {
+      expect(nuvem.js, texto).toContain(texto)
+    }
+    expect(nuvem.js).not.toContain('/api/notas/com-imagem')
+    expect(nuvem.js).not.toContain('/imagens')
+  })
+
   it('a busca vai no corpo de um POST, e a lista sem busca por GET', () => {
     expect(nuvem.js).toContain('/api/v1/transcriptions/search')
   })
@@ -482,12 +509,30 @@ describe('quem guarda no aparelho', () => {
     expect(await quemUsa(/localStorage/)).toEqual(['notas/preferencias.ts'])
   })
 
-  // ADR-022, N10: a URL blob: das imagens das notas nasce só no cliente do PC (a
-  // imagem lida com o token). O app do celular ainda não mostra imagem, e o
-  // gravador do ditado não pode criar URL de blob nenhum (o it.each do áudio,
-  // acima): a segunda metade da N10 muda esta lista de propósito.
-  it('a URL blob: só no cliente do PC', async () => {
-    expect(await quemUsa(/createObjectURL/)).toEqual(['clienteLocal.ts'])
+  // ADR-022, N10 e N10b: a URL blob: das imagens das notas. Nasce em dois arquivos
+  // só, e cada um com uma guarda: o cliente do PC (a imagem lida com o token, na
+  // Local API) e o do celular (nuvem/notas/urlDaImagem.ts, que só aceita um JPEG:
+  // `blob.type !== 'image/jpeg'` joga erro). O gravador do ditado (nuvem/ditar/) não
+  // pode criar URL de blob nenhuma nem importar o arquivo que as cria: é a garantia
+  // de que o áudio do ditado não é guardado nem tocado de volta. Mudar esta lista
+  // sem querer (um terceiro arquivo com createObjectURL) faz o teste cair.
+  it('a URL blob: só para a imagem da nota: dois arquivos, um por cliente', async () => {
+    expect(await quemUsa(/createObjectURL/)).toEqual(['clienteLocal.ts', 'nuvem/notas/urlDaImagem.ts'])
+    expect(await quemUsa(/createObjectURL|revokeObjectURL/)).toEqual(['clienteLocal.ts', 'nuvem/notas/urlDaImagem.ts'])
+  })
+
+  it('o gravador do ditado não cria URL blob: nem importa quem a cria', async () => {
+    const doGravador = (await quemUsa(/blob:|createObjectURL|revokeObjectURL|urlDaImagem/)).filter((f) => f.startsWith('nuvem/ditar/'))
+    expect(doGravador).toEqual([])
+    // Só o cliente das notas do celular importa o arquivo da URL da imagem.
+    expect(await quemUsa(/from '\.\/urlDaImagem'/)).toEqual(['nuvem/notas/notasNaNuvem.ts'])
+  })
+
+  it('o arquivo da URL da imagem só aceita JPEG e não conhece áudio', async () => {
+    const codigo = await readFile(path.join(raiz, 'src', 'nuvem', 'notas', 'urlDaImagem.ts'), 'utf8')
+    const semComentario = codigo.replace(/\/\/.*$/gm, '')
+    expect(semComentario).toContain("blob.type !== 'image/jpeg'")
+    expect(semComentario).not.toMatch(/audio|Audio|MediaRecorder|getUserMedia/)
   })
 })
 
@@ -856,6 +901,13 @@ describe('o service worker emitido (sw.js)', () => {
       ['POST /api/v1/transcriptions/search', pedido('/api/v1/transcriptions/search', { method: 'POST' })],
       // ADR-021: o áudio do ditado vai direto à rede, e o service worker nem o vê.
       ['POST /api/v1/dictations', pedido('/api/v1/dictations', { method: 'POST' })],
+      // ADR-022, N10b: a imagem das notas nunca passa pelo service worker (nem guardada,
+      // nem lida do cache): vai direto à rede, e a resposta é no-store.
+      ['GET /api/v1/notes/n1/images/i1', pedido('/api/v1/notes/n1/images/i1')],
+      ['GET /api/v1/notes/n1/images/i1, navegando', pedido('/api/v1/notes/n1/images/i1', { mode: 'navigate' })],
+      ['POST /api/v1/notes/n1/images', pedido('/api/v1/notes/n1/images', { method: 'POST' })],
+      ['POST /api/v1/notes/with-image', pedido('/api/v1/notes/with-image', { method: 'POST' })],
+      ['DELETE /api/v1/notes/n1/images/i1', pedido('/api/v1/notes/n1/images/i1', { method: 'DELETE' })],
       ['POST /api/v1/device-auth/start', pedido('/api/v1/device-auth/start', { method: 'POST' })],
       ['POST /auth/start', pedido('/auth/start', { method: 'POST' })],
       ['GET /auth/google/callback, navegando', pedido('/auth/google/callback?code=c&state=s', { mode: 'navigate' })],

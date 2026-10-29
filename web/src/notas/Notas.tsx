@@ -196,6 +196,9 @@ export function Notas({
   // Os avisos da fila (o selo de uma nota que mudou nos dois lados, a recusa que
   // virou nota nova) vão para a pílula.
   useEffect(() => celular?.rede.aoAvisar?.((texto) => avisar(texto)), [celular, avisar])
+  // As imagens também sabem da rede (N10b, cena 6): as que não carregam sem ela
+  // viram "Imagem sem rede", e voltam a ser pedidas quando a rede volta.
+  useEffect(() => imagens?.definirSemRede(semRede), [imagens, semRede])
   const redeVista = useRef({ semRede, nEsperando })
   useEffect(() => {
     const antes = redeVista.current

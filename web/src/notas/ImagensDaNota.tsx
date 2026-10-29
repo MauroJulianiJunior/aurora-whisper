@@ -28,6 +28,8 @@ interface PropsDaFoto {
   item: Item
   // larga: o primeiro quadrado do cartão, com a proporção da imagem.
   larga: boolean
+  // primeira: o primeiro quadrado da grade (o único que diz "Imagem sem rede").
+  primeira: boolean
   noCartao: boolean
   children?: ReactNode
 }
@@ -59,16 +61,33 @@ function useVisivel<T extends Element>(): [RefObject<T | null>, boolean] {
   return [ref, visivel]
 }
 
+// QuadradoVazio é o lugar de uma imagem que não está à vista, sem erro nenhum: a que
+// ainda está a caminho do PC (N10b) e a que não carrega sem rede (o celular, cena 6
+// da prévia). Ocupa o espaço da imagem, com a mesma proporção, e diz o porquê no
+// primeiro quadrado da grade (os outros só levam o ícone).
+function QuadradoVazio({ texto, dizer }: { texto: string; dizer: boolean }) {
+  return (
+    <span className="foto-vazia">
+      <Icone nome="imagem" />
+      {dizer && <span>{texto}</span>}
+    </span>
+  )
+}
+
 // Foto é um quadrado da grade: a imagem (lida quando chega perto da tela, se
-// ainda não foi), o "guardando…" de quem está subindo, ou o aviso de que não deu
-// para abrir.
-function Foto({ notaId, item, larga, noCartao, children }: PropsDaFoto) {
+// ainda não foi), o "guardando…" de quem está subindo, o lugar vazio da que está a
+// caminho ou sem rede, ou o aviso de que não deu para abrir.
+function Foto({ notaId, item, larga, noCartao, primeira, children }: PropsDaFoto) {
   const loja = useImagensNaTela()
   const [ref, visivel] = useVisivel<HTMLDivElement>()
   const id = item.tipo === 'imagem' ? item.imagem.id : null
+  const aCaminho = item.tipo === 'imagem' && item.imagem.estado === 'a_caminho'
+  const semRede = id ? (loja?.semRede(id) ?? false) : false
+  // As dependências levam o a_caminho e o semRede: a imagem que chega (a lista
+  // nova sem o estado) e a rede que volta pedem a leitura de novo.
   useEffect(() => {
-    if (id && visivel) loja?.pedir(notaId, id)
-  }, [loja, notaId, id, visivel])
+    if (id && visivel && !aCaminho) loja?.pedir(notaId, id)
+  }, [loja, notaId, id, visivel, aCaminho, semRede])
   const [w, h] = item.tipo === 'imagem' ? [item.imagem.largura, item.imagem.altura] : [item.g.largura, item.g.altura]
   const estilo = noCartao && larga ? { aspectRatio: proporcao(w, h) } : undefined
   if (item.tipo === 'guardando') {
@@ -81,6 +100,23 @@ function Foto({ notaId, item, larga, noCartao, children }: PropsDaFoto) {
   }
   const url = id ? loja?.url(id) : undefined
   const falhou = id ? loja?.falhou(id) : false
+  // A que já foi lida nesta visita continua aparecendo (url), com ou sem rede.
+  if (!url && aCaminho) {
+    return (
+      <div ref={ref} className="foto vazia a-caminho" style={estilo}>
+        <QuadradoVazio texto="Imagem a caminho" dizer={primeira} />
+        {children}
+      </div>
+    )
+  }
+  if (!url && semRede) {
+    return (
+      <div ref={ref} className="foto vazia sem-rede" style={estilo}>
+        <QuadradoVazio texto="Imagem sem rede" dizer={primeira} />
+        {children}
+      </div>
+    )
+  }
   return (
     <div ref={ref} className={falhou ? 'foto sem-imagem' : 'foto'} style={estilo}>
       {url ? <img src={url} alt="" draggable={false} /> : falhou ? <span className="foto-aviso">Imagem indisponível</span> : null}
@@ -121,14 +157,14 @@ export function GradeDeImagens({ nota, aoAbrir, aoTirar }: PropsDaGrade) {
         const ultimoComMais = i === mostrados.length - 1 && faltam > 0
         if (noCartao || item.tipo === 'guardando') {
           return (
-            <Foto key={chave} notaId={nota.id} item={item} larga={larga} noCartao={noCartao}>
+            <Foto key={chave} notaId={nota.id} item={item} larga={larga} primeira={i === 0} noCartao={noCartao}>
               {ultimoComMais && <span className="faltam">+{faltam}</span>}
             </Foto>
           )
         }
         const posicao = imagens.indexOf(item.imagem)
         return (
-          <Foto key={chave} notaId={nota.id} item={item} larga={larga} noCartao={false}>
+          <Foto key={chave} notaId={nota.id} item={item} larga={larga} primeira={i === 0} noCartao={false}>
             <button
               type="button"
               className="foto-abrir"
@@ -182,9 +218,11 @@ export function ImagemGrande({ notaId, imagens, indice, titulo, aoMudar, aoFecha
   const n = imagens.length
   const imagem = imagens[Math.min(indice, n - 1)]
   const id = imagem?.id
+  const aCaminho = imagem?.estado === 'a_caminho'
+  const semRede = id ? (loja?.semRede(id) ?? false) : false
   useEffect(() => {
-    if (id) loja?.pedir(notaId, id)
-  }, [loja, notaId, id])
+    if (id && !aCaminho) loja?.pedir(notaId, id)
+  }, [loja, notaId, id, aCaminho, semRede])
   // O foco entra no fechar ao abrir; quem abriu recebe de volta ao fechar (a nota
   // aberta cuida disso).
   useLayoutEffect(() => {
@@ -239,6 +277,10 @@ export function ImagemGrande({ notaId, imagens, indice, titulo, aoMudar, aoFecha
       <div className="imagem-grande">
         {url ? (
           <img src={url} alt={`Imagem ${atual} de ${n} da nota`} draggable={false} />
+        ) : aCaminho ? (
+          <span className="foto-aviso">Imagem a caminho</span>
+        ) : semRede ? (
+          <span className="foto-aviso">Imagem sem rede</span>
         ) : loja?.falhou(imagem.id) ? (
           <span className="foto-aviso">Imagem indisponível</span>
         ) : null}

@@ -25,6 +25,7 @@ export type NomeDoIcone =
   | 'seta'
   | 'fechar'
   | 'baixar'
+  | 'camera'
 
 const traco = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.7, strokeLinejoin: 'round', strokeLinecap: 'round' } as const
 
@@ -114,6 +115,13 @@ const desenhos: Record<NomeDoIcone, ReactNode> = {
   // As da imagem (a prévia da N10): o × sobre a imagem e na imagem grande, e o Baixar.
   fechar: <path d="M6.5 6.5l11 11M17.5 6.5l-11 11" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" />,
   baixar: <path d="M12 4v11 M7.5 10.5 12 15l4.5-4.5 M5 19.5h14" {...traco} />,
+  // A câmera do menu da imagem, no celular (N10b).
+  camera: (
+    <>
+      <path d="M4 8.5h3.5L9 6h6l1.5 2.5H20v10.5H4z" {...traco} />
+      <circle cx="12" cy="13.5" r="3.3" fill="none" stroke="currentColor" strokeWidth={1.7} />
+    </>
+  ),
 }
 
 export function Icone({ nome }: { nome: NomeDoIcone }) {
