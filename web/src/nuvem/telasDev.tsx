@@ -33,6 +33,10 @@
 //                    Anthropic: os dois campos, cada um com a linha de onde criar a
 //                    chave do provedor dele.
 //
+// As notas no celular (ADR-022, N8), com as notas de mentira (notas/notasFalsas.ts):
+//   notas            a aba Notas, com uma nota curta no alto da coluna da esquerda
+//                    (abrir uma nota e a Cor: a paleta tem de caber na tela).
+//
 // Claro e escuro seguem o sistema do navegador (no DevTools: Rendering,
 // "prefers-color-scheme"); 320 e 375 px, no modo de dispositivo.
 
@@ -44,6 +48,8 @@ import { VERSAO_DO_AVISO } from './avisoDoDitado'
 import { plataformaFalsa } from './ditar/plataformaFalsa'
 import { type OpcoesDaNuvem, aprendido, itemNuvem, servidorFalsoNuvem } from '../testes/servidorFalsoNuvem'
 import AppNuvem from './AppNuvem'
+import { armazemNaMemoria } from './notas/armazem'
+import { juntar, notaDaNuvem, notasFalsasNaNuvem } from './notas/notasFalsas'
 
 const busca = new URLSearchParams(window.location.search)
 const cenario = busca.get('cenario') ?? 'lista'
@@ -110,12 +116,23 @@ if (cenario === 'erro') {
 const ditar = ['gravando', 'enviando', 'erro-rede', 'sessao', 'chegou'].includes(cenario)
 const microfone = plataformaFalsa()
 // No "enviando", o servidor nunca responde ao ditado.
-const buscar: typeof srv.buscar = (entrada, init) =>
+const buscarDoHistorico: typeof srv.buscar = (entrada, init) =>
   cenario === 'enviando' && entrada === '/api/v1/dictations' ? new Promise(() => {}) : srv.buscar(entrada, init)
+const notas =
+  cenario === 'notas'
+    ? notasFalsasNaNuvem([
+        notaDaNuvem({ id: 'n1', titulo: 'recibos de outubro', posicao: 'U' }),
+        notaDaNuvem({ id: 'n2', titulo: 'Teste N8', corpo: 'primeira versão\nAdivinhado pelo celular', posicao: 'V' }),
+        notaDaNuvem({ id: 'n3', titulo: 'Mercado N8', corpo: '- [ ] Arroz\n- [ ] Feijão\n- [ ] Leite\n- [ ] Pão', posicao: 'W' }),
+        notaDaNuvem({ id: 'n4', titulo: 'mais um', corpo: '- [ ] Leite\n- [ ] Pão\n- [ ] Café', cor: 'verde', posicao: 'X' }),
+      ])
+    : undefined
+const buscar = notas ? juntar(notas, buscarDoHistorico) : buscarDoHistorico
+const armazem = armazemNaMemoria()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <AppNuvem buscar={buscar} irPara={() => {}} plataformaDeDitar={microfone.plataforma} />
+    <AppNuvem buscar={buscar} irPara={() => {}} plataformaDeDitar={microfone.plataforma} armazemDasNotas={notas ? () => armazem : undefined} />
   </StrictMode>,
 )
 
@@ -152,6 +169,8 @@ if (ditar) {
   // O primeiro toque no microfone de uma conta sem aceite: a folha, e o
   // microfone fechado.
   quandoHouver('Ditar', (mic) => mic.click())
+} else if (cenario === 'notas') {
+  quandoHouver('Notas', (b) => b.click())
 } else if (busca.get('config') !== '0' && cenario !== 'entrar') {
   // Abre as Configurações sozinha: o botão da barra é o único com esse nome.
   quandoHouver('Configurações', (b) => b.click())
