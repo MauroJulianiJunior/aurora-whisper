@@ -617,10 +617,9 @@ func (f *Fila) executarImagem(ctx context.Context, tx *sql.Tx, e EstadoDaImagem,
 			return fmt.Errorf("storage: apagando a imagem tirada na nuvem: %w", err)
 		}
 	}
-	if im := a.Inserir; im != nil && e.Linha == nil {
-		if !idDeImagem.MatchString(im.ID) {
-			return acaoInvalida("id de imagem que não vira arquivo")
-		}
+	// O id que não vira nome de arquivo (a decisão já o recusa) fica de fora,
+	// sem desfazer a página: um erro aqui prenderia o pull.
+	if im := a.Inserir; im != nil && e.Linha == nil && idDeImagem.MatchString(im.ID) {
 		if _, err := tx.ExecContext(ctx, `INSERT INTO local_note_images
 			(id, note_id, largura, altura, bytes, sha256, created_at, na_nuvem, sync_state)
 			SELECT ?, ?, ?, ?, ?, ?, ?, 1, ? WHERE EXISTS (SELECT 1 FROM local_notes WHERE id = ? AND user_id = ?)

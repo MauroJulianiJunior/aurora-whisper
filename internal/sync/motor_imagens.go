@@ -141,8 +141,17 @@ func (m *Motor) BaixarImagens(ctx context.Context, rel *Relatorio) error {
 			case errors.Is(gerr, storage.ErrNotFound):
 				// Tirada aqui no meio, ou já baixada: nada a fazer.
 				continue
+			case ctx.Err() != nil:
+				return ctx.Err()
 			case !errors.Is(gerr, storage.ErrImagemEstragada):
-				return gerr
+				// O arquivo não se gravou (o disco cheio, a pasta sem
+				// permissão): a imagem espera a vez dela, e a rodada segue.
+				rel.Imagens[TipoImagemEsperandoBaixa]++
+				if err := m.Fila.AplicarBaixaDaImagem(ctx, im.ID, storage.AcaoDaImagemNaBaixa{Esperar: true,
+					Erro: CodigoImagemNaoGravada}, m.agora()); err != nil {
+					return err
+				}
+				continue
 			}
 		}
 		d := DecidirBaixaDaImagem(resp)

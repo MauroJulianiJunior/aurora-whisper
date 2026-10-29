@@ -46,6 +46,8 @@ const (
 const (
 	CodigoImagemStatus    = "status"
 	CodigoImagemEstragada = "imagem_estragada"
+	// CodigoImagemNaoGravada: o arquivo baixado não se gravou aqui.
+	CodigoImagemNaoGravada = "imagem_nao_gravada"
 )
 
 // EsperaDasImagens é a espera de uma imagem que não subiu por um motivo que
