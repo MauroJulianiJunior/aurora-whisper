@@ -3044,6 +3044,18 @@ tbody[data-pronto] tr[data-arrastando] {
   bottom: calc(100% + 4px);
 }
 
+/* Sem lugar em cima (uma nota curta no alto da tela), abre para baixo; sem lugar
+   à direita, alinha pela ponta direita do botão (BotaoComMenu). */
+.barra-nota .menu[data-lado='baixo'] {
+  top: calc(100% + 4px);
+  bottom: auto;
+}
+
+.menu[data-ponta='direita'] {
+  left: auto;
+  right: 0;
+}
+
 .menu button {
   display: flex;
   align-items: center;
@@ -3189,8 +3201,10 @@ tbody[data-pronto] tr[data-arrastando] {
 }
 
 @media (max-width: 640px) {
+  /* A nota aberta desce um pouco do alto, como na prévia da N8 (64 px num celular
+     de 800), e não cola na borda de cima da tela. */
   .veu {
-    padding: 12px 8px 16px;
+    padding: 8vh 8px 16px;
   }
 
   .nota-linha-abrir {

@@ -498,6 +498,29 @@ describe('a nota aberta', () => {
     expect(within(dialogo()).queryByRole('button', { name: /\d+ marcados?/ })).toBeNull()
   })
 
+  it('Mais: o menu que não cabe em cima abre para baixo, e o que não cabe à direita se alinha pela direita', async () => {
+    // O jsdom não tem layout: a caixa do menu aberto (para cima, a partir da ponta
+    // esquerda do botão) é a de mentira, numa janela de 1024 px.
+    let caixa = { top: -120, left: 300 }
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+      if (!this.classList.contains('menu')) return new DOMRect(0, 0, 0, 0)
+      return new DOMRect(caixa.left, caixa.top, 208, 300)
+    })
+    await abrirNotas([compras()])
+    await screen.findByText('Compras', { selector: 'h3' })
+    abrir('n1')
+    const mais = within(dialogo()).getByRole('button', { name: 'Mais' })
+    const menu = () => within(dialogo()).getByRole('group', { name: 'Mais' })
+    fireEvent.click(mais)
+    expect(menu().dataset).toMatchObject({ lado: 'baixo' })
+    expect(menu().dataset.ponta).toBeUndefined()
+    fireEvent.click(mais)
+    caixa = { top: 200, left: 900 }
+    fireEvent.click(mais)
+    expect(menu().dataset).toMatchObject({ ponta: 'direita' })
+    expect(menu().dataset.lado).toBeUndefined()
+  })
+
   it('Formatar troca o prefixo da linha do cursor', async () => {
     const srv = await abrirNotas([ideia()])
     await screen.findByText('Ideia', { selector: 'h3' })
