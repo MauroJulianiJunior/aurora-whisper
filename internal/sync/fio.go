@@ -197,6 +197,24 @@ type Nota struct {
 	DeletedAt        *time.Time  `json:"deleted_at"`
 	Version          int64       `json:"version"`
 	VersaoEmConflito *SeloDaNota `json:"versao_em_conflito"`
+	// Imagens são as imagens vivas da nota (N10b), só os metadados, na ordem
+	// dela. A nuvem de antes da N10b não a manda (nil). O pull aplica cada uma
+	// como uma mudança note_image (a imagem que chegou numa página antes da
+	// nota dela não foi gravada: a nota a traz).
+	Imagens []ImagemDaNuvem `json:"imagens,omitempty"`
+}
+
+// ImagemDaNuvem é a imagem da nota como a nuvem a devolve (o imageDTO do
+// servidor; N10b): os metadados, nunca os bytes. É o payload da mudança
+// note_image do pull e o item da lista imagens da nota.
+type ImagemDaNuvem struct {
+	ID        string    `json:"id"`
+	NoteID    string    `json:"note_id"`
+	Largura   int       `json:"largura"`
+	Altura    int       `json:"altura"`
+	Bytes     int64     `json:"bytes"`
+	SHA256    string    `json:"sha256"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 // SeloDaNota é a versão do título e do corpo que perdeu um conflito.
@@ -236,6 +254,9 @@ type Change struct {
 	// de um note e de um label, N7). Só o Cliente os preenche.
 	PayloadNota     *Nota            `json:"-"`
 	PayloadMarcador *MarcadorDaNuvem `json:"-"`
+	// PayloadImagem são os metadados da imagem da nota (o upsert de um
+	// note_image, N10b). Só o Cliente o preenche.
+	PayloadImagem *ImagemDaNuvem `json:"-"`
 }
 
 // ChangePage é uma página do pull.
@@ -251,9 +272,15 @@ type ChangePage struct {
 }
 
 // TemNotas diz se a nuvem desta página sincroniza notas.
-func (p ChangePage) TemNotas() bool {
+func (p ChangePage) TemNotas() bool { return p.temEntidade(storage.EntidadeNota) }
+
+// TemImagens diz se a nuvem desta página sincroniza as imagens das notas
+// (N10b).
+func (p ChangePage) TemImagens() bool { return p.temEntidade(storage.EntidadeImagemDaNota) }
+
+func (p ChangePage) temEntidade(tipo string) bool {
 	for _, e := range p.Entidades {
-		if e == storage.EntidadeNota {
+		if e == tipo {
 			return true
 		}
 	}
@@ -312,6 +339,7 @@ type destinos struct {
 	par      **Aprendido
 	nota     **Nota
 	marcador **MarcadorDaNuvem
+	imagem   **ImagemDaNuvem
 }
 
 // lerPorTipo decodifica as ocorrências no tipo de entityType: no par, para o
@@ -326,6 +354,13 @@ func (c cru) lerPorTipo(entityType string, d destinos) error {
 			err = json.Unmarshal(o, d.nota)
 		case storage.EntidadeMarcadorDeNota:
 			err = json.Unmarshal(o, d.marcador)
+		case storage.EntidadeImagemDaNota:
+			if d.imagem == nil {
+				// O state de um push: a imagem não vai no push.
+				err = json.Unmarshal(o, d.item)
+				break
+			}
+			err = json.Unmarshal(o, d.imagem)
 		default:
 			err = json.Unmarshal(o, d.item)
 		}
@@ -358,7 +393,7 @@ func (w paginaDoFio) pagina() (ChangePage, error) {
 	}
 	for i, m := range w.Changes {
 		c := m.Change
-		if err := m.Payload.lerPorTipo(c.EntityType, destinos{&c.Payload, &c.PayloadAprendido, &c.PayloadNota, &c.PayloadMarcador}); err != nil {
+		if err := m.Payload.lerPorTipo(c.EntityType, destinos{&c.Payload, &c.PayloadAprendido, &c.PayloadNota, &c.PayloadMarcador, &c.PayloadImagem}); err != nil {
 			return ChangePage{}, err
 		}
 		p.Changes[i] = c
@@ -392,7 +427,7 @@ func (w respostaDoPush) resultado(muts []Mutation) (PushResult, error) {
 		if i < len(muts) {
 			tipo = muts[i].EntityType
 		}
-		if err := r.State.lerPorTipo(tipo, destinos{&res.State, &res.StateAprendido, &res.StateNota, &res.StateMarcador}); err != nil {
+		if err := r.State.lerPorTipo(tipo, destinos{&res.State, &res.StateAprendido, &res.StateNota, &res.StateMarcador, nil}); err != nil {
 			return PushResult{}, err
 		}
 		out.Results[i] = res

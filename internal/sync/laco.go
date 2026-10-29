@@ -103,6 +103,9 @@ type ConfigDoLaco struct {
 	// Dicionario é o dicionario.json do aprendido (Motor.Dicionario); nil
 	// deixa o aprendido de fora, como na F7. Quem o liga é o Agent (F8g).
 	Dicionario DicionarioDoAprendido
+	// Imagens são as imagens das notas no disco (Motor.Imagens, N10b); nil
+	// deixa as imagens de fora. Quem as liga é o Agent.
+	Imagens ImagensDoPC
 	// Log recebe só contagens e códigos; nil descarta.
 	Log *slog.Logger
 }
@@ -422,7 +425,7 @@ func (l *Laco) rodada(ctx context.Context) error {
 	m := &Motor{
 		Fila: l.cfg.Fila, Cliente: l.cfg.Cliente(cred.URL, cred.Token),
 		Aparelho: cred.Aparelho, PareadoEm: cred.PareadoEm, NovoID: l.cfg.NovoID, Agora: l.cfg.Agora,
-		AoLote: func() { l.contarPendentes(ctx) }, Dicionario: l.cfg.Dicionario,
+		AoLote: func() { l.contarPendentes(ctx) }, Dicionario: l.cfg.Dicionario, Imagens: l.cfg.Imagens,
 	}
 	rel, err := m.Rodada(ctx)
 	if rel.FreioConferido {
@@ -537,6 +540,18 @@ func camposDoLog(r Relatorio, pendentes int64) []any {
 		"aprendido_nao_aplicados", r.PullDoAprendido[TipoNaoAplicado] + r.PullDoAprendido[TipoPendente],
 		"aprendido_nao_aplicados_por_motivo", r.NaoAplicadosEmTexto(),
 		"aprendido_pulados", r.PullDoAprendido[TipoPulado],
+		// As imagens das notas (N10b): só contagens, nunca o tamanho de uma.
+		"imagens_completadas", r.ImagensCompletadas,
+		"imagens_subiram", r.Imagens[TipoImagemSubiu],
+		"imagens_tiradas", r.Imagens[TipoImagemTirada],
+		"imagens_esperando", r.Imagens[TipoImagemEsperando] + r.Imagens[TipoImagemEsperandoBaixa] + r.Imagens[TipoImagemSemArquivo],
+		"imagens_recusadas", r.Imagens[TipoImagemRecusada],
+		"imagens_adiadas", r.Imagens[TipoImagemAdiada],
+		"imagens_recebidas", r.Imagens[TipoImagemRecebida],
+		"imagens_baixadas", r.Imagens[TipoImagemBaixada],
+		"imagens_apagadas", r.Imagens[TipoImagemApagada] + r.Imagens[TipoImagemSumiuNaNuvem] + r.Imagens[TipoImagemSumiu],
+		"imagens_estragadas", r.Imagens[TipoImagemEstragada],
+		"imagens_nao_aplicadas", r.Imagens[TipoImagemNaoAplicada] + r.Imagens[TipoImagemConflito],
 	}
 }
 

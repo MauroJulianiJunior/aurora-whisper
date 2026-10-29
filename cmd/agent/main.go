@@ -525,7 +525,9 @@ func run(pp pastas.Pastas) error {
 			time.Now(), slog.Default()) {
 			aprendizado.semConferir = true
 		}
-		laco := montarSync(hist, dono, nuvemDoPC, aprendizado, slog.Default())
+		// As imagens das notas sobem e descem pelo mesmo laço (N10b), pelo
+		// repositório das notas, que tem a pasta delas.
+		laco := montarSync(hist, dono, nuvemDoPC, aprendizado, imagensDoSync(h.notas), slog.Default())
 		// As notas e os marcadores (ADR-022, N7) acordam o laço como o ditado.
 		h.notas.AoEnfileirar(laco.Avisar)
 		defer iniciarSync(laco, slog.Default())()

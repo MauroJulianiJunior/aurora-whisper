@@ -13,7 +13,7 @@ import (
 // dono fixo (que nem passa por ChaveDaNuvem).
 var chavesDaConexao = []string{
 	"nuvem_url", ChaveNuvemConta, "nuvem_email", "nuvem_nome", ChaveNuvemAparelho, ChaveNuvemConectadoEm,
-	ChaveNuvemEnvioAceitoEm, ChaveNuvemEnvioTotal, ChaveNuvemCopia, ChaveNuvemNotas,
+	ChaveNuvemEnvioAceitoEm, ChaveNuvemEnvioTotal, ChaveNuvemCopia, ChaveNuvemNotas, ChaveNuvemImagens,
 }
 
 // EsquecerNuvem é o "Esquecer esta nuvem" (ADR-019, "Decisões da F7c"), numa
@@ -84,6 +84,11 @@ func (f *Fila) EsquecerNuvem(ctx context.Context, agora time.Time) error {
 		// a situação e o corpo_nuvem saem (a nuvem seguinte não tem nada
 		// disso); o selo e o "marcador que espera" ficam.
 		if err := f.esquecerNotas(ctx, tx); err != nil {
+			return err
+		}
+		// As imagens das notas (N10b): a nuvem seguinte não tem nenhuma, e a
+		// que esperava o download dela sai.
+		if err := f.esquecerImagens(ctx, tx); err != nil {
 			return err
 		}
 		anotar := map[string]string{ChaveNuvemEsquecidaEm: emTexto(agora)}

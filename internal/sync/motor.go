@@ -49,6 +49,11 @@ type Motor struct {
 	// varrido, enviado nem aplicado, o M é 0, e a mudança learned do pull é
 	// "não aplicada" (o cursor anda).
 	Dicionario DicionarioDoAprendido
+	// Imagens são as imagens das notas no disco deste PC (N10b;
+	// motor_imagens.go): o PUT, o GET e o arquivo que baixou. nil deixa as
+	// imagens de fora: nada sobe nem baixa, e a mudança note_image do pull é
+	// "não aplicada" (o cursor anda).
+	Imagens ImagensDoPC
 }
 
 // Os tetos de uma rodada: o resto fica para a próxima.
@@ -75,6 +80,12 @@ type Relatorio struct {
 	// NotasCompletadas conta as notas e os marcadores de nota que a rodada pôs
 	// na fila no envio inicial das notas (Fila.CompletarNotas, N7).
 	NotasCompletadas int
+	// ImagensCompletadas conta as imagens das notas que a rodada pôs na fila
+	// no envio inicial delas (Fila.CompletarImagens, N10b).
+	ImagensCompletadas int
+	// Imagens conta, por tipo (TipoImagem*), o que a rodada fez com as imagens
+	// das notas: o pull, o envio e o download.
+	Imagens map[string]int
 	// CapacidadeNova: a rodada viu pela primeira vez que a nuvem sincroniza
 	// notas (N7), e o cursor voltou a 0 para ler tudo de novo uma vez.
 	CapacidadeNova bool
@@ -113,14 +124,16 @@ type Relatorio struct {
 
 func novoRelatorio() Relatorio {
 	return Relatorio{Push: map[string]int{}, Pull: map[string]int{}, PullDoAprendido: map[string]int{},
-		NaoAplicados: map[string]int{}, Recusados: map[string]int{}, Varredura: map[string]int{}, Reaplicados: map[string]int{}}
+		NaoAplicados: map[string]int{}, Recusados: map[string]int{}, Varredura: map[string]int{}, Reaplicados: map[string]int{},
+		Imagens: map[string]int{}}
 }
 
 // Teve diz se a rodada fez alguma coisa (a varredura que só contou o M, sem
 // gravar, não conta: o PC parado não escreve no banco a cada busca).
 func (r Relatorio) Teve() bool {
 	return r.Enviados > 0 || r.Recebidos > 0 || r.Recomecos > 0 || r.Releituras > 0 || r.Reconexoes > 0 ||
-		r.Completados > 0 || r.NotasCompletadas > 0 || r.CapacidadeNova || soma(r.Varredura) > 0 || soma(r.Reaplicados) > 0
+		r.Completados > 0 || r.NotasCompletadas > 0 || r.ImagensCompletadas > 0 || r.CapacidadeNova ||
+		soma(r.Varredura) > 0 || soma(r.Reaplicados) > 0 || soma(r.Imagens) > 0
 }
 
 // AplicouDaNuvem conta o que a rodada gravou no histórico deste PC e veio da
@@ -136,7 +149,11 @@ func (r Relatorio) Teve() bool {
 // foi gravado também entra, porque reler a lista a mais custa pouco, e deixar
 // de reler não. Só contagens: nunca texto, id ou versão.
 func (r Relatorio) AplicouDaNuvem() int {
-	return r.Pull[TipoRecebido] + r.Pull[TipoApagado] + r.Push[TipoApagado] + r.Push[TipoConflito]
+	return r.Pull[TipoRecebido] + r.Pull[TipoApagado] + r.Push[TipoApagado] + r.Push[TipoConflito] +
+		// As imagens das notas (N10b): a que chegou (a caminho), a que baixou
+		// (o arquivo está aqui) e a que saiu: o painel relê a nota.
+		r.Imagens[TipoImagemRecebida] + r.Imagens[TipoImagemApagada] + r.Imagens[TipoImagemBaixada] +
+		r.Imagens[TipoImagemSumiuNaNuvem]
 }
 
 func soma(m map[string]int) int {
@@ -248,10 +265,22 @@ func (m *Motor) Rodada(ctx context.Context) (Relatorio, error) {
 	if rel.NotasCompletadas, err = m.Fila.CompletarNotas(ctx, m.agora()); err != nil {
 		return rel, err
 	}
+	// E as imagens das notas (N10b), sob o mesmo aceite e com a capacidade
+	// delas: as anexadas antes desta versão, ou desconectado.
+	if m.Imagens != nil {
+		if rel.ImagensCompletadas, err = m.Fila.CompletarImagens(ctx, m.agora()); err != nil {
+			return rel, err
+		}
+	}
 	releu, recomecou, reconciliou, capacidade := false, false, false, false
 	for {
 		antes := rel.Pull[TipoReconciliado]
 		err := m.Enviar(ctx, &rel)
+		if err == nil {
+			// As imagens sobem depois do push (a nota criada no lote já tem a
+			// versão da nuvem) e antes do pull.
+			err = m.EnviarImagens(ctx, &rel)
+		}
 		if err == nil {
 			err = m.Receber(ctx, &rel)
 		}
@@ -274,6 +303,12 @@ func (m *Motor) Rodada(ctx context.Context) (Relatorio, error) {
 				return rel, err
 			}
 			rel.NotasCompletadas += n
+			if m.Imagens != nil {
+				if n, err = m.Fila.CompletarImagens(ctx, m.agora()); err != nil {
+					return rel, err
+				}
+				rel.ImagensCompletadas += n
+			}
 			capacidade = true
 			rel.CapacidadeNova = true
 		case errors.Is(err, ErrRecomeco) && !releu:
@@ -294,6 +329,12 @@ func (m *Motor) Rodada(ctx context.Context) (Relatorio, error) {
 			recomecou = true
 			rel.Recomecos++
 		default:
+			if err == nil {
+				// Depois do pull, as imagens que vieram da nuvem baixam
+				// (N10b). Uma que não baixa espera a vez dela, sem falhar a
+				// rodada.
+				err = m.BaixarImagens(ctx, &rel)
+			}
 			return rel, err
 		}
 	}
@@ -607,10 +648,25 @@ func (m *Motor) Receber(ctx context.Context, rel *Relatorio) error {
 			if err != nil {
 				return err
 			}
-			if primeira {
+			// A das imagens das notas (N10b), do mesmo jeito: na primeira
+			// vez, a rodada lê tudo de novo, e as notas voltam com a lista
+			// imagens.
+			primeiraDasImagens := false
+			if m.Imagens != nil {
+				if primeiraDasImagens, err = m.Fila.VerCapacidadeDasImagens(ctx, p.TemImagens(), m.agora()); err != nil {
+					return err
+				}
+			}
+			if primeira || primeiraDasImagens {
 				return errCapacidadeNova
 			}
 		}
+		var imagens []storage.ImagemNoPull
+		var daImagem map[string]ImagemDoPull
+		if m.Imagens != nil && p.TemImagens() {
+			imagens, daImagem = imagensDaPagina(p.Changes)
+		}
+		parcialDoPull := map[string]int{}
 		porID := make(map[string]Change, len(p.Changes))
 		ids := make([]string, 0, len(p.Changes))
 		var doAprendido []Change
@@ -631,6 +687,13 @@ func (m *Motor) Receber(ctx context.Context, rel *Relatorio) error {
 			case storage.EntidadeMarcadorDeNota:
 				doMarcador[id] = c
 				idsDosMarcadores = append(idsDosMarcadores, id)
+				continue
+			case storage.EntidadeImagemDaNota:
+				if daImagem == nil {
+					// Sem as imagens (o motor sem elas, ou a nuvem sem a
+					// capacidade): não aplicada, e o cursor anda.
+					parcialDoPull[TipoImagemNaoAplicada]++
+				}
 				continue
 			}
 			porID[id] = c
@@ -664,9 +727,22 @@ func (m *Motor) Receber(ctx context.Context, rel *Relatorio) error {
 				parcial.Pull[d.Tipo]++
 				return d.Acao
 			},
+			Imagens: imagens,
+			DecidirImagem: func(e storage.EstadoDaImagem) storage.AcaoDaImagem {
+				d := DecidirMudancaDaImagem(e, daImagem[e.ID])
+				parcial.Imagens[d.Tipo]++
+				return d.Acao
+			},
 		})
 		if err != nil {
 			return err
+		}
+		juntar(parcial.Imagens, parcialDoPull)
+		if m.Imagens != nil && (parcial.Imagens[TipoImagemApagada] > 0 || parcial.Pull[TipoApagado] > 0) {
+			// A lápide da imagem (ou a da nota, que leva as imagens dela)
+			// tirou linhas: o arquivo sai já, e não só na rodada do expurgo.
+			// Melhor esforço: o que ficar, a varredura tira depois.
+			_, _ = m.Imagens.TirarArquivosSemLinha(ctx)
 		}
 		cursor = novo
 		rel.Paginas++
@@ -674,6 +750,7 @@ func (m *Motor) Receber(ctx context.Context, rel *Relatorio) error {
 		juntar(rel.Pull, parcial.Pull)
 		juntar(rel.PullDoAprendido, parcial.PullDoAprendido)
 		juntar(rel.NaoAplicados, parcial.NaoAplicados)
+		juntar(rel.Imagens, parcial.Imagens)
 		if !p.HasMore {
 			return nil
 		}

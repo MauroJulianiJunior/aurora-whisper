@@ -22,7 +22,7 @@ import (
 //
 //	POST   /api/notas/com-imagem                  a nota nova só com a imagem (201, a nota)
 //	POST   /api/notas/{id}/imagens                anexa à nota (201, a imagem)
-//	GET    /api/notas/{id}/imagens/{imagem}       os bytes (image/jpeg)
+//	GET    /api/notas/{id}/imagens/{imagem}       os bytes (image/jpeg); 409 IMAGE_PENDING a caminho
 //	DELETE /api/notas/{id}/imagens/{imagem}       tira da nota, de vez (204)
 //
 // O corpo do POST é o JPEG já reduzido pelo painel (Content-Type: image/jpeg),
@@ -45,6 +45,10 @@ const (
 	// codeImagesFull: o total das imagens chegou ao teto (409); a mensagem é a
 	// frase da tela, com o número (imagemdanota.FraseDoTeto).
 	codeImagesFull = "IMAGES_FULL"
+	// codeImagePending: a imagem veio da nuvem e o arquivo ainda não baixou
+	// (409; o item da nota tem "estado": "a_caminho"). O painel mostra o lugar
+	// dela e relê quando o estado muda (N10b).
+	codeImagePending = "IMAGE_PENDING"
 )
 
 // MsgImagensNaoProntas é a frase do 503 das rotas das imagens.
@@ -59,10 +63,14 @@ type imagemDTO struct {
 	// Bytes é o tamanho do arquivo, em bytes.
 	Bytes     int64     `json:"bytes"`
 	CreatedAt time.Time `json:"created_at"`
+	// Estado (N10b) só vem na imagem que veio da nuvem e ainda não baixou:
+	// "a_caminho". Sem ele, os bytes estão aqui.
+	Estado string `json:"estado,omitempty"`
 }
 
 func toImagemDTO(im storage.ImagemDaNota) imagemDTO {
-	return imagemDTO{ID: im.ID, Largura: im.Largura, Altura: im.Altura, Bytes: im.Bytes, CreatedAt: im.CreatedAt}
+	return imagemDTO{ID: im.ID, Largura: im.Largura, Altura: im.Altura, Bytes: im.Bytes, CreatedAt: im.CreatedAt,
+		Estado: im.Estado}
 }
 
 func toImagensDTO(is []storage.ImagemDaNota) []imagemDTO {
@@ -122,6 +130,8 @@ func writeImagemError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusServiceUnavailable, codeUnavailable, MsgImagensNaoProntas)
 	case errors.Is(err, storage.ErrImagemEstragada):
 		writeError(w, http.StatusInternalServerError, codeInternal, "a imagem guardada não confere")
+	case errors.Is(err, storage.ErrImagemACaminho):
+		writeError(w, http.StatusConflict, codeImagePending, "a imagem ainda está a caminho da nuvem")
 	default:
 		writeNotaError(w, err)
 	}

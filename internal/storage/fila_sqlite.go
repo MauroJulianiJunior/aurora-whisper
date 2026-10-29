@@ -396,8 +396,12 @@ func (f *Fila) recomecar(ctx context.Context, tx *sql.Tx, aparelho, pareadoEm st
 		f.dono); err != nil {
 		return fmt.Errorf("storage: esquecendo as versões da nuvem: %w", err)
 	}
-	// As notas e os marcadores de nota (N7), no mesmo molde dos ditados.
+	// As notas e os marcadores de nota (N7), no mesmo molde dos ditados, e as
+	// imagens das notas (N10b).
 	if err := f.recomecarNotas(ctx, tx, agora); err != nil {
+		return err
+	}
+	if err := f.recomecarImagens(ctx, tx, agora); err != nil {
 		return err
 	}
 	// O aprendido, no mesmo molde (F8e): todo par do espelho marcado de novo,
@@ -640,6 +644,9 @@ func (f *Fila) AplicarTudo(ctx context.Context, aparelho, epoch string, ids []st
 	}
 	if len(notas.Notas) > 0 && notas.DecidirNota == nil {
 		return acaoInvalida("ids de notas sem a decisão")
+	}
+	if len(notas.Imagens) > 0 && notas.DecidirImagem == nil {
+		return acaoInvalida("imagens sem a decisão")
 	}
 	return naTransacao(ctx, f.db, func(tx *sql.Tx) error {
 		var guardado sql.NullString

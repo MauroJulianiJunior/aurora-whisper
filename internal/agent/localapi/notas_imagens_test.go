@@ -261,3 +261,40 @@ func TestImagens_AtrasDoToken(t *testing.T) {
 		t.Error("um pedido sem token mexeu na imagem")
 	}
 }
+
+// A imagem que veio da nuvem e ainda não baixou (N10b): o item da nota leva
+// "estado": "a_caminho" (a presente não leva a chave), e a leitura dos bytes é
+// 409 IMAGE_PENDING, não um 404 qualquer. Tirar da nota vale do mesmo jeito.
+func TestImagens_ACaminhoDaNuvem(t *testing.T) {
+	h, db := servidorDeImagens(t)
+	id := criarNotaJSON(t, h, "Do celular")
+	presente := pedirImagem(h, "POST", "/api/notas/"+id+"/imagens", "image/jpeg", jpegDeTeste(t, 10))
+	esperar(t, presente, 201)
+	if strings.Contains(presente.Body.String(), "estado") {
+		t.Errorf("a imagem presente leva o estado: %s", presente.Body.String())
+	}
+	const aCaminho = "0199a000-0000-7000-8000-00000000f0f0"
+	if _, err := db.Exec(`INSERT INTO local_note_images (id, note_id, largura, altura, bytes, sha256, created_at, na_nuvem, sync_state)
+		VALUES (?, ?, 30, 20, 1234, 'aa', '2026-10-28T23:00:00.000000000Z', 1, 'aguardando')`, aCaminho, id); err != nil {
+		t.Fatal(err)
+	}
+	w := fazer(t, h, "GET", "/api/notas/"+id, nil)
+	esperar(t, w, 200)
+	var n struct {
+		Imagens []struct {
+			ID     string `json:"id"`
+			Estado string `json:"estado"`
+		} `json:"imagens"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &n); err != nil || len(n.Imagens) != 2 {
+		t.Fatalf("a nota com a imagem a caminho: %s", w.Body.String())
+	}
+	for _, im := range n.Imagens {
+		if quero := map[bool]string{true: "a_caminho", false: ""}[im.ID == aCaminho]; im.Estado != quero {
+			t.Errorf("a imagem %s: estado %q, quero %q", im.ID, im.Estado, quero)
+		}
+	}
+	esperarErro(t, fazer(t, h, "GET", "/api/notas/"+id+"/imagens/"+aCaminho, nil), 409, "IMAGE_PENDING")
+	esperar(t, fazer(t, h, "DELETE", "/api/notas/"+id+"/imagens/"+aCaminho, nil), 204)
+	esperarErro(t, fazer(t, h, "GET", "/api/notas/"+id+"/imagens/"+aCaminho, nil), 404, "NOT_FOUND")
+}

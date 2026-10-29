@@ -34,12 +34,16 @@ import (
 // para trás é arquivo sem linha (ou o temporário), e a varredura da subida
 // (VarrerImagens) e a da rodada do expurgo o tiram.
 //
-// # O que fica para o sync (a segunda metade da N10)
+// # O sync (N10b; nota_imagem_sync.go)
 //
 // A imagem é imutável: o id (UUID v7) nasce aqui, e o SHA-256 vai junto para o
 // outro lado conferir o que chegou. Anexar e tirar NÃO mudam a versão nem a hora
-// de edição da nota (a imagem é uma linha à parte), e nada aqui põe marcador na
-// sync_outbox.
+// de edição da nota (a imagem é uma linha à parte). Anexar com a nuvem
+// conectada põe o marcador note_image na sync_outbox, na mesma transação
+// (emitirImagem); tirar põe a lápide local, se a nuvem tem ou pode ter a imagem
+// (lapideDaImagem). A imagem que vem da nuvem nasce aqui "aguardando" (a linha
+// sem o arquivo, que a varredura respeita) e só fica "normal" depois de baixar
+// e conferir (GuardarBaixada).
 
 // Os erros das imagens (além de ErrNotFound e ErrNotaNaLixeira). Os de
 // imagemdanota (ErrNaoEJPEG, ErrGrandeDemais, ErrLadoGrande, ErrInvalida) passam
@@ -56,7 +60,15 @@ var (
 	// ErrImagemEstragada: o arquivo da imagem não é o que a linha diz (o tamanho
 	// ou o SHA-256 não conferem).
 	ErrImagemEstragada = errors.New("storage: o arquivo da imagem não confere")
+	// ErrImagemACaminho: a imagem veio da nuvem e o arquivo ainda não baixou
+	// (EstadoACaminho). A API local responde 409 IMAGE_PENDING.
+	ErrImagemACaminho = errors.New("storage: a imagem ainda está a caminho da nuvem")
 )
+
+// EstadoACaminho é o Estado da imagem que veio da nuvem e ainda não baixou: a
+// nota a lista (com o tamanho e a proporção), mas os bytes ainda não existem
+// aqui.
+const EstadoACaminho = "a_caminho"
 
 // ImagemDaNota é a imagem como a lista das notas a mostra: só os metadados.
 type ImagemDaNota struct {
@@ -68,6 +80,9 @@ type ImagemDaNota struct {
 	Bytes     int64
 	SHA256    string
 	CreatedAt time.Time
+	// Estado é vazio com o arquivo aqui, e EstadoACaminho na imagem que veio da
+	// nuvem e ainda não baixou (N10b).
+	Estado string
 }
 
 // ImagemDaNotaRepository é o que a API local usa das imagens. O
@@ -86,7 +101,7 @@ type ImagemDaNotaRepository interface {
 	// LerImagem devolve os metadados e os bytes da imagem id da nota notaID (a da
 	// lixeira também). ErrNotFound se a imagem não existe, é de outra nota ou de
 	// outra pessoa, ou se o arquivo sumiu; ErrImagemEstragada se o arquivo não
-	// confere com a linha.
+	// confere com a linha; ErrImagemACaminho se ela ainda não baixou da nuvem.
 	LerImagem(ctx context.Context, userID, notaID, id string) (ImagemDaNota, []byte, error)
 
 	// TirarImagem tira a imagem da nota de vez: a linha e o arquivo. Vale também
@@ -108,7 +123,10 @@ const (
 	prefixoTemporario = ".gravando-"
 	sufixoTemporario  = ".tmp"
 	colunasDaImagem   = `id, note_id, largura, altura, bytes, sha256, created_at`
-	permissaoDaPasta  = 0o700
+	// colunasLidasDaImagem são as que lerImagem lê: as da linha e a situação
+	// do sync (para o Estado).
+	colunasLidasDaImagem = colunasDaImagem + `, sync_state`
+	permissaoDaPasta     = 0o700
 )
 
 // UsarPastaDasImagens diz onde ficam os arquivos das imagens. A pasta nasce na
@@ -136,9 +154,12 @@ func arquivoDaImagem(dir, id string) (string, error) {
 
 func lerImagem(s scanner) (ImagemDaNota, error) {
 	var im ImagemDaNota
-	var criada string
-	if err := s.Scan(&im.ID, &im.NotaID, &im.Largura, &im.Altura, &im.Bytes, &im.SHA256, &criada); err != nil {
+	var criada, situacao string
+	if err := s.Scan(&im.ID, &im.NotaID, &im.Largura, &im.Altura, &im.Bytes, &im.SHA256, &criada, &situacao); err != nil {
 		return ImagemDaNota{}, err
+	}
+	if situacao == SituacaoAguardando {
+		im.Estado = EstadoACaminho
 	}
 	var err error
 	if im.CreatedAt, err = deTempo(criada); err != nil {
@@ -150,7 +171,7 @@ func lerImagem(s scanner) (ImagemDaNota, error) {
 // imagensDasNotas devolve as imagens por nota, na ordem da criação. notaID vazio
 // traz as de todas as notas do usuário.
 func imagensDasNotas(ctx context.Context, q consulta, userID, notaID string) (map[string][]ImagemDaNota, error) {
-	consultaSQL := `SELECT ` + prefixar("i.", colunasDaImagem) + ` FROM local_note_images i
+	consultaSQL := `SELECT ` + prefixar("i.", colunasLidasDaImagem) + ` FROM local_note_images i
 		JOIN local_notes n ON n.id = i.note_id WHERE n.user_id = ?`
 	args := []any{userID}
 	if notaID != "" {
@@ -276,6 +297,16 @@ func guardarImagem(ctx context.Context, tx *sql.Tx, dir, userID, notaID string, 
 	return caminho, nil
 }
 
+// guardarEEmitir é guardarImagem com o marcador do sync na mesma transação
+// (emitirImagem): com a nuvem conectada, a imagem nova entra na fila.
+func guardarEEmitir(ctx context.Context, tx *sql.Tx, fila *naFila, dir, userID, notaID string, img imagemdanota.Limpa, id string, agora time.Time) (string, error) {
+	caminho, err := guardarImagem(ctx, tx, dir, userID, notaID, img, id, agora)
+	if err != nil {
+		return caminho, err
+	}
+	return caminho, fila.anotar(emitirImagem(ctx, tx, id, notaID, agora))
+}
+
 func (r *SQLiteNotaRepository) AnexarImagem(ctx context.Context, userID, notaID string, jpeg []byte) (ImagemDaNota, error) {
 	img, err := imagemdanota.Conferir(jpeg)
 	if err != nil {
@@ -290,12 +321,12 @@ func (r *SQLiteNotaRepository) AnexarImagem(ctx context.Context, userID, notaID 
 	r.imagensMu.Lock()
 	defer r.imagensMu.Unlock()
 	var gravado string
-	err = r.gravar(ctx, func(tx *sql.Tx, _ *naFila) error {
+	err = r.gravar(ctx, func(tx *sql.Tx, fila *naFila) error {
 		if err := conferirNotaEditavel(ctx, tx, userID, notaID, -1); err != nil {
 			return err
 		}
 		var err error
-		gravado, err = guardarImagem(ctx, tx, dir, userID, notaID, img, id, agora)
+		gravado, err = guardarEEmitir(ctx, tx, fila, dir, userID, notaID, img, id, agora)
 		return err
 	})
 	if err != nil {
@@ -345,7 +376,7 @@ func (r *SQLiteNotaRepository) CriarNotaComImagem(ctx context.Context, p NovaNot
 			return err
 		}
 		var err error
-		gravado, err = guardarImagem(ctx, tx, dir, p.UserID, id, img, idDaImagem, agora)
+		gravado, err = guardarEEmitir(ctx, tx, fila, dir, p.UserID, id, img, idDaImagem, agora)
 		return err
 	})
 	if err != nil {
@@ -358,13 +389,16 @@ func (r *SQLiteNotaRepository) CriarNotaComImagem(ctx context.Context, p NovaNot
 }
 
 func (r *SQLiteNotaRepository) LerImagem(ctx context.Context, userID, notaID, id string) (ImagemDaNota, []byte, error) {
-	im, err := lerImagem(r.db.QueryRowContext(ctx, `SELECT `+prefixar("i.", colunasDaImagem)+` FROM local_note_images i
+	im, err := lerImagem(r.db.QueryRowContext(ctx, `SELECT `+prefixar("i.", colunasLidasDaImagem)+` FROM local_note_images i
 		JOIN local_notes n ON n.id = i.note_id WHERE i.id = ? AND i.note_id = ? AND n.user_id = ?`, id, notaID, userID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return ImagemDaNota{}, nil, ErrNotFound
 	}
 	if err != nil {
 		return ImagemDaNota{}, nil, fmt.Errorf("storage: lendo a imagem: %w", err)
+	}
+	if im.Estado == EstadoACaminho {
+		return im, nil, ErrImagemACaminho
 	}
 	dir := r.pasta()
 	if dir == "" {
@@ -389,16 +423,23 @@ func (r *SQLiteNotaRepository) LerImagem(ctx context.Context, userID, notaID, id
 }
 
 func (r *SQLiteNotaRepository) TirarImagem(ctx context.Context, userID, notaID, id string) error {
-	err := r.gravar(ctx, func(tx *sql.Tx, _ *naFila) error {
-		res, err := tx.ExecContext(ctx, `DELETE FROM local_note_images WHERE id = ? AND note_id = ?
-			AND note_id IN (SELECT id FROM local_notes WHERE user_id = ?)`, id, notaID, userID)
-		if err != nil {
-			return fmt.Errorf("storage: tirando a imagem da nota: %w", err)
-		}
-		if n, _ := res.RowsAffected(); n == 0 {
+	agora := r.now()
+	err := r.gravar(ctx, func(tx *sql.Tx, fila *naFila) error {
+		// Se a nuvem tem (ou pode ter) a imagem, lido antes de a linha sair: é
+		// o que decide se o DELETE sobe (lapideDaImagem).
+		var naNuvem bool
+		err := tx.QueryRowContext(ctx, `SELECT na_nuvem <> 0 FROM local_note_images WHERE id = ? AND note_id = ?
+			AND note_id IN (SELECT id FROM local_notes WHERE user_id = ?)`, id, notaID, userID).Scan(&naNuvem)
+		if errors.Is(err, sql.ErrNoRows) {
 			return ErrNotFound
 		}
-		return nil
+		if err != nil {
+			return fmt.Errorf("storage: lendo a imagem: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM local_note_images WHERE id = ?`, id); err != nil {
+			return fmt.Errorf("storage: tirando a imagem da nota: %w", err)
+		}
+		return fila.anotar(lapideDaImagem(ctx, tx, id, notaID, naNuvem, agora))
 	})
 	if err != nil {
 		return err
@@ -414,7 +455,8 @@ type VarreduraDasImagens struct {
 	// apagou), apagados.
 	ArquivosSemLinha int
 	// LinhasSemArquivo: linhas cujo arquivo sumiu, apagadas (a imagem já não
-	// existia; a nota fica).
+	// existia; a nota fica). A que espera o download da nuvem (N10b) não conta:
+	// ela fica.
 	LinhasSemArquivo int
 	// Temporarios: restos de uma gravação que não terminou, apagados.
 	Temporarios int
@@ -469,11 +511,21 @@ func (r *SQLiteNotaRepository) varrer(ctx context.Context, comLinhas bool) (Varr
 	if err != nil {
 		return v, err
 	}
+	// A imagem que veio da nuvem e ainda não baixou (N10b) é uma linha sem
+	// arquivo de propósito: fica, e espera o download.
+	aguardando, err := lerIDs(ctx, r.db, `SELECT id FROM local_note_images WHERE sync_state = ?`, SituacaoAguardando)
+	if err != nil {
+		return v, err
+	}
+	espera := map[string]bool{}
+	for _, id := range aguardando {
+		espera[id] = true
+	}
 	naTabela := map[string]bool{}
 	var semArquivo []string
 	for _, id := range ids {
 		naTabela[id] = true
-		if !noDisco[id] {
+		if !noDisco[id] && !espera[id] {
 			semArquivo = append(semArquivo, id)
 		}
 	}
@@ -491,7 +543,9 @@ func (r *SQLiteNotaRepository) varrer(ctx context.Context, comLinhas bool) (Varr
 	err = r.gravar(ctx, func(tx *sql.Tx, _ *naFila) error {
 		v.LinhasSemArquivo = 0
 		for _, id := range semArquivo {
-			res, err := tx.ExecContext(ctx, `DELETE FROM local_note_images WHERE id = ?`, id)
+			// A linha que passou a esperar no meio (só o pull grava a espera,
+			// e sempre de uma imagem que não estava aqui) fica.
+			res, err := tx.ExecContext(ctx, `DELETE FROM local_note_images WHERE id = ? AND sync_state <> ?`, id, SituacaoAguardando)
 			if err != nil {
 				return fmt.Errorf("storage: tirando a imagem sem arquivo: %w", err)
 			}

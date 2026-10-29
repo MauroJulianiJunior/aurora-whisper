@@ -700,6 +700,11 @@ func (r *SQLiteNotaRepository) ApagarDeVez(ctx context.Context, userID, id strin
 // a resposta da nuvem); os arquivos das imagens, também (o repositório os apaga
 // depois do commit; no caminho do sync, a varredura da rodada do expurgo).
 func apagarNotaDaTabela(ctx context.Context, tx *sql.Tx, id string) error {
+	// Os marcadores das imagens da nota saem antes das linhas (N10b): a lápide
+	// da nota leva as imagens na nuvem.
+	if err := tirarMarcadoresDasImagensDaNota(ctx, tx, id); err != nil {
+		return err
+	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM local_note_labels WHERE note_id = ?`, id); err != nil {
 		return fmt.Errorf("storage: apagando os marcadores da nota: %w", err)
 	}

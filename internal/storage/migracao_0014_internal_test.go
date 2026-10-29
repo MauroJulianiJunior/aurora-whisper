@@ -38,13 +38,15 @@ func TestMigracao0014_SoNasceATabelaVazia(t *testing.T) {
 		t.Fatalf("Migrate: %v", err)
 	}
 	depois := todasAsTabelas(t, db)
+	// A 0015 (o sync das imagens), que o Migrate também aplica, só põe colunas.
+	semAsColunasDa0015(t, depois)
 	if l, ok := depois["local_note_images"]; !ok || len(l) != 0 || len(depois) != len(antes)+1 {
 		t.Fatalf("a tabela nova: presente %v, %d linhas; %d tabelas antes, %d depois", ok, len(l), len(antes), len(depois))
 	}
 	for tb, a := range antes {
 		d := depois[tb]
 		if tb == "schema_migrations" {
-			if len(d) != len(a)+1 || d[len(a)]["version"] != "0014_notas_imagens" {
+			if len(d) != len(a)+2 || d[len(a)]["version"] != "0014_notas_imagens" || d[len(a)+1]["version"] != "0015_notas_imagens_sync" {
 				t.Fatalf("as migrations aplicadas: %v", d)
 			}
 			d = d[:len(a)]

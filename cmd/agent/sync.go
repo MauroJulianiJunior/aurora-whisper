@@ -37,8 +37,22 @@ import (
 // (arquivo_indisponivel), para valer quando o dicionário voltar, em vez de
 // passar do cursor. (Até a revisão da F8g, o aprendido ficava de fora, com o
 // Dicionario nil: o desvio 37, revisto.)
-func montarSync(hist *storage.SQLiteTranscriptionRepository, dono string, n *nuvem.Servico, ap *aprendizadoDoAgent, log *slog.Logger) *syncengine.Laco {
-	return ligarSync(configDoSync(hist.Fila(dono), n, ap, log), hist, n, ap)
+func montarSync(hist *storage.SQLiteTranscriptionRepository, dono string, n *nuvem.Servico, ap *aprendizadoDoAgent,
+	imagens syncengine.ImagensDoPC, log *slog.Logger) *syncengine.Laco {
+	cfg := configDoSync(hist.Fila(dono), n, ap, log)
+	// As imagens das notas (ADR-022, N10b): o repositório das notas, com a
+	// pasta das imagens. nil as deixa de fora do sync.
+	cfg.Imagens = imagens
+	return ligarSync(cfg, hist, n, ap)
+}
+
+// imagensDoSync é o repositório das notas como as imagens do sync o usam
+// (N10b), ou nil sem ele (um ponteiro nil não vira uma interface não nil).
+func imagensDoSync(n *storage.SQLiteNotaRepository) syncengine.ImagensDoPC {
+	if n == nil {
+		return nil
+	}
+	return n
 }
 
 // ligarSync monta o laço com cfg e o liga ao resto do Agent: o ditado que
