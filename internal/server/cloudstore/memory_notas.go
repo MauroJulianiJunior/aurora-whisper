@@ -37,7 +37,7 @@ func (u *memUser) pushNote(a Actor, m Mutation, entityID string, seq int64, now 
 	}
 	u.gravarNota(out, entityID, seq, a, now)
 	if out.Result.NoteState != nil {
-		st := u.notes[entityID]
+		st := u.comImagens(u.notes[entityID])
 		out.Result.NoteState = &st
 	}
 	return out, true
@@ -48,6 +48,8 @@ func (u *memUser) pushNote(a Actor, m Mutation, entityID string, seq int64, now 
 func (u *memUser) gravarNota(out Outcome, entityID string, seq int64, a Actor, now time.Time) {
 	if out.Write == WriteTombstone {
 		delete(u.notes, entityID)
+		// As imagens saem com a nota (a cascata do Postgres, N10b).
+		u.tirarImagensDaNota(entityID)
 		u.noteTombs[noteTombKey(EntityNote, entityID)] = seq
 		u.putNoteEvent(EntityNote, entityID, OpTombstone, out.Result.EntityVersion, seq, a, now)
 		return
@@ -119,7 +121,7 @@ func (u *memUser) pullNotes(afterSeq int64) []Change {
 	var changes []Change
 	for _, n := range u.notes {
 		if n.LastSeq > afterSeq {
-			note := n
+			note := u.comImagens(n)
 			changes = append(changes, Change{
 				Seq: n.LastSeq, EntityType: EntityNote, EntityID: n.ID,
 				Operation: OpUpsert, EntityVersion: n.Version, DeviceID: origin[n.LastSeq], Note: &note,
@@ -165,7 +167,7 @@ func (s *MemoryStore) ListNotes(_ context.Context, userID, vista string, limit i
 	if u, ok := s.users[userID]; ok {
 		for _, n := range u.notes {
 			if NaVista(vista, n) {
-				notes = append(notes, n)
+				notes = append(notes, u.comImagens(n))
 			}
 		}
 	}

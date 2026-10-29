@@ -99,6 +99,9 @@ var apagarDaConta = []struct{ op, sql string }{
 	// aparelhos, como todo o resto.
 	{"apagar as ligações dos ditados com as notas", `DELETE FROM transcription_note_links WHERE user_id = $1`},
 	{"apagar os marcadores das notas", `DELETE FROM note_labels WHERE user_id = $1`},
+	// As imagens das notas (N10b; a 0026) antes das notas, que elas apontam (a
+	// cascata as levaria; o DELETE explícito diz o que sai).
+	{"apagar as imagens das notas", `DELETE FROM note_images WHERE user_id = $1`},
 	{"apagar as notas", `DELETE FROM notes WHERE user_id = $1`},
 	{"apagar os marcadores", `DELETE FROM labels WHERE user_id = $1`},
 	{"apagar as lápides das notas", `DELETE FROM note_tombstones WHERE user_id = $1`},

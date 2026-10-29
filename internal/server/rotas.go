@@ -124,6 +124,13 @@ func (c *Cloud) tabela() []rota {
 		{"POST /api/v1/notes/{id}/purge", AcessoSessao, handleNoteOp(st, c.now, cloudstore.NotaApagarDeVez)},
 		{"PUT /api/v1/notes/{id}/labels/{label}", AcessoSessao, handleNoteOp(st, c.now, cloudstore.NotaMarcar)},
 		{"DELETE /api/v1/notes/{id}/labels/{label}", AcessoSessao, handleNoteOp(st, c.now, cloudstore.NotaDesmarcar)},
+		// As imagens das notas no celular (N10b; imagens_routes.go): anexar só
+		// com rede, ler sem cache, tirar. O "with-image" é a nota nova só com a
+		// imagem (o ícone de imagem do "Criar uma nota…").
+		{"POST /api/v1/notes/with-image", AcessoSessao, c.handleNoteWithImage},
+		{"POST /api/v1/notes/{id}/images", AcessoSessao, c.handleNoteImageAttach},
+		{"GET /api/v1/notes/{id}/images/{imagem}", AcessoSessao, c.handleImageGet},
+		{"DELETE /api/v1/notes/{id}/images/{imagem}", AcessoSessao, c.handleImageDelete},
 		{"GET /api/v1/labels", AcessoSessao, handleLabelsList(st)},
 		{"POST /api/v1/labels", AcessoSessao, handleLabelCreate(st, c.now)},
 		{"PATCH /api/v1/labels/{id}", AcessoSessao, handleLabelRename(st, c.now)},
@@ -135,6 +142,12 @@ func (c *Cloud) tabela() []rota {
 
 		{"POST /api/v1/sync/push", AcessoAparelho, c.handlePush},
 		{"GET /api/v1/sync/pull", AcessoAparelho, handleStorePull(st)},
+		// As imagens das notas no sync do PC (N10b; imagens_routes.go): os
+		// bytes nunca vão no push nem no pull. O PC sobe o que anexou (PUT,
+		// idempotente), baixa o que veio de outro lugar (GET) e tira (DELETE).
+		{"PUT /api/v1/sync/notes/{id}/images/{imagem}", AcessoAparelho, c.handleSyncImagePut},
+		{"GET /api/v1/sync/notes/{id}/images/{imagem}", AcessoAparelho, c.handleImageGet},
+		{"DELETE /api/v1/sync/notes/{id}/images/{imagem}", AcessoAparelho, c.handleImageDelete},
 
 		// O pareamento de um PC (F6, pareamento.go). O start e a troca são
 		// públicos (o PC ainda não tem token), com limite por IP; ler e

@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"time"
+
+	"github.com/MauroJulianiJunior/aurora-whisper/internal/imagemdanota"
 )
 
 // Transcription é o ditado na nuvem (05-data-model.md, "Transcription", como
@@ -334,9 +336,12 @@ type Change struct {
 	Learned *Learned
 	// Note e Label são o estado atual de uma nota e de um marcador de nota
 	// (ADR-022, N7). Nulos na lápide. Uma mudança leva no máximo um dos
-	// quatro.
+	// cinco.
 	Note  *Note
 	Label *Label
+	// Image são os metadados de uma imagem de nota (ADR-022, N10b), nunca os
+	// bytes. Nulo na lápide (a imagem tirada da nota).
+	Image *NoteImage
 }
 
 // TextBytes é o tamanho do texto ditado de um item: o bruto, o final e o do
@@ -417,7 +422,7 @@ type PullResponse struct {
 // EntidadesDoSync devolve os tipos que esta nuvem sincroniza, na ordem em que
 // entraram. Uma lista nova a cada chamada: quem recebe pode mexer nela.
 func EntidadesDoSync() []string {
-	return []string{EntityTranscription, EntityLearned, EntityNote, EntityLabel}
+	return []string{EntityTranscription, EntityLearned, EntityNote, EntityLabel, EntityNoteImage}
 }
 
 // ListFilter são os filtros da listagem (06-api-contract.md, "GET
@@ -661,4 +666,31 @@ type Store interface {
 	// ditado e o que houve com a nota. ErrNotFound sem o ditado; ErrNotLinked se
 	// ele não está numa nota.
 	UndoParaNota(ctx context.Context, a Actor, id string, p PedidoDeDesfazer, now time.Time) (Desfeito, error)
+
+	// As imagens das notas (ADR-022, N10b; imagens.go). Os bytes chegam já
+	// conferidos (imagemdanota.Conferir, fora da transação); cada gravação passa
+	// pelo ponto único (o contador travado primeiro) e gasta um seq, e o pull
+	// leva a mudança note_image aos PCs. Anexar e tirar não sobem a versão da
+	// nota.
+	//
+	// AttachImage anexa n à nota (DecidirAnexo): o PC (com o aparelho) e o
+	// celular (sem). created diz se gravou; o reenvio do mesmo id com os mesmos
+	// bytes devolve o que está gravado, com created falso e sem gastar seq.
+	AttachImage(ctx context.Context, a Actor, n ImagemNova, now time.Time) (img NoteImage, created bool, err error)
+	// CreateNoteWithImage é o ícone de imagem do "Criar uma nota…" do celular:
+	// a nota nasce sem texto, no topo das ativas, com a imagem, numa transação
+	// (dois seqs: a nota e a imagem). O Actor não tem aparelho
+	// (ErrDeviceNotAllowed). Ids novos (UUID v7) para as duas.
+	CreateNoteWithImage(ctx context.Context, a Actor, img imagemdanota.Limpa, now time.Time) (Note, error)
+	// ImageInfo lê os metadados da imagem id da conta, viva ou com lápide (ok
+	// falso: não há linha). Só lê: é a conferência barata do PUT, antes de ler o
+	// corpo.
+	ImageInfo(ctx context.Context, userID, id string) (img NoteImage, ok bool, err error)
+	// GetImage lê os metadados e os bytes da imagem id da nota noteID (também a
+	// da nota na lixeira). ErrImageNotFound se não há, se só há a lápide ou se a
+	// imagem é de outra nota.
+	GetImage(ctx context.Context, userID, noteID, id string) (NoteImage, []byte, error)
+	// RemoveImage é o "Tirar da nota" (DecidirTirar): a lápide na linha, com os
+	// bytes saindo. Idempotente; vale na nota da lixeira.
+	RemoveImage(ctx context.Context, a Actor, noteID, id string, now time.Time) error
 }

@@ -29,7 +29,7 @@ const (
 var (
 	// As notas que o "Ditar para nota" pode escolher: fora da lixeira e do
 	// Arquivo.
-	sqlNotasAtivas = "SELECT " + joinCols(noteCols, "n") + ", " + noteLabelsOf("n") +
+	sqlNotasAtivas = "SELECT " + joinCols(noteCols, "n") + ", " + noteExtrasOf("n") +
 		" FROM notes n WHERE n.user_id = $1 AND n.deleted_at IS NULL AND NOT n.arquivada"
 	sqlMarcadoresDaPessoa = "SELECT " + joinCols(labelCols, "") + " FROM labels WHERE user_id = $1"
 )

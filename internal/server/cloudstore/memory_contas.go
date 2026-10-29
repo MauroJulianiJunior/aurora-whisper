@@ -393,6 +393,9 @@ func (s *MemoryStore) ApagarDadosDaConta(_ context.Context, userID, keepSessionI
 	u.labels = make(map[string]Label)
 	u.noteTombs = make(map[string]int64)
 	u.noteEvents = nil
+	// As imagens das notas (N10b): o DELETE FROM note_images do Postgres.
+	u.images = make(map[string]NoteImage)
+	u.imageBytes = make(map[string][]byte)
 	// As chaves da IA (ADR-021, C3a): o DELETE FROM ai_provider_keys do
 	// Postgres.
 	u.chavesDeIA = nil

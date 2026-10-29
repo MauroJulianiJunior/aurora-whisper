@@ -56,6 +56,11 @@ type memUser struct {
 	labels     map[string]Label
 	noteTombs  map[string]int64
 	noteEvents []Event
+	// As imagens das notas (N10b; memory_imagens.go): as linhas pelo id (as
+	// vivas e as lápides, que ficam na linha) e os bytes das vivas. Saem com a
+	// nota (a cascata do Postgres).
+	images     map[string]NoteImage
+	imageBytes map[string][]byte
 	// chavesDeIA são as linhas de ai_provider_keys, pelo provedor (ADR-021,
 	// C3a; chaves_ia.go). Nil até a primeira gravação.
 	chavesDeIA map[string]ChaveDeIA
@@ -127,15 +132,17 @@ func (s *MemoryStore) AddUser(userID string) {
 
 func newMemUser() *memUser {
 	return &memUser{
-		epoch:     NewUUIDv7(),
-		devices:   make(map[string]bool),
-		items:     make(map[string]Transcription),
-		tombs:     make(map[string]memTomb),
-		learned:   make(map[string]Learned),
-		applied:   make(map[string]memApplied),
-		notes:     make(map[string]Note),
-		labels:    make(map[string]Label),
-		noteTombs: make(map[string]int64),
+		epoch:      NewUUIDv7(),
+		devices:    make(map[string]bool),
+		items:      make(map[string]Transcription),
+		tombs:      make(map[string]memTomb),
+		learned:    make(map[string]Learned),
+		applied:    make(map[string]memApplied),
+		notes:      make(map[string]Note),
+		labels:     make(map[string]Label),
+		noteTombs:  make(map[string]int64),
+		images:     make(map[string]NoteImage),
+		imageBytes: make(map[string][]byte),
 	}
 }
 
@@ -701,8 +708,10 @@ func (s *MemoryStore) Pull(_ context.Context, userID string, afterSeq int64, lim
 			})
 		}
 	}
-	// As notas, os marcadores e as lápides deles (N7).
+	// As notas, os marcadores e as lápides deles (N7), e as imagens das notas
+	// (N10b: só os metadados).
 	changes = append(changes, u.pullNotes(afterSeq)...)
+	changes = append(changes, u.pullImages(afterSeq)...)
 	sort.Slice(changes, func(i, j int) bool { return changes[i].Seq < changes[j].Seq })
 	resp := PullResponse{LastSeq: afterSeq, Epoch: u.epoch, Entidades: EntidadesDoSync()}
 	n, more := CutPage(changes, limit, Change.TextBytes)

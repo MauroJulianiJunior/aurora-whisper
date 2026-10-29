@@ -168,7 +168,13 @@ func (s *Store) Pull(ctx context.Context, userID string, afterSeq int64, limit i
 		return cloudstore.PullResponse{}, err
 	}
 
-	changes, more := mergePage(limit, entities, tombs, learned, notes, labels, noteTombs)
+	// As imagens das notas (N10b), no mesmo snapshot: só os metadados.
+	images, err := pullImages(ctx, tx, userID, afterSeq, limit+1)
+	if err != nil {
+		return cloudstore.PullResponse{}, err
+	}
+
+	changes, more := mergePage(limit, entities, tombs, learned, notes, labels, noteTombs, images)
 	resp.Changes, resp.HasMore = changes, more
 	resp.Entidades = cloudstore.EntidadesDoSync()
 	if len(changes) > 0 {

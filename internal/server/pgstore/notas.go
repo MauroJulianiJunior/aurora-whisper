@@ -50,8 +50,15 @@ func noteLabelsOf(alias string) string {
 		".user_id AND nl.note_id = " + alias + ".id ORDER BY nl.label_id)"
 }
 
+// noteExtrasOf são as duas subconsultas que toda leitura de nota leva depois
+// das colunas: os marcadores (noteLabelsOf) e as imagens vivas
+// (noteImagesOf, N10b; imagens.go), na ordem de scanNote.
+func noteExtrasOf(alias string) string {
+	return noteLabelsOf(alias) + ", " + noteImagesOf(alias)
+}
+
 var (
-	sqlSelectNote = "SELECT " + joinCols(noteCols, "n") + ", " + noteLabelsOf("n") +
+	sqlSelectNote = "SELECT " + joinCols(noteCols, "n") + ", " + noteExtrasOf("n") +
 		" FROM notes n WHERE n.user_id = $1 AND n.id = $2"
 	sqlInsertNote = "INSERT INTO notes (" + joinCols(noteCols, "") + ") VALUES (" + placeholders(len(noteCols)) + ")"
 
@@ -61,7 +68,7 @@ var (
 	// O pull: o estado atual de cada nota e de cada marcador que mudou depois
 	// do cursor, com o aparelho de origem pelo evento do last_seq (o índice é
 	// o UNIQUE (user_id, last_seq) de cada tabela).
-	sqlPullNotes = "SELECT " + joinCols(noteCols, "n") + ", " + noteLabelsOf("n") + `, e.device_id
+	sqlPullNotes = "SELECT " + joinCols(noteCols, "n") + ", " + noteExtrasOf("n") + `, e.device_id
 	FROM notes n
 	LEFT JOIN note_sync_events e ON e.user_id = n.user_id AND e.seq = n.last_seq
 	WHERE n.user_id = $1 AND n.last_seq > $2
@@ -76,15 +83,15 @@ var (
 
 	// As listagens do celular. A posição é COLLATE "C" na própria coluna (a
 	// 0021): a ordem é a dos bytes, a mesma do Go e do PC.
-	sqlListNotesAtivas = "SELECT " + joinCols(noteCols, "n") + ", " + noteLabelsOf("n") + ` FROM notes n
+	sqlListNotesAtivas = "SELECT " + joinCols(noteCols, "n") + ", " + noteExtrasOf("n") + ` FROM notes n
 	WHERE n.user_id = $1 AND n.deleted_at IS NULL AND NOT n.arquivada
 	ORDER BY n.fixada DESC, n.posicao, n.id
 	LIMIT $2`
-	sqlListNotesArquivo = "SELECT " + joinCols(noteCols, "n") + ", " + noteLabelsOf("n") + ` FROM notes n
+	sqlListNotesArquivo = "SELECT " + joinCols(noteCols, "n") + ", " + noteExtrasOf("n") + ` FROM notes n
 	WHERE n.user_id = $1 AND n.deleted_at IS NULL AND n.arquivada
 	ORDER BY n.fixada DESC, n.posicao, n.id
 	LIMIT $2`
-	sqlListNotesLixeira = "SELECT " + joinCols(noteCols, "n") + ", " + noteLabelsOf("n") + ` FROM notes n
+	sqlListNotesLixeira = "SELECT " + joinCols(noteCols, "n") + ", " + noteExtrasOf("n") + ` FROM notes n
 	WHERE n.user_id = $1 AND n.deleted_at IS NOT NULL
 	ORDER BY n.deleted_at DESC, n.id
 	LIMIT $2`
@@ -138,21 +145,26 @@ const (
 		LIMIT $3`
 )
 
-// scanNote lê uma linha com as colunas de noteCols e os marcadores
-// (noteLabelsOf), mais os destinos extras no fim.
+// scanNote lê uma linha com as colunas de noteCols, os marcadores e as
+// imagens (noteExtrasOf), mais os destinos extras no fim.
 func scanNote(row pgx.Row, extra ...any) (cloudstore.Note, error) {
 	var n cloudstore.Note
 	var cTitulo, cCorpo, cDevice *string
 	var cAt *time.Time
 	var labels []string
+	var imagens []byte
 	dest := []any{
 		&n.ID, &n.UserID, &n.Titulo, &n.Corpo, &n.Cor, &n.Fixada, &n.Arquivada, &n.Posicao, &n.DitadoDeOrigem,
 		&n.CreatedAt, &n.UpdatedAt, &n.DeletedAt, &n.PurgeAt,
 		&n.Version, &n.ContentVersion, &n.TrashVersion, &n.ContentDeviceID, &n.TrashDeviceID, &n.LastSeq,
 		&cTitulo, &cCorpo, &cDevice, &cAt,
-		&labels,
+		&labels, &imagens,
 	}
 	if err := row.Scan(append(dest, extra...)...); err != nil {
+		return cloudstore.Note{}, err
+	}
+	var err error
+	if n.Imagens, err = lerImagensDaNota(imagens, n.ID, n.UserID); err != nil {
 		return cloudstore.Note{}, err
 	}
 	n.CreatedAt, n.UpdatedAt = n.CreatedAt.UTC(), n.UpdatedAt.UTC()
