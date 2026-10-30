@@ -10,6 +10,7 @@ import type { PropsDaFaixa } from '../ambiente'
 import { Aurora } from '../Aurora'
 import type { LoginDeTeste } from './cliente'
 import { fraseDoLogin, useVoltaDoCache } from './entrar'
+import { LinkDaPolitica } from './LinkDaPolitica'
 
 export function Tela({ titulo, linha, children }: { titulo: string; linha: string; children?: ReactNode }) {
   const h1 = useRef<HTMLHeadingElement>(null)
@@ -122,6 +123,9 @@ export function Entrar({ expirada, aprovar = false, teste, entrarComGoogle, entr
             recusa. Só na primeira entrada: quem tem a sessão acabada já foi
             convidado. Some enquanto os botões não vieram (nada pula de lugar). */}
         {comGoogle && !expirada && <p className="ajuda">Nuvem particular: só entra quem foi convidado.</p>}
+        {/* A política desta instância, só se quem sobe a nuvem a publicou: quem vai
+            entrar lê antes o que será guardado. */}
+        <LinkDaPolitica />
         {erro && (
           <p className="nota" role="alert" key={erro.vez}>
             {erro.texto}

@@ -131,6 +131,11 @@ type Estado struct {
 	// progresso, o que não subiu e a última rodada. Só com uma nuvem
 	// gravada (conectado, ou desconectado com a URL) e sem pedido em curso.
 	Historico *ResumoDoHistorico `json:"historico,omitempty"`
+	// Politica: a nuvem conectada publica a política de privacidade dela em
+	// GET /privacidade (a conferência perguntou com um HEAD, sem token). O painel
+	// só mostra o link para <url>/privacidade se for true. Ausente (false) quando
+	// ainda não se perguntou, quando a nuvem não a tem ou quando a rede falhou.
+	Politica bool `json:"politica,omitempty"`
 }
 
 // Erro é uma recusa com a frase para a tela e o status da API local.
@@ -220,6 +225,11 @@ type Servico struct {
 	aoConectar func()
 	// freio é o aviso do freio do aprendido (UsarFreio); nil é sem freio.
 	freio func() int
+	// politicaDe é a nuvem (a URL) cuja página /privacidade o Conferir viu, e
+	// politica, se ela existe. Só vale para a mesma URL: trocar de nuvem não herda
+	// a resposta da outra.
+	politicaDe string
+	politica   bool
 }
 
 // pedido é o pareamento em curso, só na memória.
@@ -340,7 +350,10 @@ func (s *Servico) Estado(ctx context.Context) (Estado, error) {
 			}
 		}
 	}
-	return Estado{Estado: Conectado, URL: base, Email: email, Nome: nome, Aviso: aviso, Historico: h}, nil
+	s.mu.Lock()
+	politica := s.politica && s.politicaDe == base
+	s.mu.Unlock()
+	return Estado{Estado: Conectado, URL: base, Email: email, Nome: nome, Aviso: aviso, Historico: h, Politica: politica}, nil
 }
 
 // pedidoValendo devolve o pedido em curso se ele não venceu (o vencido sai e
@@ -537,6 +550,13 @@ func (s *Servico) Conferir(ctx context.Context) (Estado, error) {
 		if s.aviso == AvisoSemRede {
 			s.aviso = ""
 		}
+		s.mu.Unlock()
+		// Já que a nuvem respondeu: ela publica a política de privacidade? Um HEAD
+		// público, sem token, no mesmo ritmo da conferência. Só o código importa;
+		// qualquer outra resposta, ou a rede, é "não tem" (o painel não mostra link).
+		pol, errPol := s.pedir(ctx, http.MethodHead, e.URL+"/privacidade", "", nil, nil)
+		s.mu.Lock()
+		s.politicaDe, s.politica = e.URL, errPol == nil && pol == http.StatusOK
 		s.mu.Unlock()
 	default:
 		s.log.Info("nuvem: a conferência não alcançou a nuvem; o PC segue conectado", "status", status, "erro_de_rede", err != nil)

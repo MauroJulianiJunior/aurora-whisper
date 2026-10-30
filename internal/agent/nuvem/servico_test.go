@@ -122,9 +122,11 @@ type nuvemFalsa struct {
 	startStatus    int
 	startCorpo     string
 	trocaStatus    int
-	trocaToken     string // "" é um token novo
-	meStatus       int    // 0: confere o token
-	deleteStatus   int    // 0: confere o token
+	trocaToken     string   // "" é um token novo
+	meStatus       int      // 0: confere o token
+	politica       bool     // a nuvem publica GET /privacidade
+	politicaPedida []string // o Bearer de cada HEAD /privacidade
+	deleteStatus   int      // 0: confere o token
 	expiraEm       int
 	authURL        string
 	redirecionarEm string
@@ -214,6 +216,13 @@ func (n *nuvemFalsa) servir(w http.ResponseWriter, r *http.Request) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		io.WriteString(w, `{"email":"`+emailFalso+`"}`)
+	case r.Method == http.MethodHead && r.URL.Path == "/privacidade":
+		n.politicaPedida = append(n.politicaPedida, bearer)
+		if n.politica {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
 	case r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/api/v1/devices/"):
 		n.deletes = append(n.deletes, r.URL.Path+" "+bearer)
 		if n.deleteStatus != 0 {
@@ -1200,5 +1209,66 @@ func TestSegredosForaDasRespostasEDoLog(t *testing.T) {
 		if strings.Contains(log, segredo) {
 			t.Errorf("o %s está no log:\n%s", nome, log)
 		}
+	}
+}
+
+// ─── Conferir: a nuvem publica a política de privacidade? ───
+
+// A conferência pergunta com um HEAD /privacidade, sem token, e o Estado diz
+// politica só se a nuvem respondeu 200. O painel mostra o link só com isso.
+func TestConferir_APoliticaDaNuvemApareceNoEstado(t *testing.T) {
+	c := novoCenario(t)
+	c.conectarDeVez()
+	c.nuvem.mexer(func(n *nuvemFalsa) { n.politica = true })
+	e, err := c.s.Conferir(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e.Estado != nuvem.Conectado || !e.Politica {
+		t.Fatalf("estado = %+v; quero conectado e com a política", e)
+	}
+	c.nuvem.mu.Lock()
+	pedidas := append([]string(nil), c.nuvem.politicaPedida...)
+	c.nuvem.mu.Unlock()
+	if len(pedidas) != 1 || pedidas[0] != "" {
+		t.Errorf("HEAD /privacidade = %q; quero um só, sem Bearer", pedidas)
+	}
+	// O Estado, sem nova conferência (o intervalo de 30 s), guarda a resposta.
+	if e, _ := c.s.Estado(context.Background()); !e.Politica {
+		t.Errorf("o Estado perdeu a política: %+v", e)
+	}
+}
+
+func TestConferir_SemPoliticaNaNuvemNaoHaLink(t *testing.T) {
+	c := novoCenario(t)
+	c.conectarDeVez()
+	e, err := c.s.Conferir(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e.Estado != nuvem.Conectado || e.Politica {
+		t.Fatalf("estado = %+v; quero conectado e sem política (a nuvem respondeu 404)", e)
+	}
+}
+
+// Nuvem que não respondeu ao /me (503) nem é perguntada sobre a política, e a
+// resposta de uma nuvem não vale para a outra: o Estado só traz a política da
+// URL que a conferência viu.
+func TestConferir_AFalhaDoMeNaoPerguntaAPolitica(t *testing.T) {
+	c := novoCenario(t)
+	c.conectarDeVez()
+	c.nuvem.mexer(func(n *nuvemFalsa) { n.politica = true; n.meStatus = http.StatusServiceUnavailable })
+	e, err := c.s.Conferir(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e.Politica {
+		t.Errorf("estado = %+v; a nuvem não respondeu ao /me, não há o que afirmar", e)
+	}
+	c.nuvem.mu.Lock()
+	n := len(c.nuvem.politicaPedida)
+	c.nuvem.mu.Unlock()
+	if n != 0 {
+		t.Errorf("%d HEAD /privacidade; quero 0", n)
 	}
 }

@@ -15,6 +15,7 @@ import { AprendidoNaNuvem } from './AprendidoNaNuvem'
 import { type Aparelho, type ClienteNuvem, type Eu, type Sessao, confirmacaoDeApagar } from './cliente'
 import { DitarPeloCelular } from './ditar/DitarPeloCelular'
 import type { Folha } from './ditar/folha'
+import { LinkDaPolitica } from './LinkDaPolitica'
 import { esquecerConta } from './notas/armazem'
 import type { NotasNaNuvem } from './notas/notasNaNuvem'
 
@@ -526,6 +527,9 @@ export function ConfiguracoesNuvem({
           {/* As imagens das notas (ADR-022, N10b): nunca ficam no aparelho. */}
           <li>As imagens das notas não ficam neste aparelho: sem internet, aparece &quot;Imagem sem rede&quot;.</li>
         </ul>
+        {/* A política completa desta instância, quando quem sobe a nuvem a publicou
+            (GET /privacidade). A folha do aceite do ditado não muda por isso. */}
+        <LinkDaPolitica />
 
         <div className="ajuste apagar">
           {apagando === 'fechado' ? (
