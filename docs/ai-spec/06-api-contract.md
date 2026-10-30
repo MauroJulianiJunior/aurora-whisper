@@ -1734,7 +1734,24 @@ ditar, e o ditado dele sai com `source_platform` `android` e `device_id` nulo.
 Fora de `/api/v1`, na mesma origem: o build da nuvem do painel (`index.html`, `/assets/*`), o
 `/manifest.webmanifest`, os ícones e o `/sw.js`. Manifest e ícones são públicos. `index.html` e
 `sw.js` saem com `Cache-Control: no-cache`; `/assets/*`, com `immutable`. O service worker nunca trata
-`/api`, `/auth` nem `/device`.
+`/api`, `/auth` nem `/device`, nem `/privacidade`.
+
+### GET `/privacidade` (a política de privacidade da instância, 30-out-2026)
+Página HTML pública (sem sessão; o `Host` de outro nome é o `400` de sempre) com a política **preenchida** de quem sobe a
+nuvem (`docs/politica-de-privacidade.md` é só o modelo). **A rota só existe se a instância tem a
+política**: o servidor lê o arquivo de `POLITICA_FILE` uma vez, na subida, e guarda a página em
+memória. Sem a variável, ou com o arquivo ausente (aviso `Info` no log, sem o caminho), é o `404` de
+rota não montada, e o app não mostra link. Com o arquivo, mas inválido (vazio, maior que 96 KiB, não
+UTF-8, com caractere de controle, sem texto antes do título "Os textos do app sobre privacidade", ou
+com um campo `[A PREENCHER` sobrando), o servidor **não sobe** (`2`, nomeando `POLITICA_FILE` e o
+problema, nunca o caminho nem o texto). O Markdown é de um subconjunto fixo e todo texto é escapado
+(sem HTML cru, imagem, link nem script); o que vem do título "Os textos do app sobre privacidade" em
+diante é interno e nunca é publicado.
+
+Resposta `200` `text/html; charset=utf-8`, com o quadro das outras páginas da nuvem (claro e escuro, a CSP
+de sempre, sem script nem estilo embutido), `Cache-Control: no-cache` e `ETag` (o `If-None-Match`
+igual dá `304`); `HEAD` responde igual, sem corpo. É o `HEAD` que o app usa para saber se há o que
+linkar: `200` mostra o link, qualquer outra coisa não. O texto da política nunca vai ao log.
 
 **F3:** até a F4 trazer o app, `/` é uma página provisória (`internal/server/pagina`), com
 `/pagina.js` e `/pagina.css`, sem script nem estilo embutido (a CSP é `default-src 'self'`): entrar,
@@ -2779,7 +2796,11 @@ Agent sem a nuvem montada responde `503` (`UNAVAILABLE`).
 
 - O estado (`GET /api/nuvem`, e a resposta das três abaixo): `{ "estado": "desconectado" |
   "conectando" | "conectado", "url": "<a nuvem desta instalação, para o campo>", "email"?, "nome"?
-  (conectado), "conferencia"?, "abrir_url"? (conectando), "aviso"? }`. O `aviso` é um de `revogado`
+  (conectado), "conferencia"?, "abrir_url"? (conectando), "aviso"?, "politica"? (conectado) }`.
+  `politica: true` quando a nuvem conectada publica `GET /privacidade` (o `POST /api/nuvem/conferir`
+  pergunta com um `HEAD` sem token, logo depois de o `GET /api/v1/me` dar `200`; qualquer outra
+  resposta, ou a rede fora, deixa o campo ausente); o painel só mostra o link para
+  `<url>/privacidade` com ele. O `aviso` é um de `revogado`
   (a nuvem respondeu `401`), `sem_resposta` (desconectou aqui, a nuvem não confirmou), `nao_abriu` (o
   navegador não abriu), `vencido` (o pedido venceu), `outra_conta` (a D3), `falhou` (a troca não deu)
   e `sem_rede` (a conferência não alcançou a nuvem; continua conectado). Conectado é o aparelho

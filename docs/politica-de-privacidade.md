@@ -16,6 +16,15 @@
 > sua nuvem, o responsável lê e
 > aprova estas partes e o dossiê. O que é da sua instância (o responsável, o contato, as regiões, a
 > condição do art. 33) fica nos campos **[A PREENCHER]**, e a cópia preenchida fica fora do repositório.
+>
+> **Como publicar (a página `/privacidade` da sua nuvem; `docs/deploy-privacidade.md`).** Salve a cópia
+> preenchida **fora do repositório** (ele é público, e a cópia tem o seu nome e o seu e-mail), tire esta
+> nota do topo (o servidor recusa qualquer cópia em que sobre um campo ainda por preencher, nota inclusive) e
+> mande-a para a VPS com `.\scripts\enviar-para-servidor.ps1 -ArquivoPolitica <a cópia>`; o `subir.sh`
+> a instala e recria a API. O servidor mostra o texto até o título "Os textos do app sobre privacidade"
+> (o que vem depois é interno e nunca é publicado), sem script, imagem nem link, e
+> entende só este Markdown: títulos `#`, parágrafos, listas, tabelas, citações, negrito, código e
+> linha horizontal. Sem a cópia, a sua nuvem não tem a página (e o app não mostra o link).
 
 Este texto é para quem usa o Aurora Whisper. Está em português simples de propósito. Ele só trata da
 **nuvem**, que é opcional: o Aurora Whisper funciona no seu PC sem ela.

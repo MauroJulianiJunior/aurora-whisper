@@ -237,8 +237,16 @@ está.
    e a hipótese do art. 33 (seção 4). Bloqueia o primeiro dado real.
 2. **O cadastro não sai.** O "Apagar meus dados" deixa o e-mail, o identificador e o nome (a linha em
    `users`); não existe "excluir a conta". Aceitar e escrever na política, ou pedir a rotina (um
-   comando no roteiro, ou um botão). O cadastro é dado pessoal (art. 5º, I).
-3. **Exportar.** Aceitar a falta do botão (o PC tem a cópia), ou pedir o botão.
+   comando no roteiro, ou um botão). O cadastro é dado pessoal (art. 5º, I). **Decidido pelo Mauro em
+   30-out-2026: aceitar, com a promessa "a pedido, pelo contato" (política, seção 8) e o comando que a
+   cumpre**: `deploy/scripts/tirar-cadastro.sh <e-mail>`, na VPS (`docs/deploy-privacidade.md`). Ele
+   recusa se o e-mail ainda está no `CONTAS_PERMITIDAS` e se a pessoa ainda tem dado além do que o
+   "Apagar meus dados" deixa (o contador de sincronização e a sessão), mostra o que vai sair, pede
+   "digite SIM" e apaga numa transação só. Não há botão. A cópia de segurança guarda o cadastro por
+   cerca de 30 dias (política, seção 7).
+3. **Exportar.** Aceitar a falta do botão (o PC tem a cópia), ou pedir o botão. **Decidido pelo Mauro em
+   30-out-2026: aceitar sem o botão**; a pedido, o responsável entrega uma cópia eletrônica, como a
+   política promete (seção 8).
 4. **Texto de terceiros, e agora a voz e a dica.** O ditado pode ter dado de clientes ou, sem querer,
    dado sensível (art. 5º, II); a nuvem não separa nem filtra. Com dado de cliente, quem usa pode estar
    como operador dele (art. 5º, VII; art. 39), e a nuvem vira mais um lugar onde ele mora. Ditar isso na
@@ -254,11 +262,15 @@ está.
 5. **Contato de privacidade e encarregado** (art. 41; a dispensa depende de norma da ANPD, art. 41,
    §3º: o texto da lei, conferido no Planalto em 10-out-2026, diz que a autoridade nacional pode
    estabelecer normas complementares, inclusive hipóteses de dispensa; essas normas não foram
-   conferidas aqui): [A PREENCHER: nome e e-mail].
+   conferidas aqui): [A PREENCHER: nome e e-mail]. **Decidido pelo Mauro em 30-out-2026: o próprio
+   responsável, pessoa física, pelo e-mail pessoal dele; sem encarregado à parte.** O nome e o e-mail
+   ficam só na cópia preenchida da política, fora do repositório (`docs/deploy-privacidade.md`).
 6. **O selo na restauração** (pendente da F11d): aceitar e escrever (sugestão) ou consertar no PC numa
    fatia própria.
 7. **Ditado no celular: a hipótese do art. 33 para a voz e para a dica** (seção 4). A proposta é o
-   inciso VIII, que a folha do aceite cumpre. **[A PREENCHER]**
+   inciso VIII, que a folha do aceite cumpre. **Decidido pelo Mauro em 30-out-2026: o inciso VIII**, para
+   a voz e a dica, **e também para a cópia de segurança** (hoje ela guarda só os dados dele, o único em
+   `CONTAS_PERMITIDAS`). A decisão 1 (as regiões da VPS e do bucket) continua pendente.
 8. **Ditado no celular: o que a conta da pessoa tem no provedor.** O servidor **não confere** se a
    retenção zero está ligada nem se a residência de dados está fixada. A recomendação (na tela e na
    política) é uma **chave só para o celular, com limite de gasto**, e, se a conta tiver, a residência de

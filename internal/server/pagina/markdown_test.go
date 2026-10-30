@@ -149,6 +149,11 @@ func TestMarkdown_OModeloDaPolitica(t *testing.T) {
 		t.Fatal("o modelo não tem mais o título \"Os textos do app sobre privacidade\": o corte da página depende dele")
 	}
 	md = md[:corte]
+	// A nota do topo é só do modelo (o responsável a apaga, e o servidor recusa a cópia
+	// que ainda a tem): a página de verdade nunca a mostra, e o teste também não.
+	if i, j := strings.Index(md, "\n> "), strings.Index(md, "\n## 1."); i >= 0 && j > i {
+		md = md[:i] + md[strings.Index(md[i:j], "\n\n")+i:]
+	}
 	campos := len(reCampo.FindAllString(md, -1))
 	md = reCampo.ReplaceAllString(md, "**texto de teste**")
 	if strings.Contains(md, "[A PREENCHER") {
@@ -190,8 +195,8 @@ func TestMarkdown_OModeloDaPolitica(t *testing.T) {
 	if !strings.Contains(got, "<ol>") || !strings.Contains(got, "<li>") || strings.Count(got, "<ol>") != 1 {
 		t.Errorf("a seção 10 não virou uma lista numerada só (%d <ol>)", strings.Count(got, "<ol>"))
 	}
-	if !strings.Contains(got, "<strong>texto de teste</strong>") || !strings.Contains(got, "<blockquote>") || !strings.Contains(got, "<hr>") {
-		t.Error("faltam o negrito, a citação ou a régua do modelo")
+	if !strings.Contains(got, "<strong>texto de teste</strong>") || !strings.Contains(got, "<hr>") {
+		t.Error("faltam o negrito ou a régua do modelo")
 	}
 	// Todo item da seção 10 virou item: seis, e os da lista dentro do 4 (seis)
 	// e do 5 (três).

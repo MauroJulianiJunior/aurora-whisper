@@ -6754,6 +6754,58 @@ ADR-022, "Decisões da N7"; aqui fica o que toca o contrato.
 - **Deploy:** ponto de parada, do Mauro. O roteiro é `docs/deploy-notas-n7.md` (as migrations `0020` a
   `0025`, só aditivas, e a API nova), e o teste depois dele é `docs/teste-manual-notas-n7.md`.
 
+### Decisões da política de privacidade publicada (30-out-2026; segue a F11b)
+
+A F11b escreveu o **modelo** da política. Esta fatia faz a nuvem servi-la, **preenchida**, e os apps
+apontarem para ela. Roteiro em `docs/deploy-privacidade.md`; rota em `06-api-contract.md` ("GET
+`/privacidade`"); a variável em `10-env-and-secrets.md` (`POLITICA_FILE`).
+
+- **A cópia preenchida nunca entra no repositório** (o `origin` é público e a cópia tem o nome e o e-mail do
+  responsável). Ela mora no PC, fora dele, e o `enviar-para-servidor.ps1 -ArquivoPolitica` a leva para
+  `~/aurora-whisper/recebido/`, de onde o `subir.sh` a põe em `~/aurora-whisper/politica/`. O script do PC
+  recusa um arquivo dentro do repositório. O `.gitignore` ganhou `/politica/`.
+- **Página do servidor, em HTML renderizado na subida** (`internal/server/pagina`), e não uma tela do app:
+  funciona sem login e sem JavaScript, é o que um link de fora (um e-mail, um pedido da ANPD) abre, e a CSP
+  não muda (sem script nem estilo embutido). O Markdown é um **subconjunto fixo**, renderizado por um
+  conversor próprio de poucas linhas (sem dependência nova), que **escapa todo texto** e não conhece HTML cru,
+  imagem nem link: o arquivo é do responsável, mas a página é pública, e o conversor não precisa confiar nele.
+  O resultado fica em memória, com `ETag` e `Cache-Control: no-cache`.
+- **Só o texto público.** O modelo traz, depois do título "Os textos do app sobre privacidade", as frases do
+  app; o servidor corta ali, de propósito, mesmo que a cópia as mantenha.
+- **Ausente não é erro; inválido é.** `POLITICA_FILE` sem valor, ou apontando para um arquivo que não existe,
+  é uma nuvem sem a rota (aviso `Info`, sem o caminho). Um arquivo que existe e é inválido (vazio, grande,
+  não UTF-8, com caractere de controle, ou com `[A PREENCHER` sobrando) impede a subida (saída 2, com a
+  variável e o problema, sem o caminho nem o texto): publicar o modelo pela metade, ou uma página
+  silenciosamente vazia, é pior que não subir. A nota do topo do modelo também tem `[A PREENCHER`, e o
+  responsável a apaga: é a prova de que leu.
+- **Montagem:** a **pasta** `politica/` (`${AW_POLITICA:-../politica}:/politica:ro`), criada pelo `subir.sh`
+  (se o Docker a criasse, seria de root), e não o arquivo (um bind de arquivo que não existe vira uma pasta).
+  `0755` na pasta e `0444` no arquivo, porque a API roda sem root. A API é **recriada** quando a política
+  muda, porque ela a lê só na subida. O `subir.sh` exige `"politica_publicada":true` na linha `servindo` do
+  log e o `200` de `GET /privacidade` pela borda.
+- **Como o app descobre se há política:** um `HEAD /privacidade` na própria origem (200 é "tem"; qualquer outra
+  coisa, ou a rede fora, é "não tem"), em vez de um campo novo numa resposta que o app já lê: a resposta de
+  uma rota pública, ou o código HTTP dela, é o que o próprio navegador usa, e nenhum contrato existente muda.
+  O link (`<a href="/privacidade" target="_blank" rel="noopener">`) está na tela de entrar e na seção
+  Privacidade das Configurações do celular. O service worker continua sem tocar na rota (a lista branca já a
+  deixava de fora), e o `bundle.test.ts` prende isso.
+- **O painel do PC:** o navegador do painel não alcança a nuvem (a CSP dele é `connect-src 'self'`), então o
+  **Agent** pergunta, no `Conferir` que já faz ao abrir as Configurações (`GET /api/v1/me`, no máximo a cada
+  30 s, só conectado): logo depois de um `200`, um `HEAD <url>/privacidade` **sem token**. O estado local
+  (`GET /api/nuvem`) ganha `politica: true`, e o painel mostra o link na seção Nuvem só com ele. Nenhuma
+  rodada nova, nenhum dado do PC no pedido; a resposta vale só para a URL em que foi dada.
+- **A folha do aceite do ditado não muda.** O "Política completa: {link}" que a folha da C6b deixou de fora
+  continua de fora: acrescentá-lo muda o texto que a pessoa aceita, sobe a `VERSAO_DO_AVISO` e obriga quem já
+  aceitou a aceitar de novo, sem que nada do que se faz com os dados tenha mudado (`09`, "Texto da tela").
+- **O cadastro a pedido:** `deploy/scripts/tirar-cadastro.sh <e-mail>`, na VPS (decisão 2 do dossiê). Recusa
+  se o e-mail ainda está no `CONTAS_PERMITIDAS` (config e API de pé) e se a pessoa tem dado em qualquer tabela
+  com chave estrangeira para `users` (lida do banco, não de uma lista), exceto as duas que o "Apagar meus
+  dados" deixa (`user_sync_counters` e `web_sessions`); pede `SIM`; apaga numa transação só.
+- **O dossiê, seção 7:** o Mauro decidiu em 30-out-2026 as decisões 2 (cadastro: aceitar, "a pedido, pelo
+  contato", com o comando), 3 (exportar: sem botão, ele entrega uma cópia eletrônica), 5 (contato: ele
+  mesmo, pessoa física, pelo e-mail pessoal, sem encarregado à parte) e 7 (art. 33, inciso VIII, para a voz,
+  a dica e a cópia de segurança). A decisão 1 (as regiões da VPS e do bucket) continua pendente.
+
 ## O que o Mauro providencia, e quando
 
 - **Agora (F0):**
