@@ -86,6 +86,7 @@ $Compose = Join-Path $Raiz 'deploy\compose.yml'
 $ComposeTeste = Join-Path $Raiz 'deploy\compose.teste.yml'
 $Pasta = Join-Path ([IO.Path]::GetTempPath()) 'aurora-whisper-deploy-teste'
 $PastaSegredos = Join-Path $Pasta 'segredos'
+$PastaPolitica = Join-Path $Pasta 'politica'
 $PastaChave = Join-Path $Pasta 'chave'
 $ArquivoConfig = Join-Path $Pasta 'config.env'
 $Aprovado = Join-Path $env:USERPROFILE '.aurora-whisper-dev\deploy-teste-aprovado.txt'
@@ -264,7 +265,7 @@ if (-not (Test-Path -LiteralPath $Curl -PathType Leaf)) {
     Write-Host ('FALHOU: nao achei o curl do Windows em ' + $Curl + '.') -ForegroundColor Red
     exit 1
 }
-foreach ($v in @('AW_PREFIXO', 'AW_SEGREDOS', 'AW_REDE_DO_PROXY', 'AW_PORTA_HTTPS_TESTE', 'AW_PORTA_HTTP_TESTE',
+foreach ($v in @('AW_PREFIXO', 'AW_SEGREDOS', 'AW_POLITICA', 'AW_REDE_DO_PROXY', 'AW_PORTA_HTTPS_TESTE', 'AW_PORTA_HTTP_TESTE',
         'PUBLIC_BASE_URL', 'DOMINIO', 'CONTAS_PERMITIDAS', 'B2_BUCKET', 'PROXY_CONFIAVEL')) {
     # O compose le o ambiente antes do --env-file: so o config.env do teste vale.
     Remove-Item ('Env:' + $v) -ErrorAction SilentlyContinue
@@ -312,6 +313,12 @@ try {
     # O JSON do Google de mentira, com o redirect da nuvem de teste.
     Gravar (Join-Path $PastaSegredos 'google-client.json') ('{"web":{"client_id":"teste.apps.googleusercontent.com","client_secret":"nao-e-um-segredo","redirect_uris":["https://' + $Dominio + '/auth/google/callback"]}}' + "`n")
 
+    # A politica de privacidade de mentira (a pasta que o compose monta na API,
+    # so leitura): um texto curto e valido, para a nuvem de teste servir a
+    # pagina /privacidade e o teste conferi-la pela borda.
+    $null = New-Item -ItemType Directory -Path $PastaPolitica -Force
+    Gravar (Join-Path $PastaPolitica 'politica-de-privacidade.md') ("# Politica de privacidade de teste`n`nEste texto e de mentira e so existe no teste do PC.`n")
+
     $gerar = Descartavel @('--network', 'none', '--read-only', '-v', ($PastaChave + ':/chave'),
         $ImagemBackup, 'age-keygen', '-o', '/chave/teste.key')
     if ($gerar.Codigo -ne 0) { Falhar 'o age-keygen nao gerou a chave de teste' }
@@ -341,6 +348,7 @@ try {
         ('PROXY_CONFIAVEL=' + $subrede),
         ('AW_PREFIXO=' + $Prefixo),
         ('AW_SEGREDOS=' + $PastaSegredos.Replace('\', '/')),
+        ('AW_POLITICA=' + $PastaPolitica.Replace('\', '/')),
         ('AW_REDE_DO_PROXY=' + $RedeDoProxy),
         ('AW_PORTA_HTTPS_TESTE=' + $PortaHttps),
         ('AW_PORTA_HTTP_TESTE=' + $PortaHttp)
@@ -441,6 +449,14 @@ try {
     $ditado = Pedir ('https://' + $Dominio + '/api/v1/dictation') $nosso
     if ($ditado.Codigo -ne 401) { Falhar ('as rotas do ditado no celular nao estao montadas (GET /api/v1/dictation deu ' + $ditado.Codigo + ', quero 401): a chave de cifra nao chegou ao servidor') }
     Ok 'as rotas do ditado no celular montadas (a chave de cifra chegou ao servidor)'
+    # A politica de privacidade: a pasta montada so para leitura chegou ao
+    # servidor, que a le na subida e serve a pagina em HTML, publica.
+    $politica = Pedir ('https://' + $Dominio + '/privacidade') $nosso
+    if ($politica.Codigo -ne 200) { Falhar ('a pagina /privacidade deu ' + $politica.Codigo + ' (quero 200): a pasta da politica nao chegou ao servidor') }
+    if ((Cabecalho $politica 'content-type') -notcontains 'text/html; charset=utf-8') { Falhar ('o /privacidade nao veio em HTML: ' + ((Cabecalho $politica 'content-type') -join ' | ')) }
+    $cspPolitica = Cabecalho $politica 'content-security-policy'
+    if (($cspPolitica.Count -ne 1) -or ($cspPolitica[0] -ne $CspDoServidor)) { Falhar ('a CSP do /privacidade (tem de ser a do servidor): ' + ($cspPolitica -join ' | ')) }
+    Ok 'a politica de privacidade em /privacidade (HTML, publica, com a CSP do servidor)'
     # A sentinela no CAMINHO (o log de acesso sempre traz o caminho), por
     # este router: a resposta pode ser 200 (o app) ou 404; so importa que
     # passou pela borda.

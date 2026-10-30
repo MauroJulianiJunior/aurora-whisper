@@ -51,7 +51,9 @@
 # deploy/compose.teste.yml): no servidor ficam nos padroes, que sao os nomes
 # que os scripts da VPS usam (restaurar.sh, conferir-postgres.sh, backup.sh).
 # Os caminhos relativos sao relativos a esta pasta (deploy/): o ../segredos e
-# o ~/aurora-whisper/segredos da VPS.
+# o ~/aurora-whisper/segredos da VPS; o ../politica (AW_POLITICA, no teste do
+# PC) e o ~/aurora-whisper/politica, com a politica de privacidade da
+# instancia (docs/deploy-privacidade.md).
 #
 # deploy/compose_test.go confere tudo isto lendo este arquivo.
 
@@ -165,6 +167,13 @@ services:
       # gerar-segredos.sh.
       AI_KEYS_SECRET_FILE: /run/secrets/ai-keys-secret
       PAINEL_DIR: /painel
+      # A politica de privacidade desta instancia (docs/deploy-privacidade.md): um
+      # arquivo Markdown, preenchido, que o servidor le na subida e serve em
+      # /privacidade. Opcional: se o arquivo nao existe (quem ainda nao tem
+      # politica), a nuvem sobe sem a pagina e avisa no log; se existe e ainda
+      # tem campos [A PREENCHER], a subida falha. Fica numa PASTA (e nao num
+      # arquivo so): o Docker cria como pasta o arquivo que falta num bind.
+      POLITICA_FILE: /politica/politica-de-privacidade.md
       # info: com warn ou error, a linha "retencao" do job some.
       LOG_LEVEL: info
       # O coletor do Go segura o uso abaixo do limite do conteiner.
@@ -178,6 +187,12 @@ services:
     read_only: true
     tmpfs:
       - /tmp:size=16m
+    volumes:
+      # A pasta da politica de privacidade (~/aurora-whisper/politica na VPS),
+      # so leitura. O subir.sh a cria e poe la o arquivo que o
+      # enviar-para-servidor.ps1 -ArquivoPolitica mandou. Nao e segredo: e o
+      # texto que a pagina /privacidade mostra a qualquer pessoa.
+      - ${AW_POLITICA:-../politica}:/politica:ro
     cap_drop:
       - ALL
     security_opt:

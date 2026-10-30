@@ -1,8 +1,9 @@
 <#
 .SYNOPSIS
   Manda para a VPS as imagens que passaram no deploy-teste.ps1, a pasta
-  deploy\ e (na primeira vez) o JSON do client do Google. Compativel com o
-  PowerShell 5.1. Quem roda e o Mauro, com o Docker Desktop aberto.
+  deploy\, (na primeira vez) o JSON do client do Google e, se pedida, a
+  politica de privacidade da instancia. Compativel com o PowerShell 5.1. Quem
+  roda e o Mauro, com o Docker Desktop aberto.
 
 .DESCRIPTION
   ADR-019, "Decisoes da F11", D4: a imagem testada no PC vai por ssh (docker
@@ -16,7 +17,10 @@
        aprovadas;
     2. confere o JSON do Google, se for mandado (o client Web, com o redirect
        https://<dominio>/auth/google/callback), sem mostrar nada dele, e
-       recusa um JSON dentro do repositorio;
+       recusa um JSON dentro do repositorio; e a politica de privacidade, se
+       for mandada (a copia preenchida, em Markdown: fora do repositorio, sem
+       campo [A PREENCHER, em UTF-8, sem caractere de controle e ate 96 KiB,
+       as mesmas regras que o servidor aplica);
     3. na VPS, cria a pasta ~/aurora-whisper (0700) e a recebido/ dentro dela;
     4. docker save das duas imagens | ssh <servidor> docker load (pelo cmd,
        que passa os bytes sem mexer; o cano do PowerShell 5.1 os estragaria);
@@ -24,6 +28,8 @@
     6. scp da pasta deploy\ para ~/aurora-whisper/deploy;
     7. scp do JSON do Google para ~/aurora-whisper/recebido/google-client.json,
        que o gerar-segredos.sh confere e move para segredos/.
+    8. scp da politica para ~/aurora-whisper/recebido/politica-de-privacidade.md,
+       que o subir.sh confere de novo e poe em ~/aurora-whisper/politica/.
   Ele nao sobe nada na VPS (isso e o subir.sh, la) e nunca ve segredo da VPS.
 
 .PARAMETER Dominio
@@ -36,11 +42,24 @@
   trocar o client depois, o roteiro manda o JSON sozinho, sem as imagens, e o
   subir.sh o troca.
 
+.PARAMETER ArquivoPolitica
+  A politica de privacidade desta instancia: o Markdown do modelo
+  docs/politica-de-privacidade.md com todos os campos preenchidos (o
+  docs/deploy-privacidade.md diz como). Ela tem o nome e o e-mail do
+  responsavel e fica FORA do repositorio (que e publico): o script recusa um
+  caminho dentro dele, um arquivo que ainda tenha [A PREENCHER, que nao seja
+  UTF-8, que tenha caractere de controle ou que passe de 96 KiB. Sem este
+  parametro, nada muda na politica da VPS. Com ele, o subir.sh a poe em
+  politica/ e recria a API, que passa a servir a pagina /privacidade.
+
 .PARAMETER Servidor
   O apelido do seu acesso ssh a VPS (o Host do ~/.ssh/config). Padrao: vps.
 
 .EXAMPLE
   powershell -ExecutionPolicy Bypass -File C:\Desenvolvimento\aurora-whisper\scripts\enviar-para-servidor.ps1 -Dominio aurora-whisper.exemplo.com.br -ArquivoGoogle C:\Users\voce\Downloads\client_secret.json
+
+.EXAMPLE
+  powershell -ExecutionPolicy Bypass -File C:\Desenvolvimento\aurora-whisper\scripts\enviar-para-servidor.ps1 -Dominio aurora-whisper.exemplo.com.br -ArquivoPolitica C:\Users\voce\Documents\aurora-whisper\politica-de-privacidade.md
 #>
 [CmdletBinding()]
 param(
@@ -48,6 +67,8 @@ param(
     [string]$Dominio,
 
     [string]$ArquivoGoogle = '',
+
+    [string]$ArquivoPolitica = '',
 
     [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9._-]*$')]
     [string]$Servidor = 'vps'
@@ -61,6 +82,8 @@ $ImagemApi = 'aurora-whisper-server:producao'
 $ImagemBackup = 'aurora-whisper-backup:producao'
 $Aprovado = Join-Path $env:USERPROFILE '.aurora-whisper-dev\deploy-teste-aprovado.txt'
 $MaxJsonDoGoogle = 65536
+# O teto da politica e o do servidor (server.MaxPolitica, 96 KiB).
+$MaxPolitica = 98304
 
 function Rodar-Silencioso([string]$Programa, [string[]]$Argumentos) {
     $anterior = $ErrorActionPreference
@@ -162,6 +185,34 @@ if ($ArquivoGoogle) {
     Ok ('o JSON do Google, com o redirect ' + $redirect + ' (nada dele foi mostrado)')
 }
 
+# --- 2b. a politica de privacidade ----------------------------------------------
+# A copia preenchida tem o nome e o e-mail do responsavel: nunca dentro do
+# repositorio (o GitHub e publico). Aqui valem as mesmas regras que o servidor
+# aplica ao subir (server.NovaPoliticaDePrivacidade): um arquivo que ele
+# recusaria derrubaria a API na subida. Nada do conteudo aparece na tela.
+$PoliticaCheia = ''
+if ($ArquivoPolitica) {
+    $PoliticaCheia = [IO.Path]::GetFullPath($ArquivoPolitica)
+    if (-not (Test-Path -LiteralPath $PoliticaCheia -PathType Leaf)) { Falhar ('nao achei o arquivo da politica ' + $PoliticaCheia + '.') }
+    if (Dentro-De $PoliticaCheia $Raiz) { Falhar 'a politica preenchida tem o nome e o e-mail do responsavel e nao pode ficar dentro do repositorio, que e publico: guarde-a fora (Documentos, por exemplo).' }
+    $bytesDaPolitica = [IO.File]::ReadAllBytes($PoliticaCheia)
+    if ($bytesDaPolitica.Length -gt $MaxPolitica) { Falhar 'o arquivo da politica passa de 96 KiB: nao parece uma politica de privacidade.' }
+    $textoDaPolitica = $null
+    try {
+        $textoDaPolitica = (New-Object System.Text.UTF8Encoding($false, $true)).GetString($bytesDaPolitica)
+    } catch {
+        Falhar 'o arquivo da politica nao e um texto UTF-8 valido (salve-o como UTF-8 no editor).'
+    }
+    if ($textoDaPolitica.Trim().Length -eq 0) { Falhar 'o arquivo da politica esta vazio.' }
+    if ($textoDaPolitica.IndexOf('[A PREENCHER', [StringComparison]::Ordinal) -ge 0) {
+        Falhar 'o arquivo da politica ainda tem campos [A PREENCHER...] do modelo (e a nota do topo, que e so para quem preenche): preencha-os, tire a nota e rode de novo.'
+    }
+    if ([regex]::IsMatch($textoDaPolitica, '[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]')) {
+        Falhar 'o arquivo da politica tem caracteres de controle: nao parece um texto em Markdown.'
+    }
+    Ok ('a politica de privacidade (' + $bytesDaPolitica.Length + ' bytes, UTF-8, sem campo por preencher; nada dela foi mostrado)')
+}
+
 # --- 3. a pasta na VPS ----------------------------------------------------------
 Write-Host ''
 Write-Host ('Falando com ' + $Servidor + ' pelo ssh...')
@@ -205,6 +256,18 @@ if ($JsonCheio) {
     }
     if ($codigo -ne 0) { Falhar 'o scp do JSON do Google falhou.' }
     Ok 'o JSON do Google em ~/aurora-whisper/recebido/ (na primeira vez o gerar-segredos.sh o move para segredos/; depois, o subir.sh o confere e o troca, ou o apaga se for o mesmo)'
+}
+
+# --- 8. a politica de privacidade -----------------------------------------------
+if ($PoliticaCheia) {
+    Push-Location -LiteralPath (Split-Path -Parent $PoliticaCheia)
+    try {
+        $codigo = Rodar-AVista 'scp' @('-q', (Split-Path -Leaf $PoliticaCheia), ($Servidor + ':aurora-whisper/recebido/politica-de-privacidade.md'))
+    } finally {
+        Pop-Location
+    }
+    if ($codigo -ne 0) { Falhar 'o scp da politica de privacidade falhou.' }
+    Ok 'a politica em ~/aurora-whisper/recebido/ (o subir.sh a confere de novo, a poe em politica/ depois do SIM e recria a API)'
 }
 
 Write-Host ''

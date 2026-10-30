@@ -17,7 +17,12 @@
 #      do Google em recebido/ (para trocar o client, pelo roteiro) e
 #      conferido como no gerar-segredos.sh: se for o mesmo de segredos/, sai;
 #      se for outro, troca o atual no passo 8, depois do SIM, com a API
-#      recriada (--force-recreate);
+#      recriada (--force-recreate). A politica de privacidade da instancia
+#      em recebido/ (o enviar-para-servidor.ps1 -ArquivoPolitica; ver
+#      docs/deploy-privacidade.md) e conferida do mesmo jeito (sem campo
+#      [A PREENCHER, UTF-8, sem controle, ate 96 KiB) e entra em politica/
+#      (a pasta que o compose monta, so leitura, na API) no passo 8, tambem
+#      com a API recriada: ela le o arquivo so na subida;
 #   2. o relogio: o NTP sincronizado (timedatectl). O login do Google confere
 #      a hora do token, e as sessoes, os aparelhos e o backup dependem dela;
 #   3. a sub-rede da rede "web" do Traefik (docker network inspect, so
@@ -56,7 +61,7 @@ umask 077
 
 # Os padroes do compose sao os nomes do servidor; as variaveis AW_* sao so do
 # teste do PC.
-unset AW_PREFIXO AW_SEGREDOS AW_REDE_DO_PROXY
+unset AW_PREFIXO AW_SEGREDOS AW_REDE_DO_PROXY AW_POLITICA
 # Na interpolacao, o compose le o ambiente ANTES do --env-file: uma variavel
 # exportada na sessao (um runbook de outro site, o .bashrc) valeria mais que o
 # config.env, que e o que este script confere. E o COMPOSE_PROJECT_NAME vale
@@ -74,6 +79,14 @@ CONFIG="$BASE/config.env"
 RECEBIDO="$BASE/recebido/google-client.json"
 # O JSON do Google tem menos de 1 KiB; o servidor recusa acima de 64 KiB.
 MAX_JSON_DO_GOOGLE=65536
+# A politica de privacidade da instancia: o Markdown preenchido que o PC manda
+# para recebido/ e que entra em politica/, a pasta que o compose monta (so
+# leitura) em /politica na API. O limite e o do servidor (server.MaxPolitica,
+# 96 KiB).
+RECEBIDO_POLITICA="$BASE/recebido/politica-de-privacidade.md"
+PASTA_DA_POLITICA="$BASE/politica"
+ARQUIVO_DA_POLITICA="$PASTA_DA_POLITICA/politica-de-privacidade.md"
+MAX_POLITICA=98304
 COMPOSE="$DEPLOY/compose.yml"
 PROJETO='aurora-whisper'
 REDE_DO_PROXY='web'
@@ -232,6 +245,43 @@ if [ -e "$RECEBIDO" ]; then
   fi
 fi
 
+# A politica de privacidade: a pasta que o compose monta na API existe sempre
+# (um bind de pasta que falta o Docker cria como root, e nunca a tiramos de
+# la), 0755 para o usuario da API (nonroot) ler. Nao e segredo: e o texto que
+# a pagina /privacidade mostra a qualquer pessoa. Um arquivo novo em recebido/
+# e conferido como o servidor o confere (uma recusa dele na subida derrubaria
+# a API), e entra no passo 8, depois do SIM; um igual ao atual sai.
+mkdir -p -- "$PASTA_DA_POLITICA" || falhou "nao consegui criar $PASTA_DA_POLITICA"
+chmod 0755 -- "$PASTA_DA_POLITICA" || falhou "nao consegui ajustar o modo de $PASTA_DA_POLITICA"
+troca_politica=0
+if [ -e "$RECEBIDO_POLITICA" ]; then
+  tirar="(para desistir: rm $RECEBIDO_POLITICA)"
+  { [ -f "$RECEBIDO_POLITICA" ] && [ -r "$RECEBIDO_POLITICA" ]; } || falhou "nao consegui ler $RECEBIDO_POLITICA $tirar. Nada foi mudado"
+  [ "$(wc -c < "$RECEBIDO_POLITICA")" -le "$MAX_POLITICA" ] ||
+    falhou "a politica em $RECEBIDO_POLITICA passa de 96 KiB: nao parece uma politica de privacidade $tirar. Nada foi mudado"
+  [ -s "$RECEBIDO_POLITICA" ] || falhou "a politica em $RECEBIDO_POLITICA esta vazia $tirar. Nada foi mudado"
+  if grep -Fq '[A PREENCHER' "$RECEBIDO_POLITICA"; then
+    falhou "a politica em $RECEBIDO_POLITICA ainda tem campos [A PREENCHER...] do modelo: preencha-os no PC e mande de novo $tirar. Nada foi mudado"
+  fi
+  # O iconv e da libc (toda VPS Linux o tem); sem ele, o servidor ainda recusa
+  # na subida (e o PC ja conferiu antes de mandar).
+  if command -v iconv > /dev/null 2>&1 && ! iconv -f UTF-8 -t UTF-8 < "$RECEBIDO_POLITICA" > /dev/null 2>&1; then
+    falhou "a politica em $RECEBIDO_POLITICA nao e um texto UTF-8 valido $tirar. Nada foi mudado"
+  fi
+  # Sem controle (um binario): so o tab, o fim de linha e o texto passam.
+  if [ "$(LC_ALL=C tr -d '\011\012\015\040-\176\200-\377' < "$RECEBIDO_POLITICA" | wc -c)" -gt 0 ]; then
+    falhou "a politica em $RECEBIDO_POLITICA tem caracteres de controle: nao parece um texto em Markdown $tirar. Nada foi mudado"
+  fi
+  if [ -f "$ARQUIVO_DA_POLITICA" ] && cmp -s -- "$RECEBIDO_POLITICA" "$ARQUIVO_DA_POLITICA"; then
+    rm -f -- "$RECEBIDO_POLITICA"
+    rmdir -- "$BASE/recebido" 2> /dev/null || true
+    ok "a politica de privacidade em recebido/ e a mesma de politica/ (nada a trocar): a copia de entrada saiu"
+  else
+    troca_politica=1
+    ok "uma politica de privacidade NOVA em recebido/, conferida: ela entra em politica/ depois do SIM, com a API recriada"
+  fi
+fi
+
 # --- 2. o relogio ---------------------------------------------------------------
 command -v timedatectl > /dev/null 2>&1 ||
   falhou "nao achei o timedatectl para conferir o NTP; confira a hora da VPS antes de seguir"
@@ -306,10 +356,16 @@ printf '  - nenhum dado real sobe antes do OK da revisao de LGPD (o dossie e a p
 if [ "$troca_google" = 1 ]; then
   printf '  - o client do Google e TROCADO pelo JSON novo de recebido/, e a API e recriada com ele.\n'
 fi
+if [ "$troca_politica" = 1 ]; then
+  printf '  - a politica de privacidade de recebido/ vira a de politica/, publica em https://%s/privacidade, e a API e recriada.\n' "$dominio"
+fi
 printf 'Digite SIM para subir a API (qualquer outra coisa para): '
 resposta=''
 IFS= read -r resposta || true
 if [ "$resposta" != SIM ]; then
+  if [ "$troca_politica" = 1 ]; then
+    parou "sem o SIM, a API nao subiu e a politica de privacidade nao foi publicada (a nova continua em recebido/). O Postgres ficou de pe (rode o subir.sh de novo quando quiser)."
+  fi
   if [ "$troca_google" = 1 ]; then
     parou "sem o SIM, a API nao subiu e o client do Google nao foi trocado (o JSON novo continua em recebido/). O Postgres ficou de pe (rode o subir.sh de novo quando quiser)."
   fi
@@ -324,7 +380,7 @@ api_antes="$(subida_da_api)"
 if [ "$troca_google" = 1 ]; then
   # O arquivo novo, 0444 como os outros, no lugar do atual de uma vez (mv).
   # O conteiner que ja roda continua com o arquivo velho montado, e a API so
-  # le o JSON na subida: por isso o --force-recreate.
+  # le o JSON na subida: por isso o --force-recreate (abaixo).
   novo_google="$SEGREDOS/.google-client.json.novo.$$"
   if ! cp -- "$RECEBIDO" "$novo_google" || ! chmod 0444 "$novo_google" ||
     ! mv -f -- "$novo_google" "$SEGREDOS/google-client.json"; then
@@ -334,7 +390,22 @@ if [ "$troca_google" = 1 ]; then
   rm -f -- "$RECEBIDO"
   rmdir -- "$BASE/recebido" 2> /dev/null || true
   ok "o client do Google trocado em $SEGREDOS (0444); a copia de entrada saiu"
-  dc up -d --force-recreate "$CONTEINER_API" > /dev/null 2>&1 || falhou "o compose nao recriou a API com o client novo"
+fi
+if [ "$troca_politica" = 1 ]; then
+  # A politica nova, 0444 (a API roda como nonroot e so le), no lugar da atual
+  # de uma vez (mv). Como o JSON do Google, a API a le so na subida.
+  nova_politica="$PASTA_DA_POLITICA/.politica.nova.$$"
+  if ! cp -- "$RECEBIDO_POLITICA" "$nova_politica" || ! chmod 0444 "$nova_politica" ||
+    ! mv -f -- "$nova_politica" "$ARQUIVO_DA_POLITICA"; then
+    rm -f -- "$nova_politica"
+    falhou "nao consegui por a politica em $PASTA_DA_POLITICA (a atual ficou); a API nao foi mexida"
+  fi
+  rm -f -- "$RECEBIDO_POLITICA"
+  rmdir -- "$BASE/recebido" 2> /dev/null || true
+  ok "a politica de privacidade em $PASTA_DA_POLITICA (0444); a copia de entrada saiu"
+fi
+if [ "$troca_google" = 1 ] || [ "$troca_politica" = 1 ]; then
+  dc up -d --force-recreate "$CONTEINER_API" > /dev/null 2>&1 || falhou "o compose nao recriou a API com o arquivo novo (o client do Google ou a politica)"
 else
   dc up -d "$CONTEINER_API" > /dev/null 2>&1 || falhou "o compose nao subiu a API"
 fi
@@ -364,6 +435,13 @@ else
   printf '%s\n' "$log" | sed -n "${n_servindo}p" | grep -q '"proxy_confiavel":true' ||
     falhou "a linha servindo da API diz que o proxy confiavel esta desligado"
   ok "a API saudavel: arrumacao, retencao e so entao servindo, com o proxy confiavel ligado"
+  # Com a politica em politica/, a API recriada tem de a publicar: o servidor
+  # diz na linha servindo (politica_publicada) e nunca mostra o texto.
+  if [ -f "$ARQUIVO_DA_POLITICA" ]; then
+    printf '%s\n' "$log" | sed -n "${n_servindo}p" | grep -q '"politica_publicada":true' ||
+      falhou "a API subiu sem publicar a politica de privacidade de $PASTA_DA_POLITICA (a linha servindo nao diz politica_publicada=true; veja: docker logs --since $inicio $CONTEINER_API)"
+    ok "a API publica a politica de privacidade da instancia"
+  fi
 fi
 # A saude do job, por fora do roteamento. A saida e uma linha so, sem valor
 # de configuracao (cmd/server/healthcheck.go).
@@ -392,6 +470,14 @@ if command -v curl > /dev/null 2>&1; then
   [ "$codigo" = 200 ] ||
     falhou "a API esta de pe, mas https://$dominio nao respondeu 200 em $ESPERA_HTTPS s (o DNS aponta para esta VPS? O Traefik emitiu o certificado? So para ler: docker logs --since 10m traefik)"
   ok "https://$dominio responde pelo Traefik, com o certificado valido"
+  # A politica da instancia, publica, sem sessao: quem tem o arquivo tem a
+  # pagina (sem ele, a rota nao existe e nada se confere).
+  if [ -f "$ARQUIVO_DA_POLITICA" ]; then
+    codigo="$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 10 "https://$dominio/privacidade" 2> /dev/null || true)"
+    [ "$codigo" = 200 ] ||
+      falhou "a API esta de pe, mas https://$dominio/privacidade respondeu ${codigo:-nada} (queria 200): a politica nao foi publicada. So para ler: docker logs --tail 20 $CONTEINER_API"
+    ok "https://$dominio/privacidade responde 200 (a politica da instancia)"
+  fi
 else
   printf 'AVISO: sem o curl na VPS; o https se confere pelo scripts\\conferir-nuvem.ps1, no PC.\n'
 fi

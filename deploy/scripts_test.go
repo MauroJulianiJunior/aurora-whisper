@@ -30,8 +30,9 @@ const (
 var scriptsDaVPS = []string{gerarSegredos, backupSh, restaurarSh, conferirB2, agendarBackup, subirSh, criarChaveDeCifra}
 
 // curlDoSubir é o único curl que um script da VPS roda: o subir.sh confere o
-// https pelo Traefik (um GET no health, com o certificado conferido).
-var curlDoSubir = regexp.MustCompile(`^(if command -v curl > /dev/null 2>&1; then|codigo="\$\(curl --silent --output /dev/null --write-out '%\{http_code\}' --max-time 10 "https://\$dominio/api/v1/health/live" 2> /dev/null \|\| true\)")$`)
+// https pelo Traefik (um GET no health, com o certificado conferido) e, se a
+// instância tem a política de privacidade, o GET de /privacidade.
+var curlDoSubir = regexp.MustCompile(`^(if command -v curl > /dev/null 2>&1; then|codigo="\$\(curl --silent --output /dev/null --write-out '%\{http_code\}' --max-time 10 "https://\$dominio/(api/v1/health/live|privacidade)" 2> /dev/null \|\| true\)")$`)
 
 // --- o texto ----------------------------------------------------------------
 
