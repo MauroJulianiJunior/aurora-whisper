@@ -25,9 +25,11 @@ const (
 	// ADR-021, C3a: o passo que cria só o arquivo da chave de cifra das
 	// chaves da IA numa VPS que já está no ar.
 	criarChaveDeCifra = "deploy/scripts/criar-chave-de-cifra.sh"
+	// A política de privacidade promete tirar o cadastro a pedido; este é o comando.
+	tirarCadastro = "deploy/scripts/tirar-cadastro.sh"
 )
 
-var scriptsDaVPS = []string{gerarSegredos, backupSh, restaurarSh, conferirB2, agendarBackup, subirSh, criarChaveDeCifra}
+var scriptsDaVPS = []string{gerarSegredos, backupSh, restaurarSh, conferirB2, agendarBackup, subirSh, criarChaveDeCifra, tirarCadastro}
 
 // curlDoSubir é o único curl que um script da VPS roda: o subir.sh confere o
 // https pelo Traefik (um GET no health, com o certificado conferido) e, se a
