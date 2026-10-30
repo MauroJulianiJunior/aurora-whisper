@@ -179,6 +179,11 @@ func (c *Cloud) tabela() []rota {
 	}
 	// O app: o build da nuvem do painel (painel.go).
 	t = append(t, c.painel.rotas()...)
+	// A política de privacidade da instância (politica.go): pública, como o
+	// app, e só quando a nuvem tem a cópia. Sem ela, cai no 404 do "/".
+	if c.privacidade != nil {
+		t = append(t, rota{"GET " + CaminhoDaPolitica, AcessoPublico, c.handlePolitica})
+	}
 	t = append(t, c.rotasDeTeste()...)
 	return append(t,
 		rota{"/api/v1/", AcessoPublico, handleNaoMontada},

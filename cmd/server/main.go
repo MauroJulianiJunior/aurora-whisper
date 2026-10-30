@@ -82,7 +82,9 @@ comandos:
                     GOOGLE_CLIENT_SECRET_FILE, PAINEL_DIR, PROXY_CONFIAVEL,
                     LOG_LEVEL); DATABASE_URL, SESSION_SECRET e
                     DEVICE_TOKEN_PEPPER também vêm de arquivo, pela variável
-                    com _FILE no fim (nunca as duas juntas)
+                    com _FILE no fim (nunca as duas juntas); POLITICA_FILE
+                    (opcional) é o arquivo Markdown da política de privacidade
+                    desta instância, servido em /privacidade
   migrate           aplica as migrations pendentes no Postgres de DATABASE_URL
   migrate -status   mostra o que já está aplicado e o que falta, sem aplicar nada
   healthcheck       a checagem do contêiner: GET no health/live da porta de

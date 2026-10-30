@@ -121,6 +121,11 @@ type CloudConfig struct {
 	Painel fs.FS
 	// Proxy é PROXY_CONFIAVEL.
 	Proxy cloudauth.ProxyConfiavel
+	// PoliticaDePrivacidade é a página da política desta instância
+	// (POLITICA_FILE), já conferida e montada (politica.go). Opcional: nil é o
+	// normal de quem não a publica, e o GET /privacidade cai no 404 das rotas
+	// não montadas.
+	PoliticaDePrivacidade *PoliticaDePrivacidade
 
 	// Now é o relógio (nil é time.Now).
 	Now func() time.Time
@@ -184,6 +189,8 @@ type Cloud struct {
 	csrf     *http.CrossOriginProtection
 	rotas    []rota
 	painel   *painel
+	// privacidade é a política da instância (politica.go); nil, sem a rota.
+	privacidade *PoliticaDePrivacidade
 
 	limLogin           *cloudauth.Limite
 	limInicio          *cloudauth.Limite
@@ -315,6 +322,7 @@ func NewCloud(cfg CloudConfig) (*Cloud, error) {
 		limMutacoes:  cloudauth.NovoLimite(lim.PushMutacoes, cfg.Now),
 		callbackPath: callbackPath,
 		painel:       app,
+		privacidade:  cfg.PoliticaDePrivacidade,
 		intervalo:    cfg.IntervaloDaArrumacao,
 
 		vagasDeImagem: make(chan struct{}, VagasDeImagem),

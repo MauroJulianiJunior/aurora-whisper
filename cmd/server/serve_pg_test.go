@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -132,7 +133,7 @@ func TestServe_Postgres_SobeEDesligaLimpo(t *testing.T) {
 	// A linha "servindo" diz se há proxy confiável (aqui não), e não o valor;
 	// e se as chaves da IA do celular estão ligadas (ADR-021, C3a: aqui não,
 	// sem AI_KEYS_SECRET_FILE).
-	if !strings.Contains(stderr.String(), `"https":false,"proxy_confiavel":false,"chaves_da_ia":false}`) {
+	if !strings.Contains(stderr.String(), `"https":false,"proxy_confiavel":false,"chaves_da_ia":false,"politica_publicada":false}`) {
 		t.Errorf("a linha \"servindo\" não diz o proxy confiável e as chaves da IA:\n%s", stderr.String())
 	}
 	cancel()
@@ -225,7 +226,7 @@ func TestServe_Postgres_ComAChaveDeCifraSobeComAsRotasDoDitado(t *testing.T) {
 			t.Errorf("%s %s sem sessão: %d, quero 401 (a rota existe e é da sessão)", r.method, r.path, code)
 		}
 	}
-	if !strings.Contains(stderr.String(), `"chaves_da_ia":true}`) {
+	if !strings.Contains(stderr.String(), `"chaves_da_ia":true,"politica_publicada":false}`) {
 		t.Errorf("a linha \"servindo\" não diz que as chaves da IA estão ligadas:\n%s", stderr.String())
 	}
 	cancel()
@@ -239,5 +240,110 @@ func TestServe_Postgres_ComAChaveDeCifraSobeComAsRotasDoDitado(t *testing.T) {
 	}
 	if logs := stderr.String() + stdout.String(); strings.Contains(logs, strings.Repeat("c0", 32)) {
 		t.Error("o log traz a chave de cifra")
+	}
+}
+
+// sobeComPolitica sobe o serve (o Postgres de teste, já migrado) com o env e
+// devolve o endereço, o stderr e o que desliga e confere a saída 0.
+func sobeComPolitica(t *testing.T, env map[string]string) (addr net.Addr, stderr, stdout *safeBuffer, desligar func()) {
+	t.Helper()
+	addrCh := make(chan net.Addr, 1)
+	onListen = func(a net.Addr) { addrCh <- a }
+	t.Cleanup(func() { onListen = nil })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	stdout, stderr = new(safeBuffer), new(safeBuffer)
+	done := make(chan int, 1)
+	go func() {
+		done <- run(ctx, []string{"serve"}, func(k string) string { return env[k] }, stdout, stderr)
+	}()
+	select {
+	case addr = <-addrCh:
+	case code := <-done:
+		t.Fatalf("o serve saiu com %d antes de escutar: %s", code, stderr.String())
+	case <-time.After(30 * time.Second):
+		t.Fatal("o serve não escutou em 30 s")
+	}
+	return addr, stderr, stdout, func() {
+		cancel()
+		select {
+		case code := <-done:
+			if code != 0 {
+				t.Fatalf("o desligamento saiu com %d: %s", code, stderr.String())
+			}
+		case <-time.After(20 * time.Second):
+			t.Fatal("o serve não desligou em 20 s")
+		}
+	}
+}
+
+func pedirPrivacidade(t *testing.T, addr net.Addr, method string) (int, http.Header, string) {
+	t.Helper()
+	req, err := http.NewRequest(method, "http://"+addr.String()+"/privacidade", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Host = "localhost:8080"
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("%s /privacidade: %v", method, err)
+	}
+	corpo, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	return resp.StatusCode, resp.Header, string(corpo)
+}
+
+// Com POLITICA_FILE, o serve sobe com a rota /privacidade (a política da
+// instância, pública): a página em HTML, montada pelo servidor, sem sessão
+// nenhuma; a linha "servindo" diz politica_publicada=true, e o log não traz o
+// texto nem o caminho. Sem a variável (os testes de cima), a rota é o 404.
+func TestServe_Postgres_ComAPoliticaServeAPrivacidade(t *testing.T) {
+	dbURL := pgtest.NewDB(t)
+	texto := "# Política da instância de teste\n\nQuem cuida dos seus dados: **" + marcaDoConteudo + "**.\n"
+	env := with(with(envBom(t), envDatabaseURL, dbURL), envPoliticaFile, arquivoDaPolitica(t, []byte(texto)))
+	if _, errOut, code := runCmd(t, env, "migrate"); code != 0 {
+		t.Fatalf("migrate: %d %q", code, errOut)
+	}
+	addr, stderr, stdout, desligar := sobeComPolitica(t, env)
+
+	code, h, corpo := pedirPrivacidade(t, addr, http.MethodGet)
+	if code != http.StatusOK || h.Get("Content-Type") != "text/html; charset=utf-8" || h.Get("Content-Security-Policy") == "" ||
+		!strings.Contains(corpo, "<strong>"+marcaDoConteudo+"</strong>") || !strings.Contains(corpo, "<h1>Política da instância de teste</h1>") {
+		t.Errorf("GET /privacidade: %d %v %q; quero 200, a página em HTML e a CSP", code, h, corpo)
+	}
+	if code, _, corpo := pedirPrivacidade(t, addr, http.MethodHead); code != http.StatusOK || corpo != "" {
+		t.Errorf("HEAD /privacidade: %d %q", code, corpo)
+	}
+	if !strings.Contains(stderr.String(), `"politica_publicada":true}`) {
+		t.Errorf("a linha \"servindo\" não diz que a política está publicada:\n%s", stderr.String())
+	}
+	desligar()
+	if logs := stderr.String() + stdout.String(); strings.Contains(logs, marcaDoConteudo) || strings.Contains(logs, "PASTA-DA-INSTANCIA") {
+		t.Error("o log traz o texto ou o caminho da política")
+	}
+}
+
+// POLITICA_FILE definida, mas sem o arquivo (o compose sempre a define; o
+// responsável pode ainda não ter política): sobe sem a rota, com uma linha de
+// aviso no log e sem o caminho.
+func TestServe_Postgres_PoliticaAusenteSobeSemARota(t *testing.T) {
+	dbURL := pgtest.NewDB(t)
+	env := with(with(envBom(t), envDatabaseURL, dbURL), envPoliticaFile,
+		filepath.Join(t.TempDir(), "PASTA-DA-INSTANCIA", "politica-de-privacidade.md"))
+	if _, errOut, code := runCmd(t, env, "migrate"); code != 0 {
+		t.Fatalf("migrate: %d %q", code, errOut)
+	}
+	addr, stderr, stdout, desligar := sobeComPolitica(t, env)
+
+	if code, _, _ := pedirPrivacidade(t, addr, http.MethodGet); code != http.StatusNotFound {
+		t.Errorf("GET /privacidade sem o arquivo: %d, quero 404", code)
+	}
+	if !strings.Contains(stderr.String(), `"politica_publicada":false}`) || !strings.Contains(stderr.String(), "POLITICA_FILE está definida, mas o arquivo não existe") {
+		t.Errorf("faltam a linha \"servindo\" com politica_publicada=false e o aviso:\n%s", stderr.String())
+	}
+	desligar()
+	if logs := stderr.String() + stdout.String(); strings.Contains(logs, "PASTA-DA-INSTANCIA") {
+		t.Error("o log traz o caminho da política")
 	}
 }

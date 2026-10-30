@@ -67,6 +67,11 @@ func runServe(ctx context.Context, args []string, getenv func(string) string, st
 	if server.LoginDeTesteCompilado {
 		logger.Warn("este binário tem o login de teste (build tag logindeteste): só para desenvolvimento, nunca em produção")
 	}
+	if cfg.politicaAusente {
+		// O compose sempre define POLITICA_FILE; quem ainda não tem política
+		// sobe sem a página /privacidade. Sem o caminho, nem o texto, no log.
+		logger.Info(envPoliticaFile + " está definida, mas o arquivo não existe: a nuvem sobe sem a página /privacidade")
+	}
 
 	poolCfg, err := pgxpool.ParseConfig(cfg.databaseURL)
 	if err != nil {
@@ -102,6 +107,9 @@ func runServe(ctx context.Context, args []string, getenv func(string) string, st
 		Store: store, Accounts: store, BaseURL: cfg.base.String(),
 		SessionSecret: cfg.sessionSecret, DeviceTokenPepper: cfg.pepper,
 		Contas: cfg.contas, Google: cfg.google, Proxy: cfg.proxy, Logger: logger, Painel: cfg.painel,
+		// A página da política de privacidade da instância (POLITICA_FILE): nil, sem a
+		// rota /privacidade.
+		PoliticaDePrivacidade: cfg.politica,
 		// O ditado no celular (ADR-021, C3a e C3b): sem a chave de cifra
 		// (cfg.cofre nil), as rotas das chaves da IA e as do aceite e das
 		// preferências (/dictation) não sobem. O aceite vem do próprio store
@@ -119,7 +127,8 @@ func runServe(ctx context.Context, args []string, getenv func(string) string, st
 	}
 	return abrir(ctx, cfg.addr, cloud, logger, fail,
 		"contas_permitidas", cfg.contas.Len(), "https", cfg.base.Scheme == "https",
-		"proxy_confiavel", cfg.proxy.Ligado(), "chaves_da_ia", cfg.cofre != nil)
+		"proxy_confiavel", cfg.proxy.Ligado(), "chaves_da_ia", cfg.cofre != nil,
+		"politica_publicada", cfg.politica != nil)
 }
 
 // abrir é o fim da subida do serve (F11c; ADR-019, "Decisões da F11"): a

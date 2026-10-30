@@ -32,6 +32,10 @@ const (
 	envProxyConfiavel   = "PROXY_CONFIAVEL"
 	envLogLevel         = "LOG_LEVEL"
 	envPainelDir        = "PAINEL_DIR"
+	// envPoliticaFile é o arquivo Markdown com a política de privacidade DESTA
+	// instância (a cópia preenchida do modelo docs/politica-de-privacidade.md),
+	// opcional: com ele, a nuvem a serve em GET /privacidade.
+	envPoliticaFile = "POLITICA_FILE"
 	// envAIKeysSecret é a chave de cifra das chaves da IA do celular
 	// (ADR-021, C3a), opcional: de AI_KEYS_SECRET_FILE, no contêiner.
 	envAIKeysSecret = "AI_KEYS_SECRET"
@@ -111,6 +115,13 @@ type serveConfig struct {
 	proxy         cloudauth.ProxyConfiavel
 	logLevel      slog.Level
 	painel        fs.FS
+	// politica é a política de privacidade da instância (POLITICA_FILE). Nil
+	// sem a variável, ou com ela apontando para um arquivo que não existe: a
+	// rota /privacidade não sobe (404).
+	politica *server.PoliticaDePrivacidade
+	// politicaAusente: POLITICA_FILE está definida, mas o arquivo não existe
+	// (quem ainda não tem política). Não é erro: o serve só avisa no log.
+	politicaAusente bool
 	// cofre é a chave de cifra das chaves da IA (ADR-021, C3a). Nil sem
 	// AI_KEYS_SECRET(_FILE): as rotas do ditado no celular não sobem.
 	cofre *cofre.Cofre
@@ -214,6 +225,10 @@ func loadConfig(getenv func(string) string) (serveConfig, error) {
 		return c, err
 	}
 
+	if c.politica, c.politicaAusente, err = lerPolitica(getenv(envPoliticaFile)); err != nil {
+		return c, err
+	}
+
 	switch strings.ToLower(getenv(envLogLevel)) {
 	case "", "info":
 		c.logLevel = slog.LevelInfo
@@ -273,6 +288,42 @@ func lerPainelDir(dir string) (fs.FS, error) {
 		return nil, errConfig(envPainelDir, "a pasta não tem o index.html do painel (rode pnpm build:nuvem em web)")
 	}
 	return fsys, nil
+}
+
+// lerPolitica lê a política de privacidade da instância (POLITICA_FILE), uma
+// vez, na subida. Opcional: sem a variável, ou com ela apontando para um
+// arquivo que não existe (o compose a define sempre, e o responsável pode
+// ainda não ter política), devolve nil sem erro e a rota /privacidade não sobe;
+// no segundo caso, ausente é true, e o serve registra um aviso. Com o arquivo,
+// a subida falha (saída 2) se ele não abre, não é um arquivo comum, passa de
+// server.MaxPolitica, está vazio, não é UTF-8 válido, parece binário ou ainda
+// tem campos [A PREENCHER...] do modelo: servir o que não se conferiu seria
+// dizer ao público o que ninguém leu. A mensagem diz o nome da variável e o
+// problema, nunca o caminho nem o conteúdo.
+func lerPolitica(caminho string) (p *server.PoliticaDePrivacidade, ausente bool, err error) {
+	if caminho == "" {
+		return nil, false, nil
+	}
+	f, err := os.Open(caminho)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, true, nil
+	}
+	if err != nil {
+		return nil, false, errConfig(envPoliticaFile, "não consegui abrir o arquivo")
+	}
+	defer func() { _ = f.Close() }()
+	if info, err := f.Stat(); err != nil || !info.Mode().IsRegular() {
+		return nil, false, errConfig(envPoliticaFile, "não é um arquivo comum")
+	}
+	raw, err := io.ReadAll(io.LimitReader(f, server.MaxPolitica+1))
+	if err != nil {
+		return nil, false, errConfig(envPoliticaFile, "não consegui ler o arquivo")
+	}
+	p, err = server.NovaPoliticaDePrivacidade(raw)
+	if err != nil {
+		return nil, false, errConfig(envPoliticaFile, err.Error())
+	}
+	return p, false, nil
 }
 
 // lerClientGoogle lê o JSON que o Google Cloud dá ao baixar um client do tipo

@@ -104,3 +104,170 @@ p {
   outline: 2px solid var(--foco);
   outline-offset: 2px;
 }
+
+/* A política de privacidade (privacidade.html): o texto da instância, em
+   Markdown, vira HTML no servidor (markdown.go) e cai dentro do <main>. É um
+   documento de leitura, à esquerda e numa coluna estreita, no mesmo claro e
+   escuro das páginas acima. Sem estilo embutido na página (a CSP não deixa):
+   tudo o que ela precisa está aqui, inclusive o alinhamento das células. */
+
+:root {
+  --linha: #d7dfda;
+  --superficie: #e8eeea;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --linha: #26302b;
+    --superficie: #151c18;
+  }
+}
+
+.topo {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 20px 16px 0;
+}
+
+.marca {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--texto);
+  font-family: var(--fonte-titulo);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.marca img {
+  display: block;
+  border-radius: 6px;
+}
+
+.marca:focus-visible {
+  outline: 2px solid var(--foco);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.documento {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 8px 16px 72px;
+  font-size: 15px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.documento h1 {
+  margin: 24px 0 12px;
+  font-size: 28px;
+}
+
+.documento h2 {
+  margin: 36px 0 8px;
+  font-family: var(--fonte-titulo);
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+  text-wrap: balance;
+}
+
+.documento h3 {
+  margin: 24px 0 6px;
+  font-family: var(--fonte-titulo);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.documento h4,
+.documento h5,
+.documento h6 {
+  margin: 20px 0 4px;
+  font-size: 15px;
+}
+
+.documento p {
+  margin: 0 0 12px;
+  color: var(--texto);
+}
+
+.documento ul,
+.documento ol {
+  margin: 0 0 12px;
+  padding-left: 1.5em;
+}
+
+.documento li {
+  margin: 5px 0;
+}
+
+.documento li > p {
+  margin: 8px 0 0;
+}
+
+.documento li > ul,
+.documento li > ol {
+  margin: 6px 0 0;
+}
+
+.documento code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--superficie);
+  font: 0.9em ui-monospace, 'Cascadia Mono', Consolas, monospace;
+}
+
+.documento blockquote {
+  margin: 0 0 16px;
+  padding: 2px 16px;
+  border-left: 3px solid var(--moldura);
+  color: var(--texto-2);
+}
+
+.documento blockquote p {
+  color: var(--texto-2);
+}
+
+.documento hr {
+  margin: 32px 0;
+  border: 0;
+  border-top: 1px solid var(--linha);
+}
+
+/* A tabela rola de lado no celular, e não estoura a coluna. */
+.tabela {
+  margin: 0 0 16px;
+  overflow-x: auto;
+}
+
+.documento table {
+  width: 100%;
+  min-width: 32rem;
+  border-collapse: collapse;
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.documento th,
+.documento td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--linha);
+  text-align: left;
+  vertical-align: top;
+}
+
+.documento th {
+  color: var(--texto-2);
+  font-weight: 600;
+}
+
+.documento .c {
+  text-align: center;
+}
+
+.documento .d {
+  text-align: right;
+}
