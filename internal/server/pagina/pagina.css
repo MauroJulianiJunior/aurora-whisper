@@ -251,12 +251,21 @@ p {
   line-height: 1.5;
 }
 
+/* Na célula, a palavra não quebra no meio: o "anywhere" do .documento deixaria
+   a coluna encolher até uma letra (e a tabela já rola de lado). A primeira
+   coluna é o nome da linha e ganha largura para ele. */
 .documento th,
 .documento td {
   padding: 8px 10px;
   border-bottom: 1px solid var(--linha);
   text-align: left;
   vertical-align: top;
+  overflow-wrap: break-word;
+}
+
+.documento th:first-child,
+.documento td:first-child {
+  min-width: 8rem;
 }
 
 .documento th {

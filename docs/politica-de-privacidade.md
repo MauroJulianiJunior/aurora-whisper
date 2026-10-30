@@ -295,7 +295,7 @@ compartilhado com outros serviços do responsável, atrás da mesma entrada do h
 deles poderia chegar até aqui.]** Se acontecer um incidente com risco relevante para você, o
 responsável comunica você e a autoridade (art. 48).
 
-## 10. Cinco coisas que valem ser lidas com calma
+## 10. Seis coisas que valem ser lidas com calma
 
 1. **A troca desfeita fica na nuvem.** Quando você desfaz uma troca aprendida, a nuvem continua
    guardando a palavra e a certa, marcada como desfeita, enquanto a sua conta existir. Sem isso, um PC
@@ -397,6 +397,11 @@ texto fica (o celular, para abrir sem internet). A finalidade é a mesma (mostra
 ninguém novo recebe os dados; só a separação em itens com o Polish ligado manda uma linha da nota ao
 provedor do Polish, que você já tinha ligado. **[A PREENCHER: como o responsável avisou quem já usava a
 nuvem antes das notas.]**
+
+**29-out-2026 (ADR-022, N10):** esta política ganhou as imagens das notas. Elas trazem um dado novo na
+nuvem (a imagem reduzida no seu aparelho, sem metadado) e um teto de 400 MB por conta. A finalidade é a
+mesma e ninguém novo recebe os dados: as imagens não vão a nenhuma inteligência artificial.
+**[A PREENCHER: como o responsável avisou quem já usava a nuvem antes das imagens.]**
 
 ---
 
