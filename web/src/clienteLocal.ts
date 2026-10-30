@@ -48,6 +48,10 @@ export interface EstadoNuvem {
   // historico: o lado do histórico (F7c), com a nuvem gravada: a prévia do
   // envio inicial, o progresso, o que não subiu e a última rodada.
   historico?: ResumoDoHistorico
+  // politica: a nuvem conectada publica a política de privacidade dela (o Agent
+  // perguntou com um HEAD em <url>/privacidade na conferência). Só com isso o
+  // painel mostra o link; ausente é "não tem" (ou ainda não se perguntou).
+  politica?: boolean
 }
 
 // ResumoDoHistorico é o que a seção Nuvem mostra do histórico (ADR-019,

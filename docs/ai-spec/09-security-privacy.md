@@ -736,8 +736,15 @@ O texto de Privacidade do app da nuvem e a folha do aceite foram propostos em
 (11-out-2026), com os testes que conferem as frases. O texto novo diz "a chave do PC continua no PC" e
 **não** traz a frase "Gerenciador de Credenciais", que o `bundle.test` recusa no build da nuvem. O app
 não pede a chave dentro da folha: depois do "Aceito", abre as Configurações, onde a chave é colada, e ela
-nunca vai à URL nem volta inteira à tela. O "Política completa: {link}" ficou de fora, porque a política
-não está publicada. **O texto da folha tem de continuar batendo com a política**, e qualquer mudança dele
+nunca vai à URL nem volta inteira à tela. O "Política completa: {link}" ficou de fora da folha, porque a
+política não estava publicada. **Desde 30-out-2026 ela pode estar**: a nuvem serve a política
+preenchida da instância em `GET /privacidade` (página pública, sem sessão, HTML do servidor; ver
+`06-api-contract.md` e `docs/deploy-privacidade.md`), e o app mostra um link discreto para ela na tela de
+entrar e na seção Privacidade das Configurações, e o painel do PC na seção Nuvem, **só quando a
+instância a publicou**. **A folha do aceite continua sem o link, de propósito**: acrescentá-lo muda o
+texto que a pessoa aceita e, pela regra abaixo, sobe a versão do aviso e obriga quem já aceitou a aceitar
+de novo, sem que nada do que se faz com os dados tenha mudado. A política completa está a um toque da
+folha, nas Configurações, e a folha já diz o que importa. **O texto da folha tem de continuar batendo com a política**, e qualquer mudança dele
 sobe a versão do aviso (servidor e app). A versão é um inteiro só nos dois lados (`VERSAO_DO_AVISO` e
 `cloudstore.VersaoDoAviso`, presos por um teste; o `aviso.ts` provisório em texto saiu na C6-alinhar,
 ADR-021, risco 20), e o `avisoDoDitado.test.ts` guarda uma impressão do texto que a folha mostra: se o

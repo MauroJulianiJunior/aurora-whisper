@@ -392,6 +392,15 @@ export function NuvemNoPC({ cliente, visivel, aoPerderLigacao, avisar, aoMudarEs
             </button>
           </div>
           <p className="ajuda">Desconectar tira o acesso deste PC, aqui e na nuvem.</p>
+          {/* A política desta nuvem, só quando ela a publicou (o Agent perguntou na
+              conferência). A página é do servidor da nuvem: abre numa aba nova. */}
+          {estado.politica && (
+            <p className="ajuda">
+              <a href={`${estado.url}/privacidade`} target="_blank" rel="noopener noreferrer">
+                Política de privacidade desta nuvem
+              </a>
+            </p>
+          )}
         </div>
       )}
 

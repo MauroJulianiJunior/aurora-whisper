@@ -25,6 +25,7 @@
 | PAINEL_DIR | Sim | **F4 (ADR-019):** a pasta do build da nuvem do painel (o app), com o `index.html` (`pnpm build:nuvem`, que sai em `web/dist-nuvem`). O servidor a lê para a memória na subida. Vazia, não é pasta, ou sem o `index.html`: saída 2, sem o caminho na mensagem. No servidor de teste do PC (`teste`, build tag `logindeteste`) também é obrigatória |
 | AI_KEYS_SECRET | Não (ou o `_FILE`) | **ADR-021, C3a:** a chave de cifra das chaves da IA que as pessoas colam no app do celular: 64 caracteres hexadecimais (32 bytes). Sem ela, o servidor sobe **sem** as rotas do ditado no celular (`404`). Ver "A chave de cifra das chaves da IA", abaixo |
 | AI_KEYS_SECRET_FILE | Não | **ADR-021, C3a:** o caminho do arquivo com o `AI_KEYS_SECRET` (o segredo montado no contêiner, `segredos/ai-keys-secret`). É a forma de produção |
+| POLITICA_FILE | Não | **30-out-2026:** o caminho do arquivo com a política de privacidade **preenchida** da instância (o modelo é `docs/politica-de-privacidade.md`; a cópia preenchida tem o nome e o e-mail de quem a sobe e **fica fora do repositório**). Com ele, a nuvem serve a política em `GET /privacidade`. Sem a variável, ou com o arquivo ausente (aviso `Info`, sem o caminho), não há a rota. Arquivo que existe e é inválido (vazio, mais de 96 KiB, não UTF-8, com caractere de controle, ou com campo `[A PREENCHER` sobrando) é erro de configuração: saída 2 e a linha `serve: POLITICA_FILE: ...`, sem o caminho nem o texto. Lido uma vez, na subida. Na VPS, `/politica/politica-de-privacidade.md`, a pasta `politica/` montada só para leitura (`docs/deploy-privacidade.md`) |
 | ASR_CLOUD_PROVIDER | Não | provider. **Não usada na etapa 5** (ADR-019: ASR na nuvem é "depois"). **ADR-021:** o ditado pelo celular usa o provedor e a chave **de cada pessoa**, das preferências dela, e não estas variáveis |
 | ASR_CLOUD_MODEL | Não | model. **Não usada na etapa 5** |
 | ASR_CLOUD_API_KEY | Condicional | secret. **Não usada na etapa 5** |
@@ -216,6 +217,7 @@ CONTAS_PERMITIDAS=
 PAINEL_DIR=
 AI_KEYS_SECRET=
 AI_KEYS_SECRET_FILE=
+POLITICA_FILE=
 ASR_CLOUD_PROVIDER=
 ASR_CLOUD_MODEL=
 ASR_CLOUD_API_KEY=

@@ -302,6 +302,7 @@ func TestCompose_API(t *testing.T) {
 		"DEVICE_TOKEN_PEPPER_FILE":  "/run/secrets/device-token-pepper",
 		"GOOGLE_CLIENT_SECRET_FILE": "/run/secrets/google-client.json",
 		"AI_KEYS_SECRET_FILE":       "/run/secrets/ai-keys-secret",
+		"POLITICA_FILE":             "/politica/politica-de-privacidade.md",
 	} {
 		if env[k] != v {
 			t.Errorf("%s=%q, quero %q", k, env[k], v)
@@ -316,7 +317,7 @@ func TestCompose_API(t *testing.T) {
 		switch k {
 		case "PUBLIC_BASE_URL", "CONTAS_PERMITIDAS", "PROXY_CONFIAVEL", "HTTP_ADDR", "PAINEL_DIR", "LOG_LEVEL",
 			"DATABASE_URL_FILE", "SESSION_SECRET_FILE", "DEVICE_TOKEN_PEPPER_FILE", "GOOGLE_CLIENT_SECRET_FILE",
-			"AI_KEYS_SECRET_FILE", "GOMEMLIMIT":
+			"AI_KEYS_SECRET_FILE", "POLITICA_FILE", "GOMEMLIMIT":
 		default:
 			t.Errorf("variável inesperada na API: %s", k)
 		}
@@ -563,5 +564,33 @@ func TestCompose_LimitesELogDeTodos(t *testing.T) {
 		if !temYAML(raiz, "services", svc, "healthcheck", "test") {
 			t.Errorf("%s sem healthcheck", svc)
 		}
+	}
+}
+
+// A política de privacidade da instância (docs/deploy-privacidade.md): a API
+// lê o Markdown de uma PASTA montada só para leitura (um arquivo que falta num
+// bind vira pasta, criada pelo Docker como root), e o POLITICA_FILE aponta para
+// o arquivo dentro dela. A pasta e o nome do arquivo são os que o subir.sh cria
+// e preenche, e o ./politica do repositório não existe (a cópia preenchida tem
+// dados pessoais e fica fora dele).
+func TestCompose_APoliticaDePrivacidadeNumaPastaSoLeitura(t *testing.T) {
+	raiz := compose(t)
+	vols := listaYAML(t, raiz, "services", svcAPI, "volumes")
+	if len(vols) != 1 || vols[0] != "${AW_POLITICA:-../politica}:/politica:ro" {
+		t.Errorf("os volumes da API: %q; quero só a pasta da política, só leitura", vols)
+	}
+	if got := ambiente(t, raiz, svcAPI)["POLITICA_FILE"]; got != "/politica/politica-de-privacidade.md" {
+		t.Errorf("POLITICA_FILE=%q", got)
+	}
+	subir := ler(t, subirSh)
+	exigirContem(t, subirSh, codigo(subir),
+		`PASTA_DA_POLITICA="$BASE/politica"`,
+		`ARQUIVO_DA_POLITICA="$PASTA_DA_POLITICA/politica-de-privacidade.md"`,
+		`RECEBIDO_POLITICA="$BASE/recebido/politica-de-privacidade.md"`,
+		"MAX_POLITICA=98304")
+	// O servidor e os dois scripts têm o mesmo teto.
+	if !strings.Contains(ler(t, "internal/server/politica.go"), "const MaxPolitica = 96 << 10") ||
+		!strings.Contains(ler(t, "scripts/enviar-para-servidor.ps1"), "$MaxPolitica = 98304") {
+		t.Error("o teto da política (96 KiB) tem de ser o mesmo no servidor, no subir.sh e no enviar-para-servidor.ps1")
 	}
 }

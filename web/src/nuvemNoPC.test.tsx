@@ -234,3 +234,27 @@ describe('a seção Nuvem do PC', () => {
     expect(alertas()).toEqual([])
   })
 })
+
+// A política de privacidade da nuvem conectada: o Agent pergunta (HEAD
+// /privacidade, na conferência) e o Estado traz `politica`. O painel só mostra o
+// link com isso, e ele leva à página da própria nuvem.
+describe('o link da política de privacidade da nuvem', () => {
+  it('conectado a uma nuvem que a publica: um link discreto para <url>/privacidade, numa aba nova', async () => {
+    await abrir({ nuvem: { ...conectado, url: 'https://nuvem.exemplo.test', politica: true } })
+    const a = await within(secao()).findByRole('link', { name: 'Política de privacidade desta nuvem' })
+    expect(a.getAttribute('href')).toBe('https://nuvem.exemplo.test/privacidade')
+    expect(a.getAttribute('target')).toBe('_blank')
+    expect(a.getAttribute('rel')).toContain('noopener')
+    expect(a.closest('p')?.classList.contains('ajuda')).toBe(true)
+  })
+
+  it.each<[string, EstadoNuvem]>([
+    ['conectado a uma nuvem sem a política', conectado],
+    ['conectado, com politica false', { ...conectado, politica: false }],
+    ['desconectado, mesmo com a nuvem gravada', { estado: 'desconectado', url: 'https://nuvem.exemplo.test', email: 'voce@teste.local', politica: true }],
+  ])('sem link: %s', async (_, nuvem) => {
+    await abrir({ nuvem })
+    await act(async () => {})
+    expect(within(secao()).queryByRole('link', { name: /Política de privacidade/ })).toBeNull()
+  })
+})

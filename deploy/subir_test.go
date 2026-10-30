@@ -891,7 +891,7 @@ fi
 // o compose.yml interpola e as COMPOSE_* que mudam o projeto, o arquivo, os
 // perfis ou o env-file.
 var variaveisDoAmbienteDoCompose = []string{
-	"AW_PREFIXO", "AW_SEGREDOS", "AW_REDE_DO_PROXY", "PUBLIC_BASE_URL", "DOMINIO", "CONTAS_PERMITIDAS",
+	"AW_PREFIXO", "AW_SEGREDOS", "AW_POLITICA", "AW_REDE_DO_PROXY", "PUBLIC_BASE_URL", "DOMINIO", "CONTAS_PERMITIDAS",
 	"B2_BUCKET", "PROXY_CONFIAVEL", "COMPOSE_PROJECT_NAME", "COMPOSE_FILE", "COMPOSE_PROFILES", "COMPOSE_ENV_FILES",
 }
 

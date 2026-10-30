@@ -31,6 +31,10 @@ rclone.conf
 google-client*.json
 /recebido/
 **/recebido/
+# A pasta da politica de privacidade preenchida (a VPS: ~/aurora-whisper/politica;
+# o teste do PC), que tem o nome e o e-mail do responsavel. O modelo e docs/.
+/politica/
+**/politica/
 age-key*.txt
 keys.txt
 b2-chave-do-backup*.txt

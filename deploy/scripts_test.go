@@ -25,13 +25,16 @@ const (
 	// ADR-021, C3a: o passo que cria só o arquivo da chave de cifra das
 	// chaves da IA numa VPS que já está no ar.
 	criarChaveDeCifra = "deploy/scripts/criar-chave-de-cifra.sh"
+	// A política de privacidade promete tirar o cadastro a pedido; este é o comando.
+	tirarCadastro = "deploy/scripts/tirar-cadastro.sh"
 )
 
-var scriptsDaVPS = []string{gerarSegredos, backupSh, restaurarSh, conferirB2, agendarBackup, subirSh, criarChaveDeCifra}
+var scriptsDaVPS = []string{gerarSegredos, backupSh, restaurarSh, conferirB2, agendarBackup, subirSh, criarChaveDeCifra, tirarCadastro}
 
 // curlDoSubir é o único curl que um script da VPS roda: o subir.sh confere o
-// https pelo Traefik (um GET no health, com o certificado conferido).
-var curlDoSubir = regexp.MustCompile(`^(if command -v curl > /dev/null 2>&1; then|codigo="\$\(curl --silent --output /dev/null --write-out '%\{http_code\}' --max-time 10 "https://\$dominio/api/v1/health/live" 2> /dev/null \|\| true\)")$`)
+// https pelo Traefik (um GET no health, com o certificado conferido) e, se a
+// instância tem a política de privacidade, o GET de /privacidade.
+var curlDoSubir = regexp.MustCompile(`^(if command -v curl > /dev/null 2>&1; then|codigo="\$\(curl --silent --output /dev/null --write-out '%\{http_code\}' --max-time 10 "https://\$dominio/(api/v1/health/live|privacidade)" 2> /dev/null \|\| true\)")$`)
 
 // --- o texto ----------------------------------------------------------------
 

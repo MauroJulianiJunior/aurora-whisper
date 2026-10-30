@@ -236,6 +236,10 @@ describe('o bundle da nuvem (dist-nuvem)', () => {
     expect(nuvem.js).toContain('/api/v1/learned')
     expect(nuvem.js).toContain('/api/v1/learned/undo')
     expect(nuvem.js).toContain('Desfeito em todos os aparelhos.')
+    // A política de privacidade da instância (GET /privacidade): o link do app só aparece
+    // se o HEAD na própria origem diz 200.
+    expect(nuvem.js).toContain('/privacidade')
+    expect(nuvem.js).toContain('Política de privacidade')
   })
 
   // C6a (ADR-021): o gravador e o envio do ditado. O microfone, o MediaRecorder
@@ -921,6 +925,11 @@ describe('o service worker emitido (sw.js)', () => {
       ['GET /manifest.webmanifest', pedido('/manifest.webmanifest')],
       ['GET /icone-192.png', pedido('/icone-192.png', { mode: 'no-cors' })],
       ['GET /licencas-fontes.txt', pedido('/licencas-fontes.txt')],
+      // A política de privacidade da instância é uma página do servidor (no-cache, ETag): o
+      // service worker não a guarda nem a responde, nem a navegação, nem o HEAD do app.
+      ['GET /privacidade, navegando', pedido('/privacidade', { mode: 'navigate' })],
+      ['GET /privacidade', pedido('/privacidade')],
+      ['HEAD /privacidade', pedido('/privacidade', { method: 'HEAD' })],
       ['o Google, navegando', pedido('https://accounts.google.com/o/oauth2/v2/auth?client_id=x', { mode: 'navigate' })],
       ['/assets de outra origem', pedido('https://exemplo.test/assets/index.js')],
     ])('não responde: %s', async (_, p) => {
