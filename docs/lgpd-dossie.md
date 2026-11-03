@@ -234,7 +234,10 @@ está.
 ## 7. O que o responsável decide
 
 1. **País e região.** A VPS: **[A PREENCHER]** (no exemplo, Brasil). O bucket do B2: a região da conta
-   e a hipótese do art. 33 (seção 4). Bloqueia o primeiro dado real.
+   e a hipótese do art. 33 (seção 4). Bloqueia o primeiro dado real. **Informado pelo Mauro em
+   03-nov-2026, na instância de referência: a VPS no Brasil (São Paulo); o bucket do B2 nos EUA (US
+   East)**. A cópia de segurança sai do Brasil, cifrada, pelo inciso VIII do art. 33 (decisão 7). Os dois
+   estão na cópia preenchida da política, fora do repositório.
 2. **O cadastro não sai.** O "Apagar meus dados" deixa o e-mail, o identificador e o nome (a linha em
    `users`); não existe "excluir a conta". Aceitar e escrever na política, ou pedir a rotina (um
    comando no roteiro, ou um botão). O cadastro é dado pessoal (art. 5º, I). **Decidido pelo Mauro em
@@ -270,7 +273,7 @@ está.
 7. **Ditado no celular: a hipótese do art. 33 para a voz e para a dica** (seção 4). A proposta é o
    inciso VIII, que a folha do aceite cumpre. **Decidido pelo Mauro em 30-out-2026: o inciso VIII**, para
    a voz e a dica, **e também para a cópia de segurança** (hoje ela guarda só os dados dele, o único em
-   `CONTAS_PERMITIDAS`). A decisão 1 (as regiões da VPS e do bucket) continua pendente.
+   `CONTAS_PERMITIDAS`). A decisão 1 (as regiões da VPS e do bucket) veio em 03-nov-2026.
 8. **Ditado no celular: o que a conta da pessoa tem no provedor.** O servidor **não confere** se a
    retenção zero está ligada nem se a residência de dados está fixada. A recomendação (na tela e na
    política) é uma **chave só para o celular, com limite de gasto**, e, se a conta tiver, a residência de
