@@ -6804,7 +6804,42 @@ apontarem para ela. Roteiro em `docs/deploy-privacidade.md`; rota em `06-api-con
 - **O dossiê, seção 7:** o Mauro decidiu em 30-out-2026 as decisões 2 (cadastro: aceitar, "a pedido, pelo
   contato", com o comando), 3 (exportar: sem botão, ele entrega uma cópia eletrônica), 5 (contato: ele
   mesmo, pessoa física, pelo e-mail pessoal, sem encarregado à parte) e 7 (art. 33, inciso VIII, para a voz,
-  a dica e a cópia de segurança). A decisão 1 (as regiões da VPS e do bucket) continua pendente.
+  a dica e a cópia de segurança). A decisão 1 (as regiões da VPS e do bucket) ele informou em 03-nov-2026:
+  a VPS no Brasil (São Paulo) e o bucket nos EUA (US East).
+
+### A fixação das imagens pelo digest e o `-race` no CI (03-nov-2026)
+
+- **O pedido:** "seguir com a proteção da nuvem" (Mauro, 03-nov-2026), três pendências da F11: as imagens
+  fixadas pelo digest, o detector de corrida num CI Linux e o `conferir-b2.sh` na VPS (este quem roda é ele).
+- **Toda imagem de fora vai pela tag e pelo digest** (`tag@sha256:<64 hex>`): as três de base do
+  `deploy/Dockerfile` (node, golang, distroless), as três do `deploy/backup/Dockerfile` (golang, rclone,
+  postgres alpine), o Postgres do `compose.yml`, o Traefik do `compose.teste.yml` e o Postgres do CI. O
+  digest é o do índice (vale para amd64 e arm64), lido do registro em 03-nov-2026, só leitura. **Por quê:** a
+  tag anda (as imagens oficiais são refeitas com a mesma tag); com o digest, o build do PC e o pull da VPS
+  usam os bytes que o `deploy-teste.ps1` provou, e uma imagem trocada no registro não entra calada. A tag
+  fica para quem lê; o Docker usa o digest. As duas imagens nossas (`:producao`) ficam de fora: vão por ssh,
+  sem registro, e o `enviar-para-servidor.ps1` já recusa outra que não a aprovada.
+- **O Postgres do servidor muda de bytes, não de versão.** O `postgres:18.6-trixie` guardado no PC era de
+  outro digest: a tag foi refeita depois do último pull. O fixado é o de hoje, o mesmo 18.6, com os pacotes
+  do Debian em dia. No primeiro `subir.sh` depois disto, o compose baixa a imagem e **recria o contêiner do
+  Postgres** (o volume fica; a API perde a conexão por alguns segundos e reconecta), e a API e o backup são
+  recriados com as imagens novas.
+- **A prova:** `deploy/digests_test.go` varre os Dockerfiles e os YAML de `deploy/` e `.github/` e recusa
+  imagem de fora sem digest e a mesma tag com digests diferentes; os testes que já conferiam as versões
+  passaram a exigir o digest. Mutação: tirar o digest do Postgres do compose, mudar o do golang num Dockerfile
+  só e pôr o Traefik entre aspas, sem digest, fizeram quatro testes falharem.
+- **Trocar de versão:** a tag e o digest juntos, com o digest lido do registro (`docker buildx imagetools
+  inspect <imagem>:<tag>`, a linha `Digest:`; o comentário do topo do `deploy/Dockerfile`), e o
+  `deploy-teste.ps1` antes da VPS. O passo 4 do `deploy-f11.md` não pede mais o digest da distroless.
+- **O `-race` no CI:** um job `race` (ubuntu, `go test -race ./...`) com um Postgres descartável, o mesmo do
+  compose, sem senha e só do job. Assim os `*_pg_test.go` (o sync concorrente, o login, o apagar) rodam com o
+  detector; no job `go` eles pulam, sem o `AURORA_TEST_POSTGRES_URL`. Antes do push, a mesma rodada no PC,
+  num contêiner Linux (`golang:1.27.0` do digest fixado) com o Postgres do compose: **nenhuma corrida**, a
+  suíte inteira verde (o `cmd/agent`, o `internal/smartconta`, o `internal/asr/nuvem` e o `internal/server`,
+  que o `13` deixava esperando o `-race`, inclusive). O Postgres tem de responder em `localhost`: o `pgtest`
+  recusa criar banco em servidor que não é da própria máquina.
+- **O `conferir-b2.sh`:** roda o Mauro, na VPS. O script sobe um arquivo pequeno de conferência ao bucket e
+  prova que a chave lista e **não** o apaga de vez; o painel do B2 mostra o resto (o Object Lock).
 
 ## O que o Mauro providencia, e quando
 
