@@ -104,11 +104,11 @@ func TestImagem_TresEstagiosComAsVersoesDoRepositorio(t *testing.T) {
 		t.Fatalf("a imagem deveria ter 3 estágios (painel, servidor, final), tem %d", len(es))
 	}
 	painel, servidor := es[0][0].args, es[1][0].args
-	if m := regexp.MustCompile(`^node:(\d+)\.\d+\.\d+-slim AS painel$`).FindStringSubmatch(painel); m == nil || m[1] != nodeMajor {
-		t.Errorf("o estágio do painel deveria ser node:%s.X.Y-slim AS painel (versão exata), é %q", nodeMajor, painel)
+	if m := regexp.MustCompile(`^node:(\d+)\.\d+\.\d+-slim` + comDigest + ` AS painel$`).FindStringSubmatch(painel); m == nil || m[1] != nodeMajor {
+		t.Errorf("o estágio do painel deveria ser node:%s.X.Y-slim@sha256:... AS painel (versão exata), é %q", nodeMajor, painel)
 	}
-	if want := "golang:" + goVer + " AS servidor"; servidor != want {
-		t.Errorf("o estágio do servidor deveria ser %q (o Go do go.mod), é %q", want, servidor)
+	if !regexp.MustCompile(`^golang:` + regexp.QuoteMeta(goVer) + comDigest + ` AS servidor$`).MatchString(servidor) {
+		t.Errorf("o estágio do servidor deveria ser golang:%s@sha256:... AS servidor (o Go do go.mod), é %q", goVer, servidor)
 	}
 	texto := ler(t, "deploy/Dockerfile")
 	if !strings.Contains(texto, "npm install --global pnpm@"+pnpmVer+"\n") {
@@ -173,8 +173,8 @@ func TestImagem_ServidorEstaticoSemTags(t *testing.T) {
 func TestImagem_FinalDistrolessNonrootComHealthcheck(t *testing.T) {
 	es := estagios(dockerfile(t))
 	final := es[2]
-	if !regexp.MustCompile(`^gcr\.io/distroless/static-debian\d+:nonroot(@sha256:[0-9a-f]{64})?$`).MatchString(final[0].args) {
-		t.Errorf("a imagem final deveria ser a distroless static em nonroot, é %q", final[0].args)
+	if !regexp.MustCompile(`^gcr\.io/distroless/static-debian\d+:nonroot` + comDigest + `$`).MatchString(final[0].args) {
+		t.Errorf("a imagem final deveria ser a distroless static em nonroot, com o digest, é %q", final[0].args)
 	}
 	achou := map[string]string{}
 	for _, i := range final {

@@ -231,14 +231,14 @@ func TestVPS_ImagemDoBackup(t *testing.T) {
 	if len(es) != 3 {
 		t.Fatalf("a imagem do backup deveria ter 3 estágios (age, rclone, final), tem %d", len(es))
 	}
-	if want := "golang:" + goVer + " AS age"; es[0][0].args != want {
-		t.Errorf("o age se compila com o Go do repositório: quero %q, é %q", want, es[0][0].args)
+	if !regexp.MustCompile(`^golang:` + regexp.QuoteMeta(goVer) + comDigest + ` AS age$`).MatchString(es[0][0].args) {
+		t.Errorf("o age se compila com o Go do repositório (golang:%s@sha256:... AS age): é %q", goVer, es[0][0].args)
 	}
-	if !regexp.MustCompile(`^rclone/rclone:\d+\.\d+\.\d+ AS rclone$`).MatchString(es[1][0].args) {
-		t.Errorf("o rclone em versão exata: %q", es[1][0].args)
+	if !regexp.MustCompile(`^rclone/rclone:\d+\.\d+\.\d+` + comDigest + ` AS rclone$`).MatchString(es[1][0].args) {
+		t.Errorf("o rclone em versão exata, com o digest: %q", es[1][0].args)
 	}
-	if !regexp.MustCompile(`^postgres:18\.\d+-alpine$`).MatchString(es[2][0].args) {
-		t.Errorf("a final é o Postgres 18 (o mesmo major do servidor) em versão exata: %q", es[2][0].args)
+	if !regexp.MustCompile(`^postgres:18\.\d+-alpine` + comDigest + `$`).MatchString(es[2][0].args) {
+		t.Errorf("a final é o Postgres 18 (o mesmo major do servidor) em versão exata, com o digest: %q", es[2][0].args)
 	}
 	exigirContem(t, backupImagem, texto,
 		"go install -trimpath filippo.io/age/cmd/age@v", "go install -trimpath filippo.io/age/cmd/age-keygen@v",

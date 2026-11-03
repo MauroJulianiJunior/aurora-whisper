@@ -244,12 +244,12 @@ func TestCompose_SemSegredoNoAmbiente(t *testing.T) {
 func TestCompose_Postgres(t *testing.T) {
 	raiz := compose(t)
 	img := textoYAML(t, raiz, "services", svcPostgres, "image")
-	m := regexp.MustCompile(`^postgres:(18\.\d+)-[a-z]+$`).FindStringSubmatch(img)
+	m := regexp.MustCompile(`^postgres:(18\.\d+)-[a-z]+` + comDigest + `$`).FindStringSubmatch(img)
 	if m == nil {
-		t.Fatalf("o Postgres 18 em versão exata: %q", img)
+		t.Fatalf("o Postgres 18 em versão exata, com o digest: %q", img)
 	}
 	// O pg_dump do backup é da mesma versão do servidor.
-	if !strings.Contains(ler(t, backupImagem), "FROM postgres:"+m[1]+"-alpine\n") {
+	if !strings.Contains(ler(t, backupImagem), "FROM postgres:"+m[1]+"-alpine@sha256:") {
 		t.Errorf("a imagem do backup tem de ser do mesmo Postgres (%s)", m[1])
 	}
 	if got := strings.Join(listaYAML(t, raiz, "services", svcPostgres, "command"), " "); got != "postgres"+

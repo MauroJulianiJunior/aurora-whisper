@@ -61,7 +61,10 @@ name: aurora-whisper
 
 services:
   aurora-whisper-postgres:
-    image: postgres:18.6-trixie
+    # Tag e digest, como as imagens de base do deploy/Dockerfile (o comentario
+    # de la diz por que e como trocar): o pull da VPS baixa os mesmos bytes que
+    # o teste do PC provou.
+    image: postgres:18.6-trixie@sha256:3a4264520e121176619f54ff867d12774bc81e95e7b84db58d63bccdb6144b81
     container_name: ${AW_PREFIXO:-aurora-whisper}-postgres
     restart: unless-stopped
     environment:

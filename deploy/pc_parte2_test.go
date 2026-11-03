@@ -191,8 +191,8 @@ func TestPC2_ComposeDoTesteEABorda(t *testing.T) {
 	b := func(c ...string) string {
 		return textoYAML(t, raiz, append([]string{"services", "aurora-whisper-borda-teste"}, c...)...)
 	}
-	if b("image") != "traefik:v3.6.21" {
-		t.Error("a borda de teste é o Traefik da versão fixada (v3.6.21), a mesma do servidor")
+	if !regexp.MustCompile(`^traefik:v3\.6\.21` + comDigest + `$`).MatchString(b("image")) {
+		t.Error("a borda de teste é o Traefik da versão fixada (v3.6.21, com o digest), a mesma do servidor")
 	}
 	if b("container_name") != "${AW_PREFIXO:?so no teste do PC}-borda" {
 		t.Error("a borda só existe com o prefixo do teste")
