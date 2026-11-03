@@ -23,7 +23,9 @@ import (
 // trocadas pelos literais.
 func sqlDoCadastro(t *testing.T, bloco string, vars map[string]string) string {
 	t.Helper()
-	re := regexp.MustCompile(`(?s)<< '` + bloco + `'\n(.*?)\n` + bloco + `\n`)
+	// A linha do heredoc termina em "|| true" (o read -d '' sai com 1 no fim do
+	// texto, e o set -e pararia): o resto da linha fica de fora do bloco.
+	re := regexp.MustCompile(`(?s)<< '` + bloco + `'[^\n]*\n(.*?)\n` + bloco + `\n`)
 	m := re.FindStringSubmatch(ler(t, tirarCadastro))
 	if m == nil {
 		t.Fatalf("o tirar-cadastro.sh não tem o bloco %s", bloco)
@@ -73,8 +75,9 @@ func (b *bancoDoCadastro) pessoa(id, email string) {
 	b.t.Helper()
 	b.exec(`INSERT INTO users (id, google_sub, email, display_name) VALUES ($1, $2, $3, 'Fulana')`, id, "sub-"+id, email)
 	b.exec(`INSERT INTO user_sync_counters (user_id, sync_epoch) VALUES ($1, gen_random_uuid())`, id)
+	// O token_hmac é único na tabela: cada pessoa ganha o seu (o sha256 do id).
 	b.exec(`INSERT INTO web_sessions (id, user_id, token_hmac, label, expires_at)
-	        VALUES (gen_random_uuid(), $1, decode(repeat('ab', 32), 'hex'), 'navegador', now() + interval '1 day')`, id)
+	        VALUES (gen_random_uuid(), $1::uuid, sha256(convert_to($1::uuid::text, 'UTF8')), 'navegador', now() + interval '1 day')`, id)
 }
 
 func (b *bancoDoCadastro) contar(sql string, args ...any) int {
