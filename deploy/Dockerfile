@@ -20,10 +20,22 @@
 #
 # As versoes sao as do repositorio, em tags exatas: o Node 24 e o pnpm 11.5.1
 # do web/ (.github/workflows/ci.yml e web/pnpm-lock.yaml) e o Go do go.mod.
-# deploy/deploy_test.go confere tudo isso lendo este arquivo.
+# deploy/imagem_test.go confere tudo isso lendo este arquivo.
+#
+# Cada imagem de base vai pela tag E pelo digest (tag@sha256:...): o Docker
+# usa o digest, e a tag fica para quem le. Assim o build de amanha usa os
+# mesmos bytes do de hoje, mesmo que a tag ande no registro (as imagens
+# oficiais sao refeitas de tempos em tempos com a mesma tag). Para trocar de
+# versao, troque os dois juntos, com o digest lido do registro (a linha
+# "Digest:", o do indice, que vale para amd64 e arm64):
+#
+#   docker buildx imagetools inspect <imagem>:<tag>
+#
+# deploy/digests_test.go recusa imagem de fora sem digest, aqui, no Dockerfile
+# do backup e nos dois compose.
 
 # --- 1. o painel da nuvem -----------------------------------------------------
-FROM node:24.14.0-slim AS painel
+FROM node:24.14.0-slim@sha256:d8e448a56fc63242f70026718378bd4b00f8c82e78d20eefb199224a4d8e33d8 AS painel
 ENV CI=true
 RUN npm install --global pnpm@11.5.1
 WORKDIR /src/web
@@ -33,7 +45,7 @@ COPY web/ ./
 RUN pnpm build:nuvem
 
 # --- 2. o servidor ------------------------------------------------------------
-FROM golang:1.27.0 AS servidor
+FROM golang:1.27.0@sha256:4013ae0f9e7994f8535c58c811f8f863fbed38b72e0d51e6592156f758d66146 AS servidor
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
@@ -44,10 +56,9 @@ ENV CGO_ENABLED=0
 RUN go build -trimpath -ldflags="-s -w" -o /out/aurora-whisper-server ./cmd/server
 
 # --- 3. a imagem final --------------------------------------------------------
-# A distroless nao tem tag de versao (so nonroot, latest, debug): a fixacao por
-# digest (@sha256:...) e feita no primeiro build do Mauro, com o digest que ele
-# vir.
-FROM gcr.io/distroless/static-debian12:nonroot
+# A distroless nao tem tag de versao (so nonroot, latest, debug): quem a fixa e
+# o digest.
+FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
 COPY --from=servidor /out/aurora-whisper-server /usr/local/bin/aurora-whisper-server
 COPY --from=painel /src/web/dist-nuvem/ /painel/
 

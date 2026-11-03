@@ -17,6 +17,9 @@
 # O Postgres e o 18.6, a mesma versao do servico aurora-whisper-postgres do
 # compose (o pg_dump tem de ser do mesmo major do servidor, ou mais novo).
 #
+# As tres imagens de base vao pela tag e pelo digest (tag@sha256:...), como as
+# do deploy/Dockerfile (o comentario de la diz por que e como trocar).
+#
 # Por que o rclone (com o backend b2), e nao a CLI do B2: e um binario unico e
 # estatico, sem Python nem pip numa VPS compartilhada; o "copyto" de um nome
 # novo so precisa de listar e escrever, que e o que a application key restrita
@@ -32,7 +35,7 @@
 # imagem a parte. deploy/scripts_test.go confere este arquivo.
 
 # --- o age ----------------------------------------------------------------------
-FROM golang:1.27.0 AS age
+FROM golang:1.27.0@sha256:4013ae0f9e7994f8535c58c811f8f863fbed38b72e0d51e6592156f758d66146 AS age
 ENV CGO_ENABLED=0 GOBIN=/out
 RUN go install -trimpath filippo.io/age/cmd/age@v1.2.1 \
     && go install -trimpath filippo.io/age/cmd/age-keygen@v1.2.1
@@ -42,11 +45,11 @@ RUN go install -trimpath filippo.io/age/cmd/age@v1.2.1 \
 # B2 cria hoje: o 1.70 recebia "not currently supported on API version number
 # 1" no primeiro backup da VPS (10-out-2026). O 1.75.2 traz tambem a correcao
 # de seguranca do --b2-download-url.
-FROM rclone/rclone:1.75.2 AS rclone
+FROM rclone/rclone:1.75.2@sha256:2687085f718d3c628f7fdfb77c52a1d344332aed543110bb88088f2c70d43eb5 AS rclone
 
 # --- a imagem do backup -----------------------------------------------------------
 # A alpine da imagem oficial ja traz o bash (o script dela usa) e o flock.
-FROM postgres:18.6-alpine
+FROM postgres:18.6-alpine@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5
 COPY --from=age /out/age /out/age-keygen /usr/local/bin/
 COPY --from=rclone /usr/local/bin/rclone /usr/local/bin/rclone
 COPY backup.sh /usr/local/bin/backup.sh

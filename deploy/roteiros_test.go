@@ -129,15 +129,16 @@ func TestRoteiros_AContagemDoLogDeAcesso(t *testing.T) {
 	exigirNaoContem(t, "o passo 8", passo8, `grep -c "aurora-whisper-api@docker"`, `grep -c "@docker"`)
 }
 
-// O digest da distroless vem do registro: a imagem de base de um build do
-// BuildKit não entra na lista de imagens, e o docker image inspect dela falha.
-func TestRoteiros_ODigestDaDistroless(t *testing.T) {
+// Os digests já estão fixados (03-nov-2026; deploy/digests_test.go): o passo 4
+// não pede mais o da distroless. Para trocar, o digest vem do registro: a
+// imagem de base de um build do BuildKit não entra na lista de imagens, e o
+// docker image inspect dela falha.
+func TestRoteiros_OsDigestsJaFixados(t *testing.T) {
 	passo4 := secaoDoRoteiro(t, "4")
-	exigirContem(t, "o passo 4", passo4, "docker buildx imagetools inspect gcr.io/distroless/static-debian12:nonroot")
-	exigirNaoContem(t, "o passo 4", passo4, "docker image inspect gcr.io/distroless")
-	if !strings.Contains(ler(t, "deploy/Dockerfile"), "gcr.io/distroless/static-debian12:nonroot") {
-		t.Error("o Dockerfile não usa mais a distroless static-debian12:nonroot que o roteiro cita")
-	}
+	exigirContem(t, "o passo 4", passo4, "já vêm fixadas", "docker buildx imagetools inspect <imagem>:<tag>")
+	exigirNaoContem(t, "o passo 4", passo4, "me mande o resumo", "docker image inspect gcr.io/distroless")
+	exigirNaoContem(t, "o fim do roteiro", ler(t, roteiroDeploy), "o digest da distroless")
+	exigirContem(t, "deploy/Dockerfile", ler(t, "deploy/Dockerfile"), "docker buildx imagetools inspect <imagem>:<tag>")
 }
 
 const roteiroRestauracao = "docs/restauracao-f11.md"

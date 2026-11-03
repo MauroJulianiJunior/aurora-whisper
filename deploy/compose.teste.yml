@@ -6,7 +6,8 @@
 # prefixo aurora-whisper-teste nos conteineres, nas redes e nos volumes, a
 # pasta dos segredos de mentira e a rede do proxy do teste) e acrescenta a
 # borda: um Traefik de teste, na versao fixada abaixo (mantenha-a igual a do
-# Traefik do servidor), com o log de acesso ligado para todos (como la) e
+# Traefik do servidor; tag e digest, como as imagens de base do
+# deploy/Dockerfile), com o log de acesso ligado para todos (como la) e
 # desligado so no nosso router.
 #
 # A borda de teste nao usa o socket do Docker: le os roteadores de um arquivo
@@ -24,7 +25,7 @@
 
 services:
   aurora-whisper-borda-teste:
-    image: traefik:v3.6.21
+    image: traefik:v3.6.21@sha256:850b1b3484519b12353d9679ec3246e63a42df2cc640bf8e6fa50267d589f5a0
     container_name: ${AW_PREFIXO:?so no teste do PC}-borda
     command:
       - --providers.file.filename=/etc/traefik/dinamico.yml

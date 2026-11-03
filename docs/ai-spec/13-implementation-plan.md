@@ -405,7 +405,7 @@ dicionário a palavra certa, as grafias erradas que o reconhecimento de voz escr
   (`gravarETrocar` remonta o prompt; `conferirTermos`: "age?" por grafia e "quebraria?");
 - T3: `internal/agent/localapi/termos.go` (`/api/termos`) e `learning.Arriscada`;
 - T4: `web/src/Termos.tsx` (a seção Dicionário).
-**Prontas** as cinco. O que falta: o detector de corrida (`-race`) onde houver cgo, as três decisões
+**Prontas** as cinco. O que falta: o detector de corrida (`-race`) onde houver cgo (feito em 03-nov-2026, no CI Linux), as três decisões
 do Mauro (implementadas com a recomendação; ADR-020) e o roteiro manual dele (ADR-020, "Riscos").
 
 ## TASK-020 — Retention jobs
@@ -740,7 +740,9 @@ ADR-021, "O que a implementação fixou (a fase 2)", têm os nomes, os status e 
   trabalho; e o registro de modelos conhecidos é global por provedor.
 - **Sem o `-race` aqui:** a máquina não tem compilador C. `internal/smartconta` (`Cache`, `Conta`),
   `internal/asr/nuvem` e `internal/server` (o registro da rota, o `desistir`, o `olharDeNovo` e o
-  trabalho solto) pedem a rodada com `-race` no CI Linux.
+  trabalho solto) pedem a rodada com `-race` no CI Linux. **Feita em 03-nov-2026:** o job `race` do CI
+  (com Postgres), e a primeira rodada, num contêiner Linux no PC, sem nenhuma corrida (ADR-019, "A
+  fixação das imagens pelo digest e o `-race` no CI").
 - **Testes sensíveis a carga**, que falham com a máquina ocupada e passam sozinhos: `deploy`
   (`TestSubir_*`, restaurar e gerar, com o teto fixo de 60 s do bash; o pacote passa dos 10 min do
   padrão do `go test`), `internal/storage` (`TestEspera_*`), `internal/agent/audio`

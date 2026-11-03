@@ -118,20 +118,13 @@ Se aparecer um `AVISO:` sobre o redirecionamento do http no log de acesso, siga 
 conte). Se aparecer **FALHOU**, o script já derrubou tudo: me mande a linha do FALHOU e as linhas de log
 que ele mostrou. Nada foi para a VPS.
 
-**Ainda no PC, uma vez, logo depois do `deploy-teste.ps1`:** a imagem final do servidor (a
-`distroless`) não tem número de versão, só um resumo (o digest). Para fixá-la no `deploy\Dockerfile`
-depois (fica para mim), me mande o resumo. Ele vem do registro, e não da lista de imagens do Docker: a
-imagem de base de um build fica no cache do BuildKit, e um `docker image inspect` dela daria "No such
-image".
-
-```powershell
-docker buildx imagetools inspect gcr.io/distroless/static-debian12:nonroot
-```
-
-**Deve aparecer:** três linhas no topo, `Name:`, `MediaType:` e `Digest: sha256:…`; me mande a do
-`Digest:`. É o resumo do nome `nonroot` agora, e o nome anda de tempos em tempos: rodado logo depois do
-teste, é o que o teste usou. Quando eu o fixar no `deploy\Dockerfile`, o `deploy-teste.ps1` seguinte
-prova a imagem com ele, antes de qualquer imagem nova ir para a VPS.
+**As imagens de base já vêm fixadas (desde 03-nov-2026):** cada uma vai pela tag e pelo resumo (o
+digest, `tag@sha256:…`) no `deploy\Dockerfile`, no `deploy\backup\Dockerfile` e nos dois compose, e o
+`deploy-teste.ps1` as prova com esses bytes antes de qualquer imagem ir para a VPS. Não há o que mandar.
+Para trocar de versão, a tag e o digest mudam juntos. O digest vem do registro, e não da lista de imagens
+do Docker: a imagem de base de um build fica no cache do BuildKit, e um `docker image inspect` dela daria
+"No such image". O comentário do topo do `deploy\Dockerfile` traz o comando
+(`docker buildx imagetools inspect <imagem>:<tag>`).
 
 ## 5. Mandar para a VPS
 
@@ -587,7 +580,7 @@ bash ~/aurora-whisper/deploy/scripts/subir.sh
 
 ## O que me contar
 
-1. A região do B2 (passo 2) e o digest da distroless (passo 4).
+1. A região do B2 (passo 2).
 2. Se o `deploy-teste.ps1` passou de primeira, e se apareceu o AVISO do http.
 3. As linhas `OK:` (ou o FALHOU) do `subir.sh` e do `conferir-nuvem.ps1`, e os dois números do log de
    acesso do Traefik (passo 8).
