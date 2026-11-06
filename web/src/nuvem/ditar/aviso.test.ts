@@ -56,7 +56,7 @@ describe('o que cada provedor diz', () => {
 })
 
 function estado(parcial: Partial<EstadoDoDitado> = {}): EstadoDoDitado {
-  return { preferencias: preferenciasPadrao, aceite: null, chaves: chavesVazias(), ...parcial }
+  return { preferencias: preferenciasPadrao, aceite: null, chaves: chavesVazias(), dicionario: null, ...parcial }
 }
 
 describe('o aceite vigente', () => {

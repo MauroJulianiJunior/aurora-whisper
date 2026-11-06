@@ -510,8 +510,8 @@ export function ConfiguracoesNuvem({
         </h2>
         <ul className="fatos">
           <li>
-            Vão para a nuvem: o texto dos ditados, com a data, o PC de origem e os detalhes da transcrição, as notas, com os marcadores e as imagens, e as trocas aprendidas. O
-            texto e as imagens ficam legíveis para quem administra o servidor.
+            Vão para a nuvem: o texto dos ditados, com a data, o PC de origem e os detalhes da transcrição, as notas, com os marcadores e as imagens, as trocas aprendidas e, se
+            você ligar num PC, a cópia do dicionário dele. O texto e as imagens ficam legíveis para quem administra o servidor.
           </li>
           <li>Os ditados ficam 6 meses; as notas e as imagens delas, até você apagar (a lixeira, 30 dias). Uma cópia cifrada guarda tudo por cerca de 30 dias além disso.</li>
           <li>

@@ -17,7 +17,7 @@ export interface Preferencias {
   // verdade, então o que se lê nunca é "".
   provedor: ProvedorDeVoz
   modelo: string
-  // dica: os termos aprendidos vão ao provedor junto com a voz. Desligada.
+  // dica: os termos do dicionário (os da cópia do PC, ou os aprendidos) vão ao provedor junto com a voz. Desligada.
   dica: boolean
   // polish: o texto passa pelo Polish. Desligado. O servidor só liga o Polish
   // com um modelo (não há modelo padrão do Polish): polish_modelo "" só vale
@@ -59,10 +59,22 @@ export interface ChaveGuardada {
   colar_de_novo: boolean
 }
 
+// CopiaDoDicionario é o que o celular sabe da cópia do dicionário do PC, que
+// o ditado usa (ADR-023, E): o nome do PC que é a fonte, quantos termos e
+// quando a cópia mudou. Nunca os termos.
+export interface CopiaDoDicionario {
+  aparelho: string
+  termos: number
+  // atualizado_em: RFC 3339.
+  atualizado_em: string
+}
+
 export interface EstadoDoDitado {
   preferencias: Preferencias
   aceite: Aceite | null
   chaves: Record<Provedor, ChaveGuardada>
+  // dicionario: a cópia do dicionário de um PC, ou null (sem cópia).
+  dicionario: CopiaDoDicionario | null
 }
 
 // provedoresExigidos são os provedores que as preferências usam: o da voz e,

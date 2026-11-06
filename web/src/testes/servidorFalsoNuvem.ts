@@ -316,6 +316,12 @@ export interface DitadoDaConta {
   aceite: AceiteFalso | null
   chaves: Partial<Record<ProvedorFalso, string>>
   colarDeNovo: ProvedorFalso[]
+  // dicionario: a cópia do dicionário de um PC (ADR-023, E). Ausente, o estado
+  // nem traz o campo: o 06 (docs/ai-spec/06-api-contract.md) ainda não o mostra
+  // no exemplo do GET /dictation, e o contratoDoDitado.test.ts confere o formato
+  // deste servidor contra ele. O app lê a falta como "sem cópia", e o servidor
+  // de verdade manda null. Quando o 06 ganhar o campo, o padrão passa a ser null.
+  dicionario?: { aparelho: string; termos: number; atualizado_em: string } | null
 }
 
 // Os modelos que cada provedor lista para a chave (os de voz e os de texto,
@@ -354,6 +360,7 @@ export interface OpcoesDaNuvem {
     aceite?: AceiteFalso | null
     chaves?: Partial<Record<ProvedorFalso, string>>
     colarDeNovo?: ProvedorFalso[]
+    dicionario?: DitadoDaConta['dicionario']
   }
   // versaoDoAviso: a versão do aviso que o servidor aceita no consentimento.
   versaoDoAviso?: number
@@ -463,6 +470,7 @@ export function servidorFalsoNuvem(
         aceite: ditadoInicial.aceite ? { ...ditadoInicial.aceite } : null,
         chaves: { ...ditadoInicial.chaves },
         colarDeNovo: [...(ditadoInicial.colarDeNovo ?? [])],
+        dicionario: ditadoInicial.dicionario,
       }
     : {
         preferencias: preferenciasIniciais(),
@@ -495,6 +503,7 @@ export function servidorFalsoNuvem(
       polish: { ligado: daConta.preferencias.polish, provedor: daConta.preferencias.polish_provedor, modelo: daConta.preferencias.polish_modelo },
     },
     chaves: provedoresFalsos.map(daChave),
+    ...(daConta.dicionario !== undefined && { dicionario: daConta.dicionario }),
   })
   const ehProvedor = (v: unknown): v is ProvedorFalso => provedoresFalsos.includes(v as ProvedorFalso)
   const ehObjeto = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v)

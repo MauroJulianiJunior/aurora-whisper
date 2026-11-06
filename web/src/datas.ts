@@ -8,6 +8,7 @@ const diaComAno = new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: 'nume
 const completa = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'full', timeStyle: 'short' })
 const curta = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
 const soData = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+const soDiaEMes = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit' })
 
 function chaveDoDia(d: Date): string {
   return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
@@ -51,6 +52,8 @@ export const formatarCompleta = (iso: string) => maiuscula(completa.format(new D
 export const formatarCurta = (iso: string) => curta.format(new Date(iso))
 // formatarData: só o dia, com o ano ("10/10/2026").
 export const formatarData = (iso: string) => soData.format(new Date(iso))
+// formatarDiaEMes: o dia sem o ano ("05/11").
+export const formatarDiaEMes = (iso: string) => soDiaEMes.format(new Date(iso))
 
 export function formatarSegundos(ms: number): string {
   return `${(ms / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} s`

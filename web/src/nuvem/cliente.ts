@@ -26,6 +26,7 @@ import type { NotaDaNuvem } from './notas/formato'
 import {
   type Aceite,
   type ChaveGuardada,
+  type CopiaDoDicionario,
   type EstadoDoDitado,
   type Preferencias,
   chavesVazias,
@@ -256,7 +257,8 @@ function daPagina(p: { items?: ItemDaNuvem[] | null; next_cursor?: string | null
 //   { aviso: { versao },
 //     aceite: { versao, transcricao, polish | null, aceito_em, vigente } | null,
 //     preferencias: { transcricao: { provedor, modelo }, dica, polish: { ligado, provedor, modelo } },
-//     chaves: [ { provedor, configurada, final, colar_de_novo } ] }
+//     chaves: [ { provedor, configurada, final, colar_de_novo } ],
+//     dicionario: { aparelho, termos, atualizado_em } | null }
 //
 // O app lê com tolerância: o que falta ou não tem a forma esperada vira o padrão
 // mais fechado (sem aceite, sem chave, tudo desligado), e nunca mostra da chave
@@ -315,6 +317,17 @@ function doAceite(v: unknown): Aceite | null {
   }
 }
 
+// daCopia lê a cópia do dicionário do PC (ADR-023, E): sem a forma esperada, é
+// "sem cópia".
+function daCopia(v: unknown): CopiaDoDicionario | null {
+  if (v === null || typeof v !== 'object') return null
+  const c = objeto(v)
+  if (typeof c.aparelho !== 'string' || c.aparelho === '') return null
+  if (typeof c.termos !== 'number' || !Number.isInteger(c.termos) || c.termos < 0) return null
+  if (typeof c.atualizado_em !== 'string' || Number.isNaN(Date.parse(c.atualizado_em))) return null
+  return { aparelho: c.aparelho, termos: c.termos, atualizado_em: c.atualizado_em }
+}
+
 // doEstado lê o estado inteiro. A lista de chaves traz uma entrada por
 // provedor; o provedor que o app não conhece não vira chave, e o que falta
 // fica sem chave.
@@ -327,7 +340,7 @@ function doEstado(v: unknown): EstadoDoDitado {
       if (ehProvedor(provedor)) chaves[provedor] = daChave(c)
     }
   }
-  return { preferencias: dasPreferencias(e.preferencias), aceite: doAceite(e.aceite), chaves }
+  return { preferencias: dasPreferencias(e.preferencias), aceite: doAceite(e.aceite), chaves, dicionario: daCopia(e.dicionario) }
 }
 
 export function criarClienteNuvem(buscar: Buscador = buscadorPadrao): ClienteNuvem {

@@ -425,7 +425,7 @@ describe('a Privacidade do PC', () => {
   // F8h: as trocas aprendidas também vão para a nuvem (06 e 09); desde a N7
   // (ADR-022), as notas também.
   const frase =
-    'Com a nuvem conectada, o texto dos seus ditados, as suas notas com as imagens e as trocas que você aprendeu vão para a sua nuvem, em http://localhost:8080. O áudio e o que está nas outras janelas nunca vão.'
+    'Com a nuvem conectada, o texto dos seus ditados, as suas notas com as imagens e as trocas que você aprendeu vão para a sua nuvem, em http://localhost:8080. O dicionário só vai se você ligar “Levar o dicionário para o celular”. O áudio e o que está nas outras janelas nunca vão.'
   const privacidade = () => screen.getByRole('region', { name: 'Privacidade' })
 
   it('diz para onde o texto e as trocas aprendidas vão, só com o PC conectado', async () => {

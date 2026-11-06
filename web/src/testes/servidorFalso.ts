@@ -84,7 +84,7 @@
 // marcador).
 
 import type { Aprendida, Buscador, Configuracoes, Ditado, ListaDeTermos, Provedor, ResultadoTeste, Sugestao, TermoAdicionado } from '../api'
-import type { EstadoNuvem, EstadoRetencao } from '../clienteLocal'
+import type { EstadoDoDicionario, EstadoNuvem, EstadoRetencao } from '../clienteLocal'
 import { itensDaEnumeracao } from '../notas/corpo'
 import { CORES, type ImagemDaNota, type ItensSeparados, type Marcador, type Nota } from '../notas/tipos'
 
@@ -206,6 +206,11 @@ export interface OpcoesDoServidor {
   dicionario?: string[]
   // nuvem: o estado da nuvem no começo (ADR-019, F6); sem ela, desligada.
   nuvem?: EstadoNuvem
+  // dicionarioDaNuvem: o estado do "Levar o dicionário para o celular" no começo
+  // (ADR-023, F); sem ele, desligado e sem fonte. termosDoDicionario: quantos
+  // termos o dicionário deste PC tem, que a cópia leva ao ligar.
+  dicionarioDaNuvem?: EstadoDoDicionario
+  termosDoDicionario?: number
   // retencao: o que o Agent diz dos 6 meses no começo (ADR-019, F10); sem ela,
   // nada a apagar, regra desligada e sem cópias (o bloco Histórico não aparece).
   retencao?: Partial<EstadoRetencao>
@@ -231,6 +236,8 @@ export function servidorFalso(
     termos: termosIniciais = [],
     dicionario = [],
     nuvem: nuvemInicial = { estado: 'desconectado', url: '' },
+    dicionarioDaNuvem: dicionarioInicial = { ligado: false, fonte: 'nenhuma' },
+    termosDoDicionario = 49,
     retencao: retencaoInicial = {},
     copiasProtegidas: protegidas = 0,
     tetoDasImagens = false,
@@ -258,6 +265,28 @@ export function servidorFalso(
   // também o Cancelar; o Conferir só devolve o estado (o teste muda o estado
   // por fora, como a aprovação no navegador ou a revogação no app).
   let nuvem: EstadoNuvem = { ...nuvemInicial }
+  // O dicionário no celular (ADR-023, F; internal/agent/localapi/nuvem_dicionario.go):
+  // o GET responde sempre 200 com o estado; o POST {ligar} responde 200 com o
+  // estado novo, ou a frase de erro (recusaDoDicionario) com a opção como estava.
+  // Gravar a opção sobe a version das configurações, como o Agent (a opção mora
+  // em local_settings): é o que o painel precisa acompanhar.
+  let dicionarioNuvem: EstadoDoDicionario = { ...dicionarioInicial }
+  let recusaDoDicionario: { status: number; mensagem: string } | null = null
+  let semDicionario = false
+  function rotaDoDicionario(p: Pedido): Response {
+    if (semDicionario) return new Response('404 page not found', { status: 404 })
+    if (p.metodo === 'GET') return json(dicionarioNuvem)
+    if (p.metodo !== 'POST') return erro(405, 'METHOD_NOT_ALLOWED', 'método')
+    if (typeof p.corpo?.ligar !== 'boolean') return erro(400, 'BAD_REQUEST', 'corpo JSON inválido')
+    if (nuvem.estado !== 'conectado') return erro(409, 'CONFLICT', 'Conecte o PC à nuvem antes de levar o dicionário.')
+    if (recusaDoDicionario) return erro(recusaDoDicionario.status, 'CONFLICT', recusaDoDicionario.mensagem)
+    const agora = new Date(2026, 10, 5, 14, 2).toISOString()
+    dicionarioNuvem = p.corpo.ligar
+      ? { ligado: true, fonte: 'este', termos: termosDoDicionario, atualizado_em: agora, enviado_em: agora }
+      : { ligado: false, fonte: 'nenhuma' }
+    config.version += 1
+    return json(dicionarioNuvem)
+  }
   // O contador de mudanças do sync (ADR-021, S; GET /api/nuvem/mudancas): só um
   // número, que sobe quando o Agent grava no histórico algo que veio da nuvem.
   // O teste o faz subir por fora (chegouDaNuvem, mudancasPorFora), como um pull.
@@ -270,6 +299,7 @@ export function servidorFalso(
   let microfone = { bloqueado: false, motivo: '' }
   let abrirConfiguracoesFalha = false
   function rotaNuvem(p: Pedido): Response {
+    if (p.caminho === '/api/nuvem/dicionario') return rotaDoDicionario(p)
     if (p.caminho === '/api/nuvem' && p.metodo === 'GET') return json(nuvem)
     if (p.caminho === '/api/nuvem/mudancas' && p.metodo === 'GET') {
       return agentSemContador ? new Response('404 page not found', { status: 404 }) : json({ contador })
@@ -1169,6 +1199,28 @@ export function servidorFalso(
     // que voltou ao PC, a revogação no app, o pedido que venceu.
     nuvemPorFora(e: EstadoNuvem) {
       nuvem = { ...e }
+    },
+    // dicionarioPorFora troca o que a nuvem diz do dicionário, como outro PC
+    // que passou a ser a fonte ou um aviso do envio automático.
+    dicionarioPorFora(e: EstadoDoDicionario) {
+      dicionarioNuvem = { ...e }
+    },
+    // dicionarioAgora é o estado do "Levar o dicionário" como o Agent o tem.
+    dicionarioAgora(): EstadoDoDicionario {
+      return dicionarioNuvem
+    },
+    // recusarDicionario: o próximo POST do dicionário volta com a frase (sem
+    // rede, cópia recusada); null deixa ligar e desligar.
+    recusarDicionario(r: { status: number; mensagem: string } | null) {
+      recusaDoDicionario = r
+    },
+    // agentSemDicionario: o Agent de antes da ADR-023 (as rotas dão 404).
+    agentSemDicionario(sim = true) {
+      semDicionario = sim
+    },
+    // versaoDasConfiguracoes é a version que o Agent tem agora.
+    versaoDasConfiguracoes(): number {
+      return config.version
     },
     // recusarEnvio: o próximo "Enviar o histórico" volta com a frase (a
     // cópia que falhou); null deixa enviar.
