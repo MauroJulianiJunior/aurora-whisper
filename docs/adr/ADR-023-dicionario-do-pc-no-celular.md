@@ -93,8 +93,19 @@ vazias**: elas eram o dicionário no banco, editável e por linha, que a decisã
 - quando a pessoa desliga a opção no PC que é a fonte (o `DELETE`);
 - quando o PC que é a fonte é revogado ou desconectado (o `RevogarAparelho` apaga a cópia na mesma
   transação; a leitura do ditado também ignora a cópia de um aparelho revogado, por garantia);
-- no "Apagar meus dados" (uma linha nova na lista `apagarDaConta`, antes dos aparelhos) e no
-  `tirar-cadastro.sh`.
+- no "Apagar meus dados" (uma linha nova na lista `apagarDaConta`, antes dos aparelhos; o apagar trava
+  os aparelhos da conta logo depois do contador, na mesma ordem do PUT e da revogação: aparelho, depois
+  cópia);
+- depois de uma restauração do backup (`DepoisDeRestaurar`, que já revoga todos os aparelhos).
+
+O `tirar-cadastro.sh` não muda: ele acha as tabelas pelas chaves estrangeiras e recusa a conta que ainda
+tem a cópia, como recusa a que tem qualquer outro dado; antes vem o "Apagar meus dados".
+
+**Na implementação (05-nov-2026):** o `GET /api/nuvem/dicionario` do PC, com a opção ligada e a nuvem
+dizendo que a fonte é outro PC (ou nenhuma), grava a opção desligada e devolve o aviso, como o `409` do
+envio automático. Os códigos de erro seguem os outros da nuvem, em maiúsculas (`NAO_E_A_FONTE`,
+`DICIONARIO_INVALIDO`); o `400` do PUT é `VALIDATION` (cabeçalhos e SHA-256) ou `BAD_REQUEST` (corpo
+ilegível), e o `415` é o `Content-Type` que não é JSON.
 
 ### C. Três rotas da nuvem, só com o token de um PC
 

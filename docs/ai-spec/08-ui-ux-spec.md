@@ -625,8 +625,8 @@ pergunta conta as trocas aprendidas (o `previa_trocas` do `06`, o M).
   **Aprendido no painel**, nos dois sentidos. É um PC só: as etiquetas de estado e o "não aplicado neste
   PC" ficam para os testes automáticos (ADR-019, "O fechamento da F8g").
 
-**O dicionário no celular (ADR-023, fase D4; 05-nov-2026; os textos são os da ADR, a confirmar na entrega
-do painel).** Em Configurações › Nuvem, **com a nuvem conectada**, uma opção a mais, no estilo das
+**O dicionário no celular (ADR-023, fase D4; 05-nov-2026; `web/src/DicionarioNoCelular.tsx`).** Em
+Configurações › Nuvem, **com a nuvem conectada**, uma opção a mais, no estilo das
 outras, **desligada por padrão**. O que ela faz está em `06-api-contract.md`, "O dicionário para o
 celular" (`GET` e `POST /api/nuvem/dicionario`); o `GET` pergunta à nuvem, então o painel o lê quando a
 seção abre.
@@ -640,7 +640,8 @@ seção abre.
   [x] Levar o dicionário para o celular
       49 termos, enviados às 14:02.
   ```
-  O número é o dos `termos` do estado, e a hora é a do `enviado_em`.
+  O número é o dos `termos` do estado, e a hora é a do `enviado_em` (sem ela, só "49 termos."; no
+  singular, "1 termo").
 - **Com outro PC como fonte:**
   ```
   [ ] Levar o dicionário para o celular
@@ -656,10 +657,15 @@ seção abre.
   volta com a opção **desligada** e o aviso dizendo por quê; a cópia recusada pela nuvem, ou acima dos
   limites, diz o motivo e deixa a opção como está.
 - **Desconectado**, a opção não aparece (ela só vale com a nuvem conectada). Desconectar grava a opção
-  desligada, e reconectar **não** manda o dicionário sem um clique novo.
-- **A Privacidade do PC e a do app** (as frases de "Configurações do celular") **ainda não falam da
-  cópia**: o texto vem da política que o Mauro aprovar (`docs/politica-de-privacidade.md`; ADR-023,
-  risco 4). A frase de hoje, "O áudio e o que está nas outras janelas nunca vão.", continua verdadeira.
+  desligada, e reconectar **não** manda o dicionário sem um clique novo. Com um Agent de antes da
+  ADR-023 (o `GET` dá `404`), a opção também não aparece.
+- **Enquanto o clique espera a resposta**, a caixa fica desligada (e o foco volta a ela no fim). Ligar ou
+  desligar sobe a versão das preferências (a opção mora em `local_settings`): a tela relê as
+  preferências em silêncio, mantendo o que a pessoa mudou e não salvou, para o próximo **Salvar** não
+  dar o aviso de "salvas em outra aba".
+- **A Privacidade do PC** ganha, depois da frase do que vai para a nuvem, "O dicionário só vai se você
+  ligar “Levar o dicionário para o celular”."; **a do app**, no fim de "Vão para a nuvem: …", "e, se você
+  ligar num PC, a cópia do dicionário dele" (o anexo da política, "Os textos do app sobre privacidade").
 
 #### Histórico (os 6 meses no PC; ADR-019, F10)
 **Decidido em 08-out-2026 (ADR-019, "Decisões da F10") e implementado na F10d e na F10e**
@@ -1157,14 +1163,16 @@ segundo plano."
   junto com a voz, em todo ditado, e podem ser nomes de clientes ou de outras pessoas.".
   **ADR-023 (05-nov-2026, fase D4):** a caixa passa a se chamar **"Mandar os termos do dicionário como
   dica"**: com a cópia do dicionário do PC na conta, os termos são os do dicionário; sem ela, os
-  aprendidos, que também são do dicionário. A frase de baixo não muda. **Logo abaixo da caixa, uma linha
+  aprendidos, que também são do dicionário. A frase de baixo vira "Vão ao provedor junto com a voz, em
+  todo ditado, e podem ser nomes de clientes ou de outras pessoas. São os do dicionário do PC, se ele foi
+  levado para o celular; senão, os que você ensinou." **Logo abaixo da caixa, uma linha
   discreta** com o estado da cópia (o campo `dicionario` do `GET /dictation`, `06`):
   ```
   Dicionário: o do PC-DO-MAURO, 49 termos (atualizado em 05/11 às 14:02).
   ```
   ou, sem cópia (`dicionario` `null`):
   ```
-  Sem o dicionário do PC. Para usá-lo aqui, ligue "Levar o dicionário para o celular" no painel do PC.
+  Sem o dicionário do PC. Para usá-lo aqui, ligue “Levar o dicionário para o celular” no painel do PC.
   ```
   O nome é o do PC que é a fonte. Só informa: o celular não edita o dicionário, e não tem botão para a
   cópia (ligar, desligar e trocar a fonte são do painel do PC).

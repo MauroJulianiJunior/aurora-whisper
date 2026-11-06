@@ -83,6 +83,8 @@ function montar() {
       aceite: { versao: 1, transcricao: 'openai', polish: 'anthropic', aceito_em: '2026-10-11T12:00:00.000Z' },
       chaves: { openai: 'sk-teste-de-mentira-WXYZ' },
       colarDeNovo: ['anthropic'],
+      // A cópia do dicionário de um PC, como o exemplo mostra (ADR-023, E).
+      dicionario: { aparelho: 'PC-DO-MAURO', termos: 49, atualizado_em: '2026-11-05T14:02:00Z' },
     },
   })
   return { srv, cliente: criarClienteNuvem(srv.buscar) }
@@ -110,6 +112,13 @@ describe('o servidor de mentira fala o que o 06 mostra', () => {
     const post = await srv.buscar('/api/v1/dictation/consent', { method: 'POST', body: JSON.stringify({ versao: 1, transcricao: 'openai', polish: 'anthropic' }) })
     expect(post.status).toBe(200)
     expect(forma(await json(post))).toEqual(estado)
+  })
+
+  it('sem a cópia do dicionário, dicionario: null (o exemplo mostra a cópia; a seção diz que sem ela é null)', async () => {
+    expect(secao('GET `/dictation`')).toContain('ou **`null`** quando a conta não tem cópia')
+    const srv = servidorFalsoNuvem([], { ditado: { aceite: null, chaves: {}, colarDeNovo: [] } })
+    const r = await srv.buscar('/api/v1/dictation')
+    expect((await json(r)) as { dicionario: unknown }).toHaveProperty('dicionario', null)
   })
 
   it('o aceite sem Polish tem polish: null (o exemplo mostra o Polish aceito; a seção diz que sem ele é null)', async () => {
