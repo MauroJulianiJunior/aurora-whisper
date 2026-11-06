@@ -442,7 +442,9 @@ código é a fonte: se este anexo e o app divergirem, vale o app, e este anexo s
 hoje):
 
 - Vão para a nuvem: o texto dos ditados, com a data, o PC de origem e os detalhes da transcrição, as
-  notas, com os marcadores, e as trocas aprendidas. O texto fica legível para quem administra o servidor.
+  notas, com os marcadores e as imagens, as trocas aprendidas e, se você ligar num PC, a cópia do
+  dicionário dele. O texto e as imagens ficam legíveis para quem administra o servidor. *(Atualizado em
+  05-nov-2026 com a ADR-023; esta é a frase do app.)*
 - Os ditados ficam 6 meses; as notas, até você apagar (a lixeira, 30 dias). Uma cópia cifrada guarda tudo
   por cerca de 30 dias além disso.
 - Do PC nunca vão: o áudio, o que está nas outras janelas, a chave do Polish e as configurações dos PCs.
@@ -464,8 +466,14 @@ no Brasil." (com a VPS no Brasil; a cópia de segurança cifrada fora do Brasil 
 condição do art. 33) foi proposta aqui e **não está no app** (conferido em 28-out-2026).
 
 **PC, seção Privacidade** (`web/src/Configuracoes.tsx`): com a nuvem conectada, "o texto dos seus ditados,
-as suas notas e as trocas que você aprendeu vão para a sua nuvem"; e "Com o Polish ligado, separar em
-itens uma linha de uma nota (pelo Formatar) manda essa linha ao mesmo provedor."
+as suas notas com as imagens e as trocas que você aprendeu vão para a sua nuvem", seguido de "O dicionário
+só vai se você ligar “Levar o dicionário para o celular”." (ADR-023, 05-nov-2026); e "Com o Polish ligado,
+separar em itens uma linha de uma nota (pelo Formatar) manda essa linha ao mesmo provedor."
+
+**PC, Configurações › Nuvem** (`web/src/DicionarioNoCelular.tsx`, ADR-023): a opção "Levar o dicionário
+para o celular", desligada por padrão, com "O celular passa a usar os termos deste PC. Editar continua
+aqui."; ligada, "49 termos, enviados às 14:02."; com outro PC como fonte, "Hoje o celular usa o
+dicionário de NOTEBOOK. Ligar aqui passa a usar o deste PC."
 
 ## A folha do aceite do ditado no celular (versão 1 do aviso; proposta)
 
@@ -536,8 +544,13 @@ dela **não foi relida** na D0).
 - **Ao colar a chave:** "Use uma chave só para o celular, com limite de gasto no provedor."
 - **Depois de salva:** "Chave terminada em WXYZ." Com **Trocar** e **Remover**, que mostram: "Revogue
   também esta chave no provedor. Uma cópia cifrada dela fica nos backups por cerca de 30 dias."
-- **A dica:** "Mandar os termos aprendidos como dica. Eles vão ao provedor junto com a voz, em todo
-  ditado, e podem ser nomes de clientes ou de outras pessoas."
+- **A dica:** "Mandar os termos do dicionário como dica. Vão ao provedor junto com a voz, em todo
+  ditado, e podem ser nomes de clientes ou de outras pessoas. São os do dicionário do PC, se ele foi
+  levado para o celular; senão, os que você ensinou." (ADR-023, 05-nov-2026; antes, "Mandar os termos
+  aprendidos como dica".)
+- **O dicionário:** "Dicionário: o do PC-DO-MAURO, 49 termos (atualizado em 05/11 às 14:02)." ou, sem a
+  cópia, "Sem o dicionário do PC. Para usá-lo aqui, ligue “Levar o dicionário para o celular” no painel
+  do PC."
 - **O Polish:** "Organizar o texto com o Polish. O texto do ditado vai ao provedor do Polish." (reabre a
   folha se o provedor for outro).
 - **Desligar:** "Isto tira o seu aceite e apaga as suas chaves do servidor. Não apaga os ditados já
