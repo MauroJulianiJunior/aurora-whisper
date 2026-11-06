@@ -95,6 +95,10 @@ describe('o bundle local (bin\\painel)', () => {
     // sozinho. É só do PC: o '/api/nuvem' da lista do bundle da nuvem o cobre.
     expect(local.js).toContain('/api/nuvem/mudancas')
     expect(local.js).toContain('resolver_conflito')
+    // ADR-023, F: o "Levar o dicionário para o celular" passa pelo Agent (a rota
+    // local) e é uma opção da seção Nuvem do PC.
+    expect(local.js).toContain('/api/nuvem/dicionario')
+    expect(local.js).toContain('Levar o dicionário para o celular')
     // F8h: o aprendido do PC passa pelo Agent (/api/aprendizado), com as linhas de
     // estado do sync; a pergunta do envio conta as trocas aprendidas.
     expect(local.js).toContain('/api/aprendizado')
@@ -199,12 +203,13 @@ describe('o bundle local (bin\\painel)', () => {
     'Chave terminada em',
     'Revogue também esta chave',
     'Organizar o texto com o Polish',
+    // ADR-023, E: a dica "do dicionário" e a linha da cópia do PC são só do app.
+    'Mandar os termos do dicionário como dica',
+    'Sem o dicionário do PC',
     // A Groq transcreve a voz do celular; o Polish do PC é a OpenAI ou a Anthropic.
     // O link da chave dela é só do app.
     'console.groq.com',
     'Groq',
-    // A chave do app é "só para o celular" (REQ-053); a do PC, "só para o Aurora Whisper".
-    'o celular',
     // ADR-022, N8: a aba Notas é a mesma, mas o cliente da nuvem, o ditado para a nota
     // pelo celular, o Desfazer dele e o banco do aparelho são só do app.
     '/api/v1/notes',
@@ -214,6 +219,13 @@ describe('o bundle local (bin\\painel)', () => {
     'aurora-notas',
   ])('não tem %s', (texto) => {
     expect(local.js).not.toContain(texto)
+  })
+
+  // A chave do app é "só para o celular" (REQ-053); a do PC, "só para o Aurora Whisper". O texto
+  // "o celular" solto existe no PC (ADR-023: "Levar o dicionário para o celular"), então o que se
+  // confere é o argumento do "use uma só para …", como literal de texto no bundle.
+  it('não tem o "o celular" como argumento do "use uma só para …"', () => {
+    expect(local.js).not.toMatch(/[`"']o celular[`"']/)
   })
 
   it('não é instalável: sem manifest, sem a cor da barra, sem sw.js e sem os ícones do app', () => {
@@ -280,7 +292,10 @@ describe('o bundle da nuvem (dist-nuvem)', () => {
       'Se você dita dado de cliente',
       'Chave terminada em',
       'Revogue também esta chave no provedor. Uma cópia cifrada dela fica nos backups por cerca de 30 dias.',
-      'Mandar os termos aprendidos como dica',
+      'Mandar os termos do dicionário como dica',
+      // ADR-023, E: a linha da cópia do dicionário do PC, com e sem cópia.
+      'Sem o dicionário do PC. Para usá-lo aqui, ligue “Levar o dicionário para o celular” no painel do PC.',
+      'Dicionário: o do ',
       'Organizar o texto com o Polish',
       'a chave do PC continua no PC',
       'A voz não é gravada: fica na memória e é descartada ao fim.',
@@ -345,6 +360,13 @@ describe('o bundle da nuvem (dist-nuvem)', () => {
     // F6: o lado do PC do pareamento (o Conectar, o estado, o token). F7c:
     // o envio do histórico e o esquecer são só do PC.
     '/api/nuvem',
+    // ADR-023, F: o "Levar o dicionário para o celular" é uma opção da seção Nuvem do PC. O texto
+    // da opção "Levar o dicionário para o celular" também aparece no app, na linha "Sem o
+    // dicionário do PC" (que aponta para o painel do PC), então só a rota e as frases da opção
+    // entram aqui.
+    '/api/nuvem/dicionario',
+    'O celular passa a usar os termos deste PC',
+    'Ligar aqui passa a usar o deste PC',
     'Endereço da nuvem',
     'Esquecer esta nuvem',
     'Enviar o histórico',

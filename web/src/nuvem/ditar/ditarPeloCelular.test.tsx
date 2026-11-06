@@ -696,17 +696,63 @@ describe('o modelo da voz', () => {
 })
 
 describe('a dica', () => {
-  it('começa desligada; ligar salva na hora, e a ajuda diz que os termos podem ser nomes de clientes', async () => {
+  it('começa desligada; ligar salva na hora, e a ajuda diz de onde vêm os termos e que podem ser nomes de clientes', async () => {
     const { srv } = await ligadaComChave()
-    const dica = within(secao()).getByRole<HTMLInputElement>('checkbox', { name: 'Mandar os termos aprendidos como dica' })
+    const dica = within(secao()).getByRole<HTMLInputElement>('checkbox', { name: 'Mandar os termos do dicionário como dica' })
     expect(dica.checked).toBe(false)
-    expect(secao().textContent).toContain('Eles vão ao provedor junto com a voz, em todo ditado, e podem ser nomes de clientes ou de outras pessoas.')
+    expect(secao().textContent).toContain(
+      'Vão ao provedor junto com a voz, em todo ditado, e podem ser nomes de clientes ou de outras pessoas. São os do dicionário do PC, se ele foi levado para o celular; senão, os que você ensinou.',
+    )
+    expect(secao().textContent).not.toContain('termos aprendidos como dica')
     fireEvent.click(dica)
     await waitFor(() => expect(srv.daConta.preferencias.dica).toBe(true))
     expect(doCaminho(srv, 'PUT', '/api/v1/dictation/settings')[0]!.corpo).toMatchObject({ dica: true, polish: { ligado: false } })
-    await waitFor(() => expect(within(secao()).getByRole<HTMLInputElement>('checkbox', { name: 'Mandar os termos aprendidos como dica' }).checked).toBe(true))
-    fireEvent.click(within(secao()).getByRole('checkbox', { name: 'Mandar os termos aprendidos como dica' }))
+    await waitFor(() => expect(within(secao()).getByRole<HTMLInputElement>('checkbox', { name: 'Mandar os termos do dicionário como dica' }).checked).toBe(true))
+    fireEvent.click(within(secao()).getByRole('checkbox', { name: 'Mandar os termos do dicionário como dica' }))
     await waitFor(() => expect(srv.daConta.preferencias.dica).toBe(false))
+  })
+
+  // ADR-023, E: a linha discreta sob a dica diz de que PC é a cópia do dicionário.
+  describe('a linha do dicionário do PC', () => {
+    const quando = new Date(2026, 10, 5, 14, 2).toISOString()
+
+    it('sem cópia, diz como passar a ter uma: ligar a opção no painel do PC', async () => {
+      await ligadaComChave({ dicionario: null })
+      expect(secao().textContent).toContain('Sem o dicionário do PC. Para usá-lo aqui, ligue “Levar o dicionário para o celular” no painel do PC.')
+      expect(secao().textContent).not.toContain('Dicionário: o do')
+    })
+
+    it('uma nuvem que nem manda o campo é "sem cópia"', async () => {
+      await ligadaComChave()
+      expect(secao().textContent).toContain('Sem o dicionário do PC.')
+    })
+
+    it('com a cópia, diz o PC, quantos termos e quando mudou', async () => {
+      await ligadaComChave({ dicionario: { aparelho: 'PC-DO-MAURO', termos: 49, atualizado_em: quando } })
+      expect(secao().textContent).toContain('Dicionário: o do PC-DO-MAURO, 49 termos (atualizado em 05/11 às 14:02).')
+      expect(secao().textContent).not.toContain('Sem o dicionário do PC')
+    })
+
+    it('no singular, e nunca mostra os termos', async () => {
+      await ligadaComChave({ dicionario: { aparelho: 'NOTEBOOK', termos: 1, atualizado_em: quando } })
+      expect(secao().textContent).toContain('Dicionário: o do NOTEBOOK, 1 termo (atualizado em 05/11 às 14:02).')
+    })
+
+    it('uma cópia fora da forma (sem o nome do PC, ou com a hora inválida) é "sem cópia"', async () => {
+      await ligadaComChave({ dicionario: { aparelho: '', termos: 3, atualizado_em: quando } })
+      expect(secao().textContent).toContain('Sem o dicionário do PC.')
+      cleanup()
+      await ligadaComChave({ dicionario: { aparelho: 'PC', termos: 3, atualizado_em: 'ontem' } })
+      expect(secao().textContent).toContain('Sem o dicionário do PC.')
+    })
+
+    it('ligar a dica não perde a linha: ela segue a da conta', async () => {
+      const { srv } = await ligadaComChave({ dicionario: { aparelho: 'PC-DO-MAURO', termos: 49, atualizado_em: quando } })
+      fireEvent.click(within(secao()).getByRole('checkbox', { name: 'Mandar os termos do dicionário como dica' }))
+      await waitFor(() => expect(srv.daConta.preferencias.dica).toBe(true))
+      await waitFor(() => expect(within(secao()).getByRole<HTMLInputElement>('checkbox', { name: 'Mandar os termos do dicionário como dica' }).checked).toBe(true))
+      expect(secao().textContent).toContain('Dicionário: o do PC-DO-MAURO, 49 termos (atualizado em 05/11 às 14:02).')
+    })
   })
 })
 
@@ -963,7 +1009,7 @@ describe('a Privacidade', () => {
     const priv = screen.getByRole('region', { name: 'Privacidade' })
     const t = priv.textContent!
     expect(t).toContain(
-      'Vão para a nuvem: o texto dos ditados, com a data, o PC de origem e os detalhes da transcrição, as notas, com os marcadores e as imagens, e as trocas aprendidas. O texto e as imagens ficam legíveis para quem administra o servidor.',
+      'Vão para a nuvem: o texto dos ditados, com a data, o PC de origem e os detalhes da transcrição, as notas, com os marcadores e as imagens, as trocas aprendidas e, se você ligar num PC, a cópia do dicionário dele. O texto e as imagens ficam legíveis para quem administra o servidor.',
     )
     expect(t).toContain('Os ditados ficam 6 meses; as notas e as imagens delas, até você apagar (a lixeira, 30 dias). Uma cópia cifrada guarda tudo por cerca de 30 dias além disso.')
     expect(t).toContain('Do PC nunca vão: o áudio, o que está nas outras janelas, a chave do Polish e as configurações dos PCs; a chave do PC continua no PC.')

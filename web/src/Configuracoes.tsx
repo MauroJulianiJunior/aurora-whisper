@@ -377,6 +377,28 @@ export function Configuracoes({ cliente, visivel, aoPerderLigacao, avisar, apren
     setChaves({})
   }
 
+  // adotarBase: o "Levar o dicionário para o celular" (NuvemNoPC) grava a opção
+  // nas configurações do PC, e a version delas sobe. Sem acompanhar, o próximo
+  // Salvar mandaria a base velha e levaria um 409 que ninguém causou. A tela
+  // relê, passa a se basear no que o Agent tem agora e mantém o que a pessoa
+  // mexeu e ainda não salvou (o rascunho); a nota de "salvas em outra aba" NÃO
+  // acende: nada aqui foi outra aba. Uma leitura que chega mais velha que o que
+  // a tela já tem (um Salvar que terminou no meio) é descartada.
+  async function adotarBase() {
+    let atual: Config
+    try {
+      atual = await cliente.configuracoes()
+    } catch (e) {
+      // Outro erro fica calado: o próximo Salvar diz o que houver.
+      if (problemaDe(e)) aoPerderLigacao(e)
+      return
+    }
+    setCarga((c) => {
+      if (c.tipo !== 'pronta' || atual.version < c.salvo.version) return c
+      return { ...c, salvo: atual, rascunho: mesclar(editaveis(c.salvo), c.rascunho, editaveis(atual)) }
+    })
+  }
+
   async function guardarChave() {
     const campo = campoChave.current
     if (!provedor || !campo || mexendoNaChave) return
@@ -834,6 +856,7 @@ export function Configuracoes({ cliente, visivel, aoPerderLigacao, avisar, apren
         aoPerderLigacao={aoPerderLigacao}
         avisar={avisar}
         aoMudarEstado={(e) => setNuvemConectada(e.estado === 'conectado' && e.url ? e.url : null)}
+        aoGravarDicionario={() => void adotarBase()}
       />
 
       {/* O Histórico (ADR-019, F10): os 6 meses no PC e as cópias do banco. Age na
@@ -875,7 +898,8 @@ export function Configuracoes({ cliente, visivel, aoPerderLigacao, avisar, apren
           {nuvemConectada && (
             <li>
               Com a nuvem conectada, o texto dos seus ditados, as suas notas com as imagens e as trocas que você aprendeu vão para a sua nuvem, em{' '}
-              <span className="email">{nuvemConectada}</span>. O áudio e o que está nas outras janelas nunca vão.
+              <span className="email">{nuvemConectada}</span>. O dicionário só vai se você ligar “Levar o dicionário para o celular”. O áudio e o que está
+              nas outras janelas nunca vão.
             </li>
           )}
         </ul>
