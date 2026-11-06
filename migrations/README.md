@@ -183,6 +183,26 @@ no pull. Os limites (2.000 px, 4 MB, 10 por nota, 400 MB por conta) ficam em Go,
 0001 a 0025, põe dados, roda a 0026 e prova que nada de antes mudou). **Estado em 29-out-2026: rodaram
 contra o Postgres 18 de teste** (o `scripts/postgres-de-teste.ps1`), com a suíte de contrato inteira.
 
+## A cópia do dicionário de um PC (ADR-023)
+
+| Arquivo | Tabela | O quê |
+|---|---|---|
+| 0027 | `dictionary_copies` | a cópia do `dicionario.json` de **um PC**, para o ditado no celular montar o Smart com ela: **uma por conta** (`user_id` é a chave primária), o PC que é a fonte (`device_id`, chave estrangeira composta `(user_id, device_id)` para `devices`, **sem cascata**), os bytes como `TEXT` (não `JSONB`: ele reordena as chaves e o SHA-256 deixaria de bater; até 512 KiB), o SHA-256 em hexadecimal minúsculo, o número de termos (0 a 2.000) e a hora da última mudança |
+
+Só aditiva: as `dictionary_entries` e `dictionary_aliases` (0004 e 0005) ficam como estão, vazias. A cópia sai
+quando o PC que é a fonte é revogado ou desconectado (o `RevogarAparelho` a apaga na mesma transação, e o
+`pos-restauracao` apaga todas), no `DELETE` da rota e no "Apagar meus dados" (antes dos aparelhos, por causa da
+chave estrangeira sem cascata). Os limites finos (variantes, tamanho do termo) ficam em Go
+(`dictionary.ValidarCopia`).
+
+`schema_test.go` a lê (as colunas, os `CHECK`s, a chave primária e a chave estrangeira composta);
+`internal/server/pgstore` confere o SQL contra ela (`TestSQL_AsConsultasDaCopiaDoDicionario`). Com um Postgres:
+`TestPostgres_ACopiaDoDicionario` (cada `CHECK`, a chave e a falta de cascata),
+`TestPostgres_AMigrationDoDicionarioAplicaSobreUmBancoComDados` (aplica as 0001 a 0026, põe dados, roda a 0027 e
+prova que nada de antes mudou) e, em `internal/server/pgstore`, o tomar, o manter, a revogação, o "apagar meus
+dados" e a leitura que ignora o aparelho revogado. **Estado em 05-nov-2026: os testes com Postgres compilam e
+pulam** (o Docker estava parado na máquina em que foram escritos); a primeira execução real é a do Mauro.
+
 ## Como rodar o `migrate`
 
 É um **subcomando do binário do servidor** (escolha da F1; a ADR e o `05` dizem só "comando próprio do

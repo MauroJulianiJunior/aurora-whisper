@@ -29,6 +29,9 @@ const (
 	// E os tokens, todos (o de um aparelho revogado depois do backup voltou
 	// com o backup).
 	sqlApagarTodosOsTokens = `DELETE FROM device_tokens`
+	// E as cópias do dicionário (ADR-023): cada uma é de um PC que acaba de ser
+	// revogado, como no RevogarAparelho.
+	sqlApagarTodasAsCopiasDoDicionario = `DELETE FROM dictionary_copies`
 )
 
 func (s *Store) DepoisDeRestaurar(ctx context.Context, now time.Time) (cloudstore.Restauracao, error) {
@@ -67,6 +70,9 @@ func (s *Store) DepoisDeRestaurar(ctx context.Context, now time.Time) (cloudstor
 	r.Aparelhos = tag.RowsAffected()
 	if _, err := tx.Exec(ctx, sqlApagarTodosOsTokens); err != nil {
 		return r, sanitize("apagar os tokens", err)
+	}
+	if _, err := tx.Exec(ctx, sqlApagarTodasAsCopiasDoDicionario); err != nil {
+		return r, sanitize("apagar as cópias do dicionário", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return cloudstore.Restauracao{}, sanitize("confirmar o depois de restaurar", err)

@@ -276,6 +276,12 @@ var wantTables = []tableSpec{
 			"created_at", "removed_at", "last_seq",
 		},
 	},
+	// ADR-023, D1: a cópia do dicionário de um PC, uma por conta.
+	{
+		file:    "0027_dictionary_copies_table.sql",
+		table:   "dictionary_copies",
+		columns: []string{"user_id", "device_id", "content", "sha256", "terms", "updated_at"},
+	},
 }
 
 // TestSchema_EveryMigrationIsCoveredBySpec garante que a lista acima e os
@@ -388,6 +394,9 @@ func TestSchema_UniqueConstraints(t *testing.T) {
 		// last_seq único por usuário, como a nota.
 		{"0026_note_images_table.sql", "PRIMARY KEY (user_id, id)"},
 		{"0026_note_images_table.sql", "UNIQUE (user_id, last_seq)"},
+		// ADR-023: uma cópia do dicionário por conta, e o PC que é a fonte é
+		// um aparelho da mesma conta.
+		{"0027_dictionary_copies_table.sql", "FOREIGN KEY (user_id, device_id) REFERENCES devices (user_id, id)"},
 	}
 	for _, c := range cases {
 		// Sem os comentários: eles explicam as constraints, e citam o texto delas.
@@ -650,6 +659,8 @@ func TestSchema_OptimisticConcurrencyVersionColumn(t *testing.T) {
 		"0025_transcription_note_links_table.sql": false,
 		// N10b: a imagem é imutável (nasce e sai), sem concorrência otimista.
 		"0026_note_images_table.sql": false,
+		// ADR-023: a cópia é trocada inteira (gravar por cima), sem versão.
+		"0027_dictionary_copies_table.sql": false,
 	}
 
 	re := regexp.MustCompile(`(?im)^\s*version\s+BIGINT`)
@@ -774,7 +785,8 @@ func TestSchema_DeviceForeignKeysAreCompositePerUser(t *testing.T) {
 			}
 		}
 	}
-	// Dez colunas de aparelho hoje (as quatro das notas na N7). Se a
+	// Onze colunas de aparelho hoje (as quatro das notas na N7, e o PC que é a
+	// fonte da cópia do dicionário, ADR-023). Se a
 	// generalização acima não achar nenhuma (um erro de leitura), o teste
 	// passaria sem provar nada.
 	for _, want := range []string{
@@ -782,14 +794,14 @@ func TestSchema_DeviceForeignKeysAreCompositePerUser(t *testing.T) {
 		"transcriptions.text_device_id", "transcriptions.trash_device_id",
 		"sync_events.device_id", "applied_mutations.device_id",
 		"notes.content_device_id", "notes.trash_device_id", "notes.conflict_device_id",
-		"note_sync_events.device_id",
+		"note_sync_events.device_id", "dictionary_copies.device_id",
 	} {
 		if !found[want] {
 			t.Errorf("o teste não viu a coluna de aparelho %s (uma coluna nova de aparelho entra nesta lista, uma que sumiu sai)", want)
 		}
 	}
-	if len(found) != 10 {
-		t.Errorf("achei %d colunas de aparelho em tabelas com user_id (%v), esperava 10", len(found), found)
+	if len(found) != 11 {
+		t.Errorf("achei %d colunas de aparelho em tabelas com user_id (%v), esperava 11", len(found), found)
 	}
 }
 
@@ -1006,6 +1018,21 @@ var sqlContracts = []struct {
 		"last_seq BIGINT NOT NULL CHECK (last_seq > 0)",
 		"CHECK ((removed_at IS NULL) = (conteudo IS NOT NULL))",
 		"CHECK (removed_at IS NOT NULL OR (largura IS NOT NULL AND altura IS NOT NULL AND bytes IS NOT NULL AND sha256 IS NOT NULL))",
+	}},
+	// ADR-023: uma cópia por conta (a PK é o user_id); o texto como TEXT (o JSONB
+	// reordena as chaves e o SHA-256 deixaria de bater), com o teto de 512 KiB
+	// (dictionary.MaxBytesDaCopia) e o SHA-256 em hexadecimal minúsculo; de 0 a
+	// 2.000 termos (dictionary.MaxTermosDaCopia); a data vem de quem grava; o
+	// aparelho-fonte é da mesma conta, sem cascata (quem apaga é o
+	// RevogarAparelho, na transação dele).
+	{"0027_dictionary_copies_table.sql", "dictionary_copies", []string{
+		"user_id UUID PRIMARY KEY REFERENCES users (id)",
+		"device_id UUID NOT NULL,",
+		"content TEXT NOT NULL CHECK (octet_length(content) BETWEEN 1 AND 524288)",
+		"sha256 TEXT NOT NULL CHECK (sha256 ~ '^[0-9a-f]{64}$')",
+		"terms INTEGER NOT NULL CHECK (terms BETWEEN 0 AND 2000)",
+		"updated_at TIMESTAMPTZ NOT NULL,",
+		"FOREIGN KEY (user_id, device_id) REFERENCES devices (user_id, id)",
 	}},
 }
 

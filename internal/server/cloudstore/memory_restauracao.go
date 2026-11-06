@@ -18,6 +18,9 @@ func (s *MemoryStore) DepoisDeRestaurar(_ context.Context, _ time.Time) (Restaur
 	defer s.mu.Unlock()
 	var r Restauracao
 	for _, u := range s.users {
+		// Todos os aparelhos saem (abaixo), e com eles a cópia do dicionário que
+		// um deles levou (ADR-023): o DELETE FROM dictionary_copies do Postgres.
+		u.copiaDoDicionario = nil
 		u.epoch = NewUUIDv7()
 		if u.lastSeq > u.watermark {
 			u.watermark = u.lastSeq
@@ -83,6 +86,10 @@ func (s *MemoryStore) copiar() *MemoryStore {
 		if u.preferenciasDoDitado != nil {
 			p := *u.preferenciasDoDitado
 			nu.preferenciasDoDitado = &p
+		}
+		if u.copiaDoDicionario != nil {
+			c := *u.copiaDoDicionario
+			nu.copiaDoDicionario = &c
 		}
 		nu.events = append([]Event(nil), u.events...)
 		// As notas e os marcadores (N7). A fatia Marcadores de cada nota é

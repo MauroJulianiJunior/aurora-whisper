@@ -361,6 +361,11 @@ func (s *MemoryStore) RevogarAparelho(_ context.Context, userID, deviceID string
 	}
 	d.revoked = true
 	d.version++
+	// A cópia do dicionário do PC sai junto (ADR-023): o DELETE FROM
+	// dictionary_copies do Postgres, na mesma transação da revogação.
+	if u, ok := s.users[userID]; ok && u.copiaDoDicionario != nil && u.copiaDoDicionario.deviceID == canon {
+		u.copiaDoDicionario = nil
+	}
 	for k, t := range s.tokens {
 		if t.deviceID == canon {
 			delete(s.tokens, k)
@@ -402,6 +407,9 @@ func (s *MemoryStore) ApagarDadosDaConta(_ context.Context, userID, keepSessionI
 	// As preferências e os aceites do ditado no celular (C3b): os DELETE FROM
 	// dictation_settings e dictation_consents do Postgres.
 	u.preferenciasDoDitado, u.aceitesDoDitado = nil, nil
+	// A cópia do dicionário de um PC (ADR-023): o DELETE FROM dictionary_copies
+	// do Postgres.
+	u.copiaDoDicionario = nil
 	for deviceID := range u.devices {
 		delete(s.devices, deviceID)
 	}

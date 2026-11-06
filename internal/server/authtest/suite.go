@@ -764,11 +764,12 @@ func testEscopo(t *testing.T, b Backend) {
 			t.Errorf("%s com aparelho revogado: %d, quero 401", rt.Padrao, res.Code)
 		}
 	}
-	// O sync com aparelho: o push, o pull e as três rotas das imagens das notas
-	// (N10b: o PUT, o GET e o DELETE dos bytes).
-	if seen[server.AcessoSessao] < 15 || seen[server.AcessoAparelho] != 5 || seen[server.AcessoQualquer] != 2 {
+	// O sync com aparelho: o push, o pull, as três rotas das imagens das notas
+	// (N10b: o PUT, o GET e o DELETE dos bytes) e as três da cópia do dicionário
+	// (ADR-023: o GET, o PUT e o DELETE).
+	if seen[server.AcessoSessao] < 15 || seen[server.AcessoAparelho] != 8 || seen[server.AcessoQualquer] != 2 {
 		t.Errorf("a tabela tem %v rotas por acesso; quero o CRUD, as sessões, a lista de aparelhos, a aprovação "+
-			"de um PC e o aprendido do celular só com sessão, o sync (e as imagens dele) com aparelho, e o /me e o "+
+			"de um PC e o aprendido do celular só com sessão, o sync (as imagens e o dicionário dele) com aparelho, e o /me e o "+
 			"revogar com qualquer", seen)
 	}
 	// O aprendido do celular (F8d): só a sessão, e sem parâmetro de caminho (o
