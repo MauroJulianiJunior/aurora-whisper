@@ -146,6 +146,7 @@ func pedirPolish(t *testing.T, rt *Runtime, attempt dictation.AttemptID, texto s
 
 func receberPolido(t *testing.T, rt *Runtime, prazo time.Duration) polidoPronto {
 	t.Helper()
+	prazo *= fatorDeTempo
 	select {
 	case p := <-rt.polidos:
 		return p

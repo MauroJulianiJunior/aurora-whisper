@@ -67,7 +67,7 @@ func TestEspera_PutDuranteOAplicarDeUmaPaginaCheia(t *testing.T) {
 	aplicar := time.Since(inicio)
 	put := <-espera
 	t.Logf("o Aplicar de %d ditados levou %v; o Put esperou %v", pagina, aplicar, put)
-	if put > 2*time.Second {
+	if put > 2*time.Second*fatorDeTempo {
 		t.Errorf("o Put esperou %v durante o Aplicar de uma página", put)
 	}
 }
@@ -108,7 +108,7 @@ func TestEspera_RecomecarSobreUmHistoricoGrande(t *testing.T) {
 	if c, _ := f.fila.Contar(ctx); c != n {
 		t.Errorf("a fila depois do recomeço: %d; quero %d", c, n)
 	}
-	if d > 5*time.Second {
+	if d > 5*time.Second*fatorDeTempo {
 		t.Errorf("o Recomecar de %d ditados levou %v", n, d)
 	}
 }
