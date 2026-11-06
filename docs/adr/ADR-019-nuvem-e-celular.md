@@ -207,6 +207,12 @@ pareamento, os 180 dias do token) são propostas, não decisões, e a F3 e a F6 
    nome do domínio do termo. O `dicionario.json` continua a fonte da verdade em cada PC, e a
    Correction com a frase inteira não sobe. Por quê: é o que a ADR-017 guarda. Mover o dicionário
    para o banco perderia o arquivo que a pessoa abre e audita, e o celular não precisa disso.
+   *(Nota de 05-nov-2026, ADR-023: **para o sync, esta decisão continua valendo**: o que sobe do
+   dicionário pelo sync é só o aprendido, nada do dicionário desce aos PCs, e o `dicionario.json` segue
+   a fonte da verdade. O que mudou é o "o celular não precisa disso": a conta do Mauro tinha 0 pares
+   aprendidos, e o ditado no celular escrevia sem dicionário. Por isso, com a opção "Levar o dicionário
+   para o celular" ligada no painel do PC (desligada por padrão), uma **cópia** do arquivo sobe, de um PC
+   só, para o celular ler. É um documento à parte (`dictionary_copies`), não o dicionário no banco.)*
 8. **As preferências não sincronizam na v1.** Cada PC guarda as suas: atalho, microfone, modo de
    texto, Polish, bipe, modelo de voz e a chave do provedor de IA. Por quê: "herdar ao conectar" já
    é meio sync, com versão própria. E a chave nunca sai do PC (ADR-016).
@@ -660,7 +666,10 @@ Nada disso sai da spec: vira "depois", com o motivo.
 - **Resolução com contexto na nuvem** (`/resolve`, `cloud_context_resolve`).
 - **Atualização pela nuvem** (`/updates/windows/latest`, TASK-023). A ADR-018 já decidiu a
   atualização manual nas 0.x.
-- **O dicionário completo no banco**, e as telas de Dicionário e de Correções na nuvem.
+- **O dicionário completo no banco**, e as telas de Dicionário e de Correções na nuvem. *(Nota de
+  05-nov-2026, ADR-023: o dicionário no banco, por linha e editável, **continua fora**, e as tabelas
+  `dictionary_entries` e `dictionary_aliases` seguem vazias. O que entrou foi uma cópia do
+  `dicionario.json`, só do PC à nuvem e só com a opção ligada, em `dictionary_copies`.)*
 - **A Correction com a frase inteira.** O TEST-008 passa a valer como o par curto.
 - **Ditado no celular** e texto guardado no aparelho. *(Nota de 11-out-2026, ADR-021: o ditado no
   celular **entrou**, no passo 1 (o PWA: toque para começar e toque para parar, com a voz transcrita

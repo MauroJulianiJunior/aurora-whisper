@@ -36,6 +36,15 @@ servidor, entram no backup cifrado e seguem a nota até o fim (a lixeira de 30 d
 "Apagar meus dados"). O **celular não guarda a imagem**: só a mostra, na memória da página; sem rede, diz
 "Imagem sem rede". A decisão 12 (seção 7): o Mauro decidiu em 29-out-2026 ("Só eu uso"; a imagem segue a nota).
 
+**Atualizado em 05-nov-2026 com o dicionário do PC no celular (ADR-023).** O dicionário (os termos que a
+pessoa ensinou, que podem ser nomes de clientes ou de terceiros) ficava só no PC; com a opção
+"Levar o dicionário para o celular", **desligada por padrão**, uma **cópia** dele sobe para a nuvem e o
+ditado no celular a usa. É um **dado novo** na nuvem, legível para quem administra o servidor, e, com a
+dica ligada, até 140 caracteres dele vão ao provedor de transcrição, que já recebia os termos do
+aprendido. A finalidade é a mesma e **ninguém novo recebe** os termos. O mapa de domínios, os ids de
+amostra e o nome do usuário local **não** vão. **A política publicada ainda diz que o dicionário fica no
+PC: o texto novo espera a aprovação do Mauro, e o deploy espera o texto** (decisão 13, seção 7).
+
 **Por que isto existe.** Até aqui o que se dita ficava só no PC. Com a nuvem, o texto passa a morar,
 **legível**, num servidor, e uma cópia cifrada vai para um backup. **Com o ditado no celular, a voz
 também sai: ela passa pela memória do servidor e vai, legível, a um provedor de transcrição que a pessoa
@@ -78,6 +87,15 @@ cada ditado novo sobe sozinho; o histórico antigo só sobe depois do clique em 
   4 MB, sem metadado), o tamanho em pixels e em bytes, o SHA-256 e a hora. Sobem com o aceite do "Enviar
   o histórico", junto com a nota deles; a anexada com o PC conectado sobe na hora. **O original e o
   nome do arquivo nunca saem.** Nunca vão à IA, à busca nem ao "Copiar para WhatsApp".
+- **A cópia do dicionário (ADR-023, 05-nov-2026), só com a opção ligada:** a pessoa liga, no painel do PC,
+  "Levar o dicionário para o celular" (**desligada por padrão**), e o PC manda uma **cópia** do
+  `dicionario.json` para a nuvem: os termos, as variantes (com as restritas a um domínio), as
+  prioridades, as dicas, o idioma, o **nome** dos domínios e as entradas desligadas. Os termos podem ser
+  **nomes de clientes ou de terceiros**. **Não vão:** o mapa de domínios para executáveis (diz quais
+  programas a pessoa usa), os ids de amostra e o nome do usuário local. É **uma cópia por conta**, de um PC
+  só; só vai do PC à nuvem (nada desce aos PCs), e o arquivo continua o dono: editar é no PC. Serve ao
+  ditado no celular (o Smart da conta parte dela) e, **com a dica ligada, até 140 caracteres de termos
+  vão ao provedor de transcrição** (tabela abaixo).
 - **Nunca sai:** áudio; o que está em outras janelas (programa, título, texto de perto); a chave do
   Polish; logs; preferências; o mapa de domínios; a nota em foco (o aviso do painel ao Agent, só em
   memória); o `nova:<token>` da caixa "Criar uma nota".
@@ -86,8 +104,8 @@ cada ditado novo sobe sozinho; o histórico antigo só sobe depois do clique em 
 
 | Para | O quê |
 |---|---|
-| A nuvem (a VPS) | a **voz** de cada ditado, só em memória, durante o pedido, descartada ao fim; o **texto**, que vira ditado no histórico; a **chave** da pessoa, cifrada; o aceite e as preferências |
-| O provedor de transcrição (OpenAI ou Groq, escolhido pela pessoa, com a chave dela) | a **voz**; com a **dica** ligada, os **termos do aprendido** (que podem ser nomes de clientes ou de terceiros) |
+| A nuvem (a VPS) | a **voz** de cada ditado, só em memória, durante o pedido, descartada ao fim; o **texto**, que vira ditado no histórico; a **chave** da pessoa, cifrada; o aceite e as preferências. **Lida do banco a cada ditado, sem sair do servidor:** a cópia do dicionário do PC (se a pessoa a ligou) |
+| O provedor de transcrição (OpenAI ou Groq, escolhido pela pessoa, com a chave dela) | a **voz**; com a **dica** ligada, até 140 caracteres de **termos**: os da cópia do dicionário do PC, se a conta a tem (ADR-023), ou os do aprendido (que podem ser nomes de clientes ou de terceiros) |
 | O provedor do Polish (OpenAI ou Anthropic), se ligado | o texto do Smart, com 4 palavras ou mais |
 | Os provedores, ao guardar ou trocar a chave | a própria chave, para o teste (a lista de modelos) |
 
@@ -99,8 +117,9 @@ tira a foto (ou escolhe da galeria), a reduz no aparelho e a sobe pela sessão; 
 imagem por `fetch` com a sessão e a mostra por uma URL `blob:` que só existe na memória da página.
 
 - **Nunca sai do celular:** nada além do que está acima. O app não grava a voz em lugar nenhum. Não
-  enxerga outras janelas. A chave **do PC** não vai (a pessoa cola outra no app, de propósito). O
-  dicionário completo e o mapa de domínios ficam no PC.
+  enxerga outras janelas. A chave **do PC** não vai (a pessoa cola outra no app, de propósito). O mapa de
+  domínios fica no PC, e o dicionário também, **salvo a cópia que a pessoa liga** (acima; antes da
+  ADR-023, o dicionário inteiro ficava no PC, e a política publicada ainda diz isso).
 - **A voz não é usada para identificar a pessoa.** A lei trata como sensível o "dado genético ou
   biométrico, quando vinculado a uma pessoa natural" (art. 5º, II); se a voz fosse usada para
   identificar, o tratamento pediria o art. 11. Nenhum código a compara com uma amostra nem a guarda.
@@ -110,10 +129,10 @@ imagem por `fetch` com a sessão e a mostra por uma URL `blob:` que só existe n
 | Lugar | O que tem | Quem lê |
 |---|---|---|
 | PC | tudo, em `historico.db` e `dicionario.json`, sem cifra própria | quem entrar na conta do Windows (no instalado, a pasta é só do dono, do SYSTEM e dos Administradores) |
-| Servidor (Postgres na VPS) | ditados **legíveis**, **notas e marcadores legíveis**, **as imagens das notas (a cópia reduzida, sem metadado, em `note_images`)**, aprendido, cadastro; sessões e aparelhos só como HMAC. **Ditado no celular:** a **chave da pessoa cifrada**, o aceite e as preferências | **quem administra a VPS lê o texto**; cifra ponta a ponta fica para depois |
+| Servidor (Postgres na VPS) | ditados **legíveis**, **notas e marcadores legíveis**, **as imagens das notas (a cópia reduzida, sem metadado, em `note_images`)**, aprendido, cadastro; sessões e aparelhos só como HMAC. **Ditado no celular:** a **chave da pessoa cifrada**, o aceite e as preferências. **Cópia do dicionário do PC (ADR-023, `dictionary_copies`), só com a opção ligada:** **legível**, uma por conta, com o PC que é a fonte | **quem administra a VPS lê o texto**; cifra ponta a ponta fica para depois |
 | Servidor (memória da API) | **ditado no celular:** a **voz**, durante o pedido; o texto que seria gravado, 10 min, se a gravação falhar | quem administra a VPS (a voz passa pela memória do processo, e o arquivo da chave de cifra está no mesmo servidor) |
 | Servidor de entrada (o proxy) | o endereço pedido e o IP, de passagem; **ditado no celular: a voz passa por ele** (termina o https) e ele pode segurar pedaços na memória dele | quem administra o proxy (o mesmo servidor, na instância de referência) |
-| Provedor de transcrição | **ditado no celular:** a voz e, com a dica, os termos; o que ele retém, pela documentação dele (Anexo B) | o provedor, pelo contrato da conta da pessoa |
+| Provedor de transcrição | **ditado no celular:** a voz e, com a dica, os termos (da cópia do dicionário do PC, se houver); o que ele retém, pela documentação dele (Anexo B) | o provedor, pelo contrato da conta da pessoa |
 | Backup no B2 | o banco cifrado com `age` (inclui as chaves da pessoa, já cifradas pela chave de cifra do servidor) | só quem tem a chave privada (a do responsável); o B2 vê o arquivo, o nome com data e hora, o tamanho |
 | Celular | nada do histórico (só na memória da página); a casca do app e o cookie. **Notas (N8):** num IndexedDB por conta, a última lista que a nuvem deu (título e corpo), os marcadores (o nome) e a fila das mudanças feitas sem rede; num banco à parte, o id, o e-mail e o nome da última conta que abriu o app. O Sair e o "Apagar meus dados" os apagam; a sessão que vence, não. **Imagens das notas (N10b): só os metadados** (id, tamanho, SHA-256), **nunca os pixels**: a imagem fica numa URL `blob:` na memória da aba, solta ao sair; nada de IndexedDB, Cache API nem service worker, e o `GET` responde `no-store`. **Ditado no celular:** a voz, numa variável de memória, até o envio dar certo ou a pessoa descartar | a pessoa, e quem pegar o aparelho desbloqueado |
 
@@ -140,6 +159,7 @@ imagem por `fetch` com a sessão e a mostra por uma URL `blob:` que só existe n
 | **A voz, no provedor** | o que a documentação dele diz (seção 4 e Anexo B): OpenAI, registros de abuso por até 30 dias (a tabela dela diz "nenhuma" para a transcrição, e o texto geral, até 30 dias: a política assume 30); Groq, nenhuma por padrão, até 30 dias só para falha ou abuso, e retenção zero se a conta ligar |
 | **A chave da pessoa** | até a pessoa trocar, remover, desligar o ditado ou apagar os dados; **a cópia antiga, cifrada, fica nos backups (cerca de 30 dias) e no banco `aurora_antes_AAAAMMDD` de uma restauração (7 dias)** |
 | **Aceite e preferências** | enquanto a conta existir, ou até o "Apagar meus dados" |
+| **Cópia do dicionário do PC** (ADR-023) | **enquanto a opção "Levar o dicionário para o celular" estiver ligada** no PC que é a fonte; não vence com os 6 meses. Sai ao desligar a opção (na hora), ao revogar ou desconectar esse PC, no "Apagar meus dados" e depois de uma restauração do banco. O backup cifrado a guarda pelo prazo dele (cerca de 30 dias) |
 | **Desfecho pago e não gravado** | 10 min em memória, o reinício ou a mudança do epoch da conta |
 
 ## 4. Operadores e países
@@ -181,7 +201,7 @@ proxy de terceiro (ele leria o texto e a voz): o domínio da nuvem aponta direto
 |---|---|
 | Confirmar e acessar (I, II) | o app da nuvem ou o painel do PC: lista, busca, **notas**, aparelhos, sessões, aprendido. Pedido fora do app: declaração em até 15 dias (art. 19, II) |
 | Corrigir (III) | editar o texto final; editar a nota |
-| Eliminar (IV, VI) | lixeira; **Excluir definitivamente** (só de ditado ou nota já na lixeira); **Apagar meus dados da nuvem** (digitar "apagar": ditados, lápides, aprendido, aparelhos e outras sessões, **as notas, as imagens delas, os marcadores, as lápides e os eventos deles e as notas guardadas no celular em que se clicou**, e, no ditado do celular, o aceite, as preferências e as chaves; os PCs ficam com a cópia; o backup guarda até girar) |
+| Eliminar (IV, VI) | lixeira; **Excluir definitivamente** (só de ditado ou nota já na lixeira); **Apagar meus dados da nuvem** (digitar "apagar": ditados, lápides, aprendido, aparelhos e outras sessões, **as notas, as imagens delas, os marcadores, as lápides e os eventos deles e as notas guardadas no celular em que se clicou**, e, no ditado do celular, o aceite, as preferências e as chaves, **e a cópia do dicionário do PC**; os PCs ficam com a cópia; o backup guarda até girar) |
 | Revogar (IX) | Desconectar (revoga o PC na nuvem), revogar um aparelho, encerrar uma sessão, Sair. **Ditado no celular:** "Desligar o ditado no celular" revoga o aceite e apaga as chaves (art. 8º, §5º: o tratamento já feito com o aceite fica ratificado enquanto não houver pedido de eliminação) |
 | Cópia e portabilidade (V; art. 19, §3º) | o PC já tem tudo em `historico.db`. **Não há botão de exportar na nuvem** |
 | Saber com quem compartilhamos (VII) | a seção 4 e a tabela da política, seção 6 (**no ditado do celular, inclui o provedor escolhido e o do Polish**). Eliminar o que o provedor guardou da voz não é com a nuvem: o pedido vai ao provedor, pela conta da pessoa |
@@ -312,6 +332,18 @@ está.
    (vai para a seção 13 da cópia preenchida da política); **(b) "Segue a nota"**: a imagem fica enquanto a
    nota existir e sai com ela (a lixeira de 30 dias, "Apagar para sempre", "Apagar meus dados"), com o teto
    de 400 MB por conta, sem prazo à parte para a nota arquivada.
+13. **O dicionário do PC no celular: termos de terceiros, e a política.** A cópia traz uma coisa nova: o
+   `dicionario.json` pode ter nomes de clientes e de terceiros (o dicionário do Mauro tem 49 termos), e
+   a nuvem passa a guardá-los, legíveis (seção 2), e, com a dica ligada, a mandar até 140 caracteres
+   deles ao provedor de transcrição (seção 1). A finalidade é a mesma (usar o dicionário no ditado do
+   celular), **ninguém novo recebe** os termos, e a pessoa escolhe: a opção é por PC e vem desligada.
+   Duas perguntas ao responsável: **(a)** o texto novo da política (`docs/politica-de-privacidade.md`)
+   diz que o dicionário **não** fica só no PC quando a opção está ligada; **a política publicada hoje diz
+   o contrário, e o deploy do código espera a aprovação e a republicação** (ADR-023, risco 4); **(b)** se
+   a cópia, que fica enquanto a opção estiver ligada e não vence com os 6 meses, serve, ou se ele quer um
+   prazo. **(a) está com o Mauro para aprovar; (b) segue a escolha da ADR-023** (a cópia sai ao desligar,
+   ao revogar ou desconectar o PC, no "Apagar meus dados" e depois de uma restauração; o backup cifrado a
+   guarda pelo prazo dele), sem prazo à parte.
 
 Já aceitos no projeto (D3 da ADR-019) e descritos na política: o aprendido desfeito na nuvem e no
 backup; as cópias do banco no PC; o Polish fora da nuvem (no PC). Na instância de referência, a revisão
@@ -326,6 +358,10 @@ Já decididos com as imagens das notas (ADR-022, N10) e descritos na política: 
 sob a mesma permissão das notas (decisão do Mauro, 28-out-2026); a redução e a limpeza de metadado no
 aparelho, antes de subir; o original que nunca sai; o celular que não guarda a imagem (decisão do Mauro:
 "Imagem sem rede"); o teto de 400 MB por conta.
+
+Já decidido com o dicionário do PC no celular (ADR-023, decisões do Mauro de 05-nov-2026): a cópia só do
+PC à nuvem, e só com a opção "Levar o dicionário para o celular" ligada (desligada por padrão); o que
+ela leva e o que fica no PC (seção 1); a retenção enquanto a opção estiver ligada (seção 3).
 
 ---
 
@@ -378,6 +414,10 @@ entra aqui.
 | **Imagens das notas:** a redução e a limpeza de metadado no aparelho; o servidor confere e guarda a cópia limpa | `web/src/notas/reduzirImagem.ts`; `internal/imagemdanota` (`Conferir`); `09`, "Imagens das notas na nuvem e no celular" |
 | **Imagens das notas no celular:** nada em disco (só a URL `blob:` na memória da aba); o `GET` responde `no-store`; o service worker não as toca | `web/src/nuvem/notas/urlDaImagem.ts`; `web/pwa/sw.js`; `bundle.test.ts` (as linhas do `/api/v1/notes/*/images/*` e a regra do `createObjectURL`); `06`, `GET /notes/{id}/images/{imagem}` |
 | **Imagens das notas:** o "Apagar meus dados" as apaga; a CSP deixa o `blob:` só no `img-src` | `internal/server/pgstore/contas.go:104` (`DELETE FROM note_images`); `internal/server/seguranca.go` (`csp`) |
+| **Dicionário do PC (ADR-023):** a cópia sem o mapa de domínios, sem os ids de amostra e com o usuário `copia`; os limites (512 KiB, 2.000 termos, 50 variantes por termo, 10.000 no total) | `internal/dictionary/copia.go` (`ParaACopia`, `ValidarCopia`, `LerCopia`) |
+| **Dicionário do PC:** uma cópia por conta, a opção desligada por padrão, só com o token de um PC | `migrations/0027_dictionary_copies_table.sql`; `internal/storage/migrations/0016_local_settings_copia_do_dicionario.sql`; `internal/server/dicionario_routes.go`; `internal/server/rotas.go` (`AcessoAparelho`) |
+| **Dicionário do PC:** sai ao desligar, ao revogar ou desconectar o PC, no "Apagar meus dados" e depois de uma restauração | `internal/server/pgstore/dicionario.go`; `pareamento.go` (`RevogarAparelho`); `contas.go` (`apagarDaConta`); `restauracao.go` (`sqlApagarTodasAsCopiasDoDicionario`) |
+| **Dicionário do PC:** a dica leva a do PC (até 140 caracteres) quando há cópia; o log só tem contagens | `internal/smartconta/dica.go` (`DicaDaCopia`); `internal/server/ditar_trabalho.go` (`lerCopiaDoDicionario`, a linha `ditado`) |
 | **Notas:** a separação em itens com o Polish, só a linha, só no PC | `09`, "Polish: o que sai da máquina" (a nota da N5); ADR-022, "Formatar: converter trecho" e "Decisões da N8" |
 
 ## A pré-condição do `09`, item a item
