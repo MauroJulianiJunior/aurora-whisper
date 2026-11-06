@@ -43,6 +43,17 @@ propus", sem objeção):
   prioridade, até 140 caracteres, atrás da opção "dica" que já existe no celular.
 - **Um PC só é a fonte:** ligar a opção num PC passa a fonte para ele.
 
+Em 06-nov-2026, com o código pronto, o Mauro aprovou ("aprovado") três pontos que ficaram para ele:
+
+- **o texto novo da política de privacidade** (o dicionário nas seções 1, 3 a 8 e 12, a entrada da
+  seção 13 e o anexo);
+- **a versão 2 do aviso do ditado no celular:** o item da dica da folha do aceite dizia "os termos que
+  você ensinou ao Aurora Whisper" e passa a dizer de onde vêm os termos (os do dicionário do PC, se ele
+  foi levado para o celular; senão, os ensinados). Subir a versão pede o aceite de novo a quem aceitou a
+  1, o próprio Mauro entre eles: é o custo de o aceite continuar dizendo a verdade (`VERSAO_DO_AVISO` e
+  `cloudstore.VersaoDoAviso` = 2, com a impressão da versão 2 no `avisoDoDitado.test.ts`);
+- **a linha do `CLAUDE.md`** que deixava o dicionário completo "para depois".
+
 ## Decisão
 
 ### A. A cópia: o arquivo, menos o que diz de programas e de amostras

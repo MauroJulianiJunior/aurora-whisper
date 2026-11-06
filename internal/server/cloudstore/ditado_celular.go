@@ -28,7 +28,7 @@ import (
 // (TestVersaoDoAviso_AppEServidorConferem) lê o arquivo do app e prende os
 // dois números: subir um sem o outro quebra a suíte, e não o primeiro aceite
 // de alguém.
-const VersaoDoAviso = 1
+const VersaoDoAviso = 2
 
 // Quem transcreve e quem faz o Polish no celular. A transcrição é OpenAI ou
 // Groq; o Polish, OpenAI ou Anthropic (decisões D e N). São as listas dos

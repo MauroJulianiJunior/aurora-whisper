@@ -1065,8 +1065,10 @@ versão** e pede o aceite de novo.
     escolhido. **Não é gravada no aparelho nem no servidor.** O provedor pode guardá-la: veja abaixo.
   - **A sua chave de API.** Colada uma vez. O servidor a guarda cifrada, mas **quem administra o servidor
     consegue decifrá-la**. Use uma chave só para o celular, com limite de gasto no provedor.
-  - **Se ligar a dica:** os termos que a pessoa ensinou, junto com a voz, em todo ditado; **podem ser
-    nomes de clientes ou de outras pessoas**. A dica começa desligada.
+  - **Se ligar a dica:** termos do dicionário da pessoa, junto com a voz, em todo ditado: os do
+    dicionário do PC, se ela o levou para o celular; senão, os que ela ensinou; **podem ser nomes de
+    clientes ou de outras pessoas**. A dica começa desligada. (Versão 2 do aviso, 06-nov-2026, ADR-023.
+    A 1 dizia "os termos que você ensinou ao Aurora Whisper"; quem a aceitou aceita de novo.)
   - **Se ligar o Polish:** o texto do ditado, para a OpenAI ou a Anthropic, com a chave dela. O Polish
     começa desligado. (Ao ligá-lo, a folha diz "O Polish que você está ligando" e o nome do provedor.)
 - **Para onde, e por quanto tempo fica lá:** um bloco por provedor em uso, com **só o que a documentação

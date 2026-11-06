@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest'
 import { Conflito, ErroDaApi, ForaDoAr, SemSessao } from '../api'
 import { aprendido, ditadoComOPolish, itemNuvem, servidorFalsoNuvem } from '../testes/servidorFalsoNuvem'
+import { VERSAO_DO_AVISO } from './avisoDoDitado'
 import { criarClienteNuvem, criarPortao } from './cliente'
 
 const em = (dia: number, hora: number) => new Date(2026, 9, dia, hora).toISOString()
@@ -369,7 +370,7 @@ describe('ditar', () => {
 // as formas dele estão presas ao 06 em contratoDoDitado.test.ts). Aqui se prova
 // o que o app envia e como lê o que recebe.
 describe('o ditado pelo celular na conta', () => {
-  const aceite = { versao: 1, transcricao: 'openai' as const, polish: null, aceito_em: '2026-10-09T12:00:00.000Z' }
+  const aceite = { versao: VERSAO_DO_AVISO, transcricao: 'openai' as const, polish: null, aceito_em: '2026-10-09T12:00:00.000Z' }
   // Como o app lê o aceite em aberto: com o `vigente` que o servidor diz.
   const lido = { ...aceite, vigente: true }
   // As preferências de uma conta nova: o servidor guarda sempre o modelo de
@@ -437,7 +438,7 @@ describe('o ditado pelo celular na conta', () => {
   })
 
   it('o aceite de uma versão velha do aviso vem com vigente: false (o servidor é quem diz)', async () => {
-    const { cliente } = montar({ ditado: { aceite }, versaoDoAviso: 2 })
+    const { cliente } = montar({ ditado: { aceite }, versaoDoAviso: VERSAO_DO_AVISO + 1 })
     expect((await cliente.estadoDoDitado()).aceite).toEqual({ ...aceite, vigente: false })
   })
 
@@ -496,23 +497,23 @@ describe('o ditado pelo celular na conta', () => {
 
   it('aceitar é um POST com a versão do aviso, a transcrição e o Polish, no corpo; sem Polish, o campo não vai', async () => {
     const { srv, cliente } = montar({ ditado: {} })
-    const aceito = await cliente.aceitarAviso(1, 'groq', 'anthropic')
-    expect(aceito).toEqual({ versao: 1, transcricao: 'groq', polish: 'anthropic', aceito_em: expect.any(String), vigente: true })
+    const aceito = await cliente.aceitarAviso(VERSAO_DO_AVISO, 'groq', 'anthropic')
+    expect(aceito).toEqual({ versao: VERSAO_DO_AVISO, transcricao: 'groq', polish: 'anthropic', aceito_em: expect.any(String), vigente: true })
     const [p] = srv.pedidos
     expect([p!.metodo, p!.caminho, p!.busca.toString()]).toEqual(['POST', '/api/v1/dictation/consent', ''])
-    expect(p!.corpo).toEqual({ versao: 1, transcricao: 'groq', polish: 'anthropic' })
-    expect(srv.daConta.aceite).toMatchObject({ versao: 1, transcricao: 'groq', polish: 'anthropic' })
+    expect(p!.corpo).toEqual({ versao: VERSAO_DO_AVISO, transcricao: 'groq', polish: 'anthropic' })
+    expect(srv.daConta.aceite).toMatchObject({ versao: VERSAO_DO_AVISO, transcricao: 'groq', polish: 'anthropic' })
 
     // Aceitar de novo substitui o aceite em aberto; o aviso sem Polish não o leva.
-    await cliente.aceitarAviso(1, 'openai', null)
-    expect(srv.pedidos[1]!.corpo).toEqual({ versao: 1, transcricao: 'openai' })
+    await cliente.aceitarAviso(VERSAO_DO_AVISO, 'openai', null)
+    expect(srv.pedidos[1]!.corpo).toEqual({ versao: VERSAO_DO_AVISO, transcricao: 'openai' })
     expect(srv.daConta.aceite).toMatchObject({ transcricao: 'openai', polish: null })
   })
 
   it('só a versão atual do aviso vale: a velha é 409 AVISO_DESATUALIZADO (ErroDaApi.codigo, e não Conflito), e nada é gravado', async () => {
-    // O servidor passou à versão 2 depois de este app abrir com o texto da 1.
-    const { srv, cliente } = montar({ ditado: {}, versaoDoAviso: 2 })
-    const e = (await cliente.aceitarAviso(1, 'openai', null).catch((x: unknown) => x)) as ErroDaApi
+    // O servidor passou à versão seguinte depois de este app abrir com o texto da atual.
+    const { srv, cliente } = montar({ ditado: {}, versaoDoAviso: VERSAO_DO_AVISO + 1 })
+    const e = (await cliente.aceitarAviso(VERSAO_DO_AVISO, 'openai', null).catch((x: unknown) => x)) as ErroDaApi
     expect(e).toBeInstanceOf(ErroDaApi)
     expect([e.status, e.codigo]).toEqual([409, 'AVISO_DESATUALIZADO'])
     expect(srv.daConta.aceite).toBeNull()
@@ -521,7 +522,7 @@ describe('o ditado pelo celular na conta', () => {
   it('um 200 sem o aceite gravado não é um aceite: ErroDaApi, e a folha não fecha como se tivesse dado certo', async () => {
     const { srv, cliente } = montar({ ditado: {} })
     srv.interceptar(() => new Response(JSON.stringify({ aceite: null })))
-    const e = (await cliente.aceitarAviso(1, 'openai', null).catch((x: unknown) => x)) as ErroDaApi
+    const e = (await cliente.aceitarAviso(VERSAO_DO_AVISO, 'openai', null).catch((x: unknown) => x)) as ErroDaApi
     expect(e).toBeInstanceOf(ErroDaApi)
     expect(e.status).toBe(502)
   })
@@ -643,7 +644,7 @@ describe('o ditado pelo celular na conta', () => {
     const { srv, cliente } = montar({ ditado: { aceite } })
     await cliente.estadoDoDitado()
     await cliente.salvarPreferencias(preferencias)
-    await cliente.aceitarAviso(1, 'openai', null)
+    await cliente.aceitarAviso(VERSAO_DO_AVISO, 'openai', null)
     await cliente.guardarChave('openai', 'sk-teste-do-celular-ABCD')
     await cliente.modelosDaChave('openai')
     await cliente.removerChave('openai')

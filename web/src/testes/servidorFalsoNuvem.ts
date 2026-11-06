@@ -274,7 +274,7 @@ const provedoresDePolishFalsos: string[] = ['openai', 'anthropic']
 // web/src/nuvem/avisoDoDitado.ts (VERSAO_DO_AVISO): quem prende os dois é o
 // aviso.test.ts, e quem prende aquela à do servidor de verdade é o teste do Go
 // TestVersaoDoAviso_AppEServidorConferem.
-export const versaoDoAvisoNoServidorFalso = 1
+export const versaoDoAvisoNoServidorFalso = 2
 
 // Os modelos padrão da transcrição (cloudstore.ModeloPadraoOpenAI e
 // ModeloPadraoGroq): o PUT com o modelo vazio os resolve, e o que se lê é sempre

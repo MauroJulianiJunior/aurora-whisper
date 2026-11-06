@@ -334,7 +334,8 @@ responsável comunica você e a autoridade (art. 48).
    - a **chave** fica cifrada no servidor, mas quem tem a raiz dele a decifra; a antiga, depois de
      "Trocar" ou "Remover", continua cifrada na cópia de segurança por cerca de 30 dias: revogue-a no
      provedor;
-   - a **dica** (os termos que você ensinou) começa **desligada**. Ligada, ela vai ao provedor em
+   - a **dica** (termos do seu dicionário: os do PC, se você o levou para o celular; senão, os que
+     você ensinou) começa **desligada**. Ligada, ela vai ao provedor em
      **todo ditado**, mesmo quando o ditado não fala deles, e **pode levar nomes de clientes ou de
      outras pessoas**. Ela também pode fazer o provedor escrever um termo que você não disse;
    - o **Polish no celular** começa desligado; ligado, o servidor manda o texto à OpenAI ou à
@@ -427,7 +428,9 @@ mesma e ninguém novo recebe os dados: as imagens não vão a nenhuma inteligên
 nuvem (a cópia do dicionário de um PC) e uma finalidade nova (o ditado no celular escrever esses
 termos), **só para quem liga a opção no PC**: sem o clique, nada muda. Com a dica ligada, os termos que
 vão ao provedor da transcrição passam a ser os do dicionário do PC, até o mesmo limite de 140
-caracteres. **[A PREENCHER: como o responsável avisou quem já usava a nuvem antes do dicionário.]**
+caracteres. A folha do aceite do ditado no celular passou à versão 2 do aviso, que diz de onde vêm os
+termos da dica, e quem tinha aceitado a versão 1 aceita de novo antes do próximo ditado. **[A PREENCHER:
+como o responsável avisou quem já usava a nuvem antes do dicionário.]**
 
 ---
 
@@ -475,12 +478,14 @@ para o celular", desligada por padrão, com "O celular passa a usar os termos de
 aqui."; ligada, "49 termos, enviados às 14:02."; com outro PC como fonte, "Hoje o celular usa o
 dicionário de NOTEBOOK. Ligar aqui passa a usar o deste PC."
 
-## A folha do aceite do ditado no celular (versão 1 do aviso; proposta)
+## A folha do aceite do ditado no celular (versão 2 do aviso; proposta)
 
 Aparece no primeiro toque no microfone, **antes** de o microfone abrir e de o app pedir a chave. É uma
 folha só, em destaque, separada das outras finalidades. Os botões são **Aceito** e **Agora não**. A
 identificação da versão do aviso é da C3b: **qualquer mudança neste texto muda a versão e pede o aceite
-de novo.** Onde há `{...}`, o app mostra o bloco do provedor que a pessoa escolheu.
+de novo.** Onde há `{...}`, o app mostra o bloco do provedor que a pessoa escolheu. A versão 1, até
+06-nov-2026, dizia no item da dica "os termos que você ensinou ao Aurora Whisper"; a 2 diz de onde vêm
+os termos, porque com o dicionário do PC no celular eles podem ser os dele (ADR-023).
 
 > **Ao ditar pelo celular, a sua voz vai a um provedor que não diz processar no Brasil.**
 >
@@ -493,8 +498,9 @@ de novo.** Onde há `{...}`, o app mostra o bloco do provedor que a pessoa escol
 >   guardá-la: veja abaixo.
 > - **A sua chave de API.** Você a cola uma vez. O servidor a guarda cifrada, mas **quem administra o
 >   servidor consegue decifrá-la**. Use uma chave só para o celular, com limite de gasto no provedor.
-> - **Se você ligar a dica:** os termos que você ensinou ao Aurora Whisper, junto com a voz, em todo
->   ditado. Eles podem ser nomes de clientes ou de outras pessoas. A dica começa desligada.
+> - **Se você ligar a dica:** termos do seu dicionário, junto com a voz, em todo ditado: os do
+>   dicionário do PC, se você o levou para o celular; senão, os que você ensinou ao Aurora Whisper.
+>   Eles podem ser nomes de clientes ou de outras pessoas. A dica começa desligada.
 > - **Se você ligar o Polish:** o texto do ditado, para **{OpenAI ou Anthropic}**, com a sua chave. O
 >   Polish começa desligado.
 >

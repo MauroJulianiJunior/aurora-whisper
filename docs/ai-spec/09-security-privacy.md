@@ -719,7 +719,8 @@ PC:** `dictionary.Vocabulario` sobre o dicionário final (a cópia com o aprendi
 do Agent, até 140 caracteres; os termos com dica da pessoa vêm primeiro, depois os outros, por prioridade,
 e os termos do Aprender (só variante) ficam fora, como no PC. **Sem a cópia, é a dica de antes**, para
 quem não ligou a opção não perder o que já tinha. A opção do celular passou a se chamar "Mandar os termos
-do dicionário como dica". O que vai ao provedor continua sendo só esse texto de até 140 caracteres. O ganho de 61,2% para 79,6% da Entity Accuracy foi medido no initial prompt do whisper.cpp
+do dicionário como dica", e a folha do aceite diz de onde vêm os termos desde a versão 2 do aviso
+(06-nov-2026): quem tinha aceitado a 1 aceita de novo. O que vai ao provedor continua sendo só esse texto de até 140 caracteres. O ganho de 61,2% para 79,6% da Entity Accuracy foi medido no initial prompt do whisper.cpp
 local, **e não nos modelos da OpenAI nem no whisper da Groq**; a dica pode induzir o termo, e a própria
 OpenAI avisa disso para as palavras-chave. No PC o termo aprendido continua fora do prompt (ADR-017,
 ADR-020).

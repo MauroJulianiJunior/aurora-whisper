@@ -704,8 +704,8 @@ O estado de uma vez, para a tela de Configurações: `200` com
 
 ```json
 {
-  "aviso": { "versao": 1 },
-  "aceite": { "versao": 1, "transcricao": "openai", "polish": "anthropic",
+  "aviso": { "versao": 2 },
+  "aceite": { "versao": 2, "transcricao": "openai", "polish": "anthropic",
               "aceito_em": "2026-10-11T12:00:00Z", "vigente": true },
   "preferencias": {
     "transcricao": { "provedor": "openai", "modelo": "gpt-4o-mini-transcribe" },
@@ -765,7 +765,7 @@ Nesta ordem:
 `200` com o mesmo estado do `GET`.
 
 ### POST `/dictation/consent`
-Grava o aceite. Corpo `{ "versao": 1, "transcricao": "openai", "polish": "anthropic" }`: `versao` e
+Grava o aceite. Corpo `{ "versao": 2, "transcricao": "openai", "polish": "anthropic" }`: `versao` e
 `transcricao` obrigatórios, `polish` opcional (`null` ou ausente: o aviso não incluía o Polish). Os
 provedores são **os que a folha do aceite mostrou**. Nesta ordem:
 1. O corpo (a frase fixa `corpo inválido: mande versao, transcricao e, se houver, polish`, `400`
