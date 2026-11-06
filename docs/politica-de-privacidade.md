@@ -2,7 +2,8 @@
 
 > **Modelo para quem hospeda a própria nuvem** (ADR-019, F11b; revisado com o dossiê de LGPD,
 > `docs/lgpd-dossie.md`; **reescrito em 10-out-2026 com o ditado no celular, ADR-021, D0, e atualizado em
-> 28-out-2026 com as notas, ADR-022, e em 29-out-2026 com as imagens das notas, N10**). O projeto
+> 28-out-2026 com as notas, ADR-022, em 29-out-2026 com as imagens das notas, N10, e em 05-nov-2026 com o
+> dicionário do PC no celular, ADR-023**). O projeto
 > Aurora Whisper não tem servidor central: cada nuvem é de quem a sobe, e quem a sobe responde pelos
 > dados dela. O texto descreve o que o código faz. Antes de pôr na sua nuvem outra pessoa além de você
 > (`CONTAS_PERMITIDAS`), copie este modelo, preencha os campos **[A PREENCHER]** (o responsável, o
@@ -43,6 +44,9 @@ Este texto é para quem usa o Aurora Whisper. Está em português simples de pro
   servidor, **cifrada**, mas **quem administra o servidor consegue decifrá-la**.
 - O texto dos ditados fica **6 meses**; o das **notas**, **até você apagar**. A lixeira, **30 dias**. Uma
   cópia de segurança, cifrada, guarda tudo por mais **cerca de 30 dias**.
+- **O dicionário do PC (opcional, só se você ligar "Levar o dicionário para o celular" num PC):** uma
+  cópia dele vai à nuvem, para o ditado no celular escrever os seus termos. Ela fica **legível para quem
+  administra o servidor**, e desligar a opção a apaga. A lista de programas de cada domínio não vai.
 - **As notas** (a aba Notas) vão para a nuvem junto com os ditados, se você conectar. No **celular**, o
   app guarda a última lista das suas notas no próprio aparelho, para abrir sem internet; o **Sair** a
   apaga de lá.
@@ -83,6 +87,12 @@ Windows os alcança.
   confiança);
 - as trocas que o programa aprendeu com você (a palavra que ele escrevia errado, a certa, a restrição e
   o nome do domínio);
+- **o dicionário do PC, só se você ligar "Levar o dicionário para o celular"** no painel de um PC: cada
+  termo, as variantes dele (as formas erradas que ele corrige), a prioridade, se está desligado, a
+  restrição e o **nome** do domínio, mais de que PC a cópia veio, quantos termos ela tem e quando mudou.
+  **Os termos podem ser nomes de clientes ou de outras pessoas.** Fica uma cópia só por conta: a do
+  último PC em que você ligou a opção. A lista de programas de cada domínio, o nome do usuário do PC e
+  os números internos de medição **não vão**;
 - **as suas notas**: o título e o texto, a cor, se está fixada, arquivada ou na lixeira, a posição na
   tela, os marcadores (o nome de cada um) e, se a nota nasceu de um ditado, o número desse ditado. Se a
   mesma nota mudou em dois aparelhos ao mesmo tempo, a outra versão (o título, o texto, o aparelho e a
@@ -127,13 +137,15 @@ do aparelho (o Sair com mudança esperando a rede pergunta antes, porque ela se 
 vence não apaga. Quem pega o celular desbloqueado lê essas notas, como lê as que estão na tela.
 
 **O que nunca sai do PC:** o áudio do PC; o que está em outras janelas (o programa em uso, o título, o
-texto em volta); a chave do Polish **do PC**; os logs; as preferências do PC; o mapa de domínios. O
-app do celular nem enxerga outras janelas.
+texto em volta); a chave do Polish **do PC**; os logs; as preferências do PC; a lista de programas de
+cada domínio (o mapa de domínios), mesmo com o dicionário no celular; o dicionário inteiro, sem a opção
+ligada. O app do celular nem enxerga outras janelas.
 
 ## 4. Para que usamos
 
 Só para mostrar o seu histórico e as suas notas nos seus aparelhos (o PC e o celular), manter o
-aprendido igual em todos e deixar você editar, apagar e restaurar. Não usamos seus ditados nem suas notas
+aprendido igual em todos, deixar você editar, apagar e restaurar e, se você ligar a opção num PC, fazer o
+ditado no celular escrever os termos do dicionário desse PC. Não usamos seus ditados nem suas notas
 para treinar modelos nem para anúncios, e a nuvem, por si, não os processa com inteligência artificial
 (no ditado do celular, quem o faz é o provedor que você escolheu, como está logo abaixo). **As imagens
 das notas só são mostradas a você**: nunca vão à transcrição nem ao Polish, a busca não olha dentro
@@ -158,6 +170,10 @@ nota sobe junto com ela. Você pode
 nuvem". O programa guarda no seu PC o instante do seu clique. Se esta política mudar de um jeito que
 mexa no que você aceitou, avisamos com destaque (art. 8º, §6º).
 
+**O dicionário do PC: um clique à parte.** Conectar a nuvem não leva o dicionário. Ele só vai quando você
+liga "Levar o dicionário para o celular" no painel de um PC, que diz, ao lado da opção, o que ela faz. Você
+revoga desligando a opção, desconectando o PC ou no "Apagar meus dados", e a cópia sai da nuvem na hora.
+
 **Ditado no celular: um consentimento à parte.** O envio da voz a um provedor é outra finalidade, e por
 isso tem o seu próprio aceite, **específico, em destaque e separado das outras finalidades** (art. 8º,
 §4º; para o envio ao exterior, art. 33, VIII; para dado sensível, art. 11, I). Ele aparece no primeiro
@@ -176,8 +192,8 @@ muda**; mudar só o modelo não pede. Você revoga a qualquer momento em **Desli
 | Google (login) | que você entrou. Devolve e-mail, identificador e nome | conforme as condições do Google |
 | Backblaze B2 (cópia de segurança) | só o arquivo cifrado, que ele não consegue ler | **[A PREENCHER: região do bucket]** |
 | O servidor de entrada (o que atende o https, no mesmo servidor) | o endereço IP de quem acessa e o endereço pedido, só de passagem: o registro de acesso dele fica **desligado** para a nuvem. Ele ainda pode registrar um pedido que chegue com a nuvem fora do ar, ou pelo http sem o "s" (que ele manda para o https). **No ditado do celular, a voz passa por ele**, e ele pode segurar pedaços dela na memória dele | o mesmo lugar da VPS |
-| **OpenAI** (ditado no celular), se você a escolher para transcrever | a voz; com a dica ligada, os termos do que você ensinou. Com o Polish: o texto | nos EUA ou na Europa, **se o projeto da sua chave tiver a residência de dados fixada** (uma opção para contas elegíveis; a página manda falar com o comercial da OpenAI para saber); **sem isso, a documentação que lemos não diz em que país**. O Brasil não aparece nela |
-| **Groq** (ditado no celular), se você a escolher para transcrever | a voz; com a dica ligada, os termos do que você ensinou | o que ela guarda fica em servidores nos **EUA**; **a documentação não diz onde a transcrição roda**; o contrato dela prevê tratamento nos EUA e em outros países |
+| **OpenAI** (ditado no celular), se você a escolher para transcrever | a voz; com a dica ligada, até 140 caracteres de termos do seu dicionário (os do PC, se você levou o dicionário para o celular; senão, os que você ensinou). Com o Polish: o texto | nos EUA ou na Europa, **se o projeto da sua chave tiver a residência de dados fixada** (uma opção para contas elegíveis; a página manda falar com o comercial da OpenAI para saber); **sem isso, a documentação que lemos não diz em que país**. O Brasil não aparece nela |
+| **Groq** (ditado no celular), se você a escolher para transcrever | a voz; com a dica ligada, até 140 caracteres de termos do seu dicionário (os do PC, se você levou o dicionário para o celular; senão, os que você ensinou) | o que ela guarda fica em servidores nos **EUA**; **a documentação não diz onde a transcrição roda**; o contrato dela prevê tratamento nos EUA e em outros países |
 | **OpenAI ou Anthropic** (Polish, no PC ou no celular), se você ligar | o texto final (4 palavras ou mais); **no PC, também a linha de uma nota que você pede para separar em itens** (pelo Formatar) | a confirmar. No PC a chamada sai do seu PC; no celular, do servidor da nuvem |
 
 Com a VPS no Brasil, o texto legível dos seus ditados fica no Brasil. O que sai do Brasil é a cópia de
@@ -221,6 +237,7 @@ que o provedor diz hoje, vale o que o provedor diz. As páginas lidas estão cit
 | Ditado que virou nota | os 6 meses de todo ditado, na nuvem e no PC (no PC, depois do seu OK na tela Histórico). O texto continua na nota |
 | **Imagens das notas** | **a vida da nota**: não têm os 6 meses dos ditados. A imagem que você tira da nota (com o Desfazer de alguns segundos) some de vez, no PC e na nuvem. Com a nota na lixeira, ficam 30 dias, e "Apagar para sempre" as apaga junto. A **cópia de segurança** guarda as imagens como guarda o resto do banco: cerca de **30 dias** depois de apagadas |
 | Notas guardadas no celular | até o Sair ou o "Apagar meus dados". O navegador pode apagá-las antes, se faltar espaço no aparelho |
+| **Dicionário do PC (a cópia)** | **enquanto a opção "Levar o dicionário para o celular" estiver ligada** no PC de onde ela veio. Desligar a opção, desconectar esse PC ou o "Apagar meus dados" a apaga na hora. A **cópia de segurança** a guarda como guarda o resto do banco: cerca de **30 dias** |
 | Trocas aprendidas | enquanto você não as desfaz. **Depois de desfeita, a nuvem guarda a troca (a palavra e a certa), marcada como desfeita, enquanto a sua conta existir** (seção 10) |
 | Sessão do navegador | 30 dias sem uso, e no máximo 90 desde o login |
 | PC conectado | 180 dias sem uso |
@@ -243,7 +260,7 @@ eliminação, pedir cópia, saber com quem compartilhamos e revogar o consentime
 - **mandar para a lixeira**, **restaurar**, e **excluir definitivamente** (só de um ditado ou de uma nota
   que está na lixeira; a nota leva as imagens dela). **Tirar da nota** uma imagem só (o × dela, com o
   Desfazer) a apaga de vez, no PC e na nuvem;
-- **Apagar meus dados da nuvem**: apaga seus ditados, suas notas **e as imagens delas**, os marcadores, as marcas, o aprendido, os
+- **Apagar meus dados da nuvem**: apaga seus ditados, suas notas **e as imagens delas**, os marcadores, as marcas, o aprendido, a cópia do dicionário, os
   PCs conectados, as outras sessões, as notas guardadas no celular em que você clicou e, se você ligou o
   ditado no celular, **o aceite, as preferências e as chaves**. Os seus PCs ficam com a cópia deles, e a
   cópia de segurança guarda o que apagamos até girar (seção 7);
@@ -317,7 +334,8 @@ responsável comunica você e a autoridade (art. 48).
    - a **chave** fica cifrada no servidor, mas quem tem a raiz dele a decifra; a antiga, depois de
      "Trocar" ou "Remover", continua cifrada na cópia de segurança por cerca de 30 dias: revogue-a no
      provedor;
-   - a **dica** (os termos que você ensinou) começa **desligada**. Ligada, ela vai ao provedor em
+   - a **dica** (termos do seu dicionário: os do PC, se você o levou para o celular; senão, os que
+     você ensinou) começa **desligada**. Ligada, ela vai ao provedor em
      **todo ditado**, mesmo quando o ditado não fala deles, e **pode levar nomes de clientes ou de
      outras pessoas**. Ela também pode fazer o provedor escrever um termo que você não disse;
    - o **Polish no celular** começa desligado; ligado, o servidor manda o texto à OpenAI ou à
@@ -370,8 +388,11 @@ eles antes de conectar a nuvem.
 **Ditado no celular: a voz e a dica também podem levar dado de outras pessoas.**
 - A **voz** leva o que você diz e **o que o microfone captar** (a voz de quem está perto, uma conversa
   ao fundo), e vai a um provedor que não diz processar no Brasil.
-- A **dica**, se você a ligar, leva os termos que você ensinou ao Aurora Whisper em todo ditado, mesmo
-  nos que não falam deles; **esses termos podem ser nomes de clientes ou de terceiros**.
+- A **dica**, se você a ligar, leva termos do seu dicionário (os do PC, se você levou o dicionário para o
+  celular; senão, os que você ensinou) em todo ditado, mesmo nos que não falam deles; **esses termos
+  podem ser nomes de clientes ou de terceiros**.
+- O **dicionário do PC**, se você ligar a opção, fica na nuvem com os mesmos termos: o que vale para eles
+  no seu PC passa a valer também no servidor.
 - O **seu aceite vale por você, e não por essas pessoas.** Se você dita dado de cliente, você pode estar
   como operador desse dado (art. 5º, VII), que deve seguir as instruções de quem o controla (art. 39), e
   mandar a voz ou os termos a um provedor no exterior pode ir além do que o cliente autorizou. **A
@@ -403,6 +424,14 @@ nuvem (a imagem reduzida no seu aparelho, sem metadado) e um teto de 400 MB por 
 mesma e ninguém novo recebe os dados: as imagens não vão a nenhuma inteligência artificial.
 **[A PREENCHER: como o responsável avisou quem já usava a nuvem antes das imagens.]**
 
+**05-nov-2026 (ADR-023):** esta política ganhou o dicionário do PC no celular. Ele traz um dado novo na
+nuvem (a cópia do dicionário de um PC) e uma finalidade nova (o ditado no celular escrever esses
+termos), **só para quem liga a opção no PC**: sem o clique, nada muda. Com a dica ligada, os termos que
+vão ao provedor da transcrição passam a ser os do dicionário do PC, até o mesmo limite de 140
+caracteres. A folha do aceite do ditado no celular passou à versão 2 do aviso, que diz de onde vêm os
+termos da dica, e quem tinha aceitado a versão 1 aceita de novo antes do próximo ditado. **[A PREENCHER:
+como o responsável avisou quem já usava a nuvem antes do dicionário.]**
+
 ---
 
 # Os textos do app sobre privacidade
@@ -416,7 +445,9 @@ código é a fonte: se este anexo e o app divergirem, vale o app, e este anexo s
 hoje):
 
 - Vão para a nuvem: o texto dos ditados, com a data, o PC de origem e os detalhes da transcrição, as
-  notas, com os marcadores, e as trocas aprendidas. O texto fica legível para quem administra o servidor.
+  notas, com os marcadores e as imagens, as trocas aprendidas e, se você ligar num PC, a cópia do
+  dicionário dele. O texto e as imagens ficam legíveis para quem administra o servidor. *(Atualizado em
+  05-nov-2026 com a ADR-023; esta é a frase do app.)*
 - Os ditados ficam 6 meses; as notas, até você apagar (a lixeira, 30 dias). Uma cópia cifrada guarda tudo
   por cerca de 30 dias além disso.
 - Do PC nunca vão: o áudio, o que está nas outras janelas, a chave do Polish e as configurações dos PCs.
@@ -438,15 +469,23 @@ no Brasil." (com a VPS no Brasil; a cópia de segurança cifrada fora do Brasil 
 condição do art. 33) foi proposta aqui e **não está no app** (conferido em 28-out-2026).
 
 **PC, seção Privacidade** (`web/src/Configuracoes.tsx`): com a nuvem conectada, "o texto dos seus ditados,
-as suas notas e as trocas que você aprendeu vão para a sua nuvem"; e "Com o Polish ligado, separar em
-itens uma linha de uma nota (pelo Formatar) manda essa linha ao mesmo provedor."
+as suas notas com as imagens e as trocas que você aprendeu vão para a sua nuvem", seguido de "O dicionário
+só vai se você ligar “Levar o dicionário para o celular”." (ADR-023, 05-nov-2026); e "Com o Polish ligado,
+separar em itens uma linha de uma nota (pelo Formatar) manda essa linha ao mesmo provedor."
 
-## A folha do aceite do ditado no celular (versão 1 do aviso; proposta)
+**PC, Configurações › Nuvem** (`web/src/DicionarioNoCelular.tsx`, ADR-023): a opção "Levar o dicionário
+para o celular", desligada por padrão, com "O celular passa a usar os termos deste PC. Editar continua
+aqui."; ligada, "49 termos, enviados às 14:02."; com outro PC como fonte, "Hoje o celular usa o
+dicionário de NOTEBOOK. Ligar aqui passa a usar o deste PC."
+
+## A folha do aceite do ditado no celular (versão 2 do aviso; proposta)
 
 Aparece no primeiro toque no microfone, **antes** de o microfone abrir e de o app pedir a chave. É uma
 folha só, em destaque, separada das outras finalidades. Os botões são **Aceito** e **Agora não**. A
 identificação da versão do aviso é da C3b: **qualquer mudança neste texto muda a versão e pede o aceite
-de novo.** Onde há `{...}`, o app mostra o bloco do provedor que a pessoa escolheu.
+de novo.** Onde há `{...}`, o app mostra o bloco do provedor que a pessoa escolheu. A versão 1, até
+06-nov-2026, dizia no item da dica "os termos que você ensinou ao Aurora Whisper"; a 2 diz de onde vêm
+os termos, porque com o dicionário do PC no celular eles podem ser os dele (ADR-023).
 
 > **Ao ditar pelo celular, a sua voz vai a um provedor que não diz processar no Brasil.**
 >
@@ -459,8 +498,9 @@ de novo.** Onde há `{...}`, o app mostra o bloco do provedor que a pessoa escol
 >   guardá-la: veja abaixo.
 > - **A sua chave de API.** Você a cola uma vez. O servidor a guarda cifrada, mas **quem administra o
 >   servidor consegue decifrá-la**. Use uma chave só para o celular, com limite de gasto no provedor.
-> - **Se você ligar a dica:** os termos que você ensinou ao Aurora Whisper, junto com a voz, em todo
->   ditado. Eles podem ser nomes de clientes ou de outras pessoas. A dica começa desligada.
+> - **Se você ligar a dica:** termos do seu dicionário, junto com a voz, em todo ditado: os do
+>   dicionário do PC, se você o levou para o celular; senão, os que você ensinou ao Aurora Whisper.
+>   Eles podem ser nomes de clientes ou de outras pessoas. A dica começa desligada.
 > - **Se você ligar o Polish:** o texto do ditado, para **{OpenAI ou Anthropic}**, com a sua chave. O
 >   Polish começa desligado.
 >
@@ -510,8 +550,13 @@ dela **não foi relida** na D0).
 - **Ao colar a chave:** "Use uma chave só para o celular, com limite de gasto no provedor."
 - **Depois de salva:** "Chave terminada em WXYZ." Com **Trocar** e **Remover**, que mostram: "Revogue
   também esta chave no provedor. Uma cópia cifrada dela fica nos backups por cerca de 30 dias."
-- **A dica:** "Mandar os termos aprendidos como dica. Eles vão ao provedor junto com a voz, em todo
-  ditado, e podem ser nomes de clientes ou de outras pessoas."
+- **A dica:** "Mandar os termos do dicionário como dica. Vão ao provedor junto com a voz, em todo
+  ditado, e podem ser nomes de clientes ou de outras pessoas. São os do dicionário do PC, se ele foi
+  levado para o celular; senão, os que você ensinou." (ADR-023, 05-nov-2026; antes, "Mandar os termos
+  aprendidos como dica".)
+- **O dicionário:** "Dicionário: o do PC-DO-MAURO, 49 termos (atualizado em 05/11 às 14:02)." ou, sem a
+  cópia, "Sem o dicionário do PC. Para usá-lo aqui, ligue “Levar o dicionário para o celular” no painel
+  do PC."
 - **O Polish:** "Organizar o texto com o Polish. O texto do ditado vai ao provedor do Polish." (reabre a
   folha se o provedor for outro).
 - **Desligar:** "Isto tira o seu aceite e apaga as suas chaves do servidor. Não apaga os ditados já

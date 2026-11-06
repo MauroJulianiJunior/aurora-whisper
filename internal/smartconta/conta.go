@@ -44,6 +44,14 @@ type Resumo struct {
 	NaoAplicados int
 	// Termos são os termos que o Smart da conta tem.
 	Termos int
+	// TermosDaCopia são os termos da cópia do dicionário do PC (ADR-023, D), de
+	// onde a montagem partiu; 0 sem cópia.
+	TermosDaCopia int
+	// ComCopia diz se a montagem partiu da cópia do dicionário do PC.
+	ComCopia bool
+	// JaNaCopia são os pares que a cópia já tem (a mesma variante, do mesmo
+	// termo): não passam pelo lote, que não mudaria nada.
+	JaNaCopia int
 }
 
 // Conta é o Smart da conta: o resolver montado do aprendido que a nuvem guarda,
@@ -55,29 +63,51 @@ type Conta struct {
 	resumo  Resumo
 }
 
-// Montar monta o Smart da conta a partir do aprendido dela, pelo MESMO caminho
-// do PC que recebe o aprendido da nuvem: Semente{}.AplicarPares com as mesmas
-// conferências (Conferencias), depois SmartDaSemente. O dicionário completo de
-// cada PC (os termos de antes, os adicionados, os pares presos a um domínio)
-// não existe na nuvem, e com o mesmo caminho os mesmos pares dão o mesmo
-// resultado que dariam num PC de dicionário vazio.
+// Montar monta o Smart da conta a partir do aprendido dela, sem a cópia do
+// dicionário de um PC: é MontarComCopia com a cópia nil, o PC de dicionário
+// vazio.
+func Montar(usuario string, pares []dictionary.ParDaNuvem) (*Conta, error) {
+	return MontarComCopia(usuario, nil, pares)
+}
+
+// MontarComCopia monta o Smart da conta pelo MESMO caminho do PC que recebe o
+// aprendido da nuvem: a semente do dicionário, AplicarPares com as mesmas
+// conferências (Conferencias), depois SmartDaSemente.
+//
+// A semente é a cópia do dicionário do PC que é a fonte (ADR-023, D), já
+// conferida por dictionary.LerCopia, com o usuário trocado pelo dono da conta;
+// sem cópia (nil), é a semente vazia, e os mesmos pares dão o mesmo resultado
+// que dariam num PC de dicionário vazio. A cópia não é alterada: a montagem
+// trabalha num clone.
 //
 // pares vêm na ordem do ListLearned: do mais recente (last_seq) ao mais antigo.
 // O lote os aplica do mais antigo ao mais novo, a ordem em que o pull os entrega
 // ao PC, porque quem entra primeiro leva a melhor num conflito (uma variante de
 // um termo que é variante de outro). Só entram os pares ativos e sem domínio
 // (veja Resumo.ComDominio); os outros não mudam nada, como no PC de dicionário
-// vazio (dominio_ausente e ausente).
+// vazio (dominio_ausente e ausente). Um par que a cópia já tem (o PC fonte já o
+// recebeu pelo pull) não muda nada, como no PC.
 //
 // O erro nunca traz a variante, o termo nem o domínio.
-func Montar(usuario string, pares []dictionary.ParDaNuvem) (*Conta, error) {
+func MontarComCopia(usuario string, copia *dictionary.Semente, pares []dictionary.ParDaNuvem) (*Conta, error) {
 	if usuario == "" {
 		return nil, ErrSemUsuario
+	}
+	base := dictionary.Semente{Usuario: usuario}
+	if copia != nil {
+		base = clonarSemente(*copia)
+		base.Usuario = usuario
 	}
 	if len(pares) > MaxPares {
 		pares = pares[:MaxPares]
 	}
 	resumo := Resumo{Recebidos: len(pares)}
+	var jaTem map[string]string
+	if copia != nil {
+		resumo.ComCopia = true
+		resumo.TermosDaCopia = len(copia.Entradas)
+		jaTem = variantesDaCopia(base)
+	}
 	aplicaveis := make([]dictionary.ParDaNuvem, 0, len(pares))
 	for i := len(pares) - 1; i >= 0; i-- {
 		p := pares[i]
@@ -86,6 +116,11 @@ func Montar(usuario string, pares []dictionary.ParDaNuvem) (*Conta, error) {
 			resumo.Desfeitos++
 		case p.Dominio != "":
 			resumo.ComDominio++
+		case jaTem != nil && jaTem[chaveDaCopia(p.Variante)] == chaveDaCopia(p.Termo):
+			// O par que a cópia já tem (o PC fonte já o recebeu pelo pull): o
+			// lote não mudaria nada, e conferi-lo de novo custa uma volta pelo
+			// dicionário inteiro (ADR-023, "Riscos").
+			resumo.JaNaCopia++
 		default:
 			aplicaveis = append(aplicaveis, p)
 		}
@@ -94,7 +129,7 @@ func Montar(usuario string, pares []dictionary.ParDaNuvem) (*Conta, error) {
 	// As conferências são as do PC; o "agiria" acompanha a semente em vez de
 	// montar um Smart novo a cada par (acompanhante.go).
 	conferencias, acompanha := conferenciasDaConta()
-	semente, lote, err := dictionary.Semente{Usuario: usuario}.AplicarPares(aplicaveis, conferencias)
+	semente, lote, err := base.AplicarPares(aplicaveis, conferencias)
 	if err != nil {
 		return nil, ErrMontar
 	}
@@ -114,6 +149,60 @@ func Montar(usuario string, pares []dictionary.ParDaNuvem) (*Conta, error) {
 		return nil, ErrMontar
 	}
 	return &Conta{usuario: usuario, smart: smart, resumo: resumo}, nil
+}
+
+// variantesDaCopia indexa as variantes SEM restrição da semente pela chave
+// (chaveDaCopia), cada uma com a chave do termo dela. Os pares que chegam aqui
+// são sem domínio e sem restrição, então só a variante comum é "o mesmo par": a
+// restrita o lote poderia tratar de outro jeito, e fica com ele. Uma variante
+// que aparece em dois termos também fica com o lote.
+func variantesDaCopia(s dictionary.Semente) map[string]string {
+	idx := map[string]string{}
+	repetidas := map[string]bool{}
+	for _, e := range s.Entradas {
+		termo := chaveDaCopia(e.Canonica)
+		for _, v := range e.Alias {
+			k := chaveDaCopia(v)
+			if k == "" || repetidas[k] {
+				continue
+			}
+			if t, ok := idx[k]; ok && t != termo {
+				delete(idx, k)
+				repetidas[k] = true
+				continue
+			}
+			idx[k] = termo
+		}
+	}
+	return idx
+}
+
+// chaveDaCopia é a comparação do lote do Aprender (dictionary: mesmaCoisa): a
+// forma normalizada, com os espaços colapsados.
+func chaveDaCopia(s string) string {
+	return dictionary.CollapseSpaces(dictionary.Normalize(s))
+}
+
+// clonarSemente copia a semente sem dividir as listas nem os mapas com ela: a
+// cópia do dicionário pode estar em uso por outra montagem.
+func clonarSemente(s dictionary.Semente) dictionary.Semente {
+	c := dictionary.Semente{Usuario: s.Usuario, Entradas: make([]dictionary.EntradaSemente, 0, len(s.Entradas))}
+	if s.Dominios != nil {
+		c.Dominios = make(map[string][]string, len(s.Dominios))
+		for d, apps := range s.Dominios {
+			c.Dominios[d] = append([]string(nil), apps...)
+		}
+	}
+	if s.AliasOrigem != nil {
+		c.AliasOrigem = make(map[string]string, len(s.AliasOrigem))
+		for v, o := range s.AliasOrigem {
+			c.AliasOrigem[v] = o
+		}
+	}
+	for _, e := range s.Entradas {
+		c.Entradas = append(c.Entradas, copiaDaEntrada(e))
+	}
+	return c
 }
 
 // Resumo devolve as contagens da montagem.

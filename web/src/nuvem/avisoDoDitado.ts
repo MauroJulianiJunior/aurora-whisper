@@ -13,4 +13,4 @@
 // (TestVersaoDoAviso_AppEServidorConferem) lê ESTE arquivo e prende os dois
 // números: subir um sem o outro quebra a suíte, e não o primeiro aceite de
 // alguém. Por isso a linha abaixo tem de continuar com esta forma.
-export const VERSAO_DO_AVISO = 1
+export const VERSAO_DO_AVISO = 2

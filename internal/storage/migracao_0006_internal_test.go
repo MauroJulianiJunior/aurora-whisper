@@ -92,8 +92,10 @@ func TestMigracao0006_NaoPerdeNemMudaNada(t *testing.T) {
 		t.Fatalf("Migrate: %v", err)
 	}
 
-	// A 0015 (N10b) também põe, nula, a nota do marcador das imagens.
-	novas := map[string]map[string]any{"sync_outbox": {"inicial": int64(0), "selo_escolha": nil, "selo_em": nil, "nota_id": nil}}
+	// A 0015 (N10b) também põe, nula, a nota do marcador das imagens; a 0016 (D3), a
+	// cópia do dicionário desligada.
+	novas := map[string]map[string]any{"sync_outbox": {"inicial": int64(0), "selo_escolha": nil, "selo_em": nil, "nota_id": nil},
+		"local_settings": {"dictionary_copy_enabled": int64(0)}}
 	for _, tb := range tabelas {
 		depois := linhasDe(t, db, tb)
 		if len(depois) != len(antes[tb]) {

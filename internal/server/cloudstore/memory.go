@@ -70,6 +70,9 @@ type memUser struct {
 	// em aberto (ADR-021, C3b; ditado_celular.go).
 	preferenciasDoDitado *PreferenciasDoDitado
 	aceitesDoDitado      []Aceite
+	// copiaDoDicionario é a linha de dictionary_copies (nil: a conta não tem a
+	// cópia do dicionário de um PC; ADR-023, dicionario.go).
+	copiaDoDicionario *memCopia
 
 	// A conta (vazios num usuário de AddUser).
 	sub      string

@@ -129,11 +129,15 @@ type resultadoDoDitado struct {
 
 // relatorioDoDitado é a linha "ditado" do log: só contagens e códigos.
 type relatorioDoDitado struct {
-	desfecho        string
-	bytes           int
-	provedorMs      int64
-	motivoProvedor  string
-	termosNaDica    int
+	desfecho       string
+	bytes          int
+	provedorMs     int64
+	motivoProvedor string
+	termosNaDica   int
+	// dicionario: a cópia do dicionário do PC (ADR-023, D): "sem" (a conta não
+	// tem), "copia" (o Smart partiu dela) ou "falhou" (ela não foi lida ou não
+	// montou, e o ditado seguiu só com o aprendido).
+	dicionario      string
 	resumo          smartconta.Resumo
 	smartFalhou     bool
 	lacos, removida int
@@ -219,16 +223,24 @@ func (c *Cloud) transcrever(base context.Context, t *trabalhoDoDitado, rel *rela
 	user := t.k.usuario
 	provT, modeloT := t.prefs.Transcricao.Provedor, t.prefs.Transcricao.Modelo
 
-	// 1. O aprendido da conta: o Smart e a dica.
+	// 1. O aprendido da conta e a cópia do dicionário do PC (ADR-023, D): o
+	// Smart e a dica.
 	ctxA, cancelA := context.WithTimeout(base, c.prazos.Smart)
 	pagina, errA := c.cfg.Store.ListLearned(ctxA, user, smartconta.MaxPares)
+	copia, situacao := c.lerCopiaDoDicionario(ctxA, user)
 	cancelA()
+	rel.dicionario = situacao
 	pares := paresDaNuvem(pagina.Items)
 	dica := ""
 	if t.prefs.Dica && errA == nil {
 		// Só com a preferência ligada (decisão E): os termos vão ao provedor
-		// junto com a voz.
-		dica = smartconta.Dica(pares)
+		// junto com a voz. Com a cópia, é o prompt do PC (os termos do
+		// dicionário); sem ela, os termos do aprendido, como antes.
+		if copia != nil {
+			dica = smartconta.DicaDaCopia(copia.semente)
+		} else {
+			dica = smartconta.Dica(pares)
+		}
 		if dica != "" {
 			rel.termosNaDica = strings.Count(dica, ", ") + 1
 		}
@@ -278,7 +290,7 @@ func (c *Cloud) transcrever(base context.Context, t *trabalhoDoDitado, rel *rela
 	// 3. O Smart da conta (decisão F). Sem o aprendido, ou sem o Smart, segue o
 	// texto do ASR (sem o laço de repetição), como no PC, e o Polish não roda.
 	ctxS, cancelS := context.WithTimeout(base, c.prazos.Smart)
-	conta, smartOk := c.contaDoSmart(ctxS, user, pares, errA == nil)
+	conta, smartOk := c.contaDoSmart(ctxS, user, pares, errA == nil, copia, rel)
 	var resolvido smartconta.Resolvido
 	if conta != nil {
 		resolvido = conta.ResolverParaPolir(ctxS, bruto)
@@ -451,12 +463,30 @@ func motivoDaListaDeModelos(err error) resolver.MotivoFallback {
 }
 
 // contaDoSmart devolve o Smart da conta, do cache (a versão é a do aprendido que
-// ele usa: versaoDosPares), esperando a montagem até ctx acabar (a montagem
-// segue e fica no cache para o próximo ditado). Sem o aprendido (a leitura
-// falhou), ou com a montagem falhando ou atrasada, devolve o Smart vazio (só o
-// laço de repetição sai) e ok=false: o Polish não roda sem como conferir os
-// termos da pessoa.
-func (c *Cloud) contaDoSmart(ctx context.Context, user string, pares []dictionary.ParDaNuvem, aprendidoOk bool) (*smartconta.Conta, bool) {
+// ele usa, versaoDosPares, e a da cópia do dicionário, se houver: versaoDaConta),
+// esperando a montagem até ctx acabar (a montagem segue e fica no cache para o
+// próximo ditado). Sem o aprendido (a leitura falhou), ou com a montagem
+// falhando ou atrasada, devolve o Smart vazio (só o laço de repetição sai) e
+// ok=false: o Polish não roda sem como conferir os termos da pessoa.
+//
+// Com a cópia do dicionário do PC (ADR-023, D), a montagem parte dela. Se ela
+// não monta, o ditado segue com o Smart só do aprendido, e rel.dicionario vira
+// "falhou". Se ela só atrasou, não: o cache guarda uma montagem em curso por
+// conta, e pedir outra versão agora descartaria a da cópia, que fica pronta para
+// o próximo ditado.
+func (c *Cloud) contaDoSmart(ctx context.Context, user string, pares []dictionary.ParDaNuvem, aprendidoOk bool, copia *copiaDaConta, rel *relatorioDoDitado) (*smartconta.Conta, bool) {
+	if aprendidoOk && copia != nil {
+		conta, err := c.smart.Obter(ctx, user, versaoDaConta(copia.sha256, pares), func() (*smartconta.Conta, error) {
+			return smartconta.MontarComCopia(user, &copia.semente, pares)
+		})
+		if err == nil {
+			return conta, true
+		}
+		rel.dicionario = "falhou"
+		if ctx.Err() != nil {
+			aprendidoOk = false
+		}
+	}
 	if aprendidoOk {
 		conta, err := c.smart.Obter(ctx, user, versaoDosPares(pares), func() (*smartconta.Conta, error) {
 			return smartconta.Montar(user, pares)
@@ -470,6 +500,38 @@ func (c *Cloud) contaDoSmart(ctx context.Context, user string, pares []dictionar
 		return nil, false
 	}
 	return conta, false
+}
+
+// copiaDaConta é a cópia do dicionário do PC lida para um ditado (ADR-023, D): a
+// semente conferida e a versão (o SHA-256 dos bytes).
+type copiaDaConta struct {
+	semente dictionary.Semente
+	sha256  string
+}
+
+// lerCopiaDoDicionario lê a cópia da conta (a de um PC não revogado) e a confere
+// como a rota confere ao receber. Devolve a situação para o log: "sem", "copia"
+// ou "falhou" (a leitura falhou ou os bytes não passam: o ditado segue sem a
+// cópia, nunca falha por ela).
+func (c *Cloud) lerCopiaDoDicionario(ctx context.Context, user string) (*copiaDaConta, string) {
+	_, b, ok, err := c.cfg.Store.GetDictionaryCopy(ctx, user)
+	switch {
+	case err != nil:
+		return nil, "falhou"
+	case !ok:
+		return nil, "sem"
+	}
+	s, err := dictionary.LerCopia(b)
+	if err != nil {
+		return nil, "falhou"
+	}
+	return &copiaDaConta{semente: s, sha256: dictionary.SHA256DaCopia(b)}, "copia"
+}
+
+// versaoDaConta é a versão do Smart da conta com a cópia do dicionário: a da
+// cópia e a dos pares. Outra cópia, ou outro aprendido, monta de novo.
+func versaoDaConta(shaDaCopia string, pares []dictionary.ParDaNuvem) string {
+	return "copia:" + shaDaCopia + ":" + versaoDosPares(pares)
 }
 
 // paresDaNuvem converte o aprendido da nuvem (o ListLearned, do mais recente ao
@@ -590,6 +652,7 @@ func (c *Cloud) logDoDitado(t trabalhoDoDitado, rel relatorioDoDitado, total tim
 	}
 	attrs = append(attrs,
 		"termos_na_dica", rel.termosNaDica,
+		"dicionario", rel.dicionario, "termos_da_copia", rel.resumo.TermosDaCopia, "pares_ja_na_copia", rel.resumo.JaNaCopia,
 		"pares", rel.resumo.Recebidos, "pares_aplicados", rel.resumo.Aplicados, "pares_com_dominio", rel.resumo.ComDominio,
 		"smart_falhou", rel.smartFalhou, "lacos", rel.lacos, "palavras_removidas", rel.removida, "substituicoes", rel.substituicoes,
 		"polish", rel.polish,

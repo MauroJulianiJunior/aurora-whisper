@@ -17,6 +17,24 @@ const DicaLigadaPorPadrao = false
 // protege a latência do decodificador de crescer com o aprendido.
 const OrcamentoDaDica = dictionary.OrcamentoRunasPadrao
 
+// DicaDaCopia é a dica com a cópia do dicionário do PC (ADR-023, D): o MESMO
+// prompt que o Agent daquele PC manda ao whisper local
+// (dictionary.Vocabulario sobre as entradas do arquivo, cmd/agent/main.go):
+// primeiro os termos com dica da pessoa, na ordem do arquivo, depois os outros
+// por prioridade, até OrcamentoDaDica runas. Os termos do Aprender (só variante)
+// e os desligados ficam de fora, como no PC.
+//
+// O aprendido aplicado por cima da cópia não muda a dica: ele só acrescenta
+// variantes (que não vão ao prompt) ou termos do painel (só variante, também
+// fora), então a dica da cópia é a da semente final, sem montar o Smart antes
+// da transcrição.
+//
+// Os termos podem ser nomes de clientes ou de terceiros e vão ao provedor a cada
+// ditado, só com a preferência ligada. Não loga nada.
+func DicaDaCopia(copia dictionary.Semente) string {
+	return dictionary.Vocabulario(copia.ParaEntradas(), OrcamentoDaDica)
+}
+
 // Dica monta a dica que vai ao provedor de transcrição como o prompt: os termos
 // distintos do aprendido da conta, do mais recente ao mais antigo, até
 // OrcamentoDaDica runas, separados por vírgula.

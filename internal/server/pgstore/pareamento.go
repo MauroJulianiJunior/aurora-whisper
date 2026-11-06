@@ -209,5 +209,11 @@ func (s *Store) RevogarAparelho(ctx context.Context, userID, deviceID string, no
 	if _, err := tx.Exec(ctx, sqlApagarTokenDoAparelho, canon); err != nil {
 		return sanitize("apagar o token do aparelho", err)
 	}
+	// A cópia do dicionário deste PC sai junto (ADR-023): revogar ou desconectar
+	// o PC que é a fonte apaga o que ele levou para o celular. Depois do UPDATE
+	// do aparelho: a ordem das travas é a do PUT (pgstore/dicionario.go).
+	if _, err := tx.Exec(ctx, sqlCopiaApagarDoAparelho, userID, canon); err != nil {
+		return sanitize("apagar a cópia do dicionário do aparelho", err)
+	}
 	return sanitize("confirmar a revogação", tx.Commit(ctx))
 }

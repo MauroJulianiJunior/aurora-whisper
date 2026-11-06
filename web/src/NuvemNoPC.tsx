@@ -2,6 +2,7 @@ import { type KeyboardEvent, type ReactNode, useEffect, useEffectEvent, useRef, 
 import { ErroDaApi, problemaDe } from './api'
 import type { AvisoDaNuvem, Cliente, EstadoNuvem, ResumoDoHistorico } from './clienteLocal'
 import { formatarHora } from './datas'
+import { DicionarioNoCelular } from './DicionarioNoCelular'
 import { freioDoAprendido, naoSubiram, naoSubiuFica, numero, vaoSubir } from './textosDaNuvem'
 
 // A seção "Nuvem" das Configurações do PC (ADR-019, "Conectar o PC"; F6 e
@@ -35,6 +36,9 @@ interface Props {
   // aoMudarEstado: o estado novo, a cada leitura (a Privacidade diz para
   // onde o texto vai quando o PC está conectado).
   aoMudarEstado?(e: EstadoNuvem): void
+  // aoGravarDicionario: o "Levar o dicionário para o celular" gravou a opção
+  // (ADR-023), que mora nas configurações do PC e sobe a version delas.
+  aoGravarDicionario?(): void
 }
 
 const mensagem = (e: unknown) => (e instanceof Error ? e.message : String(e))
@@ -59,7 +63,7 @@ const enderecoDeAprovar = (u: string | undefined) => (u && /^(https:\/\/|http:\/
 
 type Acao = 'conectar' | 'cancelar' | 'desconectar' | 'enviar' | 'esquecer'
 
-export function NuvemNoPC({ cliente, visivel, aoPerderLigacao, avisar, aoMudarEstado }: Props) {
+export function NuvemNoPC({ cliente, visivel, aoPerderLigacao, avisar, aoMudarEstado, aoGravarDicionario }: Props) {
   const [estado, setEstado] = useState<EstadoNuvem | null>(null)
   // indisponivel: o Agent não tem a nuvem (de antes da F6, ou sem o banco).
   const [indisponivel, setIndisponivel] = useState<string | null>(null)
@@ -386,6 +390,8 @@ export function NuvemNoPC({ cliente, visivel, aoPerderLigacao, avisar, aoMudarEs
               {freioDoAprendido(freio)}
             </p>
           )}
+          {/* O dicionário no celular (ADR-023, F): só com o PC conectado. */}
+          <DicionarioNoCelular cliente={cliente} visivel={visivel} aoPerderLigacao={aoPerderLigacao} aoGravar={aoGravarDicionario} />
           <div className="acoes">
             <button type="button" className="botao" aria-disabled={indo !== null || undefined} onClick={() => void desconectar('desconectar')}>
               {indo === 'desconectar' ? 'Desconectando…' : 'Desconectar'}

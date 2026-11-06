@@ -52,6 +52,8 @@ func preferenciasCheias() storage.Settings {
 		AIModel:              "modelo-escolhido",
 
 		MicrophoneAlwaysReady: true,
+		// A cópia do dicionário para o celular (0016, ADR-023): o round-trip a prova.
+		DictionaryCopyEnabled: true,
 	}
 }
 

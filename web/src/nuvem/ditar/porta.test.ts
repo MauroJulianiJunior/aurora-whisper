@@ -15,6 +15,7 @@ const pronto = (): EstadoDoDitado => ({
   preferencias: { ...preferenciasPadrao },
   aceite: { versao: VERSAO_DO_AVISO, transcricao: 'openai', polish: null, aceito_em: '2026-10-10T12:00:00.000Z', vigente: true },
   chaves: { ...chavesVazias(), openai: { configurada: true, final: 'WXYZ', colar_de_novo: false } },
+  dicionario: null,
 })
 
 const semAceite = (): EstadoDoDitado => ({ ...pronto(), aceite: null, chaves: chavesVazias() })

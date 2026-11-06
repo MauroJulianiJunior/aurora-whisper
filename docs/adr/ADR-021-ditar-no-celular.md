@@ -184,7 +184,7 @@ humana mais recente, desde que registrada, e esta ADR é o registro.
 | 1 | Como entra o ditado no celular? | **Em dois passos.** **Passo 1 (esta ADR):** o servidor ganha a rota que leva a voz a texto, passa pelo Smart e, se a pessoa quiser, pelo Polish. O app de hoje (o PWA) ganha um botão de microfone: toque para começar e toque para parar, com a onda e o tempo, discreto e no estilo do painel. O texto entra no histórico, desce aos PCs pelo sync e tem um "Copiar". **Passo 2 (outra ADR, depois):** o app nativo do Android, com uma bolha flutuante que escreve em qualquer campo (acessibilidade) ou com um teclado, usando **a mesma rota**. O passo 1 deixa a rota pronta para o app nativo. |
 | 2 | Quem transcreve? | **A pessoa escolhe o provedor: OpenAI ou Groq.** Ela usa a **chave dela** (BYOK), como no Polish do PC. O Mauro vai usar a OpenAI. |
 | 3 | Polish no celular? | **Sim.** Isso exige guardar a chave da IA da pessoa fora do PC, **cifrada no servidor**. Muda a regra de hoje ("a chave nunca sai do PC"), e a mudança entra na política e no dossiê. |
-| 4 | Que dicionário o celular usa? | **O Smart com o aprendido da conta.** O dicionário completo continua no PC. |
+| 4 | Que dicionário o celular usa? | **O Smart com o aprendido da conta.** O dicionário completo continua no PC. *(Nota de 05-nov-2026, ADR-023: o Mauro mudou esta decisão. Com a opção "Levar o dicionário para o celular" ligada no painel do PC (desligada por padrão), uma cópia do dicionário vai à nuvem, de um PC só, e o Smart do celular parte dela, com o aprendido por cima.)* |
 
 ### Decisões desta ADR
 
@@ -1074,7 +1074,8 @@ Escopo novo, com OK próprio (decisão P).
 - a chave **do PC** (ela continua no PC);
 - o áudio do PC;
 - o contexto de outras janelas (o PWA nem o enxerga);
-- o dicionário completo;
+- o dicionário completo; *(nota de 05-nov-2026, ADR-023: só vai a cópia dele, e só se a pessoa ligar
+  "Levar o dicionário para o celular" no painel do PC)*
 - o mapa de domínios.
 
 **A voz não é usada para identificar a pessoa.** A política diz isso. A leitura de que a voz seria
@@ -1145,7 +1146,9 @@ Mauro (a região, a hipótese, o contato e as duas decisões), e esta ADR não a
 - **O iPhone:** o Safari grava mp4/aac, e o login é o da ADR-019.
 - **Gravar o próximo enquanto o anterior transcreve.**
 - **Troca automática de provedor.**
-- **O dicionário completo no servidor** (decisão 4 do Mauro); **subir as dicas "adicionadas" do PC.**
+- **O dicionário completo no servidor** (decisão 4 do Mauro); **subir as dicas "adicionadas" do PC.** *(Nota
+  de 05-nov-2026, ADR-023: entrou, como uma **cópia** do `dicionario.json` do PC, com as dicas e tudo,
+  só com a opção ligada no PC. Editar no celular e sincronizar entre PCs seguem fora.)*
 - **Copiar a chave do PC para a nuvem:** a pessoa cola de novo, de propósito.
 - **Manter duas chaves de cifra ao mesmo tempo:** trocar o arquivo leva as chaves guardadas a
   `SEM_CHAVE`, e a pessoa cola de novo.
@@ -1195,7 +1198,10 @@ Mauro (a região, a hipótese, o contato e as duas decisões), e esta ADR não a
   as antigas ficam cifradas nos backups;
 - **o servidor fala com mais três APIs externas** (OpenAI, Groq e Anthropic);
 - **o ditado do celular depende de internet**, ao contrário do PC;
-- **o texto do celular não usa o dicionário completo** do PC, nem os pares presos a um domínio;
+- **o texto do celular não usa o dicionário completo** do PC, nem os pares presos a um domínio; *(nota de
+  05-nov-2026, ADR-023: com a cópia do dicionário do PC, o texto do celular usa o dicionário, sem o mapa
+  de domínios; as variantes e as entradas presas a um domínio continuam de fora, e os pares presos a um
+  domínio também)*;
 - **mais superfície:** oito rotas novas, três tabelas e um segredo novo;
 - **o Agent muda de lugar três peças** (C2 e C5a), sem mudar o comportamento.
 

@@ -238,7 +238,9 @@ marca d'água: F9, D2); login
 Google só para `CONTAS_PERMITIDAS`; pareamento por retorno a `127.0.0.1` com PKCE; sobem os últimos 6
 meses sem a lixeira; texto legível no servidor, com a revisão de LGPD antes do deploy. Ficam para
 depois: iPhone, preferências, ASR e contexto na nuvem, atualização pela nuvem e o dicionário completo
-no banco.
+no banco. *(Nota de 05-nov-2026, ADR-023: o dicionário completo **no banco**, editável e por linha,
+segue descartado; o que foi feito é uma **cópia** do `dicionario.json`, só do PC à nuvem e só com a
+opção ligada, para o ditado no celular: TASK-031, fases D1 a D5.)*
 
 Fatias, em ordem, cada uma com testes e um commit local. Nenhuma toca o servidor real. O
 `go test ./...` normal não sobe contêiner: os testes com Postgres rodam só quando pedidos, contra um
@@ -381,7 +383,10 @@ ADR-017), com a origem "painel", válido em qualquer aplicativo.
 - **sync: fora desta etapa.** A Correction que sincroniza (TEST-008, AC-021), a decisão de qual usuário
   é o dono e a ida do dicionário para o banco ficam para a etapa 5 (S7). **Emenda (ADR-019):** na
   etapa 5 sincroniza só o par aprendido (F8); o dono local fica e a instalação se liga a uma conta; o
-  dicionário completo no banco fica para depois.
+  dicionário completo no banco fica para depois. *(Nota de 05-nov-2026, ADR-023: o dicionário completo no
+  banco foi descartado; em vez dele, uma cópia do `dicionario.json` do PC vai à nuvem para o ditado no
+  celular, só com a opção "Levar o dicionário para o celular": TASK-031. O sync segue sendo só o
+  aprendido, e nada do dicionário desce aos PCs.)*
 
 Fatias, em ordem, cada uma com testes e um commit local (nenhum teste digita, clica ou mexe na
 área de transferência; os de gravação usam pasta temporária):
@@ -862,6 +867,36 @@ próprio para "ditar para nota" e a lista marcável sem rede no celular. Fases (
 
 Os documentos da spec (`02`, `03`, `05`, `06`, `07`, `08`, `09`, `20`) são emendados por fase, junto
 da slice que muda o contrato.
+
+## TASK-031 — O dicionário do PC no celular (ADR-023)
+**Implementada em 05-nov-2026, nas fases D1 a D5** (a ADR-023 tem o desenho e as decisões do Mauro). O
+ditado no celular montava o Smart só com o aprendido da conta, e a conta do Mauro tinha 0 pares; o
+`dicionario.json` do PC (49 termos) nunca saía dele. Agora, com a opção **"Levar o dicionário para o
+celular"** ligada (desligada por padrão) no painel do PC, uma **cópia** do arquivo vai do PC à nuvem, de um
+PC só (a fonte), e o ditado no celular a usa. Nada desce aos PCs, o arquivo continua o dono, e editar
+continua no PC.
+- **D1:** a cópia (`Semente.ParaACopia`, `dictionary.ValidarCopia`: 512 KiB, 2.000 termos, 50 variantes por
+  termo, 10.000 no total), a migration `0027` (`dictionary_copies`), o store, as rotas `GET|PUT|DELETE
+  /api/v1/sync/dictionary`, a revogação e o "Apagar meus dados" que apagam a cópia;
+- **D2:** o ditado no celular monta o Smart com a cópia (`smartconta.MontarComCopia`), o cache muda de
+  versão com o SHA-256 dela, a dica é a do PC (`DicaDaCopia`) quando há cópia, o campo `dicionario` do
+  `GET /dictation`, e o teste de paridade com o Agent;
+- **D3:** o PC: a coluna `local_settings.dictionary_copy_enabled` (migration `0016` do SQLite), o cliente
+  e a fase `EnviarDicionario` da rodada do sync, ligar e desligar, e `GET|POST /api/nuvem/dicionario`;
+- **D4:** o painel: a opção em Configurações › Nuvem e a linha em Configurações › Ditar pelo celular (a
+  caixa da dica passa a "Mandar os termos do dicionário como dica");
+- **D5:** os documentos: esta spec (`05`, `06`, `08`, `09`), o dossiê de LGPD, as notas nas ADR-019 e
+  ADR-021, a política de privacidade (proposta, para o Mauro aprovar) e o roteiro de teste manual
+  `docs/teste-manual-dicionario.md`.
+
+**O deploy espera o Mauro:** a política publicada ainda diz que o dicionário fica no PC, então o texto novo
+precisa ser aprovado e republicado antes (ADR-023, risco 4); depois, o roteiro manual.
+
+**Fica para depois:** editar o dicionário no celular; sincronizar o dicionário entre PCs (a cópia é de um
+PC só); um seletor de domínio no celular (hoje valem os termos e as variantes sem restrição: 3 variantes
+restritas no arquivo do Mauro ficam de fora); o casamento fonético no celular (precisa do contexto da
+janela); indexar o lote do Aprender para a montagem com a cópia no limite e centenas de pares que ela não
+tem (~19 s medidos, ADR-023, risco 3); e guardar o SHA-256 enviado no SQLite.
 
 ## Paralelização
 - TASK-002/003/004 podem evoluir em paralelo após contratos.

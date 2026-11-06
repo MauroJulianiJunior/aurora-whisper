@@ -43,7 +43,20 @@ func montarSync(hist *storage.SQLiteTranscriptionRepository, dono string, n *nuv
 	// As imagens das notas (ADR-022, N10b): o repositório das notas, com a
 	// pasta das imagens. nil as deixa de fora do sync.
 	cfg.Imagens = imagens
+	// O dicionário para o celular (ADR-023, D3): a fase do sync que manda a cópia
+	// do dicionario.json quando a opção está ligada.
+	cfg.Copia = copiaDoSync(n, ap)
 	return ligarSync(cfg, hist, n, ap)
+}
+
+// copiaDoSync é a fase do dicionário do laço: o dicionario.json do aprendizado
+// (ou o arquivo indisponível desta execução) e a opção do serviço da nuvem. nil,
+// sem um dos dois, deixa o dicionário de fora.
+func copiaDoSync(n *nuvem.Servico, ap *aprendizadoDoAgent) *syncengine.CopiaDoDicionario {
+	if n == nil || ap == nil {
+		return nil
+	}
+	return &syncengine.CopiaDoDicionario{Fonte: ap.fonteDaCopia(), Opcao: n.OpcaoDaCopia()}
 }
 
 // imagensDoSync é o repositório das notas como as imagens do sync o usam
@@ -100,6 +113,16 @@ func (a *aprendizadoDoAgent) dicionarioDoSync() syncengine.DicionarioDoAprendido
 	return a.Aplicador
 }
 
+// fonteDaCopia é o dicionario.json como a cópia para o celular o lê (ADR-023, D3):
+// o aplicador, ou o arquivo indisponível quando a subida não conseguiu conferi-lo
+// (semConferir): o que o laço não lê, a cópia também não manda.
+func (a *aprendizadoDoAgent) fonteDaCopia() syncengine.FonteDaCopia {
+	if a.semConferir {
+		return dicionarioIndisponivel{}
+	}
+	return a.Aplicador
+}
+
 // dicionarioIndisponivel é o dicionario.json que o laço não lê nesta execução:
 // toda leitura é dictionary.ErrSemArquivo.
 type dicionarioIndisponivel struct{}
@@ -107,6 +130,11 @@ type dicionarioIndisponivel struct{}
 func (dicionarioIndisponivel) AplicarPares(func(dictionary.Semente) []dictionary.ParDaNuvem,
 	func(dictionary.Lote) error) (dictionary.Semente, dictionary.Lote, error) {
 	return dictionary.Semente{}, dictionary.Lote{}, dictionary.ErrSemArquivo
+}
+
+// Dicionario é o dicionário que não se lê: dictionary.ErrSemArquivo.
+func (dicionarioIndisponivel) Dicionario(context.Context) (dictionary.Semente, error) {
+	return dictionary.Semente{}, dictionary.ErrSemArquivo
 }
 
 // prepararOAprendido confere, na subida e antes do laço, se o dicionario.json

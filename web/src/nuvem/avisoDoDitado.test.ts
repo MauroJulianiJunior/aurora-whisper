@@ -40,8 +40,13 @@ describe('VERSAO_DO_AVISO', () => {
 // ADR-021, C7). Depois que a primeira pessoa real aceitar, isto não vale mais: a
 // regra de cima, subir a versão e acrescentar a impressão nova sem apagar a antiga,
 // passa a valer para qualquer mudança de texto.
+//
+// A versão 2 (06-nov-2026, ADR-023) muda o item da dica: com o dicionário do PC
+// levado para o celular, a dica leva termos dele, e não só os que a pessoa
+// ensinou. A versão 1 já tinha sido aceita, então quem a aceitou aceita de novo.
 const impressoes: Record<number, string> = {
   1: '5fbf39d58a4bcffa',
+  2: '4580a92eea1cb8c3',
 }
 
 function impressao(texto: string): string {

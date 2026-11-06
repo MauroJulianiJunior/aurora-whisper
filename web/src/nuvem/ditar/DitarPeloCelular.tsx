@@ -18,12 +18,12 @@
 import { type ReactNode, useEffect, useEffectEvent, useRef, useState } from 'react'
 import { ErroDaApi, problemaDe } from '../../api'
 import type { SecaoDasConfiguracoes } from '../../ambiente'
-import { formatarData } from '../../datas'
+import { formatarData, formatarDiaEMes, formatarHora } from '../../datas'
 import type { ClienteNuvem } from '../cliente'
 import { type Provedor, type ProvedorDeVoz, type ProvedorDoPolish, nomeDoProvedor, provedoresDeVoz, provedoresDoPolish } from './aviso'
 import { ChaveDoProvedor } from './ChaveDoProvedor'
 import { textoDaEspera } from './erros'
-import { type EstadoDoDitado, type Preferencias, aceiteVigente, aceitoPara, modelosDeVoz, modelosDoPolish, provedoresExigidos } from './estado'
+import { type CopiaDoDicionario, type EstadoDoDitado, type Preferencias, aceiteVigente, aceitoPara, modelosDeVoz, modelosDoPolish, provedoresExigidos } from './estado'
 import type { Folha } from './folha'
 
 interface Props {
@@ -50,6 +50,15 @@ const iguais = (a: Preferencias, b: Preferencias) =>
   a.polish === b.polish &&
   a.polish_provedor === b.polish_provedor &&
   a.polish_modelo === b.polish_modelo
+
+// linhaDoDicionario: a linha discreta sob a dica (ADR-023, E): de que PC é a
+// cópia que o ditado usa, ou como passar a ter uma. Quem a liga é o PC, e por
+// isso a frase aponta para o painel dele.
+function linhaDoDicionario(c: CopiaDoDicionario | null): string {
+  if (!c) return 'Sem o dicionário do PC. Para usá-lo aqui, ligue “Levar o dicionário para o celular” no painel do PC.'
+  const termos = `${c.termos.toLocaleString('pt-BR')} ${c.termos === 1 ? 'termo' : 'termos'}`
+  return `Dicionário: o do ${c.aparelho}, ${termos} (atualizado em ${formatarDiaEMes(c.atualizado_em)} às ${formatarHora(c.atualizado_em)}).`
+}
 
 // fraseDeLer: a leitura do estado falhou por outra razão que a ligação.
 function fraseDeLer(e: unknown): string {
@@ -454,9 +463,15 @@ export function DitarPeloCelular({ cliente, folha, visivel, leitura, secao, aoPe
               <div className="ajuste">
                 <label className="marcar">
                   <input type="checkbox" checked={prefs.dica} disabled={aplicando} onChange={(e) => void aplicar({ dica: e.target.checked })} />
-                  Mandar os termos aprendidos como dica
+                  Mandar os termos do dicionário como dica
                 </label>
-                <p className="ajuda">Eles vão ao provedor junto com a voz, em todo ditado, e podem ser nomes de clientes ou de outras pessoas.</p>
+                <p className="ajuda">
+                  Vão ao provedor junto com a voz, em todo ditado, e podem ser nomes de clientes ou de outras pessoas. São os do dicionário do PC, se ele foi
+                  levado para o celular; senão, os que você ensinou.
+                </p>
+                <p className="ajuda">
+                  {linhaDoDicionario(estado.dicionario)}
+                </p>
               </div>
 
               <div className="ajuste">

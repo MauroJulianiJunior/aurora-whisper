@@ -274,7 +274,7 @@ const provedoresDePolishFalsos: string[] = ['openai', 'anthropic']
 // web/src/nuvem/avisoDoDitado.ts (VERSAO_DO_AVISO): quem prende os dois é o
 // aviso.test.ts, e quem prende aquela à do servidor de verdade é o teste do Go
 // TestVersaoDoAviso_AppEServidorConferem.
-export const versaoDoAvisoNoServidorFalso = 1
+export const versaoDoAvisoNoServidorFalso = 2
 
 // Os modelos padrão da transcrição (cloudstore.ModeloPadraoOpenAI e
 // ModeloPadraoGroq): o PUT com o modelo vazio os resolve, e o que se lê é sempre
@@ -316,6 +316,10 @@ export interface DitadoDaConta {
   aceite: AceiteFalso | null
   chaves: Partial<Record<ProvedorFalso, string>>
   colarDeNovo: ProvedorFalso[]
+  // dicionario: a cópia do dicionário de um PC (ADR-023, E). Ausente, o estado
+  // traz null, como o servidor de verdade (e o exemplo do GET /dictation no 06,
+  // que o contratoDoDitado.test.ts confere).
+  dicionario?: { aparelho: string; termos: number; atualizado_em: string } | null
 }
 
 // Os modelos que cada provedor lista para a chave (os de voz e os de texto,
@@ -354,6 +358,7 @@ export interface OpcoesDaNuvem {
     aceite?: AceiteFalso | null
     chaves?: Partial<Record<ProvedorFalso, string>>
     colarDeNovo?: ProvedorFalso[]
+    dicionario?: DitadoDaConta['dicionario']
   }
   // versaoDoAviso: a versão do aviso que o servidor aceita no consentimento.
   versaoDoAviso?: number
@@ -463,6 +468,7 @@ export function servidorFalsoNuvem(
         aceite: ditadoInicial.aceite ? { ...ditadoInicial.aceite } : null,
         chaves: { ...ditadoInicial.chaves },
         colarDeNovo: [...(ditadoInicial.colarDeNovo ?? [])],
+        dicionario: ditadoInicial.dicionario,
       }
     : {
         preferencias: preferenciasIniciais(),
@@ -495,6 +501,7 @@ export function servidorFalsoNuvem(
       polish: { ligado: daConta.preferencias.polish, provedor: daConta.preferencias.polish_provedor, modelo: daConta.preferencias.polish_modelo },
     },
     chaves: provedoresFalsos.map(daChave),
+    dicionario: daConta.dicionario ?? null,
   })
   const ehProvedor = (v: unknown): v is ProvedorFalso => provedoresFalsos.includes(v as ProvedorFalso)
   const ehObjeto = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v)

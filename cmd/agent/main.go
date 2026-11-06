@@ -525,6 +525,11 @@ func run(pp pastas.Pastas) error {
 			time.Now(), slog.Default()) {
 			aprendizado.semConferir = true
 		}
+		// O dicionário para o celular (ADR-023, D3): a opção mora em
+		// local_settings, e a cópia sai do mesmo dicionario.json do aprendizado
+		// (depois da conferência acima: o arquivo que o laço não lê, a cópia também
+		// não manda). Antes de o painel e o laço subirem.
+		nuvemDoPC.UsarDicionario(storage.NovaOpcaoDaCopiaDoDicionario(prefs, preferenciasPadrao()), aprendizado.fonteDaCopia())
 		// As imagens das notas sobem e descem pelo mesmo laço (N10b), pelo
 		// repositório das notas, que tem a pasta delas.
 		laco := montarSync(hist, dono, nuvemDoPC, aprendizado, imagensDoSync(h.notas), slog.Default())
@@ -544,6 +549,9 @@ func run(pp pastas.Pastas) error {
 			Aplicar:      aplicarNoRuntime(aplicar),
 			UltimoPolish: ultimoPolishParaATela(rt.UltimoPolish),
 			Nuvem:        nuvemDoPC,
+			// O dicionário para o celular (ADR-023, D3): as rotas
+			// /api/nuvem/dicionario, no mesmo serviço da nuvem.
+			CopiaDoDicionario: nuvemDoPC,
 			// Os 6 meses e as cópias do banco (F10d e F10e): o mesmo ciclo do
 			// expurgo, dono do mutex do Ligar, do Desligar e do apagar das
 			// cópias. Sem o OK gravado nas Configurações, nada dos 6 meses é

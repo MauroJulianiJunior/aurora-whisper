@@ -93,6 +93,26 @@ export interface ResumoDoHistorico {
 
 export type AvisoDaNuvem = 'revogado' | 'sem_resposta' | 'nao_abriu' | 'vencido' | 'outra_conta' | 'falhou' | 'sem_rede'
 
+// EstadoDoDicionario é o GET /api/nuvem/dicionario (ADR-023, F): o "Levar o
+// dicionário para o celular" deste PC. Os campos vazios não vêm.
+export interface EstadoDoDicionario {
+  // ligado: a opção deste PC (a intenção).
+  ligado: boolean
+  // fonte: quem a nuvem diz ser a fonte da cópia. Ausente quando o PC está
+  // desconectado ou a nuvem não pôde ser perguntada.
+  fonte?: 'este' | 'outro' | 'nenhuma'
+  // aparelho: o nome do PC que é a fonte, só quando é outro.
+  aparelho?: string
+  // termos e atualizado_em: os da cópia que a nuvem guarda.
+  termos?: number
+  atualizado_em?: string
+  // enviado_em: a última vez, nesta execução do Agent, que a nuvem aceitou a
+  // cópia deste PC.
+  enviado_em?: string
+  // aviso: a última frase do envio automático, já em português.
+  aviso?: string
+}
+
 // EstadoRetencao é o GET /api/retencao (ADR-019, F10; 06, "Retenção no PC"): os
 // 6 meses do histórico no PC e as cópias ao lado do banco. Só números e
 // booleanos: nunca texto, id ou caminho.
@@ -183,6 +203,14 @@ export interface Cliente extends ClienteDoHistorico, ClienteDeNotas {
   // frase); esquecerNuvem só vale desconectado.
   enviarHistorico(): Promise<EstadoNuvem>
   esquecerNuvem(): Promise<EstadoNuvem>
+  // O dicionário do PC no celular (ADR-023, F). dicionarioDaNuvem pergunta à
+  // nuvem quem é a fonte (por isso a seção o lê quando abre, e não a cada
+  // poucos segundos). levarDicionario liga (monta a cópia e a manda na hora) ou
+  // desliga (apaga a cópia da nuvem na hora) e devolve o estado novo; a falha
+  // vem com a frase do Agent (ErroDaApi.message), e a opção fica como estava.
+  // Gravar a opção sobe a version das configurações do PC.
+  dicionarioDaNuvem(): Promise<EstadoDoDicionario>
+  levarDicionario(ligar: boolean): Promise<EstadoDoDicionario>
   // Os 6 meses no PC e as cópias do banco (ADR-019, F10d e F10e). Os erros vêm
   // como ErroDaApi, com a frase do Agent; um Agent de antes da F10 responde
   // 404. ligarRetencao manda a contagem que a tela mostrou: se a recontagem do
@@ -514,6 +542,14 @@ export function criarCliente(token: string, buscar: Buscador = buscadorPadrao): 
     async esquecerNuvem() {
       const r = await pedir(buscar, '/api/nuvem/esquecer', autorizado({ method: 'POST' }), false)
       return (await r.json()) as EstadoNuvem
+    },
+    async dicionarioDaNuvem() {
+      const r = await pedir(buscar, '/api/nuvem/dicionario', autorizado(), false)
+      return (await r.json()) as EstadoDoDicionario
+    },
+    async levarDicionario(ligar) {
+      const r = await pedir(buscar, '/api/nuvem/dicionario', comJson('POST', { ligar }), false)
+      return (await r.json()) as EstadoDoDicionario
     },
     async retencao() {
       const r = await pedir(buscar, '/api/retencao', autorizado(), false)

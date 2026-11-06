@@ -130,6 +130,9 @@ type nuvemFalsa struct {
 	expiraEm       int
 	authURL        string
 	redirecionarEm string
+	// dicionario atende /api/v1/sync/dictionary (o dicionário para o celular);
+	// nil é 404. Roda com n.mu.
+	dicionario func(w http.ResponseWriter, r *http.Request, bearer string)
 }
 
 func novaNuvemFalsa(t *testing.T) *nuvemFalsa { return novaNuvem(t, false) }
@@ -239,6 +242,8 @@ func (n *nuvemFalsa) servir(w http.ResponseWriter, r *http.Request) {
 		}
 		n.revogado = true
 		w.WriteHeader(http.StatusNoContent)
+	case r.URL.Path == "/api/v1/sync/dictionary" && n.dicionario != nil:
+		n.dicionario(w, r, bearer)
 	default:
 		w.WriteHeader(http.StatusNotFound)
 	}

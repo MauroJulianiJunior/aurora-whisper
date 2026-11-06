@@ -84,6 +84,10 @@ const (
 		SET sync_epoch = $2, tombstone_watermark = GREATEST(tombstone_watermark, last_seq)
 		WHERE user_id = $1`
 
+	// Os aparelhos da conta, travados (o primeiro passo do apagar, depois do
+	// contador): ver ApagarDadosDaConta.
+	sqlTravarAparelhosDaConta = `SELECT 1 FROM devices WHERE user_id = $1 FOR UPDATE`
+
 	sqlArrumarLogins  = `DELETE FROM pending_logins WHERE expires_at <= $1`
 	sqlArrumarSessoes = `DELETE FROM web_sessions WHERE expires_at <= $1 OR revoked_at IS NOT NULL`
 )
@@ -126,6 +130,9 @@ var apagarDaConta = []struct{ op, sql string }{
 	{"apagar as preferências do ditado", `DELETE FROM dictation_settings WHERE user_id = $1`},
 	{"apagar os aceites do ditado", `DELETE FROM dictation_consents WHERE user_id = $1`},
 	{"apagar as chaves da IA", `DELETE FROM ai_provider_keys WHERE user_id = $1`},
+	// A cópia do dicionário de um PC (ADR-023; a 0027) aponta para o aparelho
+	// (chave estrangeira sem cascata): sai antes dele.
+	{"apagar a cópia do dicionário", `DELETE FROM dictionary_copies WHERE user_id = $1`},
 	{"apagar os pedidos de pareamento", `DELETE FROM pairing_requests WHERE approved_by = $1`},
 	// Os tokens vão junto (device_tokens: ON DELETE CASCADE).
 	{"apagar os aparelhos", `DELETE FROM devices WHERE user_id = $1`},
@@ -358,6 +365,13 @@ func (s *Store) ApagarDadosDaConta(ctx context.Context, userID, keepSessionID st
 	}
 	if tag.RowsAffected() != 1 {
 		return "", cloudstore.ErrUnknownUser
+	}
+	// Os aparelhos da conta travados antes de apagar qualquer coisa: a ordem das
+	// travas da cópia do dicionário é a do aparelho e depois a da cópia (o PUT e
+	// a revogação a seguem), e um PUT em curso termina antes do apagar, que então
+	// vê e apaga a cópia que ele gravou (ADR-023).
+	if _, err := tx.Exec(ctx, sqlTravarAparelhosDaConta, userID); err != nil {
+		return "", sanitize("travar os aparelhos", err)
 	}
 	for _, step := range apagarDaConta {
 		if _, err := tx.Exec(ctx, step.sql, userID); err != nil {

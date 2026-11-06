@@ -543,6 +543,9 @@ type SituacaoDoId struct {
 // Store é o que o servidor HTTP da etapa 5 usa para o histórico e o sync.
 // Toda escrita passa pelo ponto único de gravação da implementação.
 type Store interface {
+	// A cópia do dicionário de um PC (ADR-023; dicionario.go).
+	DicionarioDaConta
+
 	// List e Get só leem.
 	List(ctx context.Context, f ListFilter) (Page, error)
 	Get(ctx context.Context, userID, id string) (Transcription, error)

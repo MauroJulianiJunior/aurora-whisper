@@ -43,8 +43,15 @@ type Settings struct {
 	// Ctrl+Win+Alt manda o ditado para uma nota). Padrão true (a coluna nasce
 	// com 1); desligado, Ctrl+Win+Alt é um ditado comum.
 	NoteTriggerEnabled bool
-	UpdatedAt          time.Time
-	Version            int64
+	// DictionaryCopyEnabled liga o "Levar o dicionário para o celular"
+	// (ADR-023, F): a cópia do dicionario.json vai à nuvem. Padrão false (a
+	// coluna nasce com 0): nada do dicionário sai do PC sem o clique. É a
+	// intenção deste PC; quem é a fonte da cópia quem diz é a nuvem. Só as
+	// rotas /api/nuvem/dicionario e a fase do sync a mudam: o PUT
+	// /api/settings não tem este campo e o preserva.
+	DictionaryCopyEnabled bool
+	UpdatedAt             time.Time
+	Version               int64
 }
 
 // SettingsRepository é o contrato de persistência das preferências

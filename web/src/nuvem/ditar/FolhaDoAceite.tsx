@@ -117,8 +117,8 @@ function Conteudo({ folha, aberta }: { folha: Folha; aberta: FolhaAberta }) {
               Use uma chave só para o celular, com limite de gasto no provedor.
             </li>
             <li>
-              <strong>Se você ligar a dica:</strong> os termos que você ensinou ao Aurora Whisper, junto com a voz, em todo ditado. Eles podem ser nomes de clientes
-              ou de outras pessoas. A dica começa desligada.
+              <strong>Se você ligar a dica:</strong> termos do seu dicionário, junto com a voz, em todo ditado: os do dicionário do PC, se você o levou para o
+              celular; senão, os que você ensinou ao Aurora Whisper. Eles podem ser nomes de clientes ou de outras pessoas. A dica começa desligada.
             </li>
             <li>
               {polish ? (

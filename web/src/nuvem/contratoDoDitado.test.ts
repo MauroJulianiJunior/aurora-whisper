@@ -30,6 +30,7 @@ import {
   tetoDaDuracaoNoServidorFalso,
   tetoDoCorpoNoServidorFalso,
 } from '../testes/servidorFalsoNuvem'
+import { VERSAO_DO_AVISO } from './avisoDoDitado'
 import { type ClienteNuvem, type PedidoDeDitado, criarClienteNuvem } from './cliente'
 import { type ErroDoDitado, erroDoEnvio, fraseDoAviso } from './ditar/erros'
 import { falaMinimaMs, tetoMs, uuidV7 } from './ditar/medidas'
@@ -80,9 +81,11 @@ function forma(v: unknown): unknown {
 function montar() {
   const srv = servidorFalsoNuvem([itemNuvem({ id: 'd1', created_at: new Date(2026, 9, 9, 14).toISOString(), final_text: 'Um ditado.' })], {
     ditado: {
-      aceite: { versao: 1, transcricao: 'openai', polish: 'anthropic', aceito_em: '2026-10-11T12:00:00.000Z' },
+      aceite: { versao: 2, transcricao: 'openai', polish: 'anthropic', aceito_em: '2026-10-11T12:00:00.000Z' },
       chaves: { openai: 'sk-teste-de-mentira-WXYZ' },
       colarDeNovo: ['anthropic'],
+      // A cópia do dicionário de um PC, como o exemplo mostra (ADR-023, E).
+      dicionario: { aparelho: 'PC-DO-MAURO', termos: 49, atualizado_em: '2026-11-05T14:02:00Z' },
     },
   })
   return { srv, cliente: criarClienteNuvem(srv.buscar) }
@@ -107,15 +110,22 @@ describe('o servidor de mentira fala o que o 06 mostra', () => {
     })
     expect(put.status).toBe(200)
     expect(forma(await json(put))).toEqual(estado)
-    const post = await srv.buscar('/api/v1/dictation/consent', { method: 'POST', body: JSON.stringify({ versao: 1, transcricao: 'openai', polish: 'anthropic' }) })
+    const post = await srv.buscar('/api/v1/dictation/consent', { method: 'POST', body: JSON.stringify({ versao: 2, transcricao: 'openai', polish: 'anthropic' }) })
     expect(post.status).toBe(200)
     expect(forma(await json(post))).toEqual(estado)
+  })
+
+  it('sem a cópia do dicionário, dicionario: null (o exemplo mostra a cópia; a seção diz que sem ela é null)', async () => {
+    expect(secao('GET `/dictation`')).toContain('ou **`null`** quando a conta não tem cópia')
+    const srv = servidorFalsoNuvem([], { ditado: { aceite: null, chaves: {}, colarDeNovo: [] } })
+    const r = await srv.buscar('/api/v1/dictation')
+    expect((await json(r)) as { dicionario: unknown }).toHaveProperty('dicionario', null)
   })
 
   it('o aceite sem Polish tem polish: null (o exemplo mostra o Polish aceito; a seção diz que sem ele é null)', async () => {
     expect(secao('GET `/dictation`')).toContain('`polish` é `null` quando')
     const { srv } = montar()
-    await srv.buscar('/api/v1/dictation/consent', { method: 'POST', body: JSON.stringify({ versao: 1, transcricao: 'groq' }) })
+    await srv.buscar('/api/v1/dictation/consent', { method: 'POST', body: JSON.stringify({ versao: 2, transcricao: 'groq' }) })
     const r = await srv.buscar('/api/v1/dictation')
     expect(((await json(r)) as { aceite: { polish: unknown } }).aceite.polish).toBeNull()
   })
@@ -139,7 +149,7 @@ describe('o cliente manda o que o 06 pede', () => {
 
   it('o aceite: {versao, transcricao, polish}, com a versão como inteiro', async () => {
     const { srv, cliente } = montar()
-    await cliente.aceitarAviso(1, 'openai', 'anthropic')
+    await cliente.aceitarAviso(VERSAO_DO_AVISO, 'openai', 'anthropic')
     const post = srv.pedidos.find((p) => p.metodo === 'POST')!
     expect(post.caminho).toBe('/api/v1/dictation/consent')
     const exemplo = /Corpo `(\{[^`]*\})`: `versao` e/.exec(secao('POST `/dictation/consent`'))
@@ -276,7 +286,7 @@ describe('a rota POST /dictations: o status de cada código', () => {
     { codigo: 'SEM_ACEITE', rodar: () => falhou(montarRota({ ditado: {} }).cliente), erro: { tipo: 'sem-aceite', retem: true, vai: 'aceite' } },
     {
       codigo: 'SEM_CHAVE',
-      rodar: () => falhou(montarRota({ ditado: { aceite: { versao: 1, transcricao: 'openai', polish: null, aceito_em: '2026-10-11T12:00:00.000Z' } } }).cliente),
+      rodar: () => falhou(montarRota({ ditado: { aceite: { versao: 2, transcricao: 'openai', polish: null, aceito_em: '2026-10-11T12:00:00.000Z' } } }).cliente),
       erro: { tipo: 'sem-chave', retem: true, vai: 'configuracoes' },
     },
     { codigo: 'LIMITE', rodar: comAFalha('LIMITE'), erro: espere(12) },
@@ -499,7 +509,7 @@ describe('a rota POST /dictations: a idempotência e a memória', () => {
     srv.falharNoProximoDitado('gravacao')
     await falhou(cliente)
     await cliente.desligarDitado()
-    await srv.buscar('/api/v1/dictation/consent', { method: 'POST', body: JSON.stringify({ versao: 1, transcricao: 'openai' }) })
+    await srv.buscar('/api/v1/dictation/consent', { method: 'POST', body: JSON.stringify({ versao: 2, transcricao: 'openai' }) })
     await srv.buscar('/api/v1/ai-keys/openai', { method: 'PUT', body: JSON.stringify({ chave: 'sk-teste-do-celular-ABCD' }) })
     await cliente.ditar(umDitado())
     expect(srv.chamadasAoProvedor).toBe(2)

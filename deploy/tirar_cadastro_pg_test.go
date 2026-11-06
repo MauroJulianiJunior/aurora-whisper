@@ -153,7 +153,7 @@ func TestTirarCadastro_Postgres_RestosVeTodaTabelaQueApontaParaUsers(t *testing.
 	for _, tabela := range strings.Fields("devices transcriptions dictionary_entries corrections user_settings sync_events " +
 		"applied_mutations user_sync_counters web_sessions pairing_requests tombstones learned_pairs ai_provider_keys " +
 		"dictation_settings dictation_consents labels notes note_labels note_tombstones note_sync_events " +
-		"transcription_note_links note_images") {
+		"transcription_note_links note_images dictionary_copies") {
 		if _, ok := r[tabela]; !ok {
 			t.Errorf("a consulta não lista a tabela %s", tabela)
 		}

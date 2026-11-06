@@ -167,6 +167,11 @@ Unique `(user_id, normalized_form)`.
 
 Unique `(entry_id, normalized_alias)`.
 
+> **Emendado pela ADR-023 (05-nov-2026).** `DictionaryEntry` e `DictionaryAlias` (as migrations `0004` e
+> `0005`) **ficam como estão, vazias e sem repositório**: eram o dicionário no banco, editável e por
+> linha, que a decisão 1 do Mauro descartou. O dicionário do PC chega à nuvem como **um documento**, a
+> cópia do `dicionario.json`, na tabela `dictionary_copies` (abaixo, "A cópia do dicionário do PC").
+
 ### Correction
 - id uuid
 - user_id
@@ -384,7 +389,9 @@ criação) estão nos arquivos.
 
 Sem uso na etapa 5, e ficam nas migrations para o que vem depois: `DictionaryEntry` e
 `DictionaryAlias` (o dicionário completo no banco), `Correction` (a frase inteira não é guardada,
-ADR-017) e `UserSettings` (preferências não sincronizam na v1).
+ADR-017) e `UserSettings` (preferências não sincronizam na v1). *(Nota de 05-nov-2026, ADR-023: o
+dicionário completo **não** vai para estas tabelas, que seguem vazias; a cópia do dicionário do PC mora
+em `dictionary_copies`, como um documento. Ver "A cópia do dicionário do PC".)*
 
 `User`: só é criado no primeiro login de um e-mail da lista permitida (`CONTAS_PERMITIDAS`), e o
 `google_sub` fica fixado; o mesmo e-mail com outro `sub` é recusado.
@@ -633,6 +640,42 @@ estrangeira (a nota pode chegar depois do ditado, ou ter sido apagada de vez). �
 ditado no sync: o `create` e o `patch` do push gravam ou tiram a linha, sem conflito (o último que
 escreve vence), e o pull e o `GET` do ditado o levam. A lista do histórico na nuvem (`GET
 /transcriptions` e a busca) **esconde** o ditado ligado.
+
+### A cópia do dicionário do PC (ADR-023, fase D1; migration `0027`)
+Uma **cópia** do `dicionario.json` de um PC, para o ditado no celular montar o Smart com ela
+(`06-api-contract.md`, "A cópia do dicionário do PC"). Só aditiva (uma tabela nova, só `CREATE`). Só vai
+do PC à nuvem, **só com a opção "Levar o dicionário para o celular" ligada** no painel do PC; nada desce
+aos PCs, e o arquivo continua o dono. A cópia é a `Semente` recortada por `Semente.ParaACopia()`
+(`internal/dictionary/copia.go`): **sem** o mapa de domínios, **sem** os ids de amostra de `alias_origem`
+e com o `usuario` fixo `"copia"`; as entradas desligadas vão.
+
+#### dictionary_copies (0027)
+PK `user_id`: **uma cópia só por conta**. Ligar a opção em outro PC troca a fonte (um `UPSERT` no store),
+não cria uma segunda linha.
+
+| Coluna | Tipo | Notas |
+|---|---|---|
+| `user_id` | UUID | **PK**, `REFERENCES users (id)` |
+| `device_id` | UUID | o PC que é a fonte. `FOREIGN KEY (user_id, device_id) REFERENCES devices (user_id, id)`, **sem cascata** |
+| `content` | TEXT | os bytes da cópia (JSON). `CHECK (octet_length(content) BETWEEN 1 AND 524288)`. **TEXT e não JSONB**: o JSONB reordena as chaves, e o SHA-256 deixaria de bater |
+| `sha256` | TEXT | o SHA-256 dos bytes, em hexadecimal minúsculo: `CHECK (sha256 ~ '^[0-9a-f]{64}$')`. Conferido contra o cabeçalho `Dicionario-SHA256` do PUT antes de gravar; é a versão da cópia (e do cache do Smart) |
+| `terms` | INTEGER | quantos termos, para a linha do celular: `CHECK (terms BETWEEN 0 AND 2000)` |
+| `updated_at` | TIMESTAMPTZ | quando a cópia mudou pela última vez; vem de quem grava, sem `DEFAULT` |
+
+- **Os limites que o banco não confere ficam em Go** (`dictionary.ValidarCopia`, no PC antes de mandar e no
+  servidor ao receber): 512 KiB, 2.000 termos, 50 variantes por termo, 10.000 variantes no total, 80
+  caracteres por termo, variante, domínio e idioma. O banco só tem os tetos que confere sem entender o JSON.
+- **A cópia sai** quando: **(1)** a pessoa desliga a opção no PC que é a fonte (`DELETE /sync/dictionary`);
+  **(2)** o PC que é a fonte é **revogado ou desconectado**: o `RevogarAparelho` apaga a cópia **na mesma
+  transação** (a linha do aparelho não é apagada, só ganha `revoked_at`, por isso a chave estrangeira não
+  tem cascata), e a leitura do ditado também ignora a cópia de um aparelho revogado, por garantia;
+  **(3)** no "Apagar meus dados" (uma linha na lista `apagarDaConta`, antes dos aparelhos; o
+  `tirar-cadastro.sh` recusa a conta que ainda a tem, como a qualquer tabela com `user_id`); **(4)** depois
+  de **restaurar** um backup (`DepoisDeRestaurar` revoga todos os aparelhos e apaga todas as cópias).
+- **O job de retenção não a toca**: a cópia não vence com os 6 meses; vive enquanto a opção estiver ligada.
+- **Nenhuma coluna tem áudio nem contexto de janela**; o conteúdo é o dicionário que a pessoa escreveu.
+  `migrations/schema_test.go` confere. Nenhum log leva `content` (`09`, "Logging proibido").
+- O backup cifrado a guarda como guarda o resto do banco.
 
 ## SQLite
 
@@ -961,6 +1004,12 @@ modo portátil, ADR-018), e o que o painel
 > Num termo `"adicionado"`, a **prioridade é a dica**: `100` (ou mais) vai ao prompt do ASR antes de
 > tudo, na ordem do arquivo; abaixo de `100` (o painel grava `50`), nunca vai. **Nenhum campo novo**:
 > um Agent anterior ao valor carrega o arquivo e trata o termo como termo comum.
+>
+> **Emendado pela ADR-023 (05-nov-2026).** Estas três tabelas **continuam vazias e sem repositório**: a
+> cópia do dicionário que vai à nuvem é um **documento** (o `dicionario.json` recortado por
+> `Semente.ParaACopia()`), montado do arquivo a cada envio, e não linhas daqui. Nada da nuvem desce ao
+> `dicionario.json` por esse caminho. A única coisa nova no SQLite é a opção `dictionary_copy_enabled`
+> (`local_settings`, abaixo).
 
 ### local_settings
 - hotkey;
@@ -983,6 +1032,13 @@ modo portátil, ADR-018), e o que o painel
 - note_trigger_enabled — `0`/`1`, padrão `1` (true): o gatilho "ditar para nota" (Ctrl+Win+Alt) manda o
   ditado para uma nota; `0`, as mesmas teclas são um ditado comum. Migration `0011`, ADR-022 (N9),
   26-out-2026; só `ADD COLUMN`, e a linha que já existia sai com o padrão ligado.
+- dictionary_copy_enabled — `0`/`1`, padrão `0` (desligado): a opção "Levar o dicionário para o celular".
+  `0`, nada do dicionário sai deste PC; `1`, a cópia do `dicionario.json` vai à nuvem e o celular a usa no
+  ditado. É a **intenção** deste PC: quem é a fonte da cópia quem diz é a nuvem (`GET
+  /api/v1/sync/dictionary`), e o PC que perde a fonte (o `409 NAO_E_A_FONTE`) grava `0`. Desconectar o PC
+  também grava `0`. Migration `0016_local_settings_copia_do_dicionario`, ADR-023 (D3), 05-nov-2026; só
+  `ADD COLUMN ... INTEGER NOT NULL DEFAULT 0`, e a linha que já existia sai desligada. O termo, a
+  variante e o domínio nunca moram aqui.
 
 Linha única (`id = 1`), com `version` para concorrência otimista. A coluna `autostart` não é a
 fonte da verdade: o início automático é lido e gravado no registro do Windows (pacote
