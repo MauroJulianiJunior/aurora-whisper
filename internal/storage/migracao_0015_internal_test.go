@@ -66,10 +66,12 @@ func TestMigracao0015_SoGanhaAsColunasDoNadaAinda(t *testing.T) {
 		t.Fatalf("a 0015 criou ou tirou tabela: %d antes, %d depois", len(antes), len(depois))
 	}
 	semAsColunasDa0015(t, depois)
+	semAsColunasDa0016(t, depois)
 	for tb, a := range antes {
 		d := depois[tb]
 		if tb == "schema_migrations" {
-			if len(d) != len(a)+1 || d[len(a)]["version"] != "0015_notas_imagens_sync" {
+			if len(d) != len(a)+2 || d[len(a)]["version"] != "0015_notas_imagens_sync" ||
+				d[len(a)+1]["version"] != "0016_local_settings_copia_do_dicionario" {
 				t.Fatalf("as migrations aplicadas: %v", d)
 			}
 			d = d[:len(a)]

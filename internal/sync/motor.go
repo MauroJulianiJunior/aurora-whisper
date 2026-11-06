@@ -54,6 +54,10 @@ type Motor struct {
 	// imagens de fora: nada sobe nem baixa, e a mudança note_image do pull é
 	// "não aplicada" (o cursor anda).
 	Imagens ImagensDoPC
+	// Copia é a fase do dicionário para o celular (ADR-023, D3;
+	// motor_dicionario.go): a cópia do dicionario.json, a opção e a memória do
+	// que a nuvem aceitou. nil deixa o dicionário de fora: nada é enviado.
+	Copia *CopiaDoDicionario
 }
 
 // Os tetos de uma rodada: o resto fica para a próxima.
@@ -86,6 +90,9 @@ type Relatorio struct {
 	// Imagens conta, por tipo (TipoImagem*), o que a rodada fez com as imagens
 	// das notas: o pull, o envio e o download.
 	Imagens map[string]int
+	// Dicionario conta, por tipo (TipoDicionario*), o que a fase do dicionário
+	// fez: só contagens, nunca um termo.
+	Dicionario map[string]int
 	// CapacidadeNova: a rodada viu pela primeira vez que a nuvem sincroniza
 	// notas (N7), e o cursor voltou a 0 para ler tudo de novo uma vez.
 	CapacidadeNova bool
@@ -125,7 +132,7 @@ type Relatorio struct {
 func novoRelatorio() Relatorio {
 	return Relatorio{Push: map[string]int{}, Pull: map[string]int{}, PullDoAprendido: map[string]int{},
 		NaoAplicados: map[string]int{}, Recusados: map[string]int{}, Varredura: map[string]int{}, Reaplicados: map[string]int{},
-		Imagens: map[string]int{}}
+		Imagens: map[string]int{}, Dicionario: map[string]int{}}
 }
 
 // Teve diz se a rodada fez alguma coisa (a varredura que só contou o M, sem
@@ -133,7 +140,8 @@ func novoRelatorio() Relatorio {
 func (r Relatorio) Teve() bool {
 	return r.Enviados > 0 || r.Recebidos > 0 || r.Recomecos > 0 || r.Releituras > 0 || r.Reconexoes > 0 ||
 		r.Completados > 0 || r.NotasCompletadas > 0 || r.ImagensCompletadas > 0 || r.CapacidadeNova ||
-		soma(r.Varredura) > 0 || soma(r.Reaplicados) > 0 || soma(r.Imagens) > 0
+		soma(r.Varredura) > 0 || soma(r.Reaplicados) > 0 || soma(r.Imagens) > 0 ||
+		r.Dicionario[TipoDicionarioEnviado] > 0
 }
 
 // AplicouDaNuvem conta o que a rodada gravou no histórico deste PC e veio da
@@ -334,6 +342,11 @@ func (m *Motor) Rodada(ctx context.Context) (Relatorio, error) {
 				// (N10b). Uma que não baixa espera a vez dela, sem falhar a
 				// rodada.
 				err = m.BaixarImagens(ctx, &rel)
+			}
+			if err == nil {
+				// E, com a opção ligada, a cópia do dicionário para o celular
+				// (ADR-023, D3): só numa rodada sem erro.
+				err = m.EnviarDicionario(ctx, &rel)
 			}
 			return rel, err
 		}

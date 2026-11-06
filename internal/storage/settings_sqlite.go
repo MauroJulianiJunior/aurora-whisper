@@ -30,7 +30,7 @@ var _ SettingsRepository = (*SQLiteSettingsRepository)(nil)
 const colunasSettings = `hotkey, hold_threshold_ms, beep_enabled, overlay_position,
 	microphone_device_id, autostart, asr_policy, local_model_id, local_context_enabled,
 	protected_field_policy, local_port, text_mode, ai_provider, ai_model,
-	microphone_always_ready, note_trigger_enabled, updated_at, version`
+	microphone_always_ready, note_trigger_enabled, dictionary_copy_enabled, updated_at, version`
 
 func (r *SQLiteSettingsRepository) Get(ctx context.Context) (Settings, error) {
 	var (
@@ -40,12 +40,13 @@ func (r *SQLiteSettingsRepository) Get(ctx context.Context) (Settings, error) {
 		beep, auto, contexto int64
 		semprePronto         int64
 		gatilhoDaNota        int64
+		copiaDoDicionario    int64
 	)
 	err := r.db.QueryRowContext(ctx, `SELECT `+colunasSettings+` FROM local_settings WHERE id = 1`).Scan(
 		&s.Hotkey, &s.HoldThresholdMs, &beep, &s.OverlayPosition,
 		&microfone, &auto, &s.ASRPolicy, &modelo, &contexto,
 		&s.ProtectedFieldPolicy, &s.LocalPort, &s.TextMode, &s.AIProvider, &s.AIModel,
-		&semprePronto, &gatilhoDaNota, &atualizado, &s.Version)
+		&semprePronto, &gatilhoDaNota, &copiaDoDicionario, &atualizado, &s.Version)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Settings{}, ErrNotFound
 	}
@@ -55,6 +56,7 @@ func (r *SQLiteSettingsRepository) Get(ctx context.Context) (Settings, error) {
 	s.BeepEnabled, s.Autostart, s.LocalContextEnabled = beep != 0, auto != 0, contexto != 0
 	s.MicrophoneAlwaysReady = semprePronto != 0
 	s.NoteTriggerEnabled = gatilhoDaNota != 0
+	s.DictionaryCopyEnabled = copiaDoDicionario != 0
 	s.MicrophoneDeviceID, s.LocalModelID = deTexto(microfone), deTexto(modelo)
 	if s.UpdatedAt, err = deTempo(atualizado); err != nil {
 		return Settings{}, err
@@ -71,7 +73,7 @@ func (r *SQLiteSettingsRepository) Put(ctx context.Context, s Settings, baseVers
 		s.Hotkey, s.HoldThresholdMs, s.BeepEnabled, s.OverlayPosition,
 		textoNulo(s.MicrophoneDeviceID), s.Autostart, s.ASRPolicy, textoNulo(s.LocalModelID),
 		s.LocalContextEnabled, s.ProtectedFieldPolicy, s.LocalPort,
-		s.TextMode, s.AIProvider, s.AIModel, s.MicrophoneAlwaysReady, s.NoteTriggerEnabled, agora,
+		s.TextMode, s.AIProvider, s.AIModel, s.MicrophoneAlwaysReady, s.NoteTriggerEnabled, s.DictionaryCopyEnabled, agora,
 	}
 
 	var res sql.Result
@@ -81,7 +83,7 @@ func (r *SQLiteSettingsRepository) Put(ctx context.Context, s Settings, baseVers
 		// IGNORE": o OR IGNORE engoliria também uma violação de NOT NULL, e
 		// um dado inválido sairia daqui como conflito de versão.
 		res, err = r.db.ExecContext(ctx, `INSERT INTO local_settings (id, `+colunasSettings+`)
-			VALUES (1, ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 1)
+			VALUES (1, ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 1)
 			ON CONFLICT(id) DO NOTHING`, valores...)
 	} else {
 		res, err = r.db.ExecContext(ctx, `UPDATE local_settings SET
@@ -89,7 +91,7 @@ func (r *SQLiteSettingsRepository) Put(ctx context.Context, s Settings, baseVers
 			microphone_device_id = ?, autostart = ?, asr_policy = ?, local_model_id = ?,
 			local_context_enabled = ?, protected_field_policy = ?, local_port = ?,
 			text_mode = ?, ai_provider = ?, ai_model = ?, microphone_always_ready = ?,
-			note_trigger_enabled = ?, updated_at = ?, version = version + 1
+			note_trigger_enabled = ?, dictionary_copy_enabled = ?, updated_at = ?, version = version + 1
 			WHERE id = 1 AND version = ?`, append(valores, baseVersion)...)
 	}
 	if err != nil {
