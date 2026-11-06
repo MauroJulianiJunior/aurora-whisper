@@ -112,6 +112,17 @@ type estadoDoDitadoDTO struct {
 	Aceite       *aceiteDTO         `json:"aceite"`
 	Preferencias preferenciasDTO    `json:"preferencias"`
 	Chaves       []chaveDoEstadoDTO `json:"chaves"`
+	// Dicionario é a cópia do dicionário do PC que o ditado usa (ADR-023, E):
+	// de que PC, quantos termos e quando mudou; null sem cópia.
+	Dicionario *dicionarioDoDitadoDTO `json:"dicionario"`
+}
+
+// dicionarioDoDitadoDTO é a linha do celular sobre a cópia do dicionário: o nome
+// do PC que é a fonte (o do pareamento), os termos e a hora da última mudança.
+type dicionarioDoDitadoDTO struct {
+	Aparelho     string    `json:"aparelho"`
+	Termos       int       `json:"termos"`
+	AtualizadoEm time.Time `json:"atualizado_em"`
 }
 
 // O que o app manda. Os campos são ponteiros para a falta de um deles ser
@@ -181,6 +192,15 @@ func (c *Cloud) estadoDoDitado(ctx context.Context, userID string) (estadoDoDita
 			}
 		}
 		est.Chaves = append(est.Chaves, d)
+	}
+	// A cópia do dicionário do PC (ADR-023, E): só o estado, sem os bytes; a de
+	// um PC revogado conta como nenhuma.
+	copia, err := c.cfg.Store.DictionaryCopyInfo(ctx, userID)
+	if err != nil {
+		return est, err
+	}
+	if copia != nil {
+		est.Dicionario = &dicionarioDoDitadoDTO{Aparelho: copia.DeviceNome, Termos: copia.Termos, AtualizadoEm: copia.AtualizadaEm.UTC()}
 	}
 	return est, nil
 }

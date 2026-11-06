@@ -71,6 +71,12 @@ type estadoDTO struct {
 		Final       string `json:"final"`
 		ColarDeNovo bool   `json:"colar_de_novo"`
 	} `json:"chaves"`
+	// Dicionario é a cópia do dicionário do PC (ADR-023, E); nil sem cópia.
+	Dicionario *struct {
+		Aparelho     string    `json:"aparelho"`
+		Termos       int       `json:"termos"`
+		AtualizadoEm time.Time `json:"atualizado_em"`
+	} `json:"dicionario"`
 }
 
 func (m *mundo) estado(quem string) estadoDTO {

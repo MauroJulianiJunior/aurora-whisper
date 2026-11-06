@@ -86,6 +86,7 @@ func Run(t *testing.T, b Backend) {
 		{"Ditar_FalhasDoProvedorViramCodigos", testDitarFalhasDoProvedor},
 		{"Ditar_AsRotasAntigasContinuam404", testDitarRotasAntigas404},
 		{"Ditar_DicaESmartDaConta", testDitarDicaESmart},
+		{"Ditar_ComACopiaDoDicionarioDoPC", testDitarComACopiaDoDicionario},
 		{"Ditar_PolishAceito", testDitarPolishAceito},
 		{"Ditar_PolishQueFalhaGravaOSmart", testDitarPolishQueFalha},
 		{"Ditar_PolishComModeloQueOProvedorNaoLista", testDitarPolishModeloDesconhecido},
