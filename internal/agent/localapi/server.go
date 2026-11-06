@@ -79,6 +79,10 @@ type Preferencias struct {
 	// /api/nuvem*. Em produção, o *nuvem.Servico. Nil: as rotas respondem
 	// 503.
 	Nuvem Nuvem
+	// CopiaDoDicionario é o "Levar o dicionário para o celular" (ADR-023, D3):
+	// GET e POST /api/nuvem/dicionario. Em produção, o mesmo *nuvem.Servico. Nil:
+	// as rotas respondem 503.
+	CopiaDoDicionario DicionarioDaNuvem
 	// Mudancas é o contador de mudanças do sync (ADR-021, S): GET
 	// /api/nuvem/mudancas. Em produção, o *syncengine.Laco. Nil: a rota
 	// responde 503.
@@ -210,6 +214,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/nuvem/enviar", s.handleEnviarHistorico)
 	mux.HandleFunc("POST /api/nuvem/esquecer", s.handleEsquecerNuvem)
 	mux.HandleFunc("GET /api/nuvem/mudancas", s.handleMudancasNuvem)
+	mux.HandleFunc("GET /api/nuvem/dicionario", s.handleGetDicionarioDaNuvem)
+	mux.HandleFunc("POST /api/nuvem/dicionario", s.handleLigarDicionarioDaNuvem)
 
 	mux.HandleFunc("GET /api/retencao", s.handleGetRetencao)
 	mux.HandleFunc("POST /api/retencao/ligar", s.handleLigarRetencao)

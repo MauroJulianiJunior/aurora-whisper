@@ -183,6 +183,12 @@ type Config struct {
 	// storage.HistoricoDaNuvem). nil: o Estado vem sem o resumo, e o
 	// EnviarHistorico e o Esquecer respondem 503.
 	Historico Historico
+	// OpcaoDoDicionario e FonteDoDicionario são o dicionário para o celular
+	// (ADR-023, D3; dicionario.go): onde a opção "Levar o dicionário para o
+	// celular" mora, e o dicionario.json de onde a cópia sai. nil: as rotas do
+	// dicionário respondem 503.
+	OpcaoDoDicionario OpcaoDoDicionario
+	FonteDoDicionario FonteDoDicionario
 	// Log recebe só o que aconteceu, com códigos; nil descarta.
 	Log *slog.Logger
 }
@@ -230,6 +236,12 @@ type Servico struct {
 	// a resposta da outra.
 	politicaDe string
 	politica   bool
+	// dic é o que o painel sabe do dicionário para o celular (dicionario.go):
+	// o aviso, a última vez que a nuvem aceitou a cópia e quantos termos tinha.
+	dic dicionarioDoServico
+	// dicMu serializa o ligar e o desligar do dicionário (cada um fala com a
+	// nuvem e grava a opção): dois cliques juntos não se cruzam.
+	dicMu sync.Mutex
 }
 
 // pedido é o pareamento em curso, só na memória.
@@ -397,6 +409,10 @@ func (s *Servico) esquecerAparelho(ctx context.Context) error {
 	s.mu.Lock()
 	s.concluido = ""
 	s.mu.Unlock()
+	// O PC deixa de estar conectado: o dicionário para o celular volta a
+	// desligado (a revogação já apagou a cópia na nuvem), e reconectar não o
+	// manda sem um clique novo (ADR-023, F).
+	s.desligarOpcaoDoDicionario(ctx)
 	if err := s.cfg.Instalacao.Apagar(ctx, chaveAparelho, chaveNome, chaveConectadoEm); err != nil {
 		return &Erro{Status: http.StatusInternalServerError, Mensagem: MsgInstalacao, causa: err}
 	}

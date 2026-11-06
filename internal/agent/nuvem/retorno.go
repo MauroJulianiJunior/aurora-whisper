@@ -150,6 +150,9 @@ func (s *Servico) trocar(ctx context.Context, p *pedido, code string) (int, stri
 		s.desfazer(ctx, p.base, aparelho, out.Token, "cofre")
 		return http.StatusInternalServerError, AvisoFalhou
 	}
+	// Um pareamento novo começa com o dicionário para o celular desligado, qualquer
+	// que seja o valor de antes (ADR-023, F: reconectar não o manda sem um clique).
+	s.desligarOpcaoDoDicionario(ctx)
 	if err := s.cfg.Instalacao.Gravar(ctx, map[string]string{
 		chaveURL: p.base, chaveConta: conta, chaveEmail: out.Conta.Email, chaveAparelho: aparelho,
 		chaveNome: p.nome, chaveConectadoEm: s.cfg.Agora().UTC().Format(time.RFC3339),

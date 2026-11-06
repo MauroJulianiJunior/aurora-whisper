@@ -42,6 +42,7 @@ func TestMigracao0013_SoGanhaAsColunasNulas(t *testing.T) {
 	}
 	depois := todasAsTabelas(t, db)
 	semAsColunasDa0015(t, depois)
+	semAsColunasDa0016(t, depois)
 	// A única tabela nova é a das imagens das notas, da 0014 (o Migrate roda até a
 	// última), e vazia.
 	if l, ok := depois["local_note_images"]; len(depois) != len(antes)+1 || !ok || len(l) != 0 {
@@ -52,8 +53,9 @@ func TestMigracao0013_SoGanhaAsColunasNulas(t *testing.T) {
 		d := depois[tb]
 		switch tb {
 		case "schema_migrations":
-			if len(d) != len(a)+3 || d[len(a)]["version"] != "0013_notas_sync" || d[len(a)+1]["version"] != "0014_notas_imagens" ||
-				d[len(a)+2]["version"] != "0015_notas_imagens_sync" {
+			if len(d) != len(a)+4 || d[len(a)]["version"] != "0013_notas_sync" || d[len(a)+1]["version"] != "0014_notas_imagens" ||
+				d[len(a)+2]["version"] != "0015_notas_imagens_sync" ||
+				d[len(a)+3]["version"] != "0016_local_settings_copia_do_dicionario" {
 				t.Fatalf("as migrations aplicadas: %v", d)
 			}
 			d = d[:len(a)]

@@ -106,6 +106,9 @@ type ConfigDoLaco struct {
 	// Imagens são as imagens das notas no disco (Motor.Imagens, N10b); nil
 	// deixa as imagens de fora. Quem as liga é o Agent.
 	Imagens ImagensDoPC
+	// Copia é a fase do dicionário para o celular (Motor.Copia, ADR-023, D3); nil
+	// deixa o dicionário de fora. O laço guarda a mesma memória entre as rodadas.
+	Copia *CopiaDoDicionario
 	// Log recebe só contagens e códigos; nil descarta.
 	Log *slog.Logger
 }
@@ -425,7 +428,7 @@ func (l *Laco) rodada(ctx context.Context) error {
 	m := &Motor{
 		Fila: l.cfg.Fila, Cliente: l.cfg.Cliente(cred.URL, cred.Token),
 		Aparelho: cred.Aparelho, PareadoEm: cred.PareadoEm, NovoID: l.cfg.NovoID, Agora: l.cfg.Agora,
-		AoLote: func() { l.contarPendentes(ctx) }, Dicionario: l.cfg.Dicionario, Imagens: l.cfg.Imagens,
+		AoLote: func() { l.contarPendentes(ctx) }, Dicionario: l.cfg.Dicionario, Imagens: l.cfg.Imagens, Copia: l.cfg.Copia,
 	}
 	rel, err := m.Rodada(ctx)
 	if rel.FreioConferido {
@@ -552,6 +555,8 @@ func camposDoLog(r Relatorio, pendentes int64) []any {
 		"imagens_apagadas", r.Imagens[TipoImagemApagada] + r.Imagens[TipoImagemSumiuNaNuvem] + r.Imagens[TipoImagemSumiu],
 		"imagens_estragadas", r.Imagens[TipoImagemEstragada],
 		"imagens_nao_aplicadas", r.Imagens[TipoImagemNaoAplicada] + r.Imagens[TipoImagemConflito],
+		// O dicionário para o celular (ADR-023, D3): "tipo:n,tipo:n", só contagens.
+		"dicionario", emTexto(r.Dicionario),
 	}
 }
 
