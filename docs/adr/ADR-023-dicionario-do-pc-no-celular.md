@@ -146,7 +146,9 @@ do Smart (5 s), a cópia da conta é lida (só a de um aparelho não revogado).
   cópia, com o `usuario` trocado pelo dono da conta, e aplica o aprendido por cima com o mesmo
   `AplicarPares` e as mesmas conferências do PC. Os pares presos a um domínio continuam de fora, como
   hoje. Sem cópia, é exatamente a montagem de hoje (a semente vazia). É a conta do PC: o arquivo, com
-  o aprendido que veio da nuvem aplicado nele.
+  o aprendido que veio da nuvem aplicado nele. O par que a cópia já tem (a mesma variante, sem
+  restrição, do mesmo termo) é pulado: o lote não mudaria nada, e conferi-lo custa uma volta pelo
+  dicionário inteiro (ver "Riscos", 3).
 - **A resolução** continua sem domínio (`Domain` nil), que é o PC num programa fora do mapa: as
   entradas valem, de qualquer domínio, e as **variantes restritas** e as **entradas restritas** ficam
   de fora (`repository_memory.go:239-248`). No arquivo do Mauro, 0 entradas e 3 variantes são
@@ -321,7 +323,15 @@ O que muda, e entra na política, no `09` e no dossiê:
    Aprender acorda o laço; o resto espera a rodada periódica.
 2. **Dois PCs com a opção ligada:** o que perdeu a fonte só fica sabendo no próximo envio dele (o
    `409`), ou quando a seção Nuvem do painel abre.
-3. **O tempo de montagem** com o dicionário no limite (2.000 termos) não foi medido no servidor. O
-   teste mede a montagem do limite e falha acima de 2 s; o do Mauro tem 49.
+3. **O tempo de montagem com o dicionário no limite** (medido em 05-nov-2026, no PC de
+   desenvolvimento; `smartconta/desempenho_copia_test.go`): a cópia de 2.000 termos e 10.000 variantes
+   monta em ~0,1 a 0,6 s. **Com 500 pares do Aprender que ela não tem, ~19 s**: o lote do Aprender
+   confere cada par contra o dicionário inteiro (`dictionary.aprenderEm` normaliza cada variante a cada
+   par), o mesmo custo de um PC que recebe 500 pares. Por isso a montagem **pula o par que a cópia já
+   tem** (a mesma variante, sem restrição, do mesmo termo: o lote não mudaria nada; `Resumo.JaNaCopia`),
+   que é o caso de sempre, porque o PC fonte recebe o aprendido pelo pull antes de mandar a cópia. O
+   pior caso roda uma vez por versão, em segundo plano (o `Cache` segue a montagem depois do prazo do
+   ditado), e o ditado do meio usa o Smart sem a cópia. O dicionário do Mauro tem 49 termos. Indexar o
+   lote do Aprender resolveria o pior caso, mas mexe no código do PC e fica para quando fizer falta.
 4. **A política muda depois do código:** o deploy espera a aprovação do texto novo, porque a política
    publicada diria que o dicionário fica no PC.
