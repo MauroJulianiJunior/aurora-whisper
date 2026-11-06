@@ -4,7 +4,7 @@
 
 Aurora Whisper é um sistema de ditado por voz para Windows 10/11 x64, com backend cloud e dashboard web. O Windows Agent captura áudio enquanto uma tecla configurável é mantida pressionada, transcreve ao soltar, aplica resolução contextual controlada e insere o texto no campo que possui foco de teclado.
 
-O sistema deve ser local-first para captura/experiência do Windows, mas cloud-connected, só depois de a pessoa conectar, para sincronizar o histórico, o que o painel aprende e os dispositivos (dicionário completo, correções e preferências: depois, ADR-019).
+O sistema deve ser local-first para captura/experiência do Windows, mas cloud-connected, só depois de a pessoa conectar, para sincronizar o histórico, o que o painel aprende e os dispositivos. O dicionário do PC vai à nuvem só como cópia, com a opção ligada no PC (ADR-023); correções e preferências ficam para depois (ADR-019).
 
 A especificação canônica está em `docs/ai-spec/00-index.md`.
 
