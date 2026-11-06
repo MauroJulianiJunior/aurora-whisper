@@ -51,8 +51,8 @@ const (
 
 // Os códigos de erro das rotas do dicionário (ADR-023, C).
 const (
-	CodigoNaoEAFonte        = "nao_e_a_fonte"
-	CodigoDicionarioInvalid = "dicionario_invalido"
+	CodigoNaoEAFonte        = "NAO_E_A_FONTE"
+	CodigoDicionarioInvalid = "DICIONARIO_INVALIDO"
 )
 
 // EstadoDoDicionario é o estado da fonte, o corpo do GET e do 200 do PUT e do

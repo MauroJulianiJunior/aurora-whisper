@@ -184,7 +184,7 @@ func TestLigarDicionario_QuandoFalhaAOpcaoFicaDesligadaEADizPorque(t *testing.T)
 		msg    string
 	}{
 		{"422 com o motivo", func(string) (int, string, map[string]string) {
-			return 422, `{"error":{"code":"dicionario_invalido","motivo":"variantes_demais"}}`, nil
+			return 422, `{"error":{"code":"DICIONARIO_INVALIDO","motivo":"variantes_demais"}}`, nil
 		}, http.StatusConflict, syncengine.FraseDoMotivoDaCopia("variantes_demais")},
 		{"404: a nuvem de antes", func(string) (int, string, map[string]string) { return 404, "", nil },
 			http.StatusBadGateway, "A nuvem ainda não recebe o dicionário."},

@@ -150,6 +150,12 @@ func lerTabelasDe(t *testing.T, db *sql.DB) map[string][]map[string]any {
 			if v, ok := m["note_trigger_enabled"]; ok && v == int64(1) && tb == "local_settings" {
 				delete(m, "note_trigger_enabled")
 			}
+			// A dictionary_copy_enabled (0016, "Levar o dicionário para o
+			// celular", ADR-023) nasce com o padrão desligado: com ele, não é
+			// mudança. Ligada, a comparação a pega: nada aqui a liga.
+			if v, ok := m["dictionary_copy_enabled"]; ok && v == int64(0) && tb == "local_settings" {
+				delete(m, "dictionary_copy_enabled")
+			}
 			out[tb] = append(out[tb], m)
 		}
 		r.Close()
@@ -238,8 +244,9 @@ func TestSyncE2E_HistoricoDeVerdadeNaoPerdeNemMudaNada(t *testing.T) {
 	semMudar(t, "a 0006, a 0007 e a 0008", original, depois06, "schema_migrations")
 	// (e a 0009, das notas, a 0010, do ditado que virou nota, e a 0011, do gatilho
 	// da nota, a 0012, da ordem das notas, a 0013, do sync das notas, a 0014,
-	// das imagens das notas, e a 0015, do sync delas: o Migrate roda até a última)
-	if m := depois06["schema_migrations"]; len(m) != 15 || m[6]["version"] != "0007_sync_aprendido" || m[7]["version"] != "0008_sync_aprendido_perdido" || m[8]["version"] != "0009_notas" || m[9]["version"] != "0010_ditado_virou_nota" || m[10]["version"] != "0011_local_settings_gatilho_da_nota" || m[11]["version"] != "0012_notas_posicao" || m[12]["version"] != "0013_notas_sync" || m[13]["version"] != "0014_notas_imagens" || m[14]["version"] != "0015_notas_imagens_sync" {
+	// das imagens das notas, a 0015, do sync delas, e a 0016, da opção do
+	// dicionário no celular: o Migrate roda até a última)
+	if m := depois06["schema_migrations"]; len(m) != 16 || m[6]["version"] != "0007_sync_aprendido" || m[7]["version"] != "0008_sync_aprendido_perdido" || m[8]["version"] != "0009_notas" || m[9]["version"] != "0010_ditado_virou_nota" || m[10]["version"] != "0011_local_settings_gatilho_da_nota" || m[11]["version"] != "0012_notas_posicao" || m[12]["version"] != "0013_notas_sync" || m[13]["version"] != "0014_notas_imagens" || m[14]["version"] != "0015_notas_imagens_sync" || m[15]["version"] != "0016_local_settings_copia_do_dicionario" {
 		t.Errorf("as migrations: %v", m)
 	}
 	for _, tb := range []string{"sync_mudou_aqui", "sync_aprendido", "sync_veio_da_nuvem", "local_notes", "local_labels", "local_note_labels", "local_note_images"} {

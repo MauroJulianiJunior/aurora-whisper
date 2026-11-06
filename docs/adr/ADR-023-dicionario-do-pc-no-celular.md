@@ -125,10 +125,10 @@ ou `"nenhuma"` (sem cópia; os outros campos ausentes).
     fonte, mesmo que outro fosse. `200` com o estado.
   - `manter` é o envio automático, quando o arquivo muda: só grava se este PC **já é** a fonte. Se a
     fonte é outro PC, ou se não há cópia (ela foi apagada no "Apagar meus dados", por exemplo), é
-    `409` com `code: "nao_e_a_fonte"` e o estado, e nada é gravado. É o que impede dois PCs ligados de
+    `409` com `code: "NAO_E_A_FONTE"` e o estado, e nada é gravado. É o que impede dois PCs ligados de
     tomarem a fonte um do outro a cada mudança.
 - O mesmo SHA-256 que já está gravado, do mesmo PC, é `200` sem gravar (o reenvio é de graça).
-- A cópia inválida é `422` com `code: "dicionario_invalido"` e um motivo fechado
+- A cópia inválida é `422` com `code: "DICIONARIO_INVALIDO"` e um motivo fechado
   (`json`, `grande_demais`, `termos_demais`, `variantes_demais`, `termo_invalido`). Nunca leva o termo.
 
 **O DELETE** apaga só se a fonte é este PC: `204`. Se é outro PC, ou se não há cópia, também `204`, sem
@@ -218,7 +218,7 @@ de novo." **[derivada]**: desligar sem apagar daria a impressão de que a cópia
    reiniciar, o primeiro envio é um `200` sem gravar), não faz nada;
 3. senão, `PUT … manter`:
    - `200`: guarda o SHA-256;
-   - `409 nao_e_a_fonte`: **grava a opção desligada** e guarda o aviso para o painel: "O celular
+   - `409 NAO_E_A_FONTE`: **grava a opção desligada** e guarda o aviso para o painel: "O celular
      passou a usar o dicionário de NOTEBOOK." (fonte `outro`) ou "A cópia do dicionário foi apagada
      da nuvem." (fonte `nenhuma`);
    - `422`: guarda o aviso com o motivo, mantém a opção e só tenta de novo quando o arquivo mudar;

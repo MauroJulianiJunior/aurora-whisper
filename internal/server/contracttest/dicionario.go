@@ -135,8 +135,8 @@ func erroDaCopia(t *testing.T, rec *httptest.ResponseRecorder) string {
 			Motivo    string `json:"motivo"`
 		} `json:"error"`
 	}](t, rec)
-	if rec.Code != http.StatusUnprocessableEntity || e.Error.Code != "dicionario_invalido" || e.Error.Message == "" || e.Error.RequestID == "" {
-		t.Fatalf("a cópia inválida: %d %s, quero 422 dicionario_invalido", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusUnprocessableEntity || e.Error.Code != "DICIONARIO_INVALIDO" || e.Error.Message == "" || e.Error.RequestID == "" {
+		t.Fatalf("a cópia inválida: %d %s, quero 422 DICIONARIO_INVALIDO", rec.Code, rec.Body.String())
 	}
 	return e.Error.Motivo
 }
@@ -147,7 +147,7 @@ func testDicionarioTomarEManter(t *testing.T, w *world) {
 	querSemCopia(t, "o GET sem cópia", w.estadoDaCopia(pcA1))
 	c1, sha1 := copiaDaSuite(t, "Aurora", "Whisper")
 	rec := w.putCopia(pcA1, c1, "manter")
-	querStatus(t, "manter sem cópia", rec, http.StatusConflict, "nao_e_a_fonte")
+	querStatus(t, "manter sem cópia", rec, http.StatusConflict, "NAO_E_A_FONTE")
 	querSemCopia(t, "o 409 sem cópia leva o estado", lerEstadoDoConflito(t, rec.Body.Bytes()))
 	querSemCopia(t, "o manter sem cópia não gravou", w.estadoDaCopia(pcA1))
 
@@ -196,7 +196,7 @@ func testDicionarioTomarEManter(t *testing.T, w *world) {
 	// O manter de outro PC (que não é a fonte) é 409 com o estado, e nada muda.
 	c3, _ := copiaDaSuite(t, "Outro")
 	rec = w.putCopia(pcA2, c3, "manter")
-	querStatus(t, "manter de quem não é a fonte", rec, http.StatusConflict, "nao_e_a_fonte")
+	querStatus(t, "manter de quem não é a fonte", rec, http.StatusConflict, "NAO_E_A_FONTE")
 	querEstado(t, "o estado do 409", lerEstadoDoConflito(t, rec.Body.Bytes()), "outro", 3, sha2)
 	querEstado(t, "o 409 não gravou", w.estadoDaCopia(pcA1), "este", 3, sha2)
 
@@ -209,7 +209,7 @@ func testDicionarioTomarEManter(t *testing.T, w *world) {
 	querEstado(t, "tomar de outro PC", lerEstadoDaCopia(t, rec.Body.Bytes()), "este", 1, sha3)
 	querEstado(t, "o PC que perdeu a fonte", w.estadoDaCopia(pcA1), "outro", 1, sha3)
 	// E o manter do que perdeu a fonte agora é 409.
-	querStatus(t, "manter de quem perdeu a fonte", w.putCopia(pcA1, c2, "manter"), http.StatusConflict, "nao_e_a_fonte")
+	querStatus(t, "manter de quem perdeu a fonte", w.putCopia(pcA1, c2, "manter"), http.StatusConflict, "NAO_E_A_FONTE")
 
 	// Uma cópia só por conta, e cada conta com a sua: o PC da conta B não vê a de A.
 	querSemCopia(t, "o PC de outra conta", w.estadoDaCopia(pcB))
@@ -252,7 +252,7 @@ func testDicionarioCabecalhos(t *testing.T, w *world) {
 	}
 }
 
-// A cópia inválida é 422 dicionario_invalido, com o motivo fechado, em cada
+// A cópia inválida é 422 DICIONARIO_INVALIDO, com o motivo fechado, em cada
 // motivo; nada é gravado, e a resposta nunca traz o texto mandado.
 func testDicionarioInvalida(t *testing.T, w *world) {
 	copia := func(s dictionary.Semente) []byte {
@@ -423,7 +423,7 @@ func testDicionarioApagarMeusDadosApagaACopia(t *testing.T, w *world) {
 	querStatus(t, "apagar meus dados", w.do(http.MethodDelete, "/api/v1/me/data", celA, map[string]any{"confirmar": "apagar"}), http.StatusNoContent, "")
 	w.newDevice(w.userA, "pc-novo")
 	querSemCopia(t, "a cópia depois do apagar meus dados", w.estadoDaCopia("pc-novo"))
-	querStatus(t, "manter depois do apagar", w.putCopia("pc-novo", cA, "manter"), http.StatusConflict, "nao_e_a_fonte")
+	querStatus(t, "manter depois do apagar", w.putCopia("pc-novo", cA, "manter"), http.StatusConflict, "NAO_E_A_FONTE")
 	querEstado(t, "a conta B continua com a cópia", w.estadoDaCopia(pcB), "este", 1, shaB)
 }
 

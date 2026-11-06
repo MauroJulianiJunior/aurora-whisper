@@ -21,7 +21,7 @@ import (
 // família /api/v1/sync/:
 //
 //	GET    /api/v1/sync/dictionary   o estado da fonte (200)
-//	PUT    /api/v1/sync/dictionary   sobe a cópia (200 o estado, 409 nao_e_a_fonte, 422 dicionario_invalido)
+//	PUT    /api/v1/sync/dictionary   sobe a cópia (200 o estado, 409 NAO_E_A_FONTE, 422 DICIONARIO_INVALIDO)
 //	DELETE /api/v1/sync/dictionary   apaga a cópia, se este PC for a fonte (204, idempotente)
 //
 // O corpo do PUT é a cópia (Content-Type: application/json), até
@@ -42,10 +42,10 @@ import (
 // Os códigos desta família (minúsculos, como o ADR-023 os fixa: o PC os lê).
 const (
 	// codeDicionarioInvalido: a cópia foi recusada (422), com o motivo fechado.
-	codeDicionarioInvalido = "dicionario_invalido"
+	codeDicionarioInvalido = "DICIONARIO_INVALIDO"
 	// codeNaoEAFonte: o envio automático (manter) de um PC que não é a fonte
 	// (409). O corpo leva o estado.
-	codeNaoEAFonte = "nao_e_a_fonte"
+	codeNaoEAFonte = "NAO_E_A_FONTE"
 )
 
 // Os cabeçalhos do PUT.
@@ -97,7 +97,7 @@ var frasesDaCopia = map[dictionary.MotivoDaCopia]string{
 	dictionary.MotivoCopiaTermoInvalido:   "a cópia do dicionário tem um termo que não vale",
 }
 
-// recusarCopia responde o 422 dicionario_invalido com o motivo e o anota no log.
+// recusarCopia responde o 422 DICIONARIO_INVALIDO com o motivo e o anota no log.
 func recusarCopia(w http.ResponseWriter, r *http.Request, motivo dictionary.MotivoDaCopia) {
 	anotarMotivo(r.Context(), string(motivo))
 	frase, ok := frasesDaCopia[motivo]
@@ -237,7 +237,7 @@ func (c *Cloud) handleDicionarioPut(w http.ResponseWriter, r *http.Request) {
 	}
 	estado := toEstadoDaCopia(res.Atual, principal.DeviceID)
 	if res.NaoEraAFonte {
-		anotarMotivo(r.Context(), codeNaoEAFonte)
+		anotarMotivo(r.Context(), "nao_e_a_fonte")
 		writeJSON(w, http.StatusConflict, erroNaoEAFonte{
 			Error:            apiError{Code: codeNaoEAFonte, Message: "este PC não é a fonte do dicionário do celular", RequestID: storage.NewID()},
 			estadoDaCopiaDTO: estado,
