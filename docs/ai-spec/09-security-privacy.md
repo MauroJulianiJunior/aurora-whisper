@@ -9,7 +9,8 @@
 | Título e corpo da nota, nome do marcador (ADR-022) | Confidencial; a nota pode ter dado pessoal e de terceiros (clientes, por exemplo), como o ditado | SQLite (`local_notes`, `local_labels`); no Postgres (`notes`, `labels`) **só depois que quem usa conecta a nuvem**, legível no servidor como o ditado (N7). A lápide (`note_tombstones`) e o log (`note_sync_events`) levam só ids e datas | a nota e o marcador: até quem usa apagar (a lixeira expurga em 30 dias; **sem** os 6 meses do histórico). O ditado que virou nota segue os 6 meses na nuvem (a ligação sai com ele). O backup da nuvem os guarda até a cópia girar |
 | Imagem da nota no PC (ADR-022, N10, a primeira metade: o PC). A foto de um documento de cliente é dado pessoal, e de terceiros | Confidencial | **a cópia reduzida**: o navegador a reduz (2.000 px no lado maior, JPEG) antes de ela sair da página, e o original e o nome do arquivo nunca saem dela. Os bytes ficam num arquivo `<dados>\notas-imagens\<id>.jpg`, **fora do `historico.db`** (as cópias do banco ao lado dele, a dos 6 meses e a do envio, não levam as fotos); a linha `local_note_images` guarda só o tamanho em pixels e em bytes, o SHA-256 e a hora. O Agent confere o JPEG e o guarda **sem os segmentos de metadados** (APP1 a APP15, COM e o que vem depois do fim da imagem: o EXIF com a localização, o XMP, o perfil de cor, o comentário, o vídeo da "foto em movimento"), sem recomprimir (`internal/imagemdanota`). **Nunca vai à IA** (nem ao Polish, nem ao ASR), **nem à busca** (sem OCR), nem ao "Copiar para WhatsApp". No painel, só na memória da aba (uma URL `blob:`, solta ao sair; nada em cache, `localStorage` ou IndexedDB). **Desde a N10b, sobe à nuvem** sob a mesma permissão das notas ("Enviar o histórico"): a cópia limpa, conferida de novo pelo servidor antes de entrar no banco (`note_images`, no backup cifrado), e só pelas rotas das imagens; os metadados (tamanho, SHA-256, hora) vão no pull, os bytes nunca (`05`, `06`, ADR-022 "Decisões da N10b"; a política e o dossiê dizem isso). **No celular** (N10b, a segunda metade): a mesma redução, no navegador, antes de subir; **o aparelho não guarda os bytes** (só a URL `blob:` na memória da aba, solta ao sair; nem IndexedDB, nem Cache API, nem service worker; o `GET` responde `no-store`), e o IndexedDB das notas leva só os metadados da imagem (id, tamanho, SHA-256) | segue a nota: vai e volta da lixeira com ela; o expurgo de 30 dias e o "Apagar para sempre" apagam a linha e o arquivo; "Tirar da nota" a apaga de vez depois do Desfazer. Até 10 por nota, e o total de imagens da conta até 400 MB. O desinstalar com "apagar dados" leva a pasta junto |
 | Nota em foco (ADR-022: em que nota está o cursor, o id dela ou o token da caixa "Criar uma nota") | Sensível efêmero | só na memória do Agent (`internal/agent/notafoco`). Nunca em disco, log, resposta de erro nem sync | 60 s sem renovação (o painel renova a cada ~20 s), ou o DELETE `/api/notas/foco`, ou o reinício. O que fica no banco é o efeito (`virou_nota` do ditado), não o aviso |
-| Dictionary/corrections | Confidencial | SQLite/Postgres; **hoje o `dicionario.json` local, em texto, na pasta de dados** (ADR-017; ADR-018: `%LOCALAPPDATA%\AuroraWhisper`, ou ao lado do executável no modo portátil), onde o painel grava o que aprende | até exclusão |
+| Dictionary/corrections | Confidencial | SQLite/Postgres; **hoje o `dicionario.json` local, em texto, na pasta de dados** (ADR-017; ADR-018: `%LOCALAPPDATA%\AuroraWhisper`, ou ao lado do executável no modo portátil), onde o painel grava o que aprende. **Desde a ADR-023 (05-nov-2026), o arquivo só sai do PC como a cópia da linha seguinte, e só com a opção ligada; o mapa de domínios, os ids de amostra e o `usuario` local nunca saem** | até exclusão |
+| Cópia do dicionário do PC na nuvem (ADR-023, 05-nov-2026): os termos, as variantes (com as restritas), as prioridades, as dicas, o idioma, o **nome** dos domínios e as entradas desligadas do `dicionario.json`; os termos podem ser nomes de clientes ou de terceiros | Confidencial; sai da máquina | Postgres (`dictionary_copies`, migration `0027`), **uma por conta**, de um PC só (a fonte), **só depois que quem usa liga "Levar o dicionário para o celular" no painel do PC** (desligada por padrão); legível no servidor como o ditado (THR-023, THR-032). No PC, a opção é a coluna `local_settings.dictionary_copy_enabled`, e o arquivo continua o dono. **Não vão:** o mapa de domínios para executáveis, os ids de amostra do `dictlearn` e o nome do usuário local (o `usuario` da cópia é sempre `copia`) | enquanto a opção estiver ligada no PC que é a fonte. Sai ao desligar (o `DELETE`), ao revogar ou desconectar o PC, no "Apagar meus dados" e na restauração do banco; os backups cifrados a guardam pelo prazo deles (cerca de 30 dias) |
 | Email/google_sub/nome (`display_name`, o `name` do Google; o `avatar_url` existe na tabela e nunca é preenchido) | Pessoal | Postgres | vida da conta: o "apagar meus dados" **não** apaga o cadastro (dossiê de LGPD, `docs/lgpd-dossie.md`, decisão 2) |
 | Device token | Secreto | Credential Manager (alvo `AuroraWhisper/nuvem` no Agent instalado e `AuroraWhisper/nuvem-portatil` no `bin\`, ADR-019, F6)/hash (HMAC com `DEVICE_TOKEN_PEPPER`) | até revoke, ou 180 dias sem uso (F6) |
 | Sessão web da nuvem (ADR-019) | Secreto | cookie `__Host-sessao` (`HttpOnly`); no Postgres, só o HMAC com `SESSION_SECRET` | 30 dias sem uso (sugestão), "Sair" ou encerrada pela lista de sessões |
@@ -20,9 +21,9 @@
 | Voz do ditado no celular (ADR-021) | Sensível efêmero; **sai do aparelho** | só em memória: no app (uma variável, até o envio dar certo ou a pessoa descartar) e na API (uma variável do handler, durante o pedido). Nunca em disco, swap, log, erro ou resposta | descartada ao fim. No provedor escolhido, o que a documentação dele diz (ver "Ditar no celular") |
 | Chave de API da pessoa para ditar no celular (ADR-021) | Secreto | Postgres, **cifrada** (AES-256-GCM, subchave por HKDF); a chave de cifra é um arquivo do servidor (`AI_KEYS_SECRET_FILE`), fora do banco e do backup | até a pessoa trocar, remover, desligar o ditado ou apagar os dados. A cópia antiga, cifrada, fica nos backups (cerca de 30 dias) e no banco anterior da restauração (7 dias) |
 | Aceite e preferências do ditado no celular (ADR-021) | Pessoal | Postgres (`dictation_consents` e `dictation_settings`); nunca descem aos PCs | a vida da conta; o "Apagar meus dados" os apaga |
-| Termos do aprendido enviados como dica (ADR-021) | Confidencial; sai da máquina | nenhuma (a dica é montada a cada ditado); só com o interruptor ligado | a chamada ao provedor; no provedor, como a voz |
+| Termos do dicionário enviados como dica (ADR-021; ADR-023, 05-nov-2026: com a cópia do dicionário do PC, são os termos dela; sem a cópia, os do aprendido) | Confidencial; sai da máquina | nenhuma (a dica é montada a cada ditado); só com o interruptor ligado. Até 140 caracteres | a chamada ao provedor; no provedor, como a voz |
 | Desfecho pago e não gravado (ADR-021) | Confidencial | memória da API, por `(user_id, id)`: o texto que seria gravado (o do provedor e o final), o modo, o provedor e o modelo; só quando o provedor já cobrou e a gravação falhou | 10 min (o vencimento roda quando chega um pedido novo: ADR-021, risco 21), o reinício, a mudança do epoch da conta, o "Apagar meus dados" e o "Desligar o ditado" (os dois o esquecem na hora); nunca em disco nem em log |
-| Aprendido da conta montado em Smart (ADR-021) | Confidencial | memória da API: o `smartconta.Cache`, por conta, montado a cada mudança dos pares (até 500); os termos podem ser nomes de clientes ou de terceiros | até o reinício ou a saída pelo LRU; o "Apagar meus dados" e o "Desligar o ditado" o esquecem, **e esquecem de novo no fim de um ditado em andamento que um deles cortou**; nunca em disco nem em log |
+| Aprendido da conta montado em Smart (ADR-021; desde a ADR-023, montado **sobre a cópia do dicionário do PC**, quando a conta a tem, e o cache muda de versão com o SHA-256 dela) | Confidencial | memória da API: o `smartconta.Cache`, por conta, montado a cada mudança dos pares (até 500) ou da cópia; os termos podem ser nomes de clientes ou de terceiros | até o reinício ou a saída pelo LRU; o "Apagar meus dados" e o "Desligar o ditado" o esquecem, **e esquecem de novo no fim de um ditado em andamento que um deles cortou**; nunca em disco nem em log |
 
 ## Threat model
 | ID | Ameaça | Mitigação |
@@ -54,10 +55,11 @@
 | THR-025 | token do PC roubado | só serve ao sync, ao `/me` e ao próprio aparelho, nunca ao CRUD, às sessões ou ao "apagar meus dados"; HMAC no servidor; revogar pela lista de aparelhos (ADR-019). **F6:** vence com 180 dias sem uso; o token não aprova pedido, não lista nem revoga outro aparelho (`403`); um alvo no Gerenciador por modo, para o `bin\` (conta de teste) e o instalado nunca dividirem a credencial |
 | THR-026 | a voz do ditado do celular (ADR-021) sai do aparelho: passa pela memória da API, vai a um provedor escolhido pela pessoa, que não diz processar no Brasil, e pode ser retida lá; quem toma a VPS a ouve em trânsito | o aceite específico antes do microfone (THR-030); só o provedor que a pessoa escolheu, sem troca automática; a voz só em memória, descartada ao fim, nunca em disco, swap, log ou resposta (`read_only`, `memswap_limit` igual ao `mem_limit`, `ulimits: core: 0`, canário); HTTP/1.1, sem seguir redirecionamento, sem repassar o corpo de erro. Residual aceito: a retenção no provedor (o que a documentação dele diz; o servidor não confere se a retenção zero está ligada), quem tem a raiz da VPS, o proxy da entrada (que não é nosso e segura pedaços do corpo na memória dele) e o `Blob` do `MediaRecorder` no Chrome |
 | THR-027 | vazamento da chave de API que a pessoa guarda na nuvem (ADR-021) | AES-256-GCM com subchave por HKDF e AAD preso ao usuário, ao provedor e ao id da chave de cifra; a chave de cifra num arquivo `*_FILE`, nunca no banco nem no backup; o app só vê `configurada` e o `final`; nunca em resposta, log, erro, URL ou JSON malformado (frase fixa no erro de decodificação); decifrada só durante a chamada. **Não protege** de quem tem a raiz da VPS (lê o arquivo e o banco). As cópias antigas, cifradas, ficam nos backups e no banco da restauração; a tela manda **revogar a chave antiga no provedor** |
-| THR-028 | a dica leva ao provedor os termos do aprendido, que podem ser nomes de clientes ou de terceiros, e pode induzir um termo que ninguém disse (ADR-021) | desligada por padrão até a C8 medir; o interruptor é da pessoa; só os termos distintos, sem pares presos a um domínio, até 140 runas; a folha do aceite diz que os termos podem levar nomes de terceiros; a OpenAI avisa que as palavras-chave são só dicas |
+| THR-028 | a dica leva ao provedor os termos do aprendido, que podem ser nomes de clientes ou de terceiros, e pode induzir um termo que ninguém disse (ADR-021). **ADR-023 (05-nov-2026):** com a cópia do dicionário do PC na conta, a dica leva os termos do dicionário dele (os com dica da pessoa primeiro, depois os outros, por prioridade), e não só os aprendidos | desligada por padrão até a C8 medir; o interruptor é da pessoa; só os termos distintos, sem pares presos a um domínio, até 140 runas (com a cópia: a mesma função do Agent, `dictionary.Vocabulario`, também até 140 caracteres; os termos do Aprender, que são só variante, ficam fora, como no PC); a cópia só existe se a pessoa ligou a opção no PC (THR-032); a folha do aceite diz que os termos podem levar nomes de terceiros; a OpenAI avisa que as palavras-chave são só dicas |
 | THR-029 | sessão roubada, ou um defeito do app, gasta o dinheiro da pessoa no provedor (ADR-021) | limites por conta, em memória: 1 de cada vez, 10 por minuto, 200 por dia, 3 ao mesmo tempo no total; 10 por minuto nas rotas da chave; sem fala não se envia (o app mede a fala); o teto de gasto é da pessoa, com uma chave só para o celular e limite de gasto no provedor. Um ditado de 120 s custa centavos (ADR-021, "Riscos") |
 | THR-030 | voz, dica ou texto saírem sem o aceite de quem dita, ou depois de revogado (ADR-021) | sem aceite vigente que inclua o provedor: o microfone não abre, a chave não é pedida e o servidor recusa (`403`, `SEM_ACEITE`); o aceite é gravado no servidor, por conta, com a data, a versão do aviso e os provedores; a rota confere de novo antes do Polish e antes de gravar; "Apagar meus dados" é conferido dentro do `Store.Create` (epoch), sem janela. Residual: uma janela de milissegundos entre a conferência do aceite e a gravação |
 | THR-031 | o microfone fica mudo (tela apagada, ligação, app fora da frente) e o provedor inventa frases num fim mudo (ADR-021) | Wake Lock; o app para quando a página sai da frente ou a faixa do microfone fica muda ou acaba (`mute` e `ended`), envia o que gravou se tiver fala e avisa; sem fala bastante nada é enviado; o filtro de `no_speech_prob` do servidor, quando o modelo devolve o campo. No passo 1 não existe ditado com a tela apagada |
+| THR-032 | a cópia do dicionário do PC fica legível no servidor (ADR-023, 05-nov-2026): quem administra a VPS a lê, e os termos podem ser nomes de clientes ou de terceiros; um PC pode tomar a fonte de outro; a cópia pode sobreviver ao PC, à conta ou ao backup | **opt-in por PC, desligado por padrão** ("Levar o dicionário para o celular"): sem o clique, nada do dicionário sai, e conectar a nuvem não o manda (desconectar grava a opção desligada, e reconectar pede um clique novo). A cópia é a `Semente` recortada por `Semente.ParaACopia()`: **sem o mapa de domínios para executáveis, sem os ids de amostra e com o `usuario` fixo `copia`** (o nome local não sai); **uma cópia por conta** (`user_id` é a chave primária), de um PC que é a fonte (ligar em outro troca a fonte, de propósito, e o envio automático `Dicionario-Fonte: manter` nunca toma a fonte: `409 NAO_E_A_FONTE`). Só com o token de um PC (`403` para a sessão do navegador); o servidor confere o SHA-256 e a cópia (`LerCopia`, `ValidarCopia`, e a montagem do Smart) antes de gravar; limites de 512 KiB, 2.000 termos, 50 variantes por termo e 10.000 no total (cópia acima do limite não sobe, e o painel diz o motivo). **Sai** ao desligar (o `DELETE` na hora; sem rede, a opção continua ligada e o painel diz que não apagou), ao revogar ou desconectar o PC fonte (`RevogarAparelho`, na mesma transação), no "Apagar meus dados" (`apagarDaConta`) e depois de restaurar um backup (`DepoisDeRestaurar`, que revoga todos os aparelhos); a leitura do ditado ignora a cópia de um aparelho revogado. **Logs:** só o motivo (lista fechada), o tamanho em faixas, o número de termos e `dicionario`/`termos_da_copia`/`pares_ja_na_copia` no ditado; nunca um termo, uma variante, um domínio nem o nome do aparelho (ver "Logging proibido"). Residual aceito: quem tem a raiz da VPS lê a cópia (THR-023); o backup cifrado a guarda até girar (cerca de 30 dias); a política de privacidade publicada precisa do texto novo antes do deploy (ADR-023, risco 4) |
 
 ## Hook policy
 - nunca registrar sequências de teclas;
@@ -173,7 +175,7 @@ ao provedor.
 que vai ao provedor é o mesmo (o texto do Smart, com 4 palavras ou mais; o prompt fixo; o nome do
 modelo; a chave, no cabeçalho), com as mesmas travas e o mesmo prazo (`polish.Prazo`, de 3,5 s a 8 s).
 Muda o resto: a chave vem do cofre cifrado do servidor (e não do Gerenciador de Credenciais), o texto
-que vai é o do **Smart da conta** (sem o `dicionario.json` do PC, nem os pares presos a um domínio), o
+que vai é o do **Smart da conta** (sem o `dicionario.json` do PC, nem os pares presos a um domínio; *nota de 05-nov-2026, ADR-023: com a cópia do dicionário do PC na conta, o Smart parte dela, e o texto que vai ao Polish já traz os termos dela aplicados; o que vai ao provedor continua sendo só o texto final, nunca o dicionário*), o
 Polish do celular **começa desligado** e só liga com o aceite do provedor do Polish (`SEM_ACEITE`
 antes de chamar). O campo protegido não se aplica: o celular não escreve em outro aplicativo (a
 escrita em outro app e o campo de senha são do passo 2, e são parada própria). O que o provedor do
@@ -379,10 +381,14 @@ ADR-019, "Decisões da F3"). O que vale, e onde cada coisa é provada (a suíte
   de quem usa). O campo do endereço vem vazio; o projeto é aberto, e cada um sobe a própria nuvem.
 - **O que sai:** de cada ditado, texto bruto e final, data, status, lixeira, modo, aparelho de origem
   e os metadados do ASR que o histórico mostra; o aprendido (par curto, termo, restrição, nome do
-  domínio); nome, plataforma e versão do PC.
+  domínio); nome, plataforma e versão do PC. **Desde a ADR-023 (05-nov-2026), e só com a opção "Levar o
+  dicionário para o celular" ligada no PC:** a cópia do dicionário (os termos, as variantes com as
+  restritas, as prioridades, as dicas, o idioma, o nome dos domínios e as entradas desligadas), em
+  `dictionary_copies`, legível no servidor (THR-032). Detalhes em "A cópia do dicionário do PC", abaixo.
 - **O que nunca sai:** o áudio **do PC**; contexto de janela (app em foco, título, texto de perto; o
   `target_app` não existe na nuvem); a chave do Polish **do PC**; os logs; o mapa de domínios para
-  executáveis; as preferências **do PC**.
+  executáveis (também fora da cópia do dicionário); os ids de amostra do `dictlearn` e o nome do usuário
+  local; as preferências **do PC**.
 - **O que o celular manda é outro caso (ADR-021):** a voz de cada ditado, a chave que a pessoa cola no
   app, o aceite e as preferências do ditado. Isso não sai do PC nem passa por esta lista: está em
   "Ditar no celular: o que sai do aparelho", abaixo, e só existe depois do aceite específico dela.
@@ -477,6 +483,32 @@ ADR-019, "Decisões da F3"). O que vale, e onde cada coisa é provada (a suíte
     `nuvem/notas/urlDaImagem.ts`, que recusa tudo o que não é `image/jpeg`: o gravador do ditado continua
     sem criar URL de áudio.
   - **O log:** o das rotas das imagens leva o padrão da rota e o status, sem id, tamanho nem conteúdo.
+- **A cópia do dicionário do PC (ADR-023, 05-nov-2026):** o dicionário **não** sincroniza entre os PCs (a
+  decisão 7 da ADR-019 vale para o sync: nada desce); o que existe é uma **cópia que só vai do PC à
+  nuvem**, para o ditado no celular montar o Smart com ela. Detalhes:
+  - **Só com o clique:** a opção "Levar o dicionário para o celular" (Configurações › Nuvem do painel do PC)
+    nasce desligada (`local_settings.dictionary_copy_enabled = 0`). Ligar manda a cópia na hora
+    (`PUT /api/v1/sync/dictionary`, `Dicionario-Fonte: tomar`); depois, a rodada do sync manda de novo
+    quando o arquivo muda (`manter`). Desligar apaga a cópia da nuvem na hora (`DELETE`).
+  - **O que vai:** a `Semente` do `dicionario.json` recortada por `Semente.ParaACopia()`
+    (`internal/dictionary/copia.go`): termos, variantes (com as restritas), prioridades, dicas, idioma,
+    nome dos domínios e as entradas desligadas. **O que fica:** o mapa de domínios para executáveis (diz
+    quais programas a pessoa usa), os ids de amostra do `dictlearn` e o nome do usuário local (a cópia leva
+    `usuario: "copia"`). Os termos podem ser nomes de clientes ou de terceiros, e ficam legíveis no
+    servidor (THR-032).
+  - **Uma por conta, de um PC só:** a tabela `dictionary_copies` tem `user_id` como chave primária e o
+    `device_id` do PC que é a fonte. Ligar a opção em outro PC passa a fonte para ele.
+  - **Limites:** 512 KiB, 2.000 termos, 50 variantes por termo e 10.000 no total (`dictionary.ValidarCopia`,
+    no PC antes de mandar e no servidor ao receber). Acima, a cópia não sobe, e o painel diz o motivo.
+  - **Quando sai:** ao desligar a opção; ao revogar ou desconectar o PC fonte (na mesma transação do
+    `RevogarAparelho`); no "Apagar meus dados" (`apagarDaConta`; o `tirar-cadastro.sh` recusa uma conta que
+    ainda tem cópia, como recusa qualquer tabela com `user_id`); e depois de restaurar um backup
+    (`DepoisDeRestaurar`). A leitura do ditado ignora a cópia de um aparelho revogado. O backup cifrado a
+    guarda, com a retenção dele (cerca de 30 dias).
+  - **Para onde vai no ditado do celular:** ao Smart da conta, em memória; e, só com a dica ligada, até
+    140 caracteres dos termos ao provedor de transcrição (a tabela de "Ditar no celular").
+  - **O log:** o servidor registra o motivo da recusa (lista fechada), a faixa de tamanho e o número de
+    termos; o Agent registra só contagens. Nunca um termo, uma variante, um domínio nem o nome do aparelho.
 - **Revogar ou desconectar** não apaga nada no PC: o Agent continua funcionando localmente.
 
 ## Ditar no celular: o que sai do aparelho (ADR-021)
@@ -508,13 +540,15 @@ pelo ponto único de gravação (`source_platform` `web`, `device_id` nulo) e de
 
 | Para | O quê | Quando |
 |---|---|---|
-| A nuvem (a VPS) | a voz de cada ditado, **só em memória, durante o pedido, descartada ao fim**; o texto, que vira ditado no histórico como os do PC; a chave da pessoa, cifrada; o aceite e as preferências | a chave, depois do aceite; a voz, a cada ditado |
-| O provedor de transcrição (OpenAI ou Groq, escolhido pela pessoa, com a chave dela) | a voz; com a dica ligada, os termos do aprendido (que podem ser nomes de clientes ou de terceiros) | a cada ditado, com o aceite |
+| A nuvem (a VPS) | a voz de cada ditado, **só em memória, durante o pedido, descartada ao fim**; o texto, que vira ditado no histórico como os do PC; a chave da pessoa, cifrada; o aceite e as preferências. **Lida do banco a cada ditado, sem sair do servidor:** a cópia do dicionário do PC (ADR-023), que o Smart da conta usa | a chave, depois do aceite; a voz, a cada ditado |
+| O provedor de transcrição (OpenAI ou Groq, escolhido pela pessoa, com a chave dela) | a voz; com a dica ligada, até 140 caracteres de termos: os da cópia do dicionário do PC, quando a conta a tem (ADR-023), ou os do aprendido (que podem ser nomes de clientes ou de terceiros) | a cada ditado, com o aceite |
 | O provedor do Polish (OpenAI ou Anthropic) | o texto do Smart, com 4 palavras ou mais | só com o Polish ligado e aceito |
 | Os provedores, ao guardar ou trocar a chave | a própria chave, para o teste (a lista de modelos) | depois do aceite |
 
 **O que nunca vai:** a chave **do PC** (ela continua no PC); o áudio do PC; o contexto de outras janelas
-(o app do celular nem o enxerga); o dicionário completo; o mapa de domínios.
+(o app do celular nem o enxerga); o mapa de domínios. **O dicionário completo também não vai por padrão**
+(*nota de 05-nov-2026, ADR-023: só vai a cópia dele, e só se a pessoa ligar "Levar o dicionário para o
+celular" no painel do PC; ver "A cópia do dicionário do PC", em "Nuvem: o que sai da máquina"*).
 
 **Quem é quem (proposta, como no dossiê).** Quem hospeda a nuvem é o controlador (art. 5º, VI da
 Lei 13.709/2018); quem dita é o titular (art. 5º, V), e a voz e os termos podem ser de **outros
@@ -676,11 +710,16 @@ documentação não diz em que país"; para a Groq, "o que ela guarda fica nos E
 onde a transcrição roda; o contrato prevê tratamento nos EUA e em outros países". E trata o envio como
 transferência internacional porque nenhum dos dois diz processar no Brasil.
 
-### A dica do aprendido
+### A dica do aprendido (e, com a cópia, do dicionário)
 Desligada por padrão até a C8 medir. Ligada, os termos distintos do aprendido da conta (sem os pares
 presos a um domínio, do mais recente ao mais antigo, até 140 runas) vão ao provedor de transcrição como
 `prompt`, a cada ditado, **qualquer que seja o conteúdo**. Eles podem ser nomes de clientes ou de
-terceiros. O ganho de 61,2% para 79,6% da Entity Accuracy foi medido no initial prompt do whisper.cpp
+terceiros. **ADR-023 (05-nov-2026): com a cópia do dicionário do PC na conta, a dica passa a ser a do
+PC:** `dictionary.Vocabulario` sobre o dicionário final (a cópia com o aprendido aplicado), a mesma função
+do Agent, até 140 caracteres; os termos com dica da pessoa vêm primeiro, depois os outros, por prioridade,
+e os termos do Aprender (só variante) ficam fora, como no PC. **Sem a cópia, é a dica de antes**, para
+quem não ligou a opção não perder o que já tinha. A opção do celular passou a se chamar "Mandar os termos
+do dicionário como dica". O que vai ao provedor continua sendo só esse texto de até 140 caracteres. O ganho de 61,2% para 79,6% da Entity Accuracy foi medido no initial prompt do whisper.cpp
 local, **e não nos modelos da OpenAI nem no whisper da Groq**; a dica pode induzir o termo, e a própria
 OpenAI avisa disso para as palavras-chave. No PC o termo aprendido continua fora do prompt (ADR-017,
 ADR-020).
@@ -729,6 +768,11 @@ dela no provedor; o projeto não paga nada.
     risco 21).
 16. No desligamento do servidor, um trabalho de ditado que só solta depois do segundo `Shutdown` pode
     perder o ditado já pago (ADR-021, risco 21; correção sugerida: esperar os ditados de novo).
+17. A cópia do dicionário do PC (ADR-023, 05-nov-2026) fica legível para quem tem a raiz da VPS e nos
+    backups cifrados até girarem (THR-032), e a política publicada só diz isso depois de o Mauro aprovar o
+    texto novo (ADR-023, risco 4). Com a cópia no limite e muitos pares do Aprender que ela não tem, a
+    montagem do Smart pode levar ~19 s (medido em 05-nov-2026): o ditado desse momento usa o Smart sem a
+    cópia, e o `Cache` segue a montagem em segundo plano (ADR-023, risco 3).
 
 ### Texto da tela
 O texto de Privacidade do app da nuvem e a folha do aceite foram propostos em
@@ -799,7 +843,8 @@ bundle da nuvem não a contém.
   malformado que leve a chave); o corpo de erro do provedor (a OpenAI devolve um pedaço da chave no
   `401`). O que vale: o log de acesso, com o método, o padrão da rota, o status, os ms e os bytes, e uma
   linha `ditado:` só com contagens e códigos (duração, fala, bytes, provedor, modelo, desfecho, desfecho
-  do Polish, termos na dica, ms do provedor). O modelo só leva o nome se o provedor o listou (senão
+  do Polish, termos na dica, ms do provedor, e, desde a ADR-023, `dicionario` (`sem`, `copia` ou
+  `falhou`), `termos_da_copia` e `pares_ja_na_copia`). O modelo só leva o nome se o provedor o listou (senão
   `outro`), e o valor de um pânico no trabalho nunca vai a log, porque poderia citar o que a pessoa
   ditou;
 - o aprendizado pelo painel (ADR-017): o evento só registra **contagens** (por exemplo, sugestões
@@ -810,6 +855,15 @@ bundle da nuvem não a contém.
   fechados de `learning.Motivo`), o `motivo` de uma edição sem sugestão ou de um pedido recusado
   (uma classe de erro, nunca o texto dele), e `aprendido`/`desfeito` sem campo nenhum. Ver
   `06-api-contract.md`, "Aprendizado";
+- a cópia do dicionário do PC (ADR-023, 05-nov-2026), no Agent e no servidor: o termo, a variante, o
+  domínio, o nome do aparelho que é a fonte (o do aviso "O celular passou a usar o dicionário de NOME"
+  vai só à tela do painel, nunca ao log) e o corpo da cópia. O servidor registra, nas rotas
+  `/api/v1/sync/dictionary`, o padrão da rota e o status, o **motivo** da recusa (lista fechada: `json`,
+  `grande_demais`, `termos_demais`, `variantes_demais`, `termo_invalido`, mais `fonte`, `cabecalho`,
+  `tipo`, `sha` e `nao_e_a_fonte`), o tamanho em **faixas** (`ate_8k`, `ate_64k`, `ate_256k`,
+  `ate_512k`) e o número de termos; o `GET /dictation`, só a linha de sempre. O Agent registra "dicionário
+  levado para o celular" com a contagem de termos, e o status e o código (`codigo`) de uma recusa. Os
+  erros de `dictionary.ValidarCopia` trazem só o motivo;
 - o sync do aprendido (ADR-019, F8, 07-out-2026): no Agent e no servidor, só contagens (aplicados,
   não aplicados por motivo, desfeitos, pulados) e códigos de listas fechadas; nunca a variante, o
   termo ou o domínio. O servidor confere o par antes do banco (o id, os 80 caracteres, o caractere
@@ -955,6 +1009,11 @@ protegido"; ADR-011, nota de 29-set-2026).
   o esquecem na hora), e o **Smart da conta**, montado com o aprendido dela, fica só em memória até o
   reinício, a saída pelo LRU ou esses dois esquecimentos. No **provedor**, vale o que a documentação dele
   diz (a tabela de "Ditar no celular").
+- **A cópia do dicionário do PC (ADR-023, 05-nov-2026):** não vence com os 6 meses (é o dicionário, não
+  o ditado): fica **enquanto a opção estiver ligada** no PC que é a fonte, e sai ao desligar, ao revogar
+  ou desconectar esse PC, no "Apagar meus dados" e depois de restaurar um backup. O job de retenção não a
+  toca. O backup cifrado a guarda pelo prazo dele (cerca de 30 dias). No PC, o `dicionario.json` continua
+  sem prazo (abaixo); a opção em `local_settings` só diz se a cópia deve existir.
 - Exceção (ADR-017): a variante que o painel aprende é um trecho de até 4 palavras do que o ASR
   escreveu, gravado no `dicionario.json`. O dicionário persiste até exclusão, então a variante **não
   expira** com os 6 meses (nem com a lixeira) do ditado de onde veio; sai quando a pessoa a desfaz. A
@@ -1108,6 +1167,12 @@ Pontos que a revisão cobre:
 fechar antes as pendências L1 a L5 do dossiê (a região do bucket, a hipótese do art. 33 do backup, o
 contato de privacidade, exportar e o cadastro): somar uma segunda transferência internacional, agora de
 dado legível, antes de dar base escrita à primeira, piora a situação.
+
+**O dicionário do PC no celular (ADR-023, 05-nov-2026).** Os termos do dicionário, que podem ser nomes
+de clientes ou de terceiros, passam a ir à nuvem (a cópia, só com a opção ligada no PC) e, com a dica
+ligada, ao provedor de transcrição (até 140 caracteres). O dossiê (o cabeçalho, as seções 1, 2, 3, 5 e 7, com a decisão 13, e o Anexo A) e o
+texto proposto da política foram atualizados; **a política publicada ainda diz que o dicionário fica no
+PC, e o texto novo vai ao Mauro para aprovar e republicar antes do deploy** (ADR-023, risco 4).
 
 ## Operações destrutivas
 [SECURITY][BLOCKER] Exigem aprovação:

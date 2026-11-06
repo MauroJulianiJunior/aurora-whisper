@@ -625,6 +625,42 @@ pergunta conta as trocas aprendidas (o `previa_trocas` do `06`, o M).
   **Aprendido no painel**, nos dois sentidos. É um PC só: as etiquetas de estado e o "não aplicado neste
   PC" ficam para os testes automáticos (ADR-019, "O fechamento da F8g").
 
+**O dicionário no celular (ADR-023, fase D4; 05-nov-2026; os textos são os da ADR, a confirmar na entrega
+do painel).** Em Configurações › Nuvem, **com a nuvem conectada**, uma opção a mais, no estilo das
+outras, **desligada por padrão**. O que ela faz está em `06-api-contract.md`, "O dicionário para o
+celular" (`GET` e `POST /api/nuvem/dicionario`); o `GET` pergunta à nuvem, então o painel o lê quando a
+seção abre.
+- **Desligada**, sem cópia da nuvem:
+  ```
+  [ ] Levar o dicionário para o celular
+      O celular passa a usar os termos deste PC. Editar continua aqui.
+  ```
+- **Ligada:**
+  ```
+  [x] Levar o dicionário para o celular
+      49 termos, enviados às 14:02.
+  ```
+  O número é o dos `termos` do estado, e a hora é a do `enviado_em`.
+- **Com outro PC como fonte:**
+  ```
+  [ ] Levar o dicionário para o celular
+      Hoje o celular usa o dicionário de NOTEBOOK. Ligar aqui passa a usar o deste PC.
+  ```
+- **Ligar ou desligar age na hora** (fora do **Salvar configurações**), porque o Agent fala com a nuvem
+  no clique: só com o `200` a opção fica ligada, e só com o `204` fica desligada. Se a nuvem não
+  respondeu, a opção fica como estava, e a frase do erro (`message` da resposta) aparece junto dela, entre
+  elas "Não deu para apagar a cópia da nuvem agora. Tente de novo." (desligar sem rede: a opção continua
+  ligada).
+- **O aviso** (`aviso` do estado) aparece junto da opção: o PC que perdeu a fonte ("O celular passou a usar
+  o dicionário de NOTEBOOK.") ou teve a cópia apagada ("A cópia do dicionário foi apagada da nuvem.")
+  volta com a opção **desligada** e o aviso dizendo por quê; a cópia recusada pela nuvem, ou acima dos
+  limites, diz o motivo e deixa a opção como está.
+- **Desconectado**, a opção não aparece (ela só vale com a nuvem conectada). Desconectar grava a opção
+  desligada, e reconectar **não** manda o dicionário sem um clique novo.
+- **A Privacidade do PC e a do app** (as frases de "Configurações do celular") **ainda não falam da
+  cópia**: o texto vem da política que o Mauro aprovar (`docs/politica-de-privacidade.md`; ADR-023,
+  risco 4). A frase de hoje, "O áudio e o que está nas outras janelas nunca vão.", continua verdadeira.
+
 #### Histórico (os 6 meses no PC; ADR-019, F10)
 **Decidido em 08-out-2026 (ADR-019, "Decisões da F10") e implementado na F10d e na F10e**
 (`web/src/HistoricoNoPC.tsx`). O menor que funciona, no estilo das outras seções. Fica em **Configurações**, logo antes da
@@ -1119,6 +1155,19 @@ segundo plano."
   modelo não pede o aceite de novo.
 - **A dica:** a caixa "Mandar os termos aprendidos como dica", **desligada**, com "Eles vão ao provedor
   junto com a voz, em todo ditado, e podem ser nomes de clientes ou de outras pessoas.".
+  **ADR-023 (05-nov-2026, fase D4):** a caixa passa a se chamar **"Mandar os termos do dicionário como
+  dica"**: com a cópia do dicionário do PC na conta, os termos são os do dicionário; sem ela, os
+  aprendidos, que também são do dicionário. A frase de baixo não muda. **Logo abaixo da caixa, uma linha
+  discreta** com o estado da cópia (o campo `dicionario` do `GET /dictation`, `06`):
+  ```
+  Dicionário: o do PC-DO-MAURO, 49 termos (atualizado em 05/11 às 14:02).
+  ```
+  ou, sem cópia (`dicionario` `null`):
+  ```
+  Sem o dicionário do PC. Para usá-lo aqui, ligue "Levar o dicionário para o celular" no painel do PC.
+  ```
+  O nome é o do PC que é a fonte. Só informa: o celular não edita o dicionário, e não tem botão para a
+  cópia (ligar, desligar e trocar a fonte são do painel do PC).
 - **O Polish:** a caixa "Organizar o texto com o Polish", **desligada**, com "O texto do ditado vai ao
   provedor do Polish.". Ligado: **Provedor do Polish** ("OpenAI" ou "Anthropic"; um provedor fora do
   aceite reabre a folha, que mostra o bloco dele), a chave dele (com a OpenAI, "A chave da OpenAI, acima,

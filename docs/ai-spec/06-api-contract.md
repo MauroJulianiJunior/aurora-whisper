@@ -29,7 +29,9 @@ Base: `https://exemplo.com/api/v1` (o domínio real vem de `PUBLIC_BASE_URL`)
 - **Rotas que não são montadas na etapa 5** (um teste pede cada uma e recebe `404`):
   `POST /asr/transcribe`, `POST /resolve`, `GET /updates/windows/latest`, `GET`/`PUT /settings`,
   `/dictionary` (todas), `POST /corrections` e `POST /transcriptions`. Elas ficam descritas abaixo,
-  marcadas "depois".
+  marcadas "depois". *(Nota de 05-nov-2026, ADR-023: o `/dictionary` **continua não montado**, e o
+  dicionário do PC chega à nuvem por outras três rotas, `GET|PUT|DELETE /api/v1/sync/dictionary`,
+  descritas em "A cópia do dicionário do PC".)*
 - **F3 (05-out-2026), o que o servidor faz** (`internal/server`, `Cloud`; ADR-019, "Decisões da F3"):
   - **Quem pode cada rota** sai de uma tabela só (`internal/server/rotas.go`): `sessão` (o cookie
     `__Host-sessao`), `aparelho` (o Bearer do PC), `qualquer` ou `público`; e, desde a ADR-021 (C5b),
@@ -714,11 +716,17 @@ O estado de uma vez, para a tela de Configurações: `200` com
     { "provedor": "openai",    "configurada": true,  "final": "WXYZ", "colar_de_novo": false },
     { "provedor": "groq",      "configurada": false, "final": "",     "colar_de_novo": false },
     { "provedor": "anthropic", "configurada": false, "final": "",     "colar_de_novo": true }
-  ]
+  ],
+  "dicionario": { "aparelho": "PC-DO-MAURO", "termos": 49, "atualizado_em": "2026-11-05T14:02:00Z" }
 }
 ```
 
 - `aviso.versao` é a versão do texto que o servidor aceita agora.
+- `dicionario` (ADR-023, 05-nov-2026) é o estado da **cópia do dicionário do PC** que o ditado usa: o
+  nome do PC que é a fonte (`aparelho`, o do pareamento), quantos `termos` ela tem e quando mudou
+  (`atualizado_em`, RFC 3339, UTC), ou **`null`** quando a conta não tem cópia (ou a do PC que a mandou
+  foi revogada). Só o estado: **nunca os termos**. É o que o app mostra na linha "Dicionário: o do …"
+  (`08-ui-ux-spec.md`). Os termos não vão ao navegador, e a cópia só se muda pelas rotas do PC.
 - `aceite` é o aceite **em aberto** da conta (o que não terminou), ou `null`. `polish` é `null` quando o
   aviso que a pessoa viu não incluía o Polish. `vigente` é `false` quando a versão dele não é a do aviso
   atual: o aceite continua gravado, mas não vale, e o app abre a folha de novo.
@@ -803,6 +811,121 @@ só o aprendido sincroniza (`/learned` e o sync).
 ```
 ### PATCH `/dictionary/{id}`
 ### DELETE `/dictionary/{id}`
+
+*(Nota de 05-nov-2026, ADR-023: a decisão 1 do Mauro descartou este CRUD, o dicionário por linha no
+banco. As rotas acima **continuam não montadas** e as tabelas `dictionary_entries` e
+`dictionary_aliases` seguem vazias. O dicionário do PC chega à nuvem como uma cópia, pelas três rotas da
+seção seguinte.)*
+
+## A cópia do dicionário do PC (ADR-023, 05-nov-2026)
+Fonte: `internal/server/dicionario_routes.go`, `internal/dictionary/copia.go` (o formato e os limites) e
+`internal/server/cloudstore/dicionario.go` (as regras do store). Uma **cópia do `dicionario.json`**, só do
+PC à nuvem, para o ditado no celular montar o Smart com ela; o arquivo continua o dono, e **nada desce aos
+PCs**. As três rotas ficam na família `/api/v1/sync/`, **só com o token de um PC** (`AcessoAparelho`; a
+sessão do navegador recebe `403 FORBIDDEN`, "o sync exige o token de um aparelho"). **Nenhuma resposta
+traz um termo, uma variante ou um domínio**: o corpo da cópia só entra pelo `PUT`, e só sai do servidor
+dentro do Smart.
+
+```
+GET    /api/v1/sync/dictionary    o estado da fonte
+PUT    /api/v1/sync/dictionary    sobe a cópia
+DELETE /api/v1/sync/dictionary    apaga a cópia, se este PC for a fonte
+```
+
+**A cópia** é a `Semente` do `dicionario.json` recortada por `Semente.ParaACopia()`: `usuario` é sempre
+`"copia"` (o servidor o troca pelo dono da conta ao montar); o mapa `dominios` (domínio para executáveis)
+**não vai**; de `alias_origem`, só os valores `"painel"` e `"adicionado"` (os ids de amostra não vão); as
+`entradas` vão todas, **inclusive as desligadas**, com todos os campos. O JSON sai do `encoding/json`
+(campos na ordem da struct, chaves dos mapas em ordem): os mesmos termos dão os mesmos bytes, e o
+**SHA-256 dos bytes, em hexadecimal minúsculo, é a versão da cópia**. Os limites
+(`dictionary.ValidarCopia`, no PC antes de mandar e no servidor ao receber): até **512 KiB**, **2.000
+termos**, **50 variantes por termo** (`alias` e `alias_restrito` juntos) e **10.000 variantes no total**;
+o termo, cada variante, o domínio e o idioma têm até 80 caracteres, e o termo não é vazio.
+
+**O estado** (o corpo do `GET` e do `200` do `PUT`, e, ao lado do bloco `error`, o do `409`):
+
+```json
+{ "fonte": "este", "aparelho": "PC-DO-MAURO", "termos": 49,
+  "sha256": "64 dígitos hexadecimais", "atualizado_em": "2026-11-05T14:02:00Z" }
+```
+
+`fonte` é `"este"` (a cópia é do PC que pergunta), `"outro"` (é de outro PC da conta; `aparelho` é o nome
+dele, o do pareamento) ou `"nenhuma"` (sem cópia: **os outros campos não vêm**). `atualizado_em` é RFC
+3339, em UTC.
+
+### GET `/sync/dictionary`
+`200` com o estado, do ponto de vista do PC que pergunta. É o que o painel lê quando a seção Nuvem abre.
+
+### PUT `/sync/dictionary`
+O corpo é a cópia, até 512 KiB. Cabeçalhos:
+- `Content-Type: application/json` (obrigatório);
+- `Dicionario-SHA256`: o SHA-256 dos bytes do corpo, 64 dígitos hexadecimais (maiúsculas são aceitas);
+- `Dicionario-Fonte`: **`tomar`** ou **`manter`**, um valor só.
+  - **`tomar`** é o clique em "Levar o dicionário para o celular": grava sempre, e este PC passa a ser a
+    fonte, mesmo que outro fosse (um `UPSERT`: continua uma cópia só por conta). `200` com o estado.
+  - **`manter`** é o envio automático, quando o arquivo muda: só grava se este PC **já é** a fonte. Se a
+    fonte é outro PC, ou se não há cópia (apagada no "Apagar meus dados", por exemplo), é `409
+    NAO_E_A_FONTE`, e nada é gravado. É o que impede dois PCs ligados de tomarem a fonte um do outro a
+    cada mudança.
+- O mesmo SHA-256 que já está gravado, do mesmo PC, é `200` **sem gravar** (o reenvio é de graça).
+
+O servidor confere a cópia como o PC confere o arquivo: UTF-8 válido, JSON estrito de um objeto só e sem
+campo desconhecido (`dictionary.LerCopia`), a forma de uma cópia (`usuario` `"copia"`, sem `dominios`,
+`alias_origem` só com os dois valores), os limites, e a montagem do Smart (`smartconta.SmartDaSemente`,
+que recusa um termo sem forma canônica). **A cópia que não monta é `422`, e nada é gravado.**
+
+| Status | `code` | Quando |
+|---|---|---|
+| `200` | | gravou, ou era o mesmo SHA-256 do mesmo PC. Corpo: o estado |
+| `400` | `VALIDATION` | `Dicionario-Fonte` ausente, repetido ou diferente de `tomar` e `manter`; `Dicionario-SHA256` ausente, repetido ou que não são 64 hexadecimais; o SHA-256 não é o dos bytes do corpo |
+| `400` | `BAD_REQUEST` | não deu para ler o corpo |
+| `401` | `UNAUTHORIZED` | o token não é de um PC da conta (ou foi revogado) |
+| `403` | `FORBIDDEN` | a credencial é a sessão do navegador |
+| `409` | `NAO_E_A_FONTE` | `manter` de um PC que não é a fonte (`fonte` `"outro"` ou `"nenhuma"`). Corpo abaixo |
+| `415` | `BAD_REQUEST` | o `Content-Type` não é `application/json` |
+| `422` | `DICIONARIO_INVALIDO` | a cópia foi recusada, com o `motivo` abaixo |
+
+O `422` é o bloco `error` de sempre com o campo `motivo`, de uma lista fechada, e **nunca leva o termo**:
+
+```json
+{ "error": { "code": "DICIONARIO_INVALIDO", "message": "a cópia do dicionário tem termos demais",
+             "request_id": "…", "motivo": "termos_demais" } }
+```
+
+| `motivo` | O que é | `message` |
+|---|---|---|
+| `json` | não é JSON, tem campo desconhecido, ou não tem a forma de uma cópia (outro usuário, o mapa de domínios, um id de amostra); também o corpo que não é UTF-8 | `a cópia do dicionário não tem a forma esperada` |
+| `grande_demais` | mais que 512 KiB (o `Content-Length` acima do teto, ou o corpo que passa dele: **`422`, e não `413`**, porque o PC tem um motivo fechado a mostrar) | `a cópia do dicionário passou do tamanho máximo` |
+| `termos_demais` | mais que 2.000 termos | `a cópia do dicionário tem termos demais` |
+| `variantes_demais` | mais que 50 variantes num termo, ou 10.000 no total | `a cópia do dicionário tem variantes demais` |
+| `termo_invalido` | um termo vazio, um termo, variante, domínio ou idioma com mais de 80 caracteres, ou um termo que não monta o Smart | `a cópia do dicionário tem um termo que não vale` |
+
+O `409` leva o bloco `error` **e, ao lado dele, o estado** (a mesma forma do `GET`), para o PC saber para
+quem a fonte passou sem uma segunda chamada:
+
+```json
+{ "error": { "code": "NAO_E_A_FONTE", "message": "este PC não é a fonte do dicionário do celular",
+             "request_id": "…" },
+  "fonte": "outro", "aparelho": "NOTEBOOK", "termos": 49,
+  "sha256": "…", "atualizado_em": "2026-11-05T14:02:00Z" }
+```
+
+### DELETE `/sync/dictionary`
+Apaga a cópia **só se a fonte é este PC**: `204`. Se a fonte é outro PC, ou se não há cópia, também `204`,
+**sem apagar nada** (é idempotente: o PC só quer saber que a cópia dele não está lá). `401` e `403` como
+acima. Não tem corpo.
+
+### A cópia sai da nuvem
+Quando a pessoa desliga a opção no PC que é a fonte (o `DELETE`); quando esse PC é **revogado ou
+desconectado** (`RevogarAparelho`, na mesma transação); no **"Apagar meus dados"** (`DELETE /me/data`);
+e **depois de restaurar** um backup (`DepoisDeRestaurar`). A leitura do ditado ignora a cópia de um
+aparelho revogado. O job de retenção não a toca (`05-data-model.md`, "A cópia do dicionário do PC").
+
+### O log
+O log de acesso leva o método, o padrão da rota e o status, e, destas rotas, o **motivo** da recusa (a
+lista fechada acima, mais `fonte`, `cabecalho`, `tipo`, `sha` e `nao_e_a_fonte`), o **tamanho em faixas**
+(`ate_8k`, `ate_64k`, `ate_256k`, `ate_512k`) e o **número de termos**. **Nunca** um termo, uma variante,
+um domínio, o nome do aparelho nem o corpo (`09-security-privacy.md`, "Logging proibido").
 
 ## Corrections
 **Depois (ADR-019):** não montada na etapa 5. A Correction com a frase inteira não é guardada
@@ -1489,14 +1612,26 @@ depois de `/dictations/`, também são `404`.
 10. **O trabalho solto**, desligado da conexão (`context.WithoutCancel`): o celular cair não perde o que
     já foi pago, e o ditado é gravado mesmo assim.
     - O aprendido da conta (`ListLearned`): com a dica ligada nas preferências, os termos dele vão ao
-      provedor no `prompt` (`smartconta.Dica`, até 140 runas, sem par preso a domínio).
+      provedor no `prompt` (`smartconta.Dica`, até 140 runas, sem par preso a domínio). **ADR-023
+      (05-nov-2026):** junto com o aprendido, e sob o mesmo prazo do Smart (5 s), a rota lê a **cópia do
+      dicionário do PC** da conta (só a de um aparelho não revogado; `lerCopiaDoDicionario`). **Com a
+      cópia**, a dica é a do PC, `smartconta.DicaDaCopia` (`dictionary.Vocabulario` sobre a semente
+      final, até 140 caracteres: os termos com dica da pessoa primeiro, depois os outros, por prioridade;
+      os termos do Aprender, só variante, ficam fora); **sem a cópia**, é a de antes.
     - **O provedor** (`internal/asr/nuvem`, montado a cada ditado, com a chave decifrada **só durante a
       chamada**; o idioma `pt`; o multipart com `Content-Length`, sem `chunked`). A falha vira o código
       da lista fechada; o provedor que não devolve texto é `422` `SEM_FALA` (e o reenvio em 10 minutos
       não o chama de novo); nenhum ditado é criado.
     - **O Smart da conta** (`smartconta`, do cache por conta; a versão do cache é um resumo dos pares
       que o montam): o `Colapsar` e as trocas do aprendido, com o par preso a um domínio fora. Sem o
-      aprendido, segue o texto do ASR (sem o laço de repetição), e o Polish não roda.
+      aprendido, segue o texto do ASR (sem o laço de repetição), e o Polish não roda. **ADR-023:** com a
+      cópia do dicionário do PC, o Smart parte dela (`smartconta.MontarComCopia`: a semente da cópia, com
+      o `usuario` trocado pelo dono da conta, e o aprendido por cima, pulando o par que a cópia já tem), a
+      versão do cache passa a incluir o SHA-256 da cópia, e a resolução é a do PC num programa fora dos
+      domínios: valem os termos e as variantes sem restrição; **as variantes e as entradas restritas a
+      um domínio ficam de fora**, e o casamento fonético não existe (o celular não tem contexto de
+      janela). A cópia que não monta não derruba o ditado: segue com o Smart só do aprendido, e o log
+      anota `dicionario=falhou`.
     - **O Polish**, com ele ligado: antes, o aceite e o epoch são conferidos **de novo** (revogado, ou a
       conta que apagou os dados no meio: `403` `SEM_ACEITE`, sem chamar o Polish e sem gravar). O modelo
       tem de ser um que o provedor listou (`GET /ai-keys/{provedor}/models`, o `PUT` da chave, ou uma
@@ -1589,7 +1724,9 @@ solto, só com contagens e códigos: `desfecho` (`criado`, `ja_existia`, `regrav
 `sem_aceite`, `apagado`, `sem_chave`, `formato`, `provedor_recusou_chave`, `provedor_limite`,
 `provedor_fora`, `nao_gravado`, `erro_interno`, `panico`), `duracao_ms`, `fala_ms`, `bytes`, `provedor`,
 `modelo` (o nome só se o provedor o listou; senão `outro`), `provedor_ms`, `motivo_provedor` (o motivo
-do `internal/asr/nuvem`), `termos_na_dica`, as contagens do Smart (`pares`, `pares_aplicados`,
+do `internal/asr/nuvem`), `termos_na_dica`, **`dicionario`** (`sem`: a conta não tem cópia; `copia`: o
+Smart partiu dela; `falhou`: ela não foi lida ou não montou; ADR-023), **`termos_da_copia`**,
+**`pares_ja_na_copia`**, as contagens do Smart (`pares`, `pares_aplicados`,
 `pares_com_dominio`, `smart_falhou`, `lacos`, `palavras_removidas`, `substituicoes`), `polish`
 (`desligado`, `aceito`, `regravado` ou o motivo) e, com o Polish ligado, `polish_provedor`,
 `polish_modelo` (como o `modelo`), `esforco`, `tokens_entrada`, `tokens_saida` e `polish_ms` (e, quando o Polish valeu por frase, `polish_frases` e `polish_frases_revertidas`: só números; ADR-016, emenda de 19-out-2026), e `ms`.
@@ -2912,6 +3049,77 @@ Agent sem a nuvem montada responde `503` (`UNAVAILABLE`).
 - `503` (`UNAVAILABLE`, "A nuvem não está disponível neste Agent."): o Agent sem o laço do sync (sem
   histórico). Um Agent de antes da S responde `404` sem frase, e o painel para de perguntar.
 - A nuvem (`/api/v1`) não tem esta rota: o celular continua relendo a lista ao voltar à aba.
+
+### O dicionário para o celular (ADR-023, fase D3; 05-nov-2026)
+Fonte: `internal/agent/localapi/nuvem_dicionario.go` e `internal/agent/nuvem/dicionario.go`. A opção
+**"Levar o dicionário para o celular"** das Configurações › Nuvem: o PC manda a cópia do `dicionario.json`
+à nuvem (`06`, "A cópia do dicionário do PC"), só com ela ligada. Duas rotas, atrás da mesma guarda das
+outras `/api/nuvem*` (o token da Local API; `Cache-Control: no-store`). Um Agent que não montou a nuvem ou
+o dicionário responde `503` (`UNAVAILABLE`, "A nuvem não está disponível neste Agent.").
+
+#### GET `/api/nuvem/dicionario`
+O estado da opção. **Pergunta à nuvem** (`GET /api/v1/sync/dictionary`), por isso o painel o lê quando a
+seção abre, e não a cada poucos segundos. É sempre `200`, e os campos vazios não saem:
+
+```json
+{ "ligado": true, "fonte": "este", "termos": 49,
+  "atualizado_em": "2026-11-05T14:02:00Z", "enviado_em": "2026-11-05T14:02:00Z" }
+```
+
+- `ligado`: a opção deste PC (a **intenção**, em `local_settings.dictionary_copy_enabled`).
+- `fonte`: quem a nuvem diz ser a fonte, `"este"`, `"outro"` ou `"nenhuma"`; **ausente** quando a nuvem
+  não pôde ser perguntada (sem rede, o PC desconectado, a nuvem de antes desta versão).
+- `aparelho`: o nome do PC que é a fonte (com `fonte` `"outro"`; limpo de caractere de controle, até 80).
+- `termos` e `atualizado_em`: os da cópia que a nuvem guarda (RFC 3339, UTC). Sem cópia, ausentes.
+- `enviado_em`: a última vez, **nesta execução do Agent**, que a nuvem aceitou a cópia deste PC (o
+  Agent guarda isso em memória; depois de reiniciar, o primeiro envio é um `200` sem gravar).
+- `aviso`: a última frase do envio automático, já em português, para a tela.
+
+Se a opção está ligada e a nuvem diz que a fonte é **outro PC** (ou que não há cópia), este PC perdeu a
+fonte sem saber (o `409` só vem no próximo envio): o `GET` **grava a opção desligada**, guarda o aviso e
+responde `"ligado": false` com o `aviso`, para o painel não mostrar ligado o que não está. Os avisos:
+`O celular passou a usar o dicionário de NOTEBOOK.` (fonte `outro`; sem o nome, `... de outro PC.`),
+`A cópia do dicionário foi apagada da nuvem.` (fonte `nenhuma`), `A nuvem ainda não recebe o dicionário.`
+(o `404` de uma nuvem de antes), `A nuvem não aceitou o dicionário.` e, para um `422`, a frase do motivo:
+`O dicionário é grande demais para levar ao celular (o limite é 512 KB).`, `... tem termos demais ... (o
+limite é 2000).`, `... tem variantes demais ... (o limite é 50 por termo e 10000 no total).`, `Um termo ou
+uma variante do dicionário está vazio ou passa de 80 caracteres, e não dá para levar ao celular.` Com o
+`422` a opção **fica ligada**, e o envio só tenta de novo quando o arquivo mudar.
+
+#### POST `/api/nuvem/dicionario`
+Corpo: `{ "ligar": true }` ou `{ "ligar": false }` (até 1 KiB; sem o campo `ligar`, é `400`, e não um
+"desligar" por engano). O sucesso é `200` com **o mesmo JSON do `GET`**, já com o estado novo.
+- **Ligar** monta a cópia do arquivo de agora, confere os limites (`ValidarCopia`) e manda o `PUT ...
+  Dicionario-Fonte: tomar` **na hora**; o PC passa a ser a fonte, mesmo que outro fosse. **Só com o `200` da
+  nuvem a opção é gravada ligada.** Sem rede, com a cópia recusada ou fora dos limites, a opção continua
+  desligada, e o erro traz a frase.
+- **Desligar** manda o `DELETE` na hora. **Só com o `204` a opção é gravada desligada.** Sem rede, a opção
+  **continua ligada** e a frase é `Não deu para apagar a cópia da nuvem agora. Tente de novo.` (desligar
+  sem apagar daria a impressão de que a cópia saiu). Desconectado, só grava desligada (a revogação já
+  apagou a cópia).
+
+A falha é o JSON de erro de sempre (`{"error":{"code","message"}}`), com a frase em português para a tela em
+`message`, e a opção como estava:
+
+| Status | `code` | Quando |
+|---|---|---|
+| `409` | `CONFLICT` | o PC não está conectado (`Conecte o PC à nuvem antes de levar o dicionário para o celular.`); não deu para ler o `dicionario.json` (`Não deu para ler o dicionário deste PC. Nada foi enviado.`); a cópia passa dos limites ou a nuvem a recusou (a frase do motivo, acima); a nuvem não reconhece mais o PC (`A nuvem não reconhece mais este PC. Conecte de novo.`; ele fica desconectado) |
+| `502` | `UNAVAILABLE` | a nuvem não respondeu (`Não deu para falar com a nuvem agora. O dicionário não foi para o celular.`), pediu para esperar (`A nuvem pediu para esperar. Tente de novo em instantes.`), ainda não recebe o dicionário (o `404`), ou não apagou a cópia |
+| `503` | `UNAVAILABLE` | o Agent não montou a nuvem ou o dicionário |
+| `400` | `BAD_REQUEST` | o corpo não é `{"ligar": true|false}` |
+| `500` | `INTERNAL` | o banco ou o Gerenciador de Credenciais (`Não deu para guardar a opção neste PC. Nada foi enviado.`) |
+
+**O envio automático** não é rota: é uma fase da rodada do sync (`Motor.EnviarDicionario`), **depois do pull
+e das imagens**, só com a opção ligada. Monta a cópia, e, se o SHA-256 não é o último que a nuvem aceitou
+deste pareamento, manda o `PUT ... manter`. `200` guarda o SHA-256; **`409 NAO_E_A_FONTE` grava a opção
+desligada** e guarda o aviso acima; `422` guarda o aviso e só tenta de novo quando o arquivo mudar; `404`
+guarda o aviso e não tenta mais até o Agent reiniciar; o `401`, o `429`, o redirecionamento e a rede param
+a fase, e a rodada seguinte tenta de novo (a regra das imagens). O arquivo que muda (o Aprender, o
+"Adicionar termo", uma edição à mão) é visto na rodada seguinte; **desconectar** o PC grava a opção
+desligada, e reconectar **não** manda o dicionário sem um clique novo.
+
+**O log** do Agent leva só contagens (`termos`) e o status e o código de uma recusa da nuvem; nunca um
+termo, uma variante, um domínio nem o nome do aparelho (`09-security-privacy.md`, "Logging proibido").
 
 ### Retenção no PC (etapa 5; ADR-019, F10)
 Os 6 meses do histórico no PC e as cópias do banco. **Decidido em 08-out-2026 (ADR-019, "Decisões da
