@@ -148,6 +148,12 @@ func (c *Cloud) tabela() []rota {
 		{"PUT /api/v1/sync/notes/{id}/images/{imagem}", AcessoAparelho, c.handleSyncImagePut},
 		{"GET /api/v1/sync/notes/{id}/images/{imagem}", AcessoAparelho, c.handleImageGet},
 		{"DELETE /api/v1/sync/notes/{id}/images/{imagem}", AcessoAparelho, c.handleImageDelete},
+		// A cópia do dicionário do PC na nuvem (ADR-023, dicionario_routes.go): só
+		// com o token de um PC. O estado da fonte, o envio (tomar ou manter) e o
+		// apagar, que só vale para o PC que é a fonte.
+		{"GET /api/v1/sync/dictionary", AcessoAparelho, c.handleDicionarioGet},
+		{"PUT /api/v1/sync/dictionary", AcessoAparelho, c.handleDicionarioPut},
+		{"DELETE /api/v1/sync/dictionary", AcessoAparelho, c.handleDicionarioDelete},
 
 		// O pareamento de um PC (F6, pareamento.go). O start e a troca são
 		// públicos (o PC ainda não tem token), com limite por IP; ler e

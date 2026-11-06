@@ -128,6 +128,15 @@ func Run(t *testing.T, b Backend) {
 		{"Imagens_RotasDoCelular", testImagensDoCelular},
 		{"Imagens_OPCDeAntesLeENaoAplica", testImagensNoPCDeAntes},
 		{"Imagens_NadaNoLog", testImagensNadaNoLog},
+		// A cópia do dicionário de um PC (ADR-023; dicionario.go).
+		{"Dicionario_TomarEManterEmCadaEstadoDaFonte", testDicionarioTomarEManter},
+		{"Dicionario_CabecalhosErrados", testDicionarioCabecalhos},
+		{"Dicionario_CopiaInvalidaEmCadaMotivo", testDicionarioInvalida},
+		{"Dicionario_DeleteSoDaFonte", testDicionarioDeleteSoDaFonte},
+		{"Dicionario_SoComTokenDePC", testDicionarioSoComTokenDePC},
+		{"Dicionario_RevogarApagaACopia", testDicionarioRevogarApagaACopia},
+		{"Dicionario_ApagarMeusDadosApagaACopia", testDicionarioApagarMeusDadosApagaACopia},
+		{"Dicionario_NadaNoLog", testDicionarioNadaNoLog},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) { c.fn(t, newWorld(t, b)) })

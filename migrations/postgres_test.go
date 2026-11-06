@@ -1706,9 +1706,11 @@ func TestPostgres_AMigrationDasImagensAplicaSobreUmBancoComDados(t *testing.T) {
 		t.Fatalf("Load(migrations.FS): %v", err)
 	}
 	const emProducao = 25
-	if len(migs) != emProducao+1 || migs[emProducao].File != "0026_note_images_table.sql" {
+	// As que vieram depois (a 0027 do dicionário, ADR-023) têm o teste delas.
+	if len(migs) < emProducao+1 || migs[emProducao].File != "0026_note_images_table.sql" {
 		t.Fatalf("%d migrations, quero as 25 de antes e a 0026 das imagens", len(migs))
 	}
+	migs = migs[:emProducao+1]
 	conn := pgtest.Connect(t, url)
 	if res, err := pgmigrate.Run(ctx, conn, migs[:emProducao]); err != nil || len(res.Applied) != emProducao {
 		t.Fatalf("aplicar as 0001 a 0025: %+v, %v", res, err)
@@ -1753,6 +1755,118 @@ func TestPostgres_AMigrationDasImagensAplicaSobreUmBancoComDados(t *testing.T) {
 		t.Errorf("a note_images nasceu com %d linhas", n)
 	}
 	p.accept("a imagem da nota de antes", imageRow(a, note, 5))
+	if res, err := pgmigrate.Run(ctx, conn, migs); err != nil || len(res.Applied) != 0 {
+		t.Errorf("rodar de novo: %+v, %v", res, err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// A cópia do dicionário de um PC (ADR-023): a 0027
+// ---------------------------------------------------------------------------
+
+// copiaRow é uma cópia válida do dicionário da conta user, do PC device.
+func copiaRow(user, device string) *row {
+	return newRow("dictionary_copies").
+		val("user_id", user).
+		val("device_id", device).
+		lit("content", `'{"usuario":"copia","entradas":[]}'`).
+		lit("sha256", "repeat('ab', 32)").
+		lit("terms", "0").
+		lit("updated_at", "now()")
+}
+
+func TestPostgres_ACopiaDoDicionario(t *testing.T) {
+	p := newPG(t)
+	a, b := p.newUser(), p.newUser()
+	devA, devB := p.newDevice(a), p.newDevice(b)
+
+	p.accept("a cópia da conta A", copiaRow(a, devA))
+	p.accept("a cópia da conta B", copiaRow(b, devB))
+	p.reject(uniqueViolation, "uma segunda cópia na mesma conta", copiaRow(a, devA))
+	p.reject(foreignKeyViolation, "o PC de outra conta como fonte", copiaRow(p.newUser(), devA))
+	p.reject(foreignKeyViolation, "um PC que não existe como fonte", copiaRow(p.newUser(), p.newID()))
+	p.reject(foreignKeyViolation, "uma conta que não existe", copiaRow(p.newID(), devA))
+	p.reject(notNullViolation, "sem o PC", copiaRow(p.newUser(), devA).drop("device_id"))
+	p.reject(notNullViolation, "sem a hora (sem DEFAULT)", copiaRow(p.newUser(), devA).drop("updated_at"))
+
+	c := p.newUser()
+	devC := p.newDevice(c)
+	p.reject(checkViolation, "o conteúdo vazio", copiaRow(c, devC).lit("content", "''"))
+	p.reject(checkViolation, "o conteúdo acima de 512 KiB", copiaRow(c, devC).lit("content", "repeat('a', 524289)"))
+	p.accept("o conteúdo de exatos 512 KiB", copiaRow(c, devC).lit("content", "repeat('a', 524288)"))
+	d := p.newUser()
+	devD := p.newDevice(d)
+	p.reject(checkViolation, "o sha256 em maiúsculas", copiaRow(d, devD).lit("sha256", "repeat('AB', 32)"))
+	p.reject(checkViolation, "o sha256 curto", copiaRow(d, devD).lit("sha256", "'abcd'"))
+	p.reject(checkViolation, "termos negativos", copiaRow(d, devD).lit("terms", "-1"))
+	p.reject(checkViolation, "termos acima de 2.000", copiaRow(d, devD).lit("terms", "2001"))
+	p.accept("exatos 2.000 termos", copiaRow(d, devD).lit("terms", "2000"))
+
+	// Sem cascata: o aparelho com cópia não pode ser apagado (quem apaga a cópia
+	// é o RevogarAparelho, na transação dele, e o "apagar meus dados", antes dos
+	// aparelhos).
+	if _, err := p.conn.Exec(p.ctx, "DELETE FROM devices WHERE id = $1", devA); sqlState(err) != foreignKeyViolation {
+		t.Errorf("apagar o PC que é a fonte: %v, quero violação de chave estrangeira", err)
+	}
+}
+
+// A 0027 é SÓ ADITIVA: aplicada sobre o banco de antes (as 0001 a 0026), com
+// dados, cria a dictionary_copies vazia e não muda uma linha das que existiam.
+func TestPostgres_AMigrationDoDicionarioAplicaSobreUmBancoComDados(t *testing.T) {
+	url := pgtest.NewDB(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	t.Cleanup(cancel)
+	migs, err := pgmigrate.Load(migrations.FS)
+	if err != nil {
+		t.Fatalf("Load(migrations.FS): %v", err)
+	}
+	const emProducao = 26
+	if len(migs) < emProducao+1 || migs[emProducao].File != "0027_dictionary_copies_table.sql" {
+		t.Fatalf("%d migrations, quero as 26 de antes e a 0027 do dicionário", len(migs))
+	}
+	migs = migs[:emProducao+1]
+	conn := pgtest.Connect(t, url)
+	if res, err := pgmigrate.Run(ctx, conn, migs[:emProducao]); err != nil || len(res.Applied) != emProducao {
+		t.Fatalf("aplicar as 0001 a 0026: %+v, %v", res, err)
+	}
+	p := &pg{t: t, ctx: ctx, conn: conn, url: url}
+	a := p.newUser()
+	device := p.newDevice(a)
+	note := p.newID()
+	p.accept("ditado", tRow(a, 1).val("device_id", device))
+	p.accept("nota", noteRow(a, 2).val("id", note).val("content_device_id", device))
+	p.accept("imagem", imageRow(a, note, 3))
+
+	contar := func() map[string]string {
+		out := map[string]string{}
+		for _, tabela := range []string{"users", "devices", "transcriptions", "notes", "note_images", "user_sync_counters"} {
+			var n int
+			var resumo *string
+			p.scan(&n, "SELECT count(*) FROM "+pgx.Identifier{tabela}.Sanitize())
+			p.scan(&resumo, "SELECT md5(string_agg(t::text, '|' ORDER BY t::text)) FROM "+pgx.Identifier{tabela}.Sanitize()+" t")
+			out[tabela] = fmt.Sprintf("%d:%v", n, resumo != nil)
+			if resumo != nil {
+				out[tabela] += ":" + *resumo
+			}
+		}
+		return out
+	}
+	antes := contar()
+	res, err := pgmigrate.Run(ctx, conn, migs)
+	if err != nil || len(res.Applied) != 1 || res.AlreadyApplied != emProducao {
+		t.Fatalf("aplicar a 0027 sobre o banco com dados: %+v, %v", res, err)
+	}
+	for tabela, quero := range contar() {
+		if antes[tabela] != quero {
+			t.Errorf("a tabela %s mudou com a 0027: %s -> %s", tabela, antes[tabela], quero)
+		}
+	}
+	var n int
+	p.scan(&n, "SELECT count(*) FROM dictionary_copies")
+	if n != 0 {
+		t.Errorf("a dictionary_copies nasceu com %d linhas", n)
+	}
+	p.accept("a cópia do PC de antes", copiaRow(a, device))
 	if res, err := pgmigrate.Run(ctx, conn, migs); err != nil || len(res.Applied) != 0 {
 		t.Errorf("rodar de novo: %+v, %v", res, err)
 	}
