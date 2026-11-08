@@ -61,8 +61,9 @@ segurar continua como hoje. Ele respondeu, ponto a ponto:
 1. **Um toque limpo no Ctrl+Win** para: transcreve e escreve. O toque com outra tecla no meio não
    para (o Ctrl+Win+seta troca de área de trabalho e a gravação segue). [derivada]
 2. **Um clique** para, e o clique segue para o app como sempre: ele põe o cursor no campo, e o texto
-   é escrito ali. [derivada] Só o botão esquerdo (e o toque na tela, que o Windows entrega como
-   clique esquerdo); o botão direito e a rodinha não param, porque abrem menu e rolam a página.
+   é escrito ali. [derivada] Só o botão esquerdo; o botão direito e a rodinha não param, porque abrem
+   menu e rolam a página. O toque numa tela sensível ao toque deve chegar como clique esquerdo, mas
+   não foi conferido (o PC do Mauro não tem tela de toque).
    - Para quem usa: o clique que para é o clique no campo. Clicar no botão de enviar envia antes de o
      texto chegar; o texto fica no histórico.
 3. **Os 2 minutos** param e escrevem, como hoje (`DefaultMaxRecording`, que já não descarta a fala).
@@ -122,7 +123,7 @@ terminou (`toque`, `clique`, `limite`, `segurou` ou `descartada`), nunca a posi�
 | ID | Critério |
 |---|---|
 | AC-093 | Dois toques limpos no gatilho, o segundo até 400 ms depois do primeiro, ligam a gravação solta; segurar o segundo além do tempo de segurar é o ditado de sempre |
-| AC-094 | O toque com outra tecla no meio (Ctrl+Win+seta, Ctrl+Win+Alt) não liga nem para a gravação solta |
+| AC-094 | O toque com outra tecla no meio (Ctrl+Win+seta, Ctrl+Win+Alt) não liga nem para a gravação solta; se ele for o segundo aperto, a gravação que o aperto começou é descartada sem ir ao ASR |
 | AC-095 | Na gravação solta, um toque limpo ou um clique esquerdo param e escrevem; o clique segue para o app |
 | AC-096 | Na gravação solta, o Esc descarta: nada vai ao ASR, nada é escrito, nada entra no histórico; fora dela o Esc passa |
 | AC-097 | O texto vai ao campo com o cursor na hora de escrever; se for de senha, fica só no histórico |
@@ -171,3 +172,10 @@ Cada fase é um commit local verde; o merge na `main` e o push dependem dele.
 4. **Ditado mais longo.** Sem segurar, os ditados de 1 a 2 minutos ficam comuns. O prazo da
    transcrição já cresce com o áudio (até 90 s), mas o áudio longo ainda não foi medido
    (`docs/defeito-ditado-longo.md`). O roteiro manual tem um ditado de 1 min 30 s.
+5. **O clique que abre menu.** Achado ao escrever o roteiro da D4: o clique para e o texto é escrito
+   onde o cursor ficou. Se o clique abriu um menu (o botão direito num app, o ícone da bandeja, que abre
+   o menu do Aurora com o clique esquerdo), o texto é digitado dentro do menu, e no Windows uma letra
+   pode acionar um item do menu. O texto nunca se perde (vai ao histórico), mas o menu pode fazer algo.
+   O remédio possível é não escrever quando o foco relido for um menu (`ControlType` de menu, que o
+   rastreador de foco já lê) e deixar o texto no histórico, como no campo de senha. **Decisão do Mauro,
+   em aberto.** Até lá, o roteiro manual não para a gravação com um clique que abre menu.

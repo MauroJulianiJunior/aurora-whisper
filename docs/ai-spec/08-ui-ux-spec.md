@@ -124,15 +124,33 @@ onde o texto foi, porque ele **não** entra no campo em foco. Ponto verde nas du
 terceira (não se perdeu, mas não está onde a pessoa mandou). O título longo é cortado com "…" antes de
 40 letras, para o "+N" ficar sempre à vista.
 
+### Gravação solta (ADR-025)
+Dois toques no Ctrl+Win ligam a gravação sem segurar; um toque, um clique ou 2 minutos a param e
+escrevem, e o Esc a descarta (`07-flows.md`, "Dois toques"). A pílula é a mesma e a onda também, com um
+detalhe mínimo que diz "gravando sem segurar":
+- **O cadeado:** um cadeado cinza de 7x8 px na ponta esquerda, e a pílula de gravação 10 px mais larga
+  (138x20) só enquanto a gravação está solta. Escolhido pelo Mauro em 07-nov-2026 entre três opções
+  vistas em PNG (cadeado, ponto e contorno aceso, nos fundos claro, escuro e preto). Cinza, a cor da
+  onda em repouso: não compete com o verde, que é o sinal da voz. É o sinal do áudio travado do WhatsApp.
+- **Aparece** no segundo aperto, junto com a pílula, e **sai** no instante em que a gravação para: a
+  pílula volta à compacta do "Processando", e é assim que a pessoa vê que já não está solta. O ditado de
+  sempre nunca tem cadeado.
+- **Descartada pelo Esc:** a pílula some, sem mensagem: nada foi escrito nem guardado.
+- **Campo protegido na hora de escrever:** "Campo protegido: o texto ficou no histórico." com ponto
+  cinza, como a do texto que demorou. Não diz que era um campo de senha. O texto não some: está no
+  painel, em uma linha como a de qualquer inserção que falhou.
+
 ### Aparência (29-set-2026)
 Identidade da paleta do projeto (cores, contorno e ponto de estado: ver ADR-014, "Atualização
 de 29-set-2026").
 
-- Gravação e processamento: cápsula de 128x20 px, só a onda.
+- Gravação e processamento: cápsula de 128x20 px, só a onda. Na gravação solta, 138x20 px, com o cadeado
+  à esquerda (ver acima).
 - Mensagens (Success, Error, Blocked, janela de administrador, microfone bloqueado, falha de inserção, área de
-  transferência, texto no histórico, repetição removida): IBM Plex Mono Medium, 13 px, off-white,
+  transferência, texto no histórico, campo protegido no fim da gravação solta, repetição removida): IBM Plex Mono Medium, 13 px, off-white,
   com o ponto de estado antes do texto — verde em sucesso e na repetição removida, vermelho em erro
-  e bloqueio, cinza na área de transferência e no texto que ficou no histórico. A pílula tem o
+  e bloqueio, cinza na área de transferência e no texto que ficou no histórico (também o do campo protegido
+  no fim da gravação solta). A pílula tem o
   tamanho do texto: de 128 px (a largura da cápsula de gravação; "Inserido") a 280 px de largura,
   32 px de altura com uma linha e 48 com duas. Texto que não cabe numa linha quebra em duas de
   larguras parecidas, nunca no meio de palavra e nunca truncado.

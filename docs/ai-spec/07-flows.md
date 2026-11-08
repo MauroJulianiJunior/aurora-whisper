@@ -14,6 +14,51 @@ flowchart TD
     I --> J[Processar]
 ```
 
+### Dois toques: a gravação solta (ADR-025)
+Só com a combinação de teclas (o padrão). O toque curto continua não fazendo nada sozinho (AC-001); se
+for **limpo** (só o Ctrl e o Win, sem outra tecla nem modificador a mais), abre uma janela de 400 ms.
+```mermaid
+flowchart TD
+    A[Toque limpo: soltura antes do tempo de segurar] --> B{Segundo aperto em até 400 ms?}
+    B -->|Não| T[Tap de sempre]
+    B -->|Sim| P{Campo protegido?}
+    P -->|Sim| BL[Bloqueado, como o ditado de sempre]
+    P -->|Não| D[Grava já: pílula com cadeado, bipe e limite de 2 min]
+    D --> E{Soltura do segundo aperto}
+    E -->|Passou do tempo de segurar| H[Ditado de sempre: soltar para]
+    E -->|Curto, com outra tecla no meio| X[Descarta]
+    E -->|Curto e limpo| F[Gravação solta]
+    F --> G{O que vem}
+    G -->|Toque limpo| S[Para e escreve]
+    G -->|Clique esquerdo| S
+    G -->|2 minutos| S
+    G -->|Esc| X
+    S --> R[Transcrever, reler o campo e escrever]
+```
+
+- **Ligar:** o segundo aperto já grava e mostra a pílula, sem esperar o tempo de segurar (700 ms, o
+  padrão do painel). A janela é medida pelos instantes dos dois eventos do hook, não por um timer
+  (`JanelaDoDuploToque`). O toque com outra tecla no meio (Ctrl+Win+seta, Ctrl+Win+D, Ctrl+Win+Alt)
+  não abre a janela. Um toque num campo protegido também não.
+- **Parar e escrever:** um toque limpo, um clique do botão esquerdo (o clique segue para o app, que
+  põe o cursor no campo) ou os 2 minutos. O toque com outra tecla no meio (trocar de área de
+  trabalho) e o botão direito não param. O hook do mouse e o Esc saem no instante em que ela para,
+  e a pílula passa a "Processando", sem o cadeado. **Em aberto (ADR-025, risco 5):** um clique que abre
+  um menu (o botão direito num app, o ícone da bandeja) faz o texto ser escrito dentro do menu; a decisão
+  do Mauro sobre não escrever quando o foco relido for um menu ainda não saiu.
+- **Descartar:** o Esc puro, ou um segundo aperto curto com outra tecla no meio. Nada vai ao ASR,
+  nada é escrito, nada entra no histórico, a pílula some, e o desfecho da tentativa é
+  `discarded` (`dictation.OutcomeDescartado`). O Esc é engolido em par e só durante a gravação solta;
+  fora dela, e com Ctrl ou Shift, passa.
+- **Onde escreve:** no campo com o cursor na hora de escrever, **lido de novo** depois da
+  transcrição; o programa de agora é o do dicionário por domínio do Smart. Se esse campo for
+  protegido, nada é escrito: o texto vai ao histórico (status `error`, sem dizer o motivo) e a pílula
+  diz "Campo protegido: o texto ficou no histórico.". O ditado de sempre não relê o campo.
+- **Ctrl+Win+Alt:** o Alt no meio da gravação solta não a para nem a manda para a nota; segurar o
+  segundo aperto com o Alt é o ditar para nota de sempre (abaixo).
+- **Pausa da bandeja:** vale para a próxima sessão; a gravação solta em curso e o Esc engolido
+  terminam normalmente.
+
 ## Pipeline de transcrição
 Na etapa 5 (ADR-019) só existe o ramo `local_only`: o gateway de ASR na nuvem fica para depois. A
 "Outbox" do fim só recebe o marcador quando a nuvem está conectada (ver "Sync").
@@ -568,9 +613,17 @@ flowchart TD
 - error
 - blocked
 
+A gravação solta (ADR-025) não é um estado novo: é o `recording` com a marca de solta, ligada no segundo
+aperto do duplo toque e desligada em toda saída dela (`GravacaoSoltaEffect`). O descarte pelo Esc volta a
+`idle`, sem passar por `processing`, `success` nem `error`; o toque, o clique e o limite vão a
+`processing`, como a soltura do ditado de sempre.
+
 ## Timeouts
 - primed = threshold;
-- recording max default sugerido 120 s;
+- recording max default sugerido 120 s; na gravação solta (ADR-025) vale o mesmo limite, contado do
+  segundo aperto, e ele para e escreve como o toque e o clique (`DefaultMaxRecording`);
+- janela do duplo toque: 400 ms entre a soltura do primeiro toque limpo e o segundo aperto
+  (`JanelaDoDuploToque`; não é timer: mede-se pelos instantes dos eventos do hook);
 - local/cloud ASR com timeout proporcional ao áudio: 5 s + 0,75 × duração, entre 10 s e 90 s
   (`dictation.PrazoDeTranscricao`; ADR-007, nota de 2026-10-01; `docs/defeito-ditado-longo.md`);
 - resolve com timeout proporcional ao texto: 5 s até 250 caracteres, mais 6 ms por caractere

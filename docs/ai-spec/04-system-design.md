@@ -50,7 +50,7 @@ flowchart LR
 ## Componentes
 | Componente | Responsabilidade |
 |---|---|
-| Keyboard Hook | tap/hold global |
+| Keyboard Hook | tap/hold global; na gravação solta (ADR-025), o duplo toque, o Esc e o hook do mouse |
 | Audio Engine | captura PCM em RAM |
 | VAD | fala/silêncio e partial validation |
 | Overlay | onda/estado |
@@ -77,6 +77,26 @@ Fluxo:
 5. watchdog encerra sessão se keyup não chegar.
 
 Com modifiers: bypass de ditado por default.
+
+### Gravação solta (ADR-025)
+O mesmo hook de teclado decide o duplo toque e o Esc, e a thread dele instala o hook do mouse:
+- **Toque limpo:** o decisor puro (`dictation.Decider`) marca `Decision.Limpo` na soltura do gatilho
+  por combinação: só o Ctrl e o Win, sem outra tecla nem modificador a mais. A máquina junta dois
+  toques limpos em até 400 ms (`JanelaDoDuploToque`) e liga a gravação solta no segundo aperto. Com
+  tecla de letra no gatilho não existe.
+- **Esc:** `dictation.Esc`, decidido na thread do hook depois do gatilho. Só durante a gravação solta
+  (um `atomic.Bool` lido sem lock), só sem modificador, e sempre em par: o aperto, as repetições e a
+  soltura são engolidos juntos, mesmo que a gravação acabe no meio. A pausa da bandeja deixa
+  terminar a gravação solta e o Esc engolido (`Hook.deveIgnorar`).
+- **Mouse:** `WH_MOUSE_LL` instalado e retirado pela thread do hook de teclado (por uma mensagem de
+  thread), **só durante a gravação solta** e atrás do `sysinput.Guard`, como o de teclado. O callback
+  só vê o botão esquerdo descer, avisa por canal sem bloquear e repassa o evento: nunca suprime e
+  nunca lê `lParam` (posição, janela, alvo). Se a instalação falhar, a gravação segue sem o clique e
+  o runtime registra um aviso (`11-observability.md`). Se o Agent fechar no meio, o hook do mouse
+  sai junto com o de teclado.
+- **O núcleo** recebe `KeyDownEvent` (com o instante), `KeyUpEvent` (com o instante e `Limpo`),
+  `CliqueEvent` e `EscEvent`. O efeito `GravacaoSoltaEffect` liga e desliga o Esc, o hook do mouse e
+  o cadeado da pílula, e diz como a gravação terminou. Fluxo e estados em `07-flows.md`.
 
 ## Áudio
 Camada nativa eficiente. Go pode usar binding WASAPI/miniaudio ou helper nativo, desde que `AudioSource` permaneça estável.
@@ -164,6 +184,11 @@ Polish (ADR-016):
 1. UI Automation quando suportado.
 2. Clipboard fallback: snapshot → set text → paste → restore.
 3. Se falhar, manter histórico e oferecer copiar.
+
+Na gravação solta (ADR-025), o campo é **relido na hora de escrever**, e não no começo: a pessoa pode
+ter clicado em outro campo ou mudado de janela durante a gravação. Se o campo de agora for protegido,
+não escreve: o texto fica no histórico (status `error`, sem dizer que o campo era protegido) e a pílula
+avisa (`08-ui-ux-spec.md`). O ditado de sempre lê o campo uma vez, no aperto.
 
 Texto com quebra de linha (o Polish produz parágrafos e listas) vai **sempre pelo clipboard, com
 `\r\n`**, nunca pelo `SendInput`: um `\n` curto pode virar Enter e enviar a mensagem num chat

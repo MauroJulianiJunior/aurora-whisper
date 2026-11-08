@@ -898,6 +898,33 @@ restritas no arquivo do Mauro ficam de fora); o casamento fonético no celular (
 janela); indexar o lote do Aprender para a montagem com a cópia no limite e centenas de pares que ela não
 tem (~19 s medidos, ADR-023, risco 3); e guardar o SHA-256 enviado no SQLite.
 
+## TASK-032 — Ditar sem segurar (ADR-025)
+**Implementada em 07-nov-2026, nas fases D1 a D4** (a ADR-025 tem o desenho e as decisões do Mauro). Hoje
+o ditado só grava enquanto a pessoa segura o gatilho. Agora, **dois toques limpos no Ctrl+Win** (o
+segundo até 400 ms depois do primeiro) ligam uma **gravação solta**, que um toque limpo, um clique do
+botão esquerdo ou os 2 minutos param e escrevem, e que o Esc descarta. Segurar continua como sempre, e o
+ditar para nota (Ctrl+Win+Alt) também. Só com a combinação de teclas.
+- **D1:** o núcleo puro: o toque limpo no decisor (`Decision.Limpo`); na máquina, a janela do duplo
+  toque, a gravação solta, parar pelo toque, pelo clique e pelo limite, o Esc que descarta
+  (`OutcomeDescartado`). Testes de tabela;
+- **D2:** o runtime: o Esc na thread do hook (engolido em par, só na gravação solta), o hook do mouse
+  (`WH_MOUSE_LL`) só durante a gravação solta e atrás do `sysinput.Guard`, o campo e o dicionário relidos
+  na hora de escrever, o campo protegido no fim (texto no histórico, pílula "Campo protegido: o texto
+  ficou no histórico."), a pausa que deixa terminar a gravação solta e o Esc engolido, o log
+  `winruntime: gravação solta`. Testes só com dublês;
+- **D3:** a pílula: o Mauro escolheu o cadeado entre três opções em PNG (opção A, 07-nov-2026): cadeado
+  cinza de 7x8 px, pílula 10 px mais larga (138x20) só durante a gravação solta;
+- **D4:** os documentos: esta spec (`03`, `04`, `07`, `08`, `09`, `11`), a ADR-025, o README ("Como usar")
+  e o roteiro de teste manual `docs/teste-manual-ditar-sem-segurar.md`. Critérios: AC-093 a AC-099.
+
+**Nenhum teste instala hook nem injeta tecla ou clique** (`CLAUDE.md`, "Testes que agem no sistema
+real"): a instalação real do hook do mouse e o Esc de verdade ficam no roteiro manual.
+
+**Falta, e é do Mauro:** remontar o Agent e rodar o roteiro, que inclui o que ele ainda não testou (segurar
+o Ctrl e tocar o Win duas vezes, para ver se o menu Iniciar abre) e um ditado de 1 min 30 s (o áudio longo
+ainda não foi medido, `docs/defeito-ditado-longo.md`). Os 400 ms são uma constante, a ajustar depois do
+teste dele.
+
 ## Paralelização
 - TASK-002/003/004 podem evoluir em paralelo após contratos.
 - TASK-006 pode rodar com TASK-005.

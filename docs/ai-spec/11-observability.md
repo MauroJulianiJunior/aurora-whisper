@@ -74,6 +74,22 @@ Quando a política de esforço desce um degrau (`modelo_incompativel`), sai uma 
   Agent, só quando o registro diz que há bloqueio: `motivo=<palavra>`. Liberado, ou "não deu para ler",
   não escreve nada.
 
+### A gravação solta (ADR-025, 07-nov-2026)
+- `winruntime: gravação solta`, INFO, duas linhas por gravação solta: ao ligar (`attempt`,
+  `ligada=true`) e ao desligar (`attempt`, `ligada=false` e `fim`). O `fim` diz só como terminou:
+  `toque`, `clique`, `limite`, `segurou` (o segundo aperto foi segurado e virou o ditado de sempre) ou
+  `descartada` (o Esc, ou um segundo aperto que era atalho). Nunca a posição do clique, a janela, o
+  programa, o campo nem o texto.
+- A gravação descartada não deixa linha `winruntime: dictation attempt finished`: nada foi ao ASR nem ao
+  histórico (`outcome=discarded` existe no núcleo, e o efeito de histórico não é emitido). As que param
+  para transcrever seguem como qualquer ditado.
+- `winruntime: o hook do mouse falhou; o clique não parou esta gravação solta`, WARN: `attempt` e `err`
+  (o erro do Windows ou a recusa do portão). Sai ao fim da gravação solta, uma vez; a gravação seguiu
+  sem o clique.
+- `winruntime: a gravação solta terminou num campo protegido; o texto fica no histórico`, INFO:
+  só `attempt`. O histórico guarda a linha como inserção que falhou, sem dizer o motivo (AC-027), e a
+  pílula sai com `motivo=campo_protegido_no_fim` na linha `winruntime: overlay`.
+
 ## Etapa 5: a nuvem (ADR-019, 01-out-2026)
 - **Log do servidor:** método, padrão da rota (`r.Pattern`, nunca a URL crua), status, duração e
   contagens. Nunca texto, busca, token, cookie, código de pareamento nem e-mail; conta recusada na

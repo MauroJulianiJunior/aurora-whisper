@@ -25,6 +25,12 @@ Para usar o Aurora Whisper sem montar nada do código. Você precisa só do Wind
    Microfone se o acesso está ligado (se o Windows estiver bloqueando o microfone, a pílula diz "O
    Windows bloqueou o microfone. Veja o painel." e o painel tem um botão que abre essa tela). Para ver o histórico e mudar as configurações, abra o menu do
    ícone da bandeja e clique em **Abrir Aurora Whisper**.
+
+   **Sem segurar** (no código; chega ao instalador na próxima versão, a 0.1.2 não tem): dê **dois
+   toques rápidos** no `Ctrl+Win` e fale com as mãos livres. A pílula mostra um cadeado. Para parar e
+   escrever, dê **um toque** no `Ctrl+Win` ou **clique** no campo onde o texto deve entrar; aos 2
+   minutos ela para sozinha. O texto entra onde o cursor está na hora de escrever (num campo de senha,
+   não entra: fica no histórico). O **Esc** descarta a gravação, sem transcrever nem guardar nada.
 3. **Polish (opcional).** Organiza a pontuação e os parágrafos do que você ditou, com uma IA. Vem
    **desligado** e só funciona com a **sua própria chave de API**, da OpenAI ou da Anthropic: o projeto
    não fornece chave nenhuma, e o uso é **cobrado na sua conta** do provedor. Para ligar:
@@ -189,8 +195,10 @@ use o menu do ícone, **Sair**.
 ./bin/aurora-whisper-agent.exe
 ```
 
-Segure `Ctrl+Win`, fale, solte. O roteiro de teste manual da bandeja e do painel está em
-`docs/teste-manual-bandeja-e-painel.md`; o do ditado, em `docs/sprint-4-teste-manual.md`.
+Segure `Ctrl+Win`, fale, solte; ou dê dois toques no `Ctrl+Win` para ditar sem segurar (ADR-025). O
+roteiro de teste manual da bandeja e do painel está em `docs/teste-manual-bandeja-e-painel.md`; o do
+ditado, em `docs/sprint-4-teste-manual.md`; o do ditado sem segurar, em
+`docs/teste-manual-ditar-sem-segurar.md`.
 
 ## Privacidade
 
@@ -241,6 +249,9 @@ Segure `Ctrl+Win`, fale, solte. O roteiro de teste manual da bandeja e do painel
   - no passo 1 não há ditado com a tela apagada nem em segundo plano.
   O detalhe e os prazos de cada provedor estão em `docs/politica-de-privacidade.md` e
   `docs/lgpd-dossie.md`; o desenho, na ADR-021.
+- **Ditar sem segurar** (ADR-025). Só enquanto essa gravação dura, o Agent vê o clique do botão
+  esquerdo do mouse, para parar (só que houve um clique, nunca onde), e segura o **Esc**, que a
+  descarta. Fora dela, não vê o mouse, e o Esc é o de sempre. O log diz só como a gravação terminou.
 - A API local só escuta em `127.0.0.1`.
 
 Os detalhes estão em `docs/ai-spec/09-security-privacy.md`.
