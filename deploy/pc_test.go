@@ -162,13 +162,17 @@ func TestPC_TesteMensalConfereIdadeERestauracao(t *testing.T) {
 
 // O ageDecifraDeMentira escreve o cabeçalho de um dump e, no caso "grande",
 // 1 MB atrás dele: bem mais que o cano (64 KiB), como um backup de verdade
-// com algumas centenas de ditados. O head morre de SIGPIPE se ninguém lê.
+// com algumas centenas de ditados. Quem escreve o 1 MB é o printf do próprio
+// bash, que morre de SIGPIPE se ninguém lê, como o age de verdade. Era o
+// "head -c 1000000 /dev/zero", e no CI de 08-nov-2026 (Ubuntu 26.04) o controle
+// abaixo saiu 0 uma vez, sem SIGPIPE: o head é do sistema, e provavelmente
+// trata o cano fechado de outro jeito; o printf é o do bash em toda máquina.
 const ageDecifraDeMentira = `
 if [ "${FALSO_AGE_FALHA:-}" = 1 ]; then printf 'age: error: no identity matched any of the recipients\n' >&2; exit 1; fi
 case "${FALSO_DUMP:-grande}" in
   lixo) printf 'isto nao e um dump\n' ;;
   pequeno) printf 'PGDMP-FALSO\n' ;;
-  *) printf 'PGDMP-FALSO\n'; head -c 1000000 /dev/zero ;;
+  *) printf 'PGDMP-FALSO\n'; printf '%01000000d' 0 ;;
 esac
 `
 

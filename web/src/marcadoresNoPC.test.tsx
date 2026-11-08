@@ -533,12 +533,13 @@ describe('o botão de marcador na nota aberta', () => {
     fireEvent.click(tirar)
     await waitFor(() => expect(pedidosA(srv, '/api/notas/n9/marcadores/m1', 'DELETE')).toHaveLength(1))
     await waitFor(() => expect(within(dialogo()).queryByRole('button', { name: 'Tirar o marcador Compras' })).toBeNull())
-    // Sobrou o Viagem, que ganha o foco.
-    expect(document.activeElement).toBe(within(dialogo()).getByRole('button', { name: 'Tirar o marcador Viagem' }))
+    // Sobrou o Viagem, que ganha o foco. O foco muda num useEffect, que roda depois de a
+    // etiqueta sair da tela: conferir na hora dava <body> às vezes (CI de 08-nov-2026).
+    await waitFor(() => expect(document.activeElement).toBe(within(dialogo()).getByRole('button', { name: 'Tirar o marcador Viagem' })))
     fireEvent.click(document.activeElement!)
     await waitFor(() => expect(within(dialogo()).queryByRole('button', { name: /Tirar o marcador/ })).toBeNull())
     // Sem etiqueta, o foco vai ao botão de marcador.
-    expect(document.activeElement).toBe(botaoMarcadoresDaNota())
+    await waitFor(() => expect(document.activeElement).toBe(botaoMarcadoresDaNota()))
   })
 
   it('a nota guarda a versão nova: o texto salvo depois do marcador leva base_version certa (sem 409)', async () => {

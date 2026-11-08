@@ -198,10 +198,16 @@ func TestMain(m *testing.M) {
 
 // falso escreve um programa de mentira. O corpo é bash; antes dele, a chamada
 // é anotada no REGISTRO, uma por linha: "nome [arg1] [arg2] ...".
+//
+// A linha sai numa escrita só. Num cano (pg_dump | age), dois falsos anotam ao
+// mesmo tempo; com um printf para o nome, outro para os argumentos e outro
+// para o fim da linha, a linha de um podia entrar no meio da do outro
+// ("agepg_dump como aurora_backup"), que é o que explica a falha do
+// TestVPS_BackupCaminhoFeliz no CI de 08-nov-2026.
 func (a *ambienteBash) falso(nome, corpo string) {
 	a.t.Helper()
 	texto := "#!/usr/bin/env bash\n" +
-		"{ printf '%s' " + nome + "; printf ' [%s]' \"$@\"; printf '\\n'; } >> \"$REGISTRO\"\n" +
+		"printf -v __chamada ' [%s]' \"$@\"; printf '%s%s\\n' " + nome + " \"$__chamada\" >> \"$REGISTRO\"\n" +
 		corpo + "\n"
 	if err := os.WriteFile(filepath.Join(a.falsos, nome), []byte(texto), 0o755); err != nil {
 		a.t.Fatal(err)
