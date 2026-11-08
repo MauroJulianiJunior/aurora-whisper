@@ -104,6 +104,7 @@ func TestPilulaEmPNG(t *testing.T) {
 		{"nota-nova", FrameState{Phase: FaseNotaNova}},
 		{"nota-nao-salvou", FrameState{Phase: FaseNotaNaoSalvou}},
 		{"campo-protegido-no-historico", FrameState{Phase: FaseCampoProtegidoNoHistorico}},
+		{"menu-no-historico", FrameState{Phase: FaseMenuNoHistorico}},
 	}
 	fundos := []fundoPNG{
 		{"claro", 245, 225},

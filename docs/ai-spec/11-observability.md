@@ -89,6 +89,8 @@ Quando a política de esforço desce um degrau (`modelo_incompativel`), sai uma 
 - `winruntime: a gravação solta terminou num campo protegido; o texto fica no histórico`, INFO:
   só `attempt`. O histórico guarda a linha como inserção que falhou, sem dizer o motivo (AC-027), e a
   pílula sai com `motivo=campo_protegido_no_fim` na linha `winruntime: overlay`.
+- `winruntime: a gravação solta terminou com um menu aberto; o texto fica no histórico`, INFO: só
+  `attempt`; a pílula sai com `motivo=menu_no_fim`. Nunca o programa, a janela nem os itens do menu.
 
 ## Etapa 5: a nuvem (ADR-019, 01-out-2026)
 - **Log do servidor:** método, padrão da rota (`r.Pattern`, nunca a URL crua), status, duração e

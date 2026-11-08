@@ -489,3 +489,125 @@ func TestRun_GravacaoSolta(t *testing.T) {
 	case <-time.After(150 * time.Millisecond):
 	}
 }
+
+// TestFocoEhMenu: o modo de menu do Win32 basta; sem ele, decide o tipo do
+// controle em foco.
+func TestFocoEhMenu(t *testing.T) {
+	for _, c := range []struct {
+		tipo       string
+		menuAberto bool
+		quer       bool
+	}{
+		{"Menu", false, true},
+		{"MenuBar", false, true},
+		{"MenuItem", false, true},
+		{"Edit", false, false},
+		{"Document", false, false},
+		{"", false, false},
+		{"Edit", true, true}, // o menu aberto pelo clique, sem item destacado
+	} {
+		if got := focoEhMenu(dictation.FocusTarget{ControlType: c.tipo}, c.menuAberto); got != c.quer {
+			t.Errorf("focoEhMenu(%q, menu aberto %v) = %v, quero %v", c.tipo, c.menuAberto, got, c.quer)
+		}
+	}
+}
+
+// terminarComMenu liga a gravação solta, para pelo clique e transcreve,
+// com o lugar do cursor e o modo de menu que o teste der.
+func terminarComMenu(t *testing.T, alvo dictation.FocusTarget, menuAberto bool) *bancadaSolta {
+	t.Helper()
+	b := novaBancadaSolta(t)
+	consultas := 0
+	b.rt.menuAberto = func() bool { consultas++; return menuAberto }
+	b.ligar(t)
+	b.clicar()
+	b.foco.alvo = alvo
+	b.transcrever(t)
+	if consultas > 1 {
+		t.Fatalf("o modo de menu foi consultado %d vezes, quero no máximo uma, no fim", consultas)
+	}
+	return b
+}
+
+// TestSolta_MenuAbertoNoFimFicaNoHistorico: o clique que parou abriu um menu
+// (o da bandeja, o de contexto). O texto não é escrito no menu: fica no
+// histórico, e a pílula diz isso (ADR-025, risco 5).
+func TestSolta_MenuAbertoNoFimFicaNoHistorico(t *testing.T) {
+	b := terminarComMenu(t, dictation.FocusTarget{ProcessName: "editor.exe", ControlType: "Edit"}, true)
+
+	if ins := pedidosDeInsercao(b.rt); len(ins) != 0 {
+		t.Fatalf("o texto foi escrito com um menu aberto: %+v", ins)
+	}
+	l := b.hist.unica(t)
+	if l.FinalText != ditadoSolto || l.Status != "error" {
+		t.Fatalf("histórico: final %q status %q, quero o ditado, como inserção que falhou", l.FinalText, l.Status)
+	}
+	if f := b.pilula.ultima(t); f != overlay.FaseMenuNoHistorico {
+		t.Fatalf("pílula %v, quero FaseMenuNoHistorico", f)
+	}
+	if !strings.Contains(b.log.String(), "motivo=menu_no_fim") {
+		t.Errorf("a linha do overlay não diz o motivo:\n%s", b.log.String())
+	}
+}
+
+// TestSolta_MenuPeloTipoDoControle: sem o modo de menu do Win32, o item de
+// menu em foco (um menu que não é do Win32) também não recebe o texto.
+func TestSolta_MenuPeloTipoDoControle(t *testing.T) {
+	b := terminarComMenu(t, dictation.FocusTarget{ProcessName: "app.exe", ControlType: "MenuItem"}, false)
+	if ins := pedidosDeInsercao(b.rt); len(ins) != 0 {
+		t.Fatalf("o texto foi escrito num item de menu: %+v", ins)
+	}
+	if f := b.pilula.ultima(t); f != overlay.FaseMenuNoHistorico {
+		t.Fatalf("pílula %v, quero FaseMenuNoHistorico", f)
+	}
+}
+
+// TestSolta_CampoProtegidoVemAntesDoMenu: um menu aberto sobre um campo de
+// senha é, antes de tudo, um campo de senha.
+func TestSolta_CampoProtegidoVemAntesDoMenu(t *testing.T) {
+	b := terminarComMenu(t, dictation.FocusTarget{ProcessName: "banco.exe", ControlType: "Edit", Protected: true}, true)
+	if f := b.pilula.ultima(t); f != overlay.FaseCampoProtegidoNoHistorico {
+		t.Fatalf("pílula %v, quero FaseCampoProtegidoNoHistorico", f)
+	}
+}
+
+// TestSolta_SemMenuEscreve: sem menu, o texto vai para o campo como sempre.
+func TestSolta_SemMenuEscreve(t *testing.T) {
+	b := terminarComMenu(t, dictation.FocusTarget{ProcessName: "editor.exe", ControlType: "Edit"}, false)
+	if ins := pedidosDeInsercao(b.rt); len(ins) != 1 {
+		t.Fatalf("pedidos de inserção %d, quero o texto no campo", len(ins))
+	}
+}
+
+// TestSolta_OHoldNaoOlhaOMenu: o ditado de sempre não relê nada no fim, e
+// escreve mesmo com o modo de menu ligado (a ADR-025 só muda a gravação solta).
+func TestSolta_OHoldNaoOlhaOMenu(t *testing.T) {
+	b := novaBancadaSolta(t)
+	consultas := 0
+	b.rt.menuAberto = func() bool { consultas++; return true }
+	b.tecla(true, 0, false, false)
+	b.rt.clk.(*clock.Fake).Advance(700 * time.Millisecond)
+	b.rt.dispatch(<-b.rt.pending)
+	b.tecla(false, 3000, true, false)
+	b.transcrever(t)
+	if consultas != 0 || len(pedidosDeInsercao(b.rt)) != 1 {
+		t.Fatalf("hold: %d consulta(s) ao modo de menu e %d inserção(ões); quero 0 e 1", consultas, len(pedidosDeInsercao(b.rt)))
+	}
+}
+
+// TestNew_LigaOModoDeMenu: o Runtime de produção consulta o modo de menu do
+// Win32. Só confere que a consulta está ligada; não a chama.
+func TestNew_LigaOModoDeMenu(t *testing.T) {
+	machine, err := dictation.NewMachine(dictation.Config{
+		Key:           dictation.KeyUnknown,
+		Modifiers:     dictation.ModControl | dictation.ModMeta,
+		HoldThreshold: 700 * time.Millisecond,
+		MaxRecording:  dictation.DefaultMaxRecording,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rt := New(machine, clock.NewFake(time.Now()), nil, nil, nil, fakeFocus{}, nil, nil); rt.menuAberto == nil {
+		t.Fatal("New não ligou a consulta do modo de menu: um menu aberto no fim da gravação solta receberia o texto")
+	}
+}

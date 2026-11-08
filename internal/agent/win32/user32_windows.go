@@ -28,6 +28,7 @@ var (
 	procGetSystemMetrics    = user32.NewProc("GetSystemMetrics")
 	procSendInput           = user32.NewProc("SendInput")
 	procDefWindowProcW      = user32.NewProc("DefWindowProcW")
+	procGetGUIThreadInfo    = user32.NewProc("GetGUIThreadInfo")
 )
 
 // SetWindowsHookExW instala um hook global ou de thread. hookProc deve
@@ -210,6 +211,18 @@ func ShowWindow(hwnd HWND, cmdShow int32) bool {
 func GetSystemMetrics(index int32) int32 {
 	r1, _, _ := procGetSystemMetrics.Call(uintptr(index))
 	return int32(r1)
+}
+
+// GetGUIThreadInfo lê o estado de interface da thread threadID; 0 é a thread
+// da janela em primeiro plano. Só leitura: não move foco nem muda nada.
+// Preenche info.CbSize sozinha.
+func GetGUIThreadInfo(threadID uint32, info *GUITHREADINFO) error {
+	info.CbSize = uint32(unsafe.Sizeof(*info))
+	r1, _, err := procGetGUIThreadInfo.Call(uintptr(threadID), uintptr(unsafe.Pointer(info)))
+	if r1 == 0 {
+		return err
+	}
+	return nil
 }
 
 // SendInput injeta os eventos sintéticos de inputs na fila de input do

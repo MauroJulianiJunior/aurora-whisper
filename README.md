@@ -29,8 +29,8 @@ Para usar o Aurora Whisper sem montar nada do código. Você precisa só do Wind
    **Sem segurar** (no código; chega ao instalador na próxima versão, a 0.1.2 não tem): dê **dois
    toques rápidos** no `Ctrl+Win` e fale com as mãos livres. A pílula mostra um cadeado. Para parar e
    escrever, dê **um toque** no `Ctrl+Win` ou **clique** no campo onde o texto deve entrar; aos 2
-   minutos ela para sozinha. O texto entra onde o cursor está na hora de escrever (num campo de senha,
-   não entra: fica no histórico). O **Esc** descarta a gravação, sem transcrever nem guardar nada.
+   minutos ela para sozinha. O texto entra onde o cursor está na hora de escrever (num campo de senha
+   ou num menu aberto, não entra: fica no histórico). O **Esc** descarta a gravação, sem transcrever nem guardar nada.
 3. **Polish (opcional).** Organiza a pontuação e os parágrafos do que você ditou, com uma IA. Vem
    **desligado** e só funciona com a **sua própria chave de API**, da OpenAI ou da Anthropic: o projeto
    não fornece chave nenhuma, e o uso é **cobrado na sua conta** do provedor. Para ligar:

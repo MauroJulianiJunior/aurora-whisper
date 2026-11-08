@@ -910,7 +910,8 @@ ditar para nota (Ctrl+Win+Alt) também. Só com a combinação de teclas.
 - **D2:** o runtime: o Esc na thread do hook (engolido em par, só na gravação solta), o hook do mouse
   (`WH_MOUSE_LL`) só durante a gravação solta e atrás do `sysinput.Guard`, o campo e o dicionário relidos
   na hora de escrever, o campo protegido no fim (texto no histórico, pílula "Campo protegido: o texto
-  ficou no histórico."), a pausa que deixa terminar a gravação solta e o Esc engolido, o log
+  ficou no histórico."), o menu aberto no fim (risco 5, decidido em 07-nov-2026: texto no histórico,
+  pílula "Menu aberto: o texto ficou no histórico."), a pausa que deixa terminar a gravação solta e o Esc engolido, o log
   `winruntime: gravação solta`. Testes só com dublês;
 - **D3:** a pílula: o Mauro escolheu o cadeado entre três opções em PNG (opção A, 07-nov-2026): cadeado
   cinza de 7x8 px, pílula 10 px mais larga (138x20) só durante a gravação solta;

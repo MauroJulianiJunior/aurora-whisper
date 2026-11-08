@@ -176,6 +176,9 @@ Cada fase é um commit local verde; o merge na `main` e o push dependem dele.
    onde o cursor ficou. Se o clique abriu um menu (o botão direito num app, o ícone da bandeja, que abre
    o menu do Aurora com o clique esquerdo), o texto é digitado dentro do menu, e no Windows uma letra
    pode acionar um item do menu. O texto nunca se perde (vai ao histórico), mas o menu pode fazer algo.
-   O remédio possível é não escrever quando o foco relido for um menu (`ControlType` de menu, que o
-   rastreador de foco já lê) e deixar o texto no histórico, como no campo de senha. **Decisão do Mauro,
-   em aberto.** Até lá, o roteiro manual não para a gravação com um clique que abre menu.
+   **Decidido pelo Mauro em 07-nov-2026** ("segue a tua sugestao"): com um menu aberto no fim da
+   gravação solta, o texto não é escrito e fica no histórico, como no campo de senha, e a pílula diz
+   "Menu aberto: o texto ficou no histórico." (ponto cinza). "Menu aberto" é: a thread em primeiro plano está num menu do Win32 (`GetGUIThreadInfo`, só leitura) ou o controle em foco é de menu pela UI Automation (`Menu`, `MenuBar`, `MenuItem`).
+   Os dois sinais, porque nenhum basta sozinho: num menu do Win32 aberto pelo clique nenhum item tem o
+   foco ainda, e um menu que não é do Win32 não liga o modo de menu. Um menu que não faça nenhum dos
+   dois não é reconhecido; o roteiro manual confere o da bandeja e o de contexto do Bloco de Notas.

@@ -11,9 +11,10 @@ clique ou nos 2 minutos, e escreve onde o cursor está na hora; e que o **Esc de
 
 **Nunca dite uma senha de verdade.** Num campo de senha, o esperado é o ditado **não** entrar.
 
-**Não pare a gravação com um clique que abre menu** (o botão direito, o ícone da bandeja): o clique para,
-e o texto seria escrito dentro do menu, onde uma letra pode acionar um item. Está em aberto (ADR-025,
-risco 5), e por isso este roteiro não faz isso.
+**Menus:** o clique que para pode abrir um menu (o botão direito, o ícone da bandeja). Com um menu aberto,
+o Aurora não escreve: o texto fica no histórico (ADR-025, risco 5). O passo 9 confere isso. Se algum
+item de menu for acionado sozinho (o Agent fechar, pausar, ou o painel abrir), anote: a guarda não
+reconheceu aquele menu.
 
 **Se algo não sair como está escrito:** pare naquele passo, anote o número do passo e o que apareceu (um
 print ajuda), e siga para a próxima parte. No fim, me conte tudo, junto com a saída do passo 10.
@@ -140,15 +141,30 @@ janela **Nomes de Usuário e Senhas Armazenados**, clique **Adicionar...**. **N�
    **Anote:** quantos segundos ficou em "Processando", e se o texto saiu **inteiro** (o começo, o meio e o
    fim). É o risco 4 da ADR: o áudio longo ainda não tinha sido medido.
 
-## 9. Clicar fora de um campo
+## 9. Clicar fora de um campo, e em menus
 
-O clique que para escreve no lugar que ficou com o cursor. Este passo só observa o que acontece quando
-esse lugar não é um campo de texto (e não é um menu: ver o aviso no começo).
+O clique que para escreve no lugar que ficou com o cursor, menos num menu.
 
-1. Minimize as janelas até ver um pedaço vazio da área de trabalho, e abra o Bloco de Notas por cima,
-   sem cobrir tudo.
-2. No Bloco de Notas, dois toques no Ctrl+Win, diga "clique na área de trabalho", e clique num ponto
-   **vazio da área de trabalho**.
+1. **O menu da bandeja:** no Bloco de Notas, dois toques no Ctrl+Win, diga "parar pela bandeja", e
+   clique no **ícone do Aurora na bandeja**.
+   **Deve acontecer:** o menu da bandeja abre e fica aberto; a pílula diz **"Menu aberto: o texto ficou
+   no histórico."**, com o ponto cinza; **nenhum** item do menu é acionado (o Agent não fecha, não pausa e
+   o painel não abre sozinho). A frase está no **Histórico** do painel. Feche o menu com o **Esc**.
+2. **O botão direito não para:** no Bloco de Notas, dois toques no Ctrl+Win, diga "o botão direito não
+   para", e clique com o **botão direito** dentro do Bloco de Notas. O menu de contexto abre e a gravação
+   **continua** (o cadeado segue na pílula). Clique com o **esquerdo fora do menu**, no texto do Bloco de
+   Notas: o menu fecha, a gravação para e o texto entra no Bloco de Notas.
+3. **Parar com o menu de contexto aberto:** dois toques no Ctrl+Win, diga "menu aberto pelo teclado",
+   aperte **Shift+F10** (abre o menu de contexto do Bloco de Notas) e, com o menu aberto, dê **um toque**
+   no Ctrl+Win.
+   **Pode acontecer uma de duas coisas, e as duas estão certas:** o menu continua aberto e a pílula diz
+   **"Menu aberto: o texto ficou no histórico."**; ou o menu fecha sozinho com o toque e o texto entra no
+   Bloco de Notas. **Anote qual foi.** O que **não** pode: o texto aparecer dentro do menu, ou um item
+   dele ser acionado (por exemplo, o texto do Bloco de Notas ser recortado ou apagado). Feche o menu com o
+   **Esc**, se ele ficou aberto.
+4. **A área de trabalho:** minimize as janelas até ver um pedaço vazio da área de trabalho, e abra o
+   Bloco de Notas por cima, sem cobrir tudo. No Bloco de Notas, dois toques no Ctrl+Win, diga "clique na
+   área de trabalho", e clique num ponto **vazio da área de trabalho**.
    **Anote:** se o texto apareceu em algum lugar, e se está no **Histórico** do painel (deve estar).
 
 ## 10. O log

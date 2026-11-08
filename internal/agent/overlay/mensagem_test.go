@@ -234,6 +234,7 @@ func TestComporMensagem_QuebrasDasMensagens(t *testing.T) {
 		FaseNotaNova:                  {"Nota nova"},
 		FaseNotaNaoSalvou:             {"Não salvou na nota:", "está no histórico."},
 		FaseCampoProtegidoNoHistorico: {"Campo protegido: o texto", "ficou no histórico."},
+		FaseMenuNoHistorico:           {"Menu aberto: o texto", "ficou no histórico."},
 	} {
 		if got := ComporMensagem(p).Linhas; strings.Join(got, "|") != strings.Join(want, "|") {
 			t.Errorf("%s: %q, want %q", nomeDaFase(p), got, want)

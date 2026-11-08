@@ -139,6 +139,8 @@ detalhe mínimo que diz "gravando sem segurar":
 - **Campo protegido na hora de escrever:** "Campo protegido: o texto ficou no histórico." com ponto
   cinza, como a do texto que demorou. Não diz que era um campo de senha. O texto não some: está no
   painel, em uma linha como a de qualquer inserção que falhou.
+- **Menu aberto na hora de escrever** (o clique que parou abriu um menu): "Menu aberto: o texto ficou
+  no histórico.", com ponto cinza, pelo mesmo motivo (ADR-025, risco 5).
 
 ### Aparência (29-set-2026)
 Identidade da paleta do projeto (cores, contorno e ponto de estado: ver ADR-014, "Atualização

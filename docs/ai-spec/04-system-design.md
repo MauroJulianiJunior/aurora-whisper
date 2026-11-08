@@ -188,7 +188,9 @@ Polish (ADR-016):
 Na gravação solta (ADR-025), o campo é **relido na hora de escrever**, e não no começo: a pessoa pode
 ter clicado em outro campo ou mudado de janela durante a gravação. Se o campo de agora for protegido,
 não escreve: o texto fica no histórico (status `error`, sem dizer que o campo era protegido) e a pílula
-avisa (`08-ui-ux-spec.md`). O ditado de sempre lê o campo uma vez, no aperto.
+avisa (`08-ui-ux-spec.md`). Também não escreve com um **menu aberto** (ADR-025, risco 5): a thread em primeiro plano está num menu do Win32 (`GetGUIThreadInfo`, só leitura) ou o controle em foco é de menu pela UI Automation (`Menu`, `MenuBar`, `MenuItem`);
+escrever num menu do Windows aciona itens pela primeira letra. O ditado de sempre lê o campo uma vez,
+no aperto.
 
 Texto com quebra de linha (o Polish produz parágrafos e listas) vai **sempre pelo clipboard, com
 `\r\n`**, nunca pelo `SendInput`: um `\n` curto pode virar Enter e enviar a mensagem num chat

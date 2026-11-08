@@ -43,9 +43,9 @@ flowchart TD
 - **Parar e escrever:** um toque limpo, um clique do botão esquerdo (o clique segue para o app, que
   põe o cursor no campo) ou os 2 minutos. O toque com outra tecla no meio (trocar de área de
   trabalho) e o botão direito não param. O hook do mouse e o Esc saem no instante em que ela para,
-  e a pílula passa a "Processando", sem o cadeado. **Em aberto (ADR-025, risco 5):** um clique que abre
-  um menu (o botão direito num app, o ícone da bandeja) faz o texto ser escrito dentro do menu; a decisão
-  do Mauro sobre não escrever quando o foco relido for um menu ainda não saiu.
+  e a pílula passa a "Processando", sem o cadeado. Se o clique abriu um menu (o botão direito num app, o
+  ícone da bandeja), o texto não é escrito: fica no histórico, como no campo protegido (ADR-025, risco
+  5, decidido em 07-nov-2026).
 - **Descartar:** o Esc puro, ou um segundo aperto curto com outra tecla no meio. Nada vai ao ASR,
   nada é escrito, nada entra no histórico, a pílula some, e o desfecho da tentativa é
   `discarded` (`dictation.OutcomeDescartado`). O Esc é engolido em par e só durante a gravação solta;

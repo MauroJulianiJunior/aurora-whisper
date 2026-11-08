@@ -91,7 +91,7 @@ func fasesDoOverlay() []dictation.OverlayPhase {
 // lugar de uma do núcleo, ou fora de uma tentativa.
 func fasesSoDoOverlay() []dictation.OverlayPhase {
 	return []dictation.OverlayPhase{FaseJanelaElevada, FaseTextoNoHistorico, FaseRepeticaoRemovida, FaseMicrofoneBloqueado,
-		FaseNaNota, FaseNotaNova, FaseNotaNaoSalvou, FaseCampoProtegidoNoHistorico}
+		FaseNaNota, FaseNotaNova, FaseNotaNaoSalvou, FaseCampoProtegidoNoHistorico, FaseMenuNoHistorico}
 }
 
 // nomeDaFase é o String() da fase, que para as do overlay devolve
@@ -114,6 +114,8 @@ func nomeDaFase(p dictation.OverlayPhase) string {
 		return "nota-nao-salvou"
 	case FaseCampoProtegidoNoHistorico:
 		return "campo-protegido-no-historico"
+	case FaseMenuNoHistorico:
+		return "menu-no-historico"
 	}
 	return p.String()
 }

@@ -379,6 +379,13 @@ type Runtime struct {
 	// Escrito e lido na goroutine de Run; só troca a mensagem daquela
 	// tentativa (overlay.FaseDoCampoNoFim), como elevadaEm.
 	protegidoNoFim dictation.AttemptID
+	// menuNoFim é a mesma marca para a gravação solta que terminou com um
+	// menu aberto (overlay.FaseDoMenuNoFim).
+	menuNoFim dictation.AttemptID
+	// menuAberto diz se a thread em primeiro plano está num menu do Win32
+	// (menuEmPrimeiroPlano). Nil: só o tipo do controle em foco decide, que é
+	// o que os testes querem. Só consultada no fim da gravação solta.
+	menuAberto func() bool
 
 	// retido e sinal são o "gravando" que espera o microfone (ADR-015).
 	// Só a goroutine de Run lê e escreve. Ver microfone.go.
@@ -449,6 +456,7 @@ func New(machine *dictation.Machine, clk clock.Clock, hk *hook.Hook, aud *audio.
 		pararCapturas: make(chan struct{}),
 		polidos:       make(chan polidoPronto, 1),
 		vaga:          vagaLivre(),
+		menuAberto:    menuEmPrimeiroPlano,
 	}
 }
 
@@ -678,6 +686,10 @@ func (rt *Runtime) apply(effects []dictation.Effect) {
 				fase = f
 				args = append(args, "motivo", "campo_protegido_no_fim")
 			}
+			if f := overlay.FaseDoMenuNoFim(fase, e.Attempt != dictation.NoAttempt && e.Attempt == rt.menuNoFim); f != fase {
+				fase = f
+				args = append(args, "motivo", "menu_no_fim")
+			}
 			// Um erro com o microfone bloqueado pelo Windows diz isso, e não
 			// "tente novamente" (overlay.FaseDoMicrofone). Só o motivo, uma
 			// palavra, vai para o log.
@@ -735,8 +747,8 @@ func (rt *Runtime) apply(effects []dictation.Effect) {
 				continue
 			}
 			// A gravação solta escreve no campo de agora, e não escreve num
-			// campo protegido (ADR-025, C.2; solta.go).
-			if ev, recusou := rt.recusarCampoProtegido(e); recusou {
+			// campo protegido nem num menu (ADR-025, C.2 e risco 5; solta.go).
+			if ev, recusou := rt.recusarNoFim(e); recusou {
 				next = append(next, ev)
 				continue
 			}

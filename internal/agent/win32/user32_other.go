@@ -87,6 +87,10 @@ func GetSystemMetrics(index int32) int32 {
 	return 0
 }
 
+func GetGUIThreadInfo(threadID uint32, info *GUITHREADINFO) error {
+	return ErrNotSupported
+}
+
 func SendInput(inputs []INPUT) (uint32, error) {
 	if len(inputs) == 0 {
 		return 0, nil

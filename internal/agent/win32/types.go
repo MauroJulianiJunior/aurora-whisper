@@ -49,6 +49,30 @@ type RECT struct {
 	Bottom int32
 }
 
+// GUITHREADINFO espelha a struct Win32 GUITHREADINFO de GetGUIThreadInfo. O
+// Agent só lê Flags (o modo de menu, ADR-025, risco 5); as janelas vêm
+// junto porque a struct é assim, e não são usadas nem registradas.
+type GUITHREADINFO struct {
+	CbSize        uint32
+	Flags         uint32
+	HwndActive    HWND
+	HwndFocus     HWND
+	HwndCapture   HWND
+	HwndMenuOwner HWND
+	HwndMoveSize  HWND
+	HwndCaret     HWND
+	RcCaret       RECT
+}
+
+// Bits de GUITHREADINFO.Flags que dizem que a thread está num menu do Win32:
+// a barra de menu ou o menu de sistema da janela, ou um menu suspenso (o de
+// contexto, o da bandeja).
+const (
+	GUIInMenuMode     uint32 = 0x00000004
+	GUISystemMenuMode uint32 = 0x00000008
+	GUIPopupMenuMode  uint32 = 0x00000010
+)
+
 // MSG espelha a struct Win32 MSG usada por GetMessageW/TranslateMessage/
 // DispatchMessageW. O compilador insere 4 bytes de padding antes de
 // WParam para alinhá-lo a 8 bytes, exatamente como o cabeçalho Win32.

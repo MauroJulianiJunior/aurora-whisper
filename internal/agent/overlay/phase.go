@@ -113,6 +113,16 @@ const (
 // mas não foi escrito.
 const FaseCampoProtegidoNoHistorico dictation.OverlayPhase = 1007
 
+// FaseMenuNoHistorico é a gravação solta que terminou com um menu aberto (o
+// de contexto do botão direito, o da bandeja): o texto não é escrito e fica
+// no histórico (ADR-025, risco 5, decisão do Mauro de 07-nov-2026). Escrever
+// num menu do Windows aciona itens dele pela primeira letra; no da bandeja do
+// Aurora, um "s" no texto seria o "Sair".
+//
+// Fora do núcleo e com o ponto cinza, pelos mesmos motivos de
+// FaseCampoProtegidoNoHistorico; o runtime troca a fase em FaseDoMenuNoFim.
+const FaseMenuNoHistorico dictation.OverlayPhase = 1008
+
 // FaseDoMicrofone escolhe a fase de um erro: OverlayError vira
 // FaseMicrofoneBloqueado quando o microfone está bloqueado pelo Windows.
 // Qualquer outra fase passa intacta — a marca só troca a mensagem de um
@@ -142,6 +152,17 @@ func FaseDoSucesso(fase dictation.OverlayPhase, repeticaoRemovida bool) dictatio
 func FaseDoCampoNoFim(fase dictation.OverlayPhase, campoProtegido bool) dictation.OverlayPhase {
 	if fase == dictation.OverlayInsertFailed && campoProtegido {
 		return FaseCampoProtegidoNoHistorico
+	}
+	return fase
+}
+
+// FaseDoMenuNoFim escolhe a fase de uma inserção que falhou:
+// OverlayInsertFailed vira FaseMenuNoHistorico quando quem a recusou foi o
+// runtime, por haver um menu aberto no fim da gravação solta. Qualquer outra
+// fase passa intacta.
+func FaseDoMenuNoFim(fase dictation.OverlayPhase, menuAberto bool) dictation.OverlayPhase {
+	if fase == dictation.OverlayInsertFailed && menuAberto {
+		return FaseMenuNoHistorico
 	}
 	return fase
 }
@@ -220,6 +241,9 @@ func Label(phase dictation.OverlayPhase) string {
 		// O que aconteceu e onde está o texto, como a da nota. "Campo
 		// protegido" é o nome que a pílula do bloqueio já usa.
 		return "Campo protegido: o texto ficou no histórico."
+	case FaseMenuNoHistorico:
+		// Como a do campo protegido: o que havia no lugar, e onde está o texto.
+		return "Menu aberto: o texto ficou no histórico."
 	case dictation.OverlayInsertFailed:
 		// A transcrição deu certo; só a inserção falhou, e o texto NÃO
 		// está na área de transferência. Mandar colar aqui faria a
@@ -261,7 +285,7 @@ func isTerminalPhase(phase dictation.OverlayPhase) bool {
 		dictation.OverlayBlocked, dictation.OverlayClipboard,
 		dictation.OverlayInsertFailed, FaseJanelaElevada, FaseTextoNoHistorico,
 		FaseRepeticaoRemovida, FaseMicrofoneBloqueado,
-		FaseNaNota, FaseNotaNova, FaseNotaNaoSalvou, FaseCampoProtegidoNoHistorico:
+		FaseNaNota, FaseNotaNova, FaseNotaNaoSalvou, FaseCampoProtegidoNoHistorico, FaseMenuNoHistorico:
 		return true
 	default:
 		return false
