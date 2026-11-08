@@ -97,7 +97,9 @@ var (
 //     erro; mas também NÃO foi inserido, e verde ali diria que foi — a
 //     pessoa bateria o olho no verde e não colaria.
 //   - Texto que chegou depois do prazo e ficou no histórico
-//     (FaseTextoNoHistorico): cinza, pelo mesmo motivo.
+//     (FaseTextoNoHistorico): cinza, pelo mesmo motivo. E também o da
+//     gravação solta que terminou num campo protegido
+//     (FaseCampoProtegidoNoHistorico).
 //   - Repetição removida (FaseRepeticaoRemovida): verde. O texto entrou;
 //     a mensagem pede para conferir.
 //   - Erro, campo protegido, janela de administrador, falha de inserção:
@@ -114,7 +116,7 @@ func sinalPara(phase dictation.OverlayPhase) (Cor, bool) {
 	switch phase {
 	case dictation.OverlaySuccess, FaseRepeticaoRemovida, FaseNaNota, FaseNotaNova:
 		return corVerde, true
-	case dictation.OverlayClipboard, FaseTextoNoHistorico, FaseNotaNaoSalvou:
+	case dictation.OverlayClipboard, FaseTextoNoHistorico, FaseNotaNaoSalvou, FaseCampoProtegidoNoHistorico:
 		return corCinza, true
 	case dictation.OverlayError, dictation.OverlayBlocked, dictation.OverlayInsertFailed, FaseJanelaElevada,
 		FaseMicrofoneBloqueado:

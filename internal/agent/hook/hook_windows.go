@@ -20,6 +20,11 @@ import (
 // thread do hook (ver Stop).
 const wmQuit uint32 = 0x0012
 
+// wmMouse é a mensagem de thread com que GravacaoSolta pede à thread do hook
+// que instale (wParam 1) ou retire (wParam 0) o hook do mouse. Na faixa
+// WM_APP (0x8000 em diante), que o Windows deixa para o próprio programa.
+const wmMouse uint32 = 0x8000 + 1
+
 // kernel32!GetTickCount não tem wrapper em golang.org/x/sys/windows nem em
 // internal/agent/win32 (que só cobre user32/gdi32 — ver seu doc.go), então
 // é resolvido aqui do mesmo jeito que win32 resolve user32/gdi32: por
@@ -129,11 +134,89 @@ func (h *Hook) run(ready chan<- error) {
 			_ = err // fila de mensagens com erro: encerra o loop de qualquer forma
 			break
 		}
+		if msg.HWnd == 0 && msg.Message == wmMouse {
+			h.trocarMouse(msg.WParam != 0)
+			continue
+		}
 		win32.TranslateMessage(&msg)
 		win32.DispatchMessageW(&msg)
 	}
 
+	// O hook do mouse nunca sobra: se o Agent fecha no meio de uma gravação
+	// solta, ele sai junto com o de teclado.
+	h.trocarMouse(false)
 	win32.UnhookWindowsHookEx(h.handle)
+}
+
+// pedirMouse pede à thread do hook que instale ou retire o hook do mouse. Só
+// manda a mensagem; quem instala é trocarMouse, lá. Sem hook de teclado
+// rodando (os testes nunca o iniciam), não há thread para pedir, e nada
+// acontece.
+func (h *Hook) pedirMouse(ligar bool) error {
+	h.mu.Lock()
+	started, threadID := h.started, h.threadID
+	h.mu.Unlock()
+	if !started {
+		return nil
+	}
+	var w uintptr
+	if ligar {
+		w = 1
+	}
+	if err := win32.PostThreadMessageW(threadID, wmMouse, w, 0); err != nil {
+		return fmt.Errorf("hook: PostThreadMessageW(wmMouse): %w", err)
+	}
+	return nil
+}
+
+// trocarMouse instala ou retira o hook do mouse (WH_MOUSE_LL) da gravação
+// solta (ADR-025, D.1). Roda na thread do hook de teclado, que já tem o laço
+// de mensagens que um hook de baixo nível exige, e por isso os dois callbacks
+// nunca rodam ao mesmo tempo.
+//
+// O trampolim é criado uma vez só, na primeira instalação: windows.NewCallback
+// nunca libera o que aloca (ver win32.NewLowLevelKeyboardHookProc), e criar um
+// por gravação solta esgotaria a tabela.
+func (h *Hook) trocarMouse(ligar bool) {
+	if ligar == (h.mouse != 0) {
+		return
+	}
+	if !ligar {
+		_ = win32.UnhookWindowsHookEx(h.mouse)
+		h.mouse = 0
+		return
+	}
+	// Instalar um WH_MOUSE_LL é ação no sistema real: o hook passa a ver cada
+	// clique da máquina. Mesmo portão do de teclado (ADR-025, D.3).
+	if err := sysinput.Guard(); err != nil {
+		h.erroDoMouse.Store(&err)
+		return
+	}
+	if h.mouseProc == 0 {
+		h.mouseProc = win32.NewLowLevelMouseHookProc(h.callbackDoMouse)
+	}
+	m, err := win32.SetWindowsHookExW(win32.WHMouseLL, h.mouseProc, 0, 0)
+	if err != nil {
+		h.erroDoMouse.Store(&err)
+		return
+	}
+	h.mouse = m
+}
+
+// callbackDoMouse é o LowLevelMouseProc da gravação solta. Faz o mínimo, como
+// o de teclado (ADR-010): olha só se o botão esquerdo desceu, avisa por canal
+// sem bloquear e repassa. Nunca suprime: o clique segue para o app, que põe o
+// cursor no campo (ADR-025, B.2). Nunca lê lParam: a posição, a janela e o
+// que foi clicado não passam por aqui (ADR-025, F).
+func (h *Hook) callbackDoMouse(nCode int32, wParam, lParam uintptr) uintptr {
+	if nCode >= 0 && wParam == uintptr(win32.WMLButtonDown) {
+		select {
+		case h.cliques <- struct{}{}:
+		default:
+			// Já há um clique esperando o runtime: este não diz nada a mais.
+		}
+	}
+	return win32.CallNextHookEx(h.mouse, nCode, wParam, lParam)
 }
 
 // callback é o LowLevelKeyboardProc instalado por run(). Roda inteiramente

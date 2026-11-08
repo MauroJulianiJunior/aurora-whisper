@@ -243,9 +243,50 @@ func (ShowOverlayEffect) isEffect() {}
 type GravacaoSoltaEffect struct {
 	Attempt AttemptID
 	Ligada  bool
+	// Fim diz como ela terminou, só no efeito que desliga.
+	Fim FimDaSolta
 }
 
 func (GravacaoSoltaEffect) isEffect() {}
+
+// FimDaSolta diz como a gravação solta terminou. É o que a linha do log
+// registra dela, e só isto: nunca a posição do clique, a janela ou o texto
+// (ADR-025, F).
+type FimDaSolta int
+
+const (
+	// SemFim: o efeito que liga, ou a parada de um ditado de sempre.
+	SemFim FimDaSolta = iota
+	// FimToque: um toque limpo no gatilho parou e escreve.
+	FimToque
+	// FimClique: o clique esquerdo parou e escreve.
+	FimClique
+	// FimLimite: os 2 minutos pararam e escrevem.
+	FimLimite
+	// FimSegurou: o segundo aperto do duplo toque foi segurado além do tempo
+	// de segurar, e virou o ditado de sempre.
+	FimSegurou
+	// FimDescartada: o Esc, ou um segundo aperto que era atalho. Nada vai ao
+	// ASR.
+	FimDescartada
+)
+
+func (f FimDaSolta) String() string {
+	switch f {
+	case FimToque:
+		return "toque"
+	case FimClique:
+		return "clique"
+	case FimLimite:
+		return "limite"
+	case FimSegurou:
+		return "segurou"
+	case FimDescartada:
+		return "descartada"
+	default:
+		return ""
+	}
+}
 
 // PlayBeepEffect pede um beep de confirmação ao entrar em gravação.
 // Emitido apenas quando Config.BeepEnabled (AC-006).

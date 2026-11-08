@@ -24,3 +24,8 @@ func (h *Hook) Stop() error {
 func (h *Hook) SynthesizeTap() error {
 	return win32.ErrNotSupported
 }
+
+// pedirMouse é um no-op fora do Windows: não há hook do mouse.
+func (h *Hook) pedirMouse(bool) error {
+	return nil
+}

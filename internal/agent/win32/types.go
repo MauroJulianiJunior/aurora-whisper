@@ -181,6 +181,13 @@ func (k *KBDLLHOOKSTRUCT) LowerILInjected() bool {
 // suprime o evento para o resto do sistema.
 type LowLevelKeyboardProc func(nCode int32, wParam uintptr, info *KBDLLHOOKSTRUCT) uintptr
 
+// LowLevelMouseProc é a assinatura Go do callback de um hook WH_MOUSE_LL
+// (ADR-025, D). Ao contrário do de teclado, lParam fica cru, sem decodificar
+// o MSLLHOOKSTRUCT: o Agent só quer saber QUE o botão esquerdo desceu
+// (wParam), nunca onde. Sem struct, não há posição para guardar nem por
+// engano. Mesmas regras de nCode e de CallNextHookEx do teclado.
+type LowLevelMouseProc func(nCode int32, wParam, lParam uintptr) uintptr
+
 // WndProc é a assinatura Go de um window procedure (o valor atribuído a
 // WNDCLASSEX.LpfnWndProc através de NewWndProc).
 type WndProc func(hwnd HWND, msg uint32, wParam, lParam uintptr) uintptr
@@ -192,6 +199,14 @@ const (
 	// WHKeyboardLL é o idHook de um hook de teclado de baixo nível
 	// (WH_KEYBOARD_LL), instalado via SetWindowsHookExW.
 	WHKeyboardLL int32 = 13
+
+	// WHMouseLL é o idHook de um hook de mouse de baixo nível
+	// (WH_MOUSE_LL). Só existe durante a gravação solta (ADR-025, D).
+	WHMouseLL int32 = 14
+
+	// WMLButtonDown é o wParam de um hook WH_MOUSE_LL quando o botão
+	// esquerdo desce.
+	WMLButtonDown uint32 = 0x0201
 
 	// Mensagens de teclado entregues a um hook WH_KEYBOARD_LL.
 	WMKeyDown    uint32 = 0x0100

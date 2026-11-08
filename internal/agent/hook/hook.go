@@ -9,6 +9,7 @@ package hook
 // de internal/agent/win32).
 
 import (
+	"fmt"
 	"sync"
 	"sync/atomic"
 
@@ -68,6 +69,26 @@ type Hook struct {
 	// de ~300 ms e não pode esperar ninguém (ADR-010).
 	pausado atomic.Bool
 
+	// solta diz se a gravação solta está ligada (ADR-025, D). Escrita pelo
+	// runtime (GravacaoSolta) e lida no callback, sem lock, pelo mesmo motivo
+	// de pausado.
+	solta atomic.Bool
+	// esc decide o Esc da gravação solta. Só a thread do hook o usa, como o
+	// decider.
+	esc dictation.Esc
+	// cliques leva ao runtime o clique esquerdo visto pelo hook do mouse.
+	// Buffer 1, com envio que não bloqueia: um clique basta para parar, e os
+	// seguintes não dizem nada a mais.
+	cliques chan struct{}
+	// erroDoMouse é a falha da última instalação do hook do mouse, escrita pela
+	// thread do hook e devolvida por GravacaoSolta quando a gravação solta
+	// desliga. Nil: instalou, ou nem tentou.
+	erroDoMouse atomic.Pointer[error]
+	// mouse e mouseProc são o hook do mouse e o trampolim dele. Só a thread do
+	// hook lê e escreve: ela instala, retira e roda o callback.
+	mouse     win32.HHOOK
+	mouseProc uintptr
+
 	// mu protege apenas o ciclo de vida (started/done) contra chamadas
 	// concorrentes indevidas a Start/Stop. handle, threadID e tickRef são
 	// escritos uma única vez, na goroutine da thread do hook, antes de
@@ -95,6 +116,7 @@ func New(cfg Config) *Hook {
 		decider:    novoDecider(cfg),
 		translator: NewTranslator(),
 		events:     make(chan dictation.RawKeyEvent, cfg.EventBuffer),
+		cliques:    make(chan struct{}, 1),
 	}
 }
 
@@ -109,6 +131,34 @@ func New(cfg Config) *Hook {
 // O canal nunca é fechado por Stop(); ele simplesmente para de receber.
 func (h *Hook) Events() <-chan dictation.RawKeyEvent {
 	return h.events
+}
+
+// Cliques devolve o canal do clique esquerdo durante a gravação solta
+// (ADR-025, B.2). Fora dela não há hook do mouse, e nada chega aqui. O canal
+// não leva posição, janela nem botão: só que houve um clique.
+func (h *Hook) Cliques() <-chan struct{} {
+	return h.cliques
+}
+
+// GravacaoSolta liga ou desliga o que só existe durante a gravação solta
+// (ADR-025, D): o Esc que descarta e o hook do mouse. O runtime chama no
+// dictation.GravacaoSoltaEffect. Não espera a thread do hook: o pedido vai
+// por mensagem, e a instalação acontece lá.
+//
+// Ao desligar, devolve o erro da instalação do hook do mouse, se ela falhou:
+// a gravação funcionou sem o clique, e o runtime registra isso.
+//
+// Seguro de qualquer goroutine.
+func (h *Hook) GravacaoSolta(ligada bool) error {
+	h.solta.Store(ligada)
+	err := h.pedirMouse(ligada)
+	if ligada {
+		return err
+	}
+	if p := h.erroDoMouse.Swap(nil); p != nil && err == nil {
+		err = fmt.Errorf("hook: o hook do mouse não foi instalado: %w", *p)
+	}
+	return err
 }
 
 // Pausar liga ou desliga o ditado sem desinstalar o hook. Pausado, a
@@ -127,8 +177,13 @@ func (h *Hook) Pausado() bool { return h.pausado.Load() }
 // deveIgnorar decide se o callback deixa o evento passar sem consultar o
 // decisor. Fora da build tag do Windows para ser testável na suíte
 // normal: é a única decisão da pausa, e é onde mora o caso de borda.
+//
+// A pausa vale para a próxima sessão, e três coisas são sessão em curso: o
+// toque armado, a gravação solta (o toque que a para tem de chegar ao
+// núcleo) e o Esc engolido (a soltura dele tem de ser engolida também, ou o
+// Windows fica com o Esc preso).
 func (h *Hook) deveIgnorar() bool {
-	return h.pausado.Load() && !h.decider.Armado()
+	return h.pausado.Load() && !h.decider.Armado() && !h.solta.Load() && !h.esc.Preso()
 }
 
 // decidir consulta o decisor e devolve, junto com a decisão, o evento como ele
@@ -140,6 +195,16 @@ func (h *Hook) decidir(ev dictation.RawKeyEvent) (dictation.Decision, dictation.
 	d := h.decider.Decide(ev)
 	ev.ParaNota = d.Notify && d.ParaNota
 	ev.Limpo = d.Notify && d.Limpo
+	// O Esc da gravação solta (ADR-025, B.4) é decidido depois do gatilho, que
+	// também vê o Esc: é assim que um Ctrl+Win+Esc deixa o toque sujo. Os dois
+	// nunca notificam o mesmo evento. O gatilho por combinação só notifica ao
+	// completar ou desfazer o conjunto, num modificador; o Esc só sem
+	// modificador nenhum, e só com a gravação solta, que não existe com tecla
+	// de letra.
+	if e := h.esc.Decide(ev, h.solta.Load()); e.Suppress || e.Notify {
+		ev.Descartar = e.Notify
+		return e, ev
+	}
 	return d, ev
 }
 

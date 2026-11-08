@@ -140,6 +140,11 @@ type insertor interface {
 type teclado interface {
 	Events() <-chan dictation.RawKeyEvent
 	SynthesizeTap() error
+	// Cliques e GravacaoSolta são a gravação solta (ADR-025, D): o clique
+	// esquerdo que a para, e o pedido de ligar e desligar o Esc e o hook do
+	// mouse. Ver solta.go.
+	Cliques() <-chan struct{}
+	GravacaoSolta(ligada bool) error
 }
 
 // mostrador é o que o Runtime precisa do overlay: mostrar a fase e
@@ -369,6 +374,12 @@ type Runtime struct {
 	// com uma tentativa nova.
 	repeticaoEm dictation.AttemptID
 
+	// protegidoNoFim é a última gravação solta que terminou com o cursor num
+	// campo protegido: o texto não foi escrito e ficou no histórico (solta.go).
+	// Escrito e lido na goroutine de Run; só troca a mensagem daquela
+	// tentativa (overlay.FaseDoCampoNoFim), como elevadaEm.
+	protegidoNoFim dictation.AttemptID
+
 	// retido e sinal são o "gravando" que espera o microfone (ADR-015).
 	// Só a goroutine de Run lê e escreve. Ver microfone.go.
 	retido sinalRetido
@@ -449,6 +460,7 @@ func New(machine *dictation.Machine, clk clock.Clock, hk *hook.Hook, aud *audio.
 // (ADR-007, seção 6).
 func (rt *Runtime) Run(ctx context.Context) error {
 	hookEvents := rt.hook.Events()
+	cliques := rt.hook.Cliques()
 	var audioFrames <-chan audio.Frame
 	if rt.audio != nil {
 		audioFrames = rt.audio.Frames()
@@ -475,6 +487,12 @@ func (rt *Runtime) Run(ctx context.Context) error {
 				continue
 			}
 			rt.handleRaw(raw)
+
+		case <-cliques:
+			// O clique esquerdo da gravação solta (ADR-025, B.2). Só que houve
+			// um: nem posição, nem janela. Fora dela não há hook do mouse, e
+			// um clique atrasado o núcleo ignora.
+			rt.dispatch(dictation.CliqueEvent{Attempt: rt.machine.CurrentAttempt()})
 
 		case frame, ok := <-audioFrames:
 			if !ok {
@@ -518,12 +536,18 @@ func (rt *Runtime) Run(ctx context.Context) error {
 // digitação). Isto é o que torna StateBlocked (AC-036) alcançável em
 // produção pela primeira vez (Sprint 2) — ver runtime_test.go.
 func (rt *Runtime) handleRaw(raw dictation.RawKeyEvent) {
+	if raw.Descartar {
+		// O Esc da gravação solta (ADR-025, B.4): não é tecla do gatilho, e
+		// vai ao núcleo como o pedido de descartar a tentativa em curso.
+		rt.dispatch(dictation.EscEvent{Attempt: rt.machine.CurrentAttempt()})
+		return
+	}
 	if raw.Down {
 		rt.aplicarAjuste()
 		rt.aplicarDicionario()
 		alvo, elevada := rt.lerFoco()
 		antes := rt.machine.CurrentAttempt()
-		rt.dispatch(dictation.KeyDownEvent{Attempt: dictation.NoAttempt, Focus: alvo})
+		rt.dispatch(dictation.KeyDownEvent{Attempt: dictation.NoAttempt, Focus: alvo, At: raw.At})
 		// A marca vale para a tentativa que ESTE keydown começou. Um keydown
 		// no meio de outra tentativa é ignorado pelo núcleo, e não pode
 		// remarcar a tentativa em curso com uma leitura mais nova. Uma marca
@@ -553,8 +577,15 @@ func (rt *Runtime) handleRaw(raw dictation.RawKeyEvent) {
 	}
 	// A soltura traz a marca final do gatilho da nota (o Alt apertado no meio
 	// da gravação conta), antes de o texto existir.
-	rt.marcarParaNota(attempt, raw)
-	rt.dispatch(dictation.KeyUpEvent{Attempt: attempt})
+	//
+	// Menos na gravação solta já solta: ali cada sessão do gatilho é um
+	// toque de parar, e um Ctrl+Win+Alt, que não para (não é toque limpo),
+	// também não pode mandar o texto para uma nota (ADR-025: a nota fica
+	// como está).
+	if !rt.machine.GravandoSemSegurar() {
+		rt.marcarParaNota(attempt, raw)
+	}
+	rt.dispatch(dictation.KeyUpEvent{Attempt: attempt, At: raw.At, Limpo: raw.Limpo})
 }
 
 // dispatch alimenta ev ao Machine e aplica os Effect devolvidos. Só é
@@ -641,6 +672,12 @@ func (rt *Runtime) apply(effects []dictation.Effect) {
 			if fase != e.Phase {
 				args = append(args, "motivo", "janela_elevada")
 			}
+			// A gravação solta que terminou num campo protegido diz que o
+			// texto ficou no histórico (solta.go).
+			if f := overlay.FaseDoCampoNoFim(fase, e.Attempt != dictation.NoAttempt && e.Attempt == rt.protegidoNoFim); f != fase {
+				fase = f
+				args = append(args, "motivo", "campo_protegido_no_fim")
+			}
 			// Um erro com o microfone bloqueado pelo Windows diz isso, e não
 			// "tente novamente" (overlay.FaseDoMicrofone). Só o motivo, uma
 			// palavra, vai para o log.
@@ -668,6 +705,9 @@ func (rt *Runtime) apply(effects []dictation.Effect) {
 			rt.log.Info("winruntime: overlay", args...)
 			rt.mostrarFase(fase, texto)
 
+		case dictation.GravacaoSoltaEffect:
+			rt.aplicarGravacaoSolta(e)
+
 		case dictation.PlayBeepEffect:
 			// O bipe diz "pode falar": só sai com o microfone entregando
 			// áudio (ADR-015). Ver microfone.go.
@@ -692,6 +732,12 @@ func (rt *Runtime) apply(effects []dictation.Effect) {
 			// volta ao núcleo como a de uma inserção (paranota.go).
 			if rt.vaiParaNota(e.Attempt) {
 				next = append(next, rt.gravarNaNota(e))
+				continue
+			}
+			// A gravação solta escreve no campo de agora, e não escreve num
+			// campo protegido (ADR-025, C.2; solta.go).
+			if ev, recusou := rt.recusarCampoProtegido(e); recusou {
+				next = append(next, ev)
 				continue
 			}
 			rt.enfileirarInsercao(e)
@@ -1089,9 +1135,17 @@ func (rt *Runtime) resolver(e dictation.ResolveEffect) dictation.Event {
 	// O domínio do app em foco RESTRINGE o que o dicionário pode
 	// corrigir — nunca amplia. Desconhecido deixa de fora justamente as
 	// entradas perigosas.
+	//
+	// Na gravação solta, o programa é o de agora: o texto vai para onde o
+	// cursor está na hora de escrever, e o dicionário é o desse lugar
+	// (ADR-025, C.1).
+	foco := e.Focus
+	if e.ReleFoco {
+		foco, _ = rt.lerFoco()
+	}
 	var dominio *string
 	if rt.dominioDoApp != nil {
-		dominio = rt.dominioDoApp(e.Focus.ProcessName)
+		dominio = rt.dominioDoApp(foco.ProcessName)
 	}
 
 	req := resolver.ResolveRequest{

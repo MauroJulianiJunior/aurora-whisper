@@ -80,3 +80,25 @@ func TestEsc_OutrasTeclasEInjetadoPorNosPassam(t *testing.T) {
 		{ev: nosso, solta: true},
 	})
 }
+
+// TestEsc_Preso: preso do aperto engolido até a soltura dele, e só então.
+func TestEsc_Preso(t *testing.T) {
+	var e Esc
+	e.Decide(ev(KeyEscape, 0, true), false)
+	if e.Preso() {
+		t.Fatal("Esc que passou ficou preso")
+	}
+	e.Decide(ev(KeyEscape, 0, false), false)
+	e.Decide(ev(KeyEscape, 0, true), true)
+	if !e.Preso() {
+		t.Fatal("Esc engolido não está preso")
+	}
+	e.Decide(ev(KeyEscape, 0, true), false) // repetição
+	if !e.Preso() {
+		t.Fatal("a repetição soltou o Esc")
+	}
+	e.Decide(ev(KeyEscape, 0, false), false)
+	if e.Preso() {
+		t.Fatal("a soltura não soltou o Esc")
+	}
+}

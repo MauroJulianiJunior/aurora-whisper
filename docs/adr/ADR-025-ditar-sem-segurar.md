@@ -76,7 +76,10 @@ segurar continua como hoje. Ele respondeu, ponto a ponto:
    no campo do começo. [derivada] Depois de um clique, o app já moveu o cursor; depois de um toque, é
    onde a pessoa está. O contexto do Smart (o programa, para o dicionário por domínio) é lido junto.
 2. **Se esse campo for de senha, não escreve:** o texto fica no histórico, e a pílula diz isso.
-   [derivada] É o AC-036 no fim da gravação, já que o campo pode ter mudado no meio.
+   [derivada] É o AC-036 no fim da gravação, já que o campo pode ter mudado no meio. Na D2, a pílula
+   ficou "Campo protegido: o texto ficou no histórico." (ponto cinza, como a do texto que demorou), e
+   o histórico guarda a linha como inserção que falhou, sem dizer que era campo de senha (AC-027).
+   **Para quem usa:** o texto não some; está no painel.
 3. A escrita é a de sempre (ADR-011): se falhar, o texto fica na área de transferência e a pílula
    pede para colar.
 
@@ -93,7 +96,9 @@ segurar continua como hoje. Ele respondeu, ponto a ponto:
    apertada com o conjunto inteiro. O Esc também: a thread do hook lê, sem lock, se a gravação solta
    está ligada.
 5. A sessão solta é uma só, como hoje: a pausa da bandeja (`Decider.Armado`) a respeita, e o clique
-   na bandeja para a gravação, como qualquer clique.
+   na bandeja para a gravação, como qualquer clique. Na D2, a pausa ganhou mais duas coisas em curso
+   que ela deixa terminar: a gravação solta e o Esc engolido, cuja soltura tem de ser engolida também
+   (`hook.Hook.deveIgnorar`).
 
 ### E. A pílula
 
@@ -103,7 +108,7 @@ ao Mauro como imagens antes de entrar (fase D3), e a escolhida entra no `08-ui-u
 ### F. Privacidade
 
 Nada novo sai do PC. O mouse só é visto durante a gravação solta, e o log registra só como ela
-terminou (`toque`, `clique`, `limite` ou `descartada`), nunca a posição, a janela ou o texto
+terminou (`toque`, `clique`, `limite`, `segurou` ou `descartada`), nunca a posição, a janela ou o texto
 (`CLAUDE.md`, "Nunca gravar contexto de janela"). O Esc só é segurado durante a gravação solta.
 
 ## Critérios de aceite novos
@@ -150,7 +155,8 @@ Cada fase é um commit local verde; o merge na `main` e o push dependem dele.
 ## Riscos
 
 1. **O menu Iniciar.** Se um toque rápido no Ctrl+Win abrir o Iniciar, o duplo toque o abre e fecha.
-   A conferir com o Mauro antes da D2; se abrir, o remédio vai a ele antes.
+   Conferido com o Mauro em 07-nov-2026, antes da D2: "quando dou toque rapido nada acontece". Fica
+   no roteiro manual (D4) o jeito que ele não testou: segurar o Ctrl e tocar o Win duas vezes.
 2. **O hook do mouse.** Todo clique da máquina passa pelo Agent durante a gravação solta; se o
    callback demorar, o Windows o derruba (`LowLevelHooksTimeout`) e o clique atrasa. Mitigação: só
    durante a gravação solta, e o callback só manda por canal.

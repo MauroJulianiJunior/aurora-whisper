@@ -198,8 +198,8 @@ func TestSolta_SegundoApertoSeguradoEhODitadoDeSempre(t *testing.T) {
 	if len(effectsOfType[StopAudioCaptureEffect](up)) != 1 {
 		t.Errorf("soltura: %#v, quer o StopAudioCaptureEffect", up)
 	}
-	if _, desligou := soltaLigada(up); desligou != 1 {
-		t.Errorf("soltura: %#v, quer a gravação solta desligada", up)
+	if got := effectsOfType[GravacaoSoltaEffect](up); len(got) != 1 || got[0].Ligada || got[0].Fim != FimSegurou {
+		t.Errorf("soltura: %#v, quer a gravação solta desligada como segurada", up)
 	}
 }
 
@@ -227,7 +227,7 @@ func TestSolta_ToqueLimpoPara(t *testing.T) {
 	m := maquinaDaCombinacao(t, false)
 	id := ligarPorDuploToque(t, m)
 	apertar(m, 5000)
-	conferirParada(t, m, id, soltar(m, 5100, true), true)
+	conferirParada(t, m, id, soltar(m, 5100, true), true, FimToque)
 }
 
 func TestSolta_ToqueComOutraTeclaNaoPara(t *testing.T) {
@@ -245,7 +245,7 @@ func TestSolta_ToqueComOutraTeclaNaoPara(t *testing.T) {
 func TestSolta_CliquePara(t *testing.T) {
 	m := maquinaDaCombinacao(t, false)
 	id := ligarPorDuploToque(t, m)
-	conferirParada(t, m, id, m.Handle(CliqueEvent{Attempt: id}), true)
+	conferirParada(t, m, id, m.Handle(CliqueEvent{Attempt: id}), true, FimClique)
 }
 
 func TestSolta_CliqueComOSegundoApertoSeguroPara(t *testing.T) {
@@ -254,7 +254,7 @@ func TestSolta_CliqueComOSegundoApertoSeguroPara(t *testing.T) {
 	soltar(m, 100, true)
 	apertar(m, 300)
 	id := m.CurrentAttempt()
-	conferirParada(t, m, id, m.Handle(CliqueEvent{Attempt: id}), true)
+	conferirParada(t, m, id, m.Handle(CliqueEvent{Attempt: id}), true, FimClique)
 	if up := soltar(m, 2000, true); len(up) != 0 {
 		t.Errorf("soltura depois do clique: %#v, quer nenhum efeito", up)
 	}
@@ -263,7 +263,7 @@ func TestSolta_CliqueComOSegundoApertoSeguroPara(t *testing.T) {
 func TestSolta_LimiteParaEEscreve(t *testing.T) {
 	m := maquinaDaCombinacao(t, false)
 	id := ligarPorDuploToque(t, m)
-	conferirParada(t, m, id, m.Handle(TimerElapsedEvent{Attempt: id, Kind: TimerMaxRecording}), false)
+	conferirParada(t, m, id, m.Handle(TimerElapsedEvent{Attempt: id, Kind: TimerMaxRecording}), false, FimLimite)
 }
 
 func TestSolta_EscDescarta(t *testing.T) {
@@ -405,7 +405,7 @@ func TestSolta_DepoisDoDescarte_ODitadoDeSempreFunciona(t *testing.T) {
 // conferirParada confere a parada da gravação solta: desliga a solta antes de
 // tudo, para a captura e espera o áudio. cancelaLimite diz se o limite de
 // gravação ainda precisava ser cancelado (falso quando foi ele que parou).
-func conferirParada(t *testing.T, m *Machine, id AttemptID, effects []Effect, cancelaLimite bool) {
+func conferirParada(t *testing.T, m *Machine, id AttemptID, effects []Effect, cancelaLimite bool, fim FimDaSolta) {
 	t.Helper()
 	if m.State() != StateProcessing || m.CurrentAttempt() != id {
 		t.Fatalf("parada: estado %v tentativa %v, quer StateProcessing na tentativa %v", m.State(), m.CurrentAttempt(), id)
@@ -413,8 +413,8 @@ func conferirParada(t *testing.T, m *Machine, id AttemptID, effects []Effect, ca
 	if len(effects) == 0 {
 		t.Fatal("parada sem efeitos")
 	}
-	if e, ok := effects[0].(GravacaoSoltaEffect); !ok || e.Ligada {
-		t.Errorf("parada: primeiro efeito %#v, quer o GravacaoSoltaEffect desligado", effects[0])
+	if e, ok := effects[0].(GravacaoSoltaEffect); !ok || e.Ligada || e.Fim != fim {
+		t.Errorf("parada: primeiro efeito %#v, quer o GravacaoSoltaEffect desligado com o fim %v", effects[0], fim)
 	}
 	if len(effectsOfType[StopAudioCaptureEffect](effects)) != 1 || !temTimer(effects, TimerAudioStopTimeout) {
 		t.Errorf("parada: %#v, quer o StopAudioCaptureEffect e o prazo dele", effects)
@@ -440,8 +440,8 @@ func conferirDescarte(t *testing.T, m *Machine, effects []Effect) {
 	if m.State() != StateIdle || m.CurrentAttempt() != NoAttempt {
 		t.Fatalf("descarte: estado %v tentativa %v, quer StateIdle sem tentativa", m.State(), m.CurrentAttempt())
 	}
-	if _, desligou := soltaLigada(effects); desligou != 1 {
-		t.Errorf("descarte: %#v, quer a gravação solta desligada", effects)
+	if got := effectsOfType[GravacaoSoltaEffect](effects); len(got) != 1 || got[0].Ligada || got[0].Fim != FimDescartada {
+		t.Errorf("descarte: %#v, quer a gravação solta desligada como descartada", effects)
 	}
 	if len(effectsOfType[AbortAudioCaptureEffect](effects)) != 1 {
 		t.Errorf("descarte: %#v, quer o AbortAudioCaptureEffect", effects)
@@ -457,5 +457,51 @@ func conferirDescarte(t *testing.T, m *Machine, effects []Effect) {
 	}
 	if _, ok := effects[len(effects)-1].(ReleaseAudioEffect); !ok {
 		t.Errorf("descarte: último efeito %#v, quer o ReleaseAudioEffect (TEST-007)", effects[len(effects)-1])
+	}
+}
+
+// TestSolta_GravandoSemSegurar: só depois de o segundo aperto ser solto a
+// gravação está solta de verdade; segurando o segundo aperto, e no ditado de
+// sempre, não.
+func TestSolta_GravandoSemSegurar(t *testing.T) {
+	m := maquinaDaCombinacao(t, false)
+	apertar(m, 0)
+	if m.GravandoSemSegurar() {
+		t.Fatal("primeiro aperto: já gravando sem segurar")
+	}
+	soltar(m, 100, true)
+	apertar(m, 300)
+	if m.GravandoSemSegurar() {
+		t.Fatal("segundo aperto ainda seguro: gravando sem segurar")
+	}
+	soltar(m, 400, true)
+	if !m.GravandoSemSegurar() {
+		t.Fatal("segundo aperto solto: quer gravando sem segurar")
+	}
+	id := m.CurrentAttempt()
+	m.Handle(CliqueEvent{Attempt: id})
+	if m.GravandoSemSegurar() {
+		t.Fatal("depois do clique: ainda gravando sem segurar")
+	}
+
+	// O ditado de sempre nunca está solto.
+	h := maquinaDaCombinacao(t, false)
+	apertar(h, 0)
+	h.Handle(TimerElapsedEvent{Attempt: h.CurrentAttempt(), Kind: TimerHoldThreshold})
+	if h.State() != StateRecording || h.GravandoSemSegurar() {
+		t.Fatalf("hold: estado %v, solto=%v; quer gravando, não solto", h.State(), h.GravandoSemSegurar())
+	}
+}
+
+// TestFimDaSolta_String: os nomes que vão ao log, e nada para o efeito que
+// liga.
+func TestFimDaSolta_String(t *testing.T) {
+	for f, quer := range map[FimDaSolta]string{
+		SemFim: "", FimToque: "toque", FimClique: "clique", FimLimite: "limite",
+		FimSegurou: "segurou", FimDescartada: "descartada",
+	} {
+		if got := f.String(); got != quer {
+			t.Errorf("FimDaSolta(%d).String() = %q, quer %q", f, got, quer)
+		}
 	}
 }

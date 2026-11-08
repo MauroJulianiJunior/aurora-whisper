@@ -10,6 +10,10 @@ func NewLowLevelKeyboardHookProc(fn LowLevelKeyboardProc) uintptr {
 	return 0
 }
 
+func NewLowLevelMouseHookProc(fn LowLevelMouseProc) uintptr {
+	return 0
+}
+
 func NewWndProc(fn WndProc) uintptr {
 	return 0
 }

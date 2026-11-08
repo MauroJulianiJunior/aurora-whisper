@@ -195,6 +195,10 @@ type RawKeyEvent struct {
 	// Limpo também vem da decisão (Decision.Limpo), só na soltura: o toque
 	// teve só as teclas do gatilho, sem nenhuma outra no meio (ADR-025).
 	Limpo bool
+	// Descartar também vem do hook: é o aperto do Esc que descarta a
+	// gravação solta (dictation.Esc). O runtime o entrega como EscEvent, e
+	// não como tecla do gatilho.
+	Descartar bool
 }
 
 // AudioBufferRef é uma referência opaca a um buffer de áudio mantido pelo

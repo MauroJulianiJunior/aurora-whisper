@@ -232,7 +232,7 @@ func (m *Machine) onKeyUp(e KeyUpEvent) []Effect {
 		// "soltei a tecla". Sem isto o contador seguia correndo durante o
 		// ASR inteiro e a tela afirmava estar gravando com o microfone já
 		// fechado (ver OverlayProcessing).
-		return m.pararCaptura(id, true)
+		return m.pararCaptura(id, true, SemFim)
 	default:
 		// Keyup redundante durante processing/inserting: nada a fazer.
 		return nil
@@ -289,7 +289,7 @@ func (m *Machine) onKeyUpSolta(id AttemptID, e KeyUpEvent) []Effect {
 	if m.segurando {
 		m.segurando = false
 		if !e.At.IsZero() && e.At.Sub(m.apertouEm) >= m.cfg.HoldThreshold {
-			return m.pararCaptura(id, true)
+			return m.pararCaptura(id, true, FimSegurou)
 		}
 		if !e.Limpo {
 			return m.descartar(id)
@@ -299,8 +299,18 @@ func (m *Machine) onKeyUpSolta(id AttemptID, e KeyUpEvent) []Effect {
 	if !e.Limpo {
 		return nil
 	}
-	return m.pararCaptura(id, true)
+	return m.pararCaptura(id, true, FimToque)
 }
+
+// GravandoSemSegurar reporta se a gravação solta já está solta: o segundo
+// aperto do duplo toque foi solto, e a gravação segue sem tecla nenhuma
+// segurada. Daqui até ela parar, cada toque no gatilho é de parar, nunca uma
+// sessão nova.
+//
+// Existe para o runtime não deixar uma dessas sessões remarcar a gravação: um
+// Ctrl+Win+Alt no meio dela não para nada (não é toque limpo) e não pode
+// mandar o texto para uma nota (ADR-025: a nota fica como está).
+func (m *Machine) GravandoSemSegurar() bool { return m.gravandoSolta && !m.segurando }
 
 // onClique trata o clique esquerdo da gravação solta: para e escreve, e o
 // clique, que seguiu para o app, já pôs o cursor no campo (ADR-025, B.2).
@@ -310,7 +320,7 @@ func (m *Machine) onClique() []Effect {
 	if !m.gravandoSolta {
 		return nil
 	}
-	return m.pararCaptura(m.current, true)
+	return m.pararCaptura(m.current, true, FimClique)
 }
 
 // onEsc trata o Esc da gravação solta: descarta (ADR-025, B.4).
@@ -324,12 +334,12 @@ func (m *Machine) onEsc() []Effect {
 // pararCaptura encerra a captura e começa a transcrição: é a soltura do
 // hold, o toque ou o clique que param a gravação solta, e o limite de
 // gravação. cancelarLimite é falso só quando quem para é o próprio limite,
-// que já disparou.
+// que já disparou. fim é como a gravação solta terminou, se era uma.
 //
 // A saída da gravação solta vem antes de tudo: o hook do mouse e o Esc
 // desligam no instante em que ela para, e não no fim da transcrição.
-func (m *Machine) pararCaptura(id AttemptID, cancelarLimite bool) []Effect {
-	effects := m.sairDaSolta(id)
+func (m *Machine) pararCaptura(id AttemptID, cancelarLimite bool, fim FimDaSolta) []Effect {
+	effects := m.sairDaSolta(id, fim)
 	m.state = StateProcessing
 	m.pending = TimerAudioStopTimeout
 	if cancelarLimite {
@@ -356,12 +366,12 @@ func (m *Machine) descartar(id AttemptID) []Effect {
 // sairDaSolta desliga o que só existe durante a gravação solta. Fora dela
 // não emite nada, e por isso os caminhos do ditado de sempre seguem com os
 // mesmos efeitos de antes.
-func (m *Machine) sairDaSolta(id AttemptID) []Effect {
+func (m *Machine) sairDaSolta(id AttemptID, fim FimDaSolta) []Effect {
 	if !m.gravandoSolta {
 		return nil
 	}
 	m.gravandoSolta, m.segurando = false, false
-	return []Effect{GravacaoSoltaEffect{Attempt: id, Ligada: false}}
+	return []Effect{GravacaoSoltaEffect{Attempt: id, Ligada: false, Fim: fim}}
 }
 
 // onTimerElapsed trata a expiração de um timer. Um timer cujo Kind não seja
@@ -410,7 +420,7 @@ func (m *Machine) onTimerElapsed(e TimerElapsedEvent) []Effect {
 		//
 		// Na gravação solta, o limite é o terceiro jeito de parar, e
 		// escreve como os outros (ADR-025, B.3).
-		return m.pararCaptura(id, false)
+		return m.pararCaptura(id, false, FimLimite)
 	case TimerAudioStopTimeout:
 		effects := []Effect{AbortAudioCaptureEffect{Attempt: id}}
 		return append(effects, m.endAttempt(id, OutcomeTimeout, ErrorReasonTimeout, "")...)
@@ -567,7 +577,7 @@ func (m *Machine) endAttempt(id AttemptID, outcome Outcome, reason ErrorReason, 
 	// A gravação solta que acaba aqui é a descartada (descartar); a que para
 	// para transcrever já foi desligada em pararCaptura. Desligar aqui também
 	// garante que o hook do mouse nunca sobra ligado depois da tentativa.
-	effects := m.sairDaSolta(id)
+	effects := m.sairDaSolta(id, FimDescartada)
 	m.solta = false
 	if outcome != OutcomeTap {
 		effects = append(effects, ShowOverlayEffect{Attempt: id, Phase: overlayPhaseFor(outcome, reason)})

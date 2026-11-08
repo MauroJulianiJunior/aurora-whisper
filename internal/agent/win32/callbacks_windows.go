@@ -33,6 +33,17 @@ func NewLowLevelKeyboardHookProc(fn LowLevelKeyboardProc) uintptr {
 	})
 }
 
+// NewLowLevelMouseHookProc cria o trampolim stdcall exigido por
+// SetWindowsHookExW(WHMouseLL, ...). Mesma ressalva de
+// NewLowLevelKeyboardHookProc: uma chamada por processo. O hook do mouse é
+// instalado e retirado a cada gravação solta, e o trampolim criado uma vez
+// serve a todas as instalações.
+func NewLowLevelMouseHookProc(fn LowLevelMouseProc) uintptr {
+	return windows.NewCallback(func(nCode int32, wParam uintptr, lParam uintptr) uintptr {
+		return fn(nCode, wParam, lParam)
+	})
+}
+
 // NewWndProc cria o trampolim stdcall para um window procedure, com a
 // mesma ressalva de "chamar uma única vez" descrita em
 // NewLowLevelKeyboardHookProc. O retorno deve ser atribuído a

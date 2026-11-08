@@ -25,6 +25,11 @@ type Esc struct {
 	preso bool
 }
 
+// Preso reporta se um Esc engolido ainda não foi solto. Enquanto estiver, a
+// soltura dele tem de passar por Decide, com ou sem gravação solta e com ou
+// sem pausa: é ela que fecha o par (ver hook.Hook.deveIgnorar).
+func (e *Esc) Preso() bool { return e.preso }
+
 // Decide decide um evento do teclado. solta diz se a gravação solta está
 // ligada. Notify sai uma vez, no aperto que descarta.
 func (e *Esc) Decide(ev RawKeyEvent, solta bool) Decision {

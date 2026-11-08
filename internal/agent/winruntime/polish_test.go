@@ -929,10 +929,25 @@ func TestPolish_CanarioDePrivacidadeNoLog(t *testing.T) {
 type tecladoFalso struct {
 	eventos chan dictation.RawKeyEvent
 	taps    atomic.Int32
+	// cliques faz o papel do hook do mouse; soltas guarda cada pedido de
+	// ligar (true) e desligar (false) a gravação solta, e erroDoMouse é o que
+	// o pedido de desligar devolve. Só a goroutine de Run chama
+	// GravacaoSolta; o teste lê soltas depois de ela ter respondido.
+	cliques     chan struct{}
+	soltas      []bool
+	erroDoMouse error
 }
 
 func (k *tecladoFalso) Events() <-chan dictation.RawKeyEvent { return k.eventos }
 func (k *tecladoFalso) SynthesizeTap() error                 { k.taps.Add(1); return nil }
+func (k *tecladoFalso) Cliques() <-chan struct{}             { return k.cliques }
+func (k *tecladoFalso) GravacaoSolta(ligada bool) error {
+	k.soltas = append(k.soltas, ligada)
+	if !ligada {
+		return k.erroDoMouse
+	}
+	return nil
+}
 
 func (k *tecladoFalso) tecla(t *testing.T, down bool) {
 	t.Helper()
