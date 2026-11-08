@@ -141,6 +141,28 @@ terminou (`toque`, `clique`, `limite`, `segurou` ou `descartada`), nunca a posi�
 
 Cada fase é um commit local verde; o merge na `main` e o push dependem dele.
 
+## Teste no PC (08-nov-2026)
+
+O Mauro remontou o Agent da `main` (merge local de 07-nov-2026) e rodou parte do roteiro; no fim,
+"ta tudo funcionando. Siga."
+
+- **No log:** o ditado de sempre, segurando, escreveu; duas gravações soltas ligaram pelos dois
+  toques e pararam pelo clique (`fim=clique`), as duas escritas, uma de 16 s com Alt+Tab no meio.
+- **Relatado por ele, sem a gravação no log da sessão:** o Esc descarta e o campo de senha não recebe
+  o texto.
+- **Não rodado:** o clique que abre um menu (risco 5), segurar o Ctrl e tocar o Win duas vezes (risco
+  1), os atalhos no meio, o segundo aperto segurado, o limite de 2 minutos e o ditado de 1 min 30 s
+  (risco 4).
+- **Achado e corrigido:** o primeiro dos dois toques registrava um WARN (`synthesize tap falhou`, "no
+  character mapping for key 0"). O núcleo pedia ao hook que devolvesse a tecla do toque, e no Ctrl+Win
+  não há tecla suprimida a devolver: o hook recusava antes de injetar qualquer coisa. Já acontecia
+  desde outubro em todo toque curto no Ctrl+Win. Agora o núcleo só pede no gatilho por tecla
+  (`dictation/devolver_toque_test.go`).
+- **Fora desta ADR:** quatro ditados de sempre foram recusados como "nada reconhecido como fala" com
+  pico de −22 a −25 dBFS: o detector de fala, por energia, pede −30,5 dBFS de RMS numa janela de 20
+  ms (`audio/vad.go`). Com o Agent reiniciado e o microfone trocado no Windows, passaram. Baixar o
+  limiar é uma decisão do Mauro, ainda não pedida.
+
 ## Testes
 
 - **Puros, em `go test ./...`:** o decisor (toque limpo e sujo, segurar o Ctrl e tocar o Win, o Alt

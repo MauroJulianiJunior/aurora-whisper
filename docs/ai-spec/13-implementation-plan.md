@@ -921,10 +921,11 @@ ditar para nota (Ctrl+Win+Alt) também. Só com a combinação de teclas.
 **Nenhum teste instala hook nem injeta tecla ou clique** (`CLAUDE.md`, "Testes que agem no sistema
 real"): a instalação real do hook do mouse e o Esc de verdade ficam no roteiro manual.
 
-**Falta, e é do Mauro:** remontar o Agent e rodar o roteiro, que inclui o que ele ainda não testou (segurar
-o Ctrl e tocar o Win duas vezes, para ver se o menu Iniciar abre) e um ditado de 1 min 30 s (o áudio longo
-ainda não foi medido, `docs/defeito-ditado-longo.md`). Os 400 ms são uma constante, a ajustar depois do
-teste dele.
+**No PC (08-nov-2026):** o Mauro rodou parte do roteiro e deu por bom ("ta tudo funcionando. Siga."):
+os dois toques, o clique que para e escreve, o Alt+Tab no meio; o que ficou sem rodar (o menu, segurar o
+Ctrl e tocar o Win duas vezes, o limite e o ditado de 1 min 30 s) está na ADR-025, "Teste no PC". Os 400
+ms ficaram como estão. O WARN do primeiro toque (`synthesize tap falhou`) saiu: no Ctrl+Win o núcleo não
+pede mais ao hook a tecla do toque, que não existe.
 
 ## Paralelização
 - TASK-002/003/004 podem evoluir em paralelo após contratos.

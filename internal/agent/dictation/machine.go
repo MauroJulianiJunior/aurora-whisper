@@ -212,8 +212,8 @@ func (m *Machine) onKeyUp(e KeyUpEvent) []Effect {
 		effects := []Effect{
 			CancelTimerEffect{Attempt: id, Kind: TimerHoldThreshold},
 			AbortAudioCaptureEffect{Attempt: id},
-			SynthesizeTapEffect{Attempt: id},
 		}
+		effects = append(effects, m.devolverToque(id)...)
 		return append(effects, m.endAttempt(id, OutcomeTap, ErrorReasonNone, "")...)
 	case StateBlocked:
 		// Tap curto em campo protegido: o ditado está bloqueado, mas a tecla
@@ -221,8 +221,8 @@ func (m *Machine) onKeyUp(e KeyUpEvent) []Effect {
 		// capturado, então não há nada para abortar.
 		effects := []Effect{
 			CancelTimerEffect{Attempt: id, Kind: TimerHoldThreshold},
-			SynthesizeTapEffect{Attempt: id},
 		}
+		effects = append(effects, m.devolverToque(id)...)
 		return append(effects, m.endAttempt(id, OutcomeTap, ErrorReasonNone, "")...)
 	case StateRecording:
 		// Hold real (AC-002/AC-007): para a captura autoritativamente.
@@ -237,6 +237,19 @@ func (m *Machine) onKeyUp(e KeyUpEvent) []Effect {
 		// Keyup redundante durante processing/inserting: nada a fazer.
 		return nil
 	}
+}
+
+// devolverToque é o SynthesizeTapEffect do toque curto, e só existe no
+// gatilho por tecla: lá o hook suprimiu a tecla, e o toque precisa digitá-la
+// (AC-001). No gatilho por combinação (Ctrl+Win) o hook nunca suprime nada
+// (NewDeciderModificadores) e não há caractere a devolver. O efeito só fazia o
+// hook recusar ("no character mapping for key 0") e o runtime registrar um WARN
+// a cada toque, e a cada gravação solta, que começa por um toque (ADR-025).
+func (m *Machine) devolverToque(id AttemptID) []Effect {
+	if m.cfg.Key == KeyUnknown {
+		return nil
+	}
+	return []Effect{SynthesizeTapEffect{Attempt: id}}
 }
 
 // fechaDuploToque reporta se um keydown em at é o segundo aperto de um duplo
