@@ -3,6 +3,7 @@ package storage_test
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -23,6 +24,18 @@ import (
 //   - o Recomecar sobre um histórico grande, que depois da revisão de
 //     06-out-2026 só roda no epoch novo (um backup restaurado) e na primeira
 //     rodada da instalação: a reconexão e o 410 não passam por ele.
+
+// prazo alonga o teto sob o detector de corrida (fatorDeTempo) e na máquina
+// do GitHub Actions, que é bem mais lenta que um PC: no runner Windows, o
+// Recomecar de 7 mil ditados levou 5,7 s (08-nov-2026), e no PC do Mauro leva
+// de 0,4 a 1,4 s. Com 3x no CI, o teto ainda pega o que trava.
+func prazo(d time.Duration) time.Duration {
+	d *= fatorDeTempo
+	if os.Getenv("GITHUB_ACTIONS") == "true" {
+		d *= 3
+	}
+	return d
+}
 
 // Put durante o Aplicar de uma página cheia: o Put começa quando o Aplicar
 // está no primeiro ditado, e espera o resto da página.
@@ -67,7 +80,7 @@ func TestEspera_PutDuranteOAplicarDeUmaPaginaCheia(t *testing.T) {
 	aplicar := time.Since(inicio)
 	put := <-espera
 	t.Logf("o Aplicar de %d ditados levou %v; o Put esperou %v", pagina, aplicar, put)
-	if put > 2*time.Second*fatorDeTempo {
+	if put > prazo(2*time.Second) {
 		t.Errorf("o Put esperou %v durante o Aplicar de uma página", put)
 	}
 }
@@ -108,7 +121,7 @@ func TestEspera_RecomecarSobreUmHistoricoGrande(t *testing.T) {
 	if c, _ := f.fila.Contar(ctx); c != n {
 		t.Errorf("a fila depois do recomeço: %d; quero %d", c, n)
 	}
-	if d > 5*time.Second*fatorDeTempo {
+	if d > prazo(5*time.Second) {
 		t.Errorf("o Recomecar de %d ditados levou %v", n, d)
 	}
 }

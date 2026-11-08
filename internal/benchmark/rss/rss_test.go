@@ -104,20 +104,30 @@ func TestSampleTree_RealProcessNoChildren(t *testing.T) {
 		_ = cmd.Wait()
 	})
 
-	// Dá um instante para o processo terminar de subir antes de medir —
-	// sem isso, a primeira amostra corre o risco de pegar o processo
-	// antes do SO terminar de contabilizar seu working set inicial.
-	time.Sleep(100 * time.Millisecond)
-
+	// Mede até dar certo, por até 5 s, como o watcher de
+	// internal/benchmark/candidate: uma amostra que falha "não conta" e a
+	// próxima tenta de novo (tree.go, "Falha parcial"). Com uma amostra só,
+	// o teste falhou no runner Windows do CI em 08-nov-2026 com o processo
+	// vivo; um SampleTree quebrado de vez continua falhando aqui, no prazo.
+	// O instante antes de cada amostra é para o SO terminar de contabilizar
+	// o working set inicial do processo recém-criado.
 	pid := cmd.Process.Pid
-	treeBytes, treeOK := SampleTree(pid)
-	sampleBytes, sampleOK := Sample(pid)
+	var treeBytes, sampleBytes int64
+	var treeOK, sampleOK bool
+	for prazo := time.Now().Add(5 * time.Second); ; {
+		time.Sleep(100 * time.Millisecond)
+		treeBytes, treeOK = SampleTree(pid)
+		sampleBytes, sampleOK = Sample(pid)
+		if (treeOK && sampleOK) || time.Now().After(prazo) {
+			break
+		}
+	}
 
 	if !treeOK {
-		t.Fatal("SampleTree: want ok == true para processo real recém-criado")
+		t.Fatal("SampleTree: want ok == true para processo real recém-criado (5 s de tentativas)")
 	}
 	if !sampleOK {
-		t.Fatal("Sample: want ok == true para processo real recém-criado")
+		t.Fatal("Sample: want ok == true para processo real recém-criado (5 s de tentativas)")
 	}
 	if treeBytes < sampleBytes {
 		t.Fatalf("SampleTree = %d bytes, want >= Sample = %d bytes (a árvore nunca pode medir menos que a raiz sozinha)",
