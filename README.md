@@ -11,8 +11,8 @@ ditados e as configurações.
 Para usar o Aurora Whisper sem montar nada do código. Você precisa só do Windows 10 ou 11 (64 bits).
 
 1. **Baixe e instale.** Na página da
-   [versão 0.1.2](https://github.com/MauroJulianiJunior/aurora-whisper/releases/tag/v0.1.2), em
-   **Assets**, baixe o `AuroraWhisper-Setup-0.1.2.exe` (cerca de 140 MB: já leva o modelo de voz).
+   [versão 0.1.3](https://github.com/MauroJulianiJunior/aurora-whisper/releases/tag/v0.1.3), em
+   **Assets**, baixe o `AuroraWhisper-Setup-0.1.3.exe` (cerca de 140 MB: já leva o modelo de voz).
    Dê dois cliques nele. É uma **versão prévia (0.x), sem assinatura digital**, então
    o Windows mostra "O Windows protegeu o computador" (SmartScreen): clique em **Mais informações** e
    depois em **Executar assim mesmo**. A instalação **não pede administrador** (só se faltar um
@@ -26,7 +26,7 @@ Para usar o Aurora Whisper sem montar nada do código. Você precisa só do Wind
    Windows bloqueou o microfone. Veja o painel." e o painel tem um botão que abre essa tela). Para ver o histórico e mudar as configurações, abra o menu do
    ícone da bandeja e clique em **Abrir Aurora Whisper**.
 
-   **Sem segurar** (no código; chega ao instalador na próxima versão, a 0.1.2 não tem): dê **dois
+   **Sem segurar**: dê **dois
    toques rápidos** no `Ctrl+Win` e fale com as mãos livres. A pílula mostra um cadeado. Para parar e
    escrever, dê **um toque** no `Ctrl+Win` ou **clique** no campo onde o texto deve entrar; aos 2
    minutos ela para sozinha. O texto entra onde o cursor está na hora de escrever (num campo de senha
@@ -58,7 +58,7 @@ Para usar o Aurora Whisper sem montar nada do código. Você precisa só do Wind
 
 ## Estado
 
-A 0.1.2 é uma **prévia**: sem assinatura digital e sem atualização automática (para atualizar, baixe o
+A 0.1.3 é uma **prévia**: sem assinatura digital e sem atualização automática (para atualizar, baixe o
 Setup novo e instale por cima). O Agent funciona de ponta a ponta sem nuvem: captura, transcrição na
 sua máquina, dicionário, inserção, bandeja, overlay e painel. A nuvem é opcional e serve para ver e
 editar o histórico no celular e nos outros PCs; o projeto não tem servidor central, e cada pessoa sobe
@@ -78,7 +78,7 @@ a sua, num servidor seu (o código está em `cmd/server`, o deploy em `deploy/` 
 
 ## Instalar
 
-> A versão **0.1.2** é uma prévia e está na página de Releases; o resumo para quem só quer usar está
+> A versão **0.1.3** é uma prévia e está na página de Releases; o resumo para quem só quer usar está
 > em "Comece aqui". O Setup é gerado pelo repositório (veja "Montar o Setup"). Quem prefere montar do
 > código segue a seção seguinte.
 

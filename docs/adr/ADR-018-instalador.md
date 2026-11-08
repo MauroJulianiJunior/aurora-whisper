@@ -1173,6 +1173,18 @@ rascunho no Windows e confirmou que funcionou. Quem tem a 0.1.1 instala por cima
 configurações ficam. Os antivírus continuam sem dado: quem usa resolve com o próprio antivírus
 (decisão do Mauro, 19-out-2026).
 
+## Nota de 08-nov-2026: a 0.1.3 publicada
+
+A 0.1.3 foi publicada como prévia (`--prerelease`) em 08-nov-2026, com o OK do Mauro, a partir do
+rascunho que o workflow montou da tag `v0.1.3` (`c2c370c`). Traz as Notas (ADR-022) e o ditar sem
+segurar (ADR-025). O Setup tem 144.085.676 bytes e SHA-256
+`794f29679ddd5f3cb03b3ca9523ceb4489a8ec3ebef872a37b8303ead527c404`; o download sem login devolve o
+mesmo tamanho, e o `.sha256` publicado, o mesmo hash. Desta vez o Setup do rascunho **não foi
+instalado** antes de publicar: o instalador é o mesmo da 0.1.2 (nada mudou em `installer/`, em
+`scripts/montar-instalador.ps1` nem em `.github/workflows/release.yml` desde a `v0.1.2`), as novidades
+foram testadas no Agent do `bin\`, e a decisão foi do Mauro ("Se os testadores reportarem erro é pra
+isso que eles servem"). Quem tem a 0.1.2 instala por cima, e o histórico e as configurações ficam.
+
 ## Revisão
 
 Depois do primeiro Setup instalado numa conta limpa: o tamanho real do Setup; quanto levou a
