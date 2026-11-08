@@ -15,6 +15,12 @@ const (
 	// DefaultMaxRecording é o limite de gravação sugerido pela spec
 	// (07-flows.md, "Timeouts"). Usado quando Config.MaxRecording é zero.
 	DefaultMaxRecording = 120 * time.Second
+
+	// JanelaDoDuploToque é o prazo entre a soltura do primeiro toque limpo
+	// e o aperto do segundo, para os dois ligarem a gravação solta
+	// (ADR-025, A.1). O duplo clique do Windows usa 500 ms; o valor é
+	// ajustado depois do teste do Mauro.
+	JanelaDoDuploToque = 400 * time.Millisecond
 )
 
 // Erros de validação de Config, testáveis com errors.Is.

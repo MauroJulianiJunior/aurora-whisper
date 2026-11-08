@@ -15,6 +15,12 @@ type Decision struct {
 	// Gatilhos). Só o decisor dos dois gatilhos a preenche; o Decider sozinho
 	// a deixa falsa.
 	ParaNota bool
+	// Limpo: só na soltura do gatilho por combinação. O toque teve só as
+	// teclas do conjunto: nenhuma outra tecla apertada e nenhum modificador
+	// a mais segurado entre armar e soltar (ADR-025, A.2). Só o toque limpo
+	// conta para o duplo toque e para parar a gravação solta; o Ctrl+Win+seta
+	// e o Ctrl+Win+Alt não são limpos. Com tecla de letra, sempre falso.
+	Limpo bool
 }
 
 // passThrough é a decisão "não faça nada com este evento".
@@ -32,6 +38,9 @@ type Decider struct {
 	key      KeyCode
 	required Modifiers
 	armed    bool
+	// sujo: no modo de combinação, a sessão armada viu outra tecla ou um
+	// modificador a mais (ver Decision.Limpo).
+	sujo bool
 }
 
 // Armado reporta se há um toque da tecla de ditado EM CURSO — entre o
@@ -154,12 +163,31 @@ func (d *Decider) decideCombinacao(ev RawKeyEvent) Decision {
 	switch {
 	case completo && !d.armed:
 		d.armed = true
+		d.sujo = foraDoConjunto(ev, d.required)
 		// Notify sem Suppress: ver NewDeciderModificadores.
 		return Decision{Notify: true}
 	case !completo && d.armed:
 		d.armed = false
-		return Decision{Notify: true}
+		return Decision{Notify: true, Limpo: !d.sujo}
 	default:
+		if d.armed && foraDoConjunto(ev, d.required) {
+			d.sujo = true
+		}
 		return passThrough
 	}
+}
+
+// foraDoConjunto reporta se ev mostra algo além do gatilho required: um
+// modificador a mais segurado (o Alt do Ctrl+Win+Alt, o Shift), ou uma tecla
+// que não é modificador apertada (a seta do Ctrl+Win+seta, que o Translator
+// entrega como KeyUnknown). A repetição automática do próprio Ctrl ou Win,
+// segurados, não conta.
+//
+// Só o aperto de tecla comum conta: a soltura de uma tecla apertada antes de
+// armar não diz nada sobre este toque.
+func foraDoConjunto(ev RawKeyEvent, required Modifiers) bool {
+	if ev.Modifiers&^required != 0 {
+		return true
+	}
+	return ev.Down && !ev.Key.IsModifier()
 }

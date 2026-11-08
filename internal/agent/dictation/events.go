@@ -22,6 +22,10 @@ type Event interface {
 type KeyDownEvent struct {
 	Attempt AttemptID
 	Focus   FocusTarget
+	// At é o instante do aperto, o do evento do hook (RawKeyEvent.At). Mede
+	// a janela do duplo toque e quanto tempo o segundo aperto foi segurado
+	// (ADR-025). Zero quer dizer desconhecido, e o duplo toque não liga.
+	At time.Time
 }
 
 func (e KeyDownEvent) AttemptID() AttemptID { return e.Attempt }
@@ -29,9 +33,32 @@ func (e KeyDownEvent) AttemptID() AttemptID { return e.Attempt }
 // KeyUpEvent sinaliza que a tecla de ditado foi solta.
 type KeyUpEvent struct {
 	Attempt AttemptID
+	// At é o instante da soltura (ver KeyDownEvent.At).
+	At time.Time
+	// Limpo: o toque teve só as teclas do gatilho (RawKeyEvent.Limpo). Só o
+	// toque limpo conta para o duplo toque e para parar a gravação solta.
+	Limpo bool
 }
 
 func (e KeyUpEvent) AttemptID() AttemptID { return e.Attempt }
+
+// CliqueEvent sinaliza um clique do botão esquerdo durante a gravação solta
+// (ADR-025, B.2). O hook do mouse só existe nela, e o clique segue para o
+// app: ele põe o cursor no campo onde o texto vai ser escrito. Não carrega
+// posição nem janela.
+type CliqueEvent struct {
+	Attempt AttemptID
+}
+
+func (e CliqueEvent) AttemptID() AttemptID { return e.Attempt }
+
+// EscEvent sinaliza o Esc que descarta a gravação solta (ADR-025, B.4; o
+// Esc decide quando ele vale).
+type EscEvent struct {
+	Attempt AttemptID
+}
+
+func (e EscEvent) AttemptID() AttemptID { return e.Attempt }
 
 // TimerElapsedEvent sinaliza que um timer armado por StartTimerEffect
 // expirou sem ter sido cancelado a tempo.

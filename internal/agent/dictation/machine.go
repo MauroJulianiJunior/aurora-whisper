@@ -21,6 +21,24 @@ type Machine struct {
 
 	focus     FocusTarget
 	finalText string
+
+	// A gravação solta (ADR-025).
+	//
+	// ultimoToque é a soltura do último toque limpo; ele abre a janela do
+	// duplo toque. Zero, não há janela. Todo keydown que começa uma
+	// tentativa o consome.
+	ultimoToque time.Time
+	// solta: a tentativa corrente começou pelo duplo toque. Vale até o fim
+	// dela, porque o foco é relido na hora de escrever (ReleFoco).
+	solta bool
+	// gravandoSolta: a captura da gravação solta está em curso, com o hook
+	// do mouse e o Esc ligados (GravacaoSoltaEffect). Sempre implica
+	// StateRecording.
+	gravandoSolta bool
+	// segurando: o segundo aperto do duplo toque ainda não foi solto;
+	// apertouEm é quando ele começou.
+	segurando bool
+	apertouEm time.Time
 }
 
 // NewMachine cria um Machine para a configuração cfg, já validada
@@ -107,6 +125,16 @@ func (m *Machine) Handle(ev Event) []Effect {
 			return nil
 		}
 		return m.onInsertResult(e)
+	case CliqueEvent:
+		if !m.isCurrent(e.Attempt) {
+			return nil
+		}
+		return m.onClique()
+	case EscEvent:
+		if !m.isCurrent(e.Attempt) {
+			return nil
+		}
+		return m.onEsc()
 	default:
 		return nil
 	}
@@ -125,6 +153,8 @@ func (m *Machine) onKeyDown(e KeyDownEvent) []Effect {
 	if m.current != NoAttempt {
 		return nil
 	}
+	duplo := m.fechaDuploToque(e.At)
+	m.ultimoToque = time.Time{}
 
 	m.nextID++
 	id := m.nextID
@@ -149,6 +179,10 @@ func (m *Machine) onKeyDown(e KeyDownEvent) []Effect {
 		}
 	}
 
+	if duplo {
+		return m.ligarSolta(id, e.At)
+	}
+
 	m.state = StatePrimed
 	m.pending = TimerHoldThreshold
 	return []Effect{
@@ -161,10 +195,20 @@ func (m *Machine) onKeyDown(e KeyDownEvent) []Effect {
 // onKeyUp trata a soltura da tecla de ditado.
 func (m *Machine) onKeyUp(e KeyUpEvent) []Effect {
 	id := m.current
+	if m.gravandoSolta {
+		return m.onKeyUpSolta(id, e)
+	}
 	switch m.state {
 	case StatePrimed:
 		// Tap curto (AC-001): threshold ainda não expirou. Descarta o
 		// buffer e sintetiza o caractere original.
+		//
+		// O toque limpo abre a janela do duplo toque (ADR-025). O toque num
+		// campo protegido (StateBlocked, abaixo) não abre: lá o ditado não
+		// existe.
+		if e.Limpo {
+			m.ultimoToque = e.At
+		}
 		effects := []Effect{
 			CancelTimerEffect{Attempt: id, Kind: TimerHoldThreshold},
 			AbortAudioCaptureEffect{Attempt: id},
@@ -188,18 +232,136 @@ func (m *Machine) onKeyUp(e KeyUpEvent) []Effect {
 		// "soltei a tecla". Sem isto o contador seguia correndo durante o
 		// ASR inteiro e a tela afirmava estar gravando com o microfone já
 		// fechado (ver OverlayProcessing).
-		m.state = StateProcessing
-		m.pending = TimerAudioStopTimeout
-		return []Effect{
-			CancelTimerEffect{Attempt: id, Kind: TimerMaxRecording},
-			ShowOverlayEffect{Attempt: id, Phase: OverlayProcessing},
-			StopAudioCaptureEffect{Attempt: id},
-			StartTimerEffect{Attempt: id, Kind: TimerAudioStopTimeout, Duration: DefaultAudioStopTimeout},
-		}
+		return m.pararCaptura(id, true)
 	default:
 		// Keyup redundante durante processing/inserting: nada a fazer.
 		return nil
 	}
+}
+
+// fechaDuploToque reporta se um keydown em at é o segundo aperto de um duplo
+// toque: veio até JanelaDoDuploToque depois da soltura do último toque limpo
+// (ADR-025, A.1). Só existe no gatilho por combinação (A.5): com tecla de
+// letra, dois toques são a letra digitada duas vezes. Instante desconhecido
+// (zero) não fecha nada.
+func (m *Machine) fechaDuploToque(at time.Time) bool {
+	if m.cfg.Key != KeyUnknown || m.ultimoToque.IsZero() || at.IsZero() {
+		return false
+	}
+	d := at.Sub(m.ultimoToque)
+	return d >= 0 && d <= JanelaDoDuploToque
+}
+
+// ligarSolta começa a gravação solta no segundo aperto do duplo toque: grava
+// já, sem esperar o tempo de segurar, e a pílula aparece agora (ADR-025,
+// A.3). O limite de gravação é armado aqui também: é a rede de segurança de
+// sempre, e são os 2 minutos que o Mauro manteve.
+func (m *Machine) ligarSolta(id AttemptID, at time.Time) []Effect {
+	m.state = StateRecording
+	m.pending = TimerMaxRecording
+	m.solta, m.gravandoSolta = true, true
+	m.segurando, m.apertouEm = true, at
+	effects := []Effect{
+		SuppressKeyEffect{Attempt: id},
+		MarkAudioStartEffect{Attempt: id},
+		GravacaoSoltaEffect{Attempt: id, Ligada: true},
+		ShowOverlayEffect{Attempt: id, Phase: OverlayRecording},
+		StartTimerEffect{Attempt: id, Kind: TimerMaxRecording, Duration: m.cfg.MaxRecording},
+	}
+	if m.cfg.BeepEnabled {
+		effects = append(effects, PlayBeepEffect{Attempt: id})
+	}
+	return effects
+}
+
+// onKeyUpSolta trata a soltura do gatilho durante a gravação solta.
+//
+// A primeira é a do segundo aperto do duplo toque, e decide o que ele era:
+//   - segurado além do tempo de segurar: o ditado de sempre, e soltar para;
+//   - curto e limpo: a gravação fica solta;
+//   - curto e com outra tecla no meio (Ctrl+Win+seta logo depois de um
+//     toque): era atalho, e a gravação é descartada sem ir ao ASR.
+//
+// Depois dela, cada soltura é de um aperto feito com a gravação já solta: o
+// toque limpo para; o que teve outra tecla no meio (trocar de área de
+// trabalho) não, e a gravação segue (ADR-025, B.1).
+func (m *Machine) onKeyUpSolta(id AttemptID, e KeyUpEvent) []Effect {
+	if m.segurando {
+		m.segurando = false
+		if !e.At.IsZero() && e.At.Sub(m.apertouEm) >= m.cfg.HoldThreshold {
+			return m.pararCaptura(id, true)
+		}
+		if !e.Limpo {
+			return m.descartar(id)
+		}
+		return nil
+	}
+	if !e.Limpo {
+		return nil
+	}
+	return m.pararCaptura(id, true)
+}
+
+// onClique trata o clique esquerdo da gravação solta: para e escreve, e o
+// clique, que seguiu para o app, já pôs o cursor no campo (ADR-025, B.2).
+// Fora da gravação solta não há hook do mouse; um clique atrasado, que
+// chega depois de ela acabar, não faz nada.
+func (m *Machine) onClique() []Effect {
+	if !m.gravandoSolta {
+		return nil
+	}
+	return m.pararCaptura(m.current, true)
+}
+
+// onEsc trata o Esc da gravação solta: descarta (ADR-025, B.4).
+func (m *Machine) onEsc() []Effect {
+	if !m.gravandoSolta {
+		return nil
+	}
+	return m.descartar(m.current)
+}
+
+// pararCaptura encerra a captura e começa a transcrição: é a soltura do
+// hold, o toque ou o clique que param a gravação solta, e o limite de
+// gravação. cancelarLimite é falso só quando quem para é o próprio limite,
+// que já disparou.
+//
+// A saída da gravação solta vem antes de tudo: o hook do mouse e o Esc
+// desligam no instante em que ela para, e não no fim da transcrição.
+func (m *Machine) pararCaptura(id AttemptID, cancelarLimite bool) []Effect {
+	effects := m.sairDaSolta(id)
+	m.state = StateProcessing
+	m.pending = TimerAudioStopTimeout
+	if cancelarLimite {
+		effects = append(effects, CancelTimerEffect{Attempt: id, Kind: TimerMaxRecording})
+	}
+	return append(effects,
+		ShowOverlayEffect{Attempt: id, Phase: OverlayProcessing},
+		StopAudioCaptureEffect{Attempt: id},
+		StartTimerEffect{Attempt: id, Kind: TimerAudioStopTimeout, Duration: DefaultAudioStopTimeout},
+	)
+}
+
+// descartar joga fora a gravação solta: a captura é abortada sem ir ao ASR,
+// e a tentativa acaba sem histórico e com a pílula escondida. Quem desliga a
+// gravação solta é o endAttempt.
+func (m *Machine) descartar(id AttemptID) []Effect {
+	effects := []Effect{
+		CancelTimerEffect{Attempt: id, Kind: TimerMaxRecording},
+		AbortAudioCaptureEffect{Attempt: id},
+	}
+	return append(effects, m.endAttempt(id, OutcomeDescartado, ErrorReasonNone, "")...)
+}
+
+// sairDaSolta desliga o que só existe durante a gravação solta. Fora dela
+// não emite nada, e por isso os caminhos do ditado de sempre seguem com os
+// mesmos efeitos de antes.
+func (m *Machine) sairDaSolta(id AttemptID) []Effect {
+	if !m.gravandoSolta {
+		return nil
+	}
+	m.gravandoSolta, m.segurando = false, false
+	return []Effect{GravacaoSoltaEffect{Attempt: id, Ligada: false}}
 }
 
 // onTimerElapsed trata a expiração de um timer. Um timer cujo Kind não seja
@@ -245,13 +407,10 @@ func (m *Machine) onTimerElapsed(e TimerElapsedEvent) []Effect {
 		// captura parou. Este caminho existe justamente para quando o
 		// keyup NÃO chega (tecla presa), e é o caso em que deixar
 		// "Gravando" na tela seria mais enganoso, não menos.
-		m.state = StateProcessing
-		m.pending = TimerAudioStopTimeout
-		return []Effect{
-			ShowOverlayEffect{Attempt: id, Phase: OverlayProcessing},
-			StopAudioCaptureEffect{Attempt: id},
-			StartTimerEffect{Attempt: id, Kind: TimerAudioStopTimeout, Duration: DefaultAudioStopTimeout},
-		}
+		//
+		// Na gravação solta, o limite é o terceiro jeito de parar, e
+		// escreve como os outros (ADR-025, B.3).
+		return m.pararCaptura(id, false)
 	case TimerAudioStopTimeout:
 		effects := []Effect{AbortAudioCaptureEffect{Attempt: id}}
 		return append(effects, m.endAttempt(id, OutcomeTimeout, ErrorReasonTimeout, "")...)
@@ -326,7 +485,7 @@ func (m *Machine) onTranscribeResult(e TranscribeResultEvent) []Effect {
 	// e a folga entre os dois não pode depender de quem contou o quê
 	// (PrazoDeResolucao).
 	effects = append(effects,
-		ResolveEffect{Attempt: id, ASRResult: e.Result, Focus: m.focus},
+		ResolveEffect{Attempt: id, ASRResult: e.Result, Focus: m.focus, ReleFoco: m.solta},
 		StartTimerEffect{Attempt: id, Kind: TimerResolveTimeout, Duration: PrazoDeResolucao(e.Result.Text)},
 	)
 	return effects
@@ -346,7 +505,7 @@ func (m *Machine) onResolveResult(e ResolveResultEvent) []Effect {
 	m.pending = TimerInsertTimeout
 	m.finalText = e.Result.Text
 	effects = append(effects,
-		InsertEffect{Attempt: id, Text: e.Result.Text, Focus: m.focus},
+		InsertEffect{Attempt: id, Text: e.Result.Text, Focus: m.focus, ReleFoco: m.solta},
 		StartTimerEffect{Attempt: id, Kind: TimerInsertTimeout, Duration: DefaultInsertTimeout},
 	)
 	return effects
@@ -397,7 +556,7 @@ func (m *Machine) endAttempt(id AttemptID, outcome Outcome, reason ErrorReason, 
 		m.state = StateSuccess
 	case OutcomeBlocked:
 		m.state = StateBlocked
-	case OutcomeTap:
+	case OutcomeTap, OutcomeDescartado:
 		m.state = StateIdle
 	default:
 		m.state = StateError
@@ -405,14 +564,19 @@ func (m *Machine) endAttempt(id AttemptID, outcome Outcome, reason ErrorReason, 
 	m.current = NoAttempt
 	m.pending = TimerNone
 
-	var effects []Effect
+	// A gravação solta que acaba aqui é a descartada (descartar); a que para
+	// para transcrever já foi desligada em pararCaptura. Desligar aqui também
+	// garante que o hook do mouse nunca sobra ligado depois da tentativa.
+	effects := m.sairDaSolta(id)
+	m.solta = false
 	if outcome != OutcomeTap {
 		effects = append(effects, ShowOverlayEffect{Attempt: id, Phase: overlayPhaseFor(outcome, reason)})
 	}
 	// Blocked não entra no histórico: registrar "tentou ditar aqui" carregaria
 	// metadado sobre uso de campo de senha, contra a postura de privacidade da
-	// spec (AC-027). O usuário já recebe o aviso pelo overlay.
-	if outcome != OutcomeTap && outcome != OutcomeBlocked {
+	// spec (AC-027). O usuário já recebe o aviso pelo overlay. A gravação
+	// descartada também não: a pessoa a jogou fora antes de virar texto.
+	if outcome != OutcomeTap && outcome != OutcomeBlocked && outcome != OutcomeDescartado {
 		effects = append(effects, RecordHistoryEffect{Attempt: id, Outcome: outcome, Reason: reason, Text: text})
 	}
 	effects = append(effects, ReleaseAudioEffect{Attempt: id})
@@ -433,6 +597,9 @@ func overlayPhaseFor(outcome Outcome, reason ErrorReason) OverlayPhase {
 		return OverlaySuccess
 	case OutcomeBlocked:
 		return OverlayBlocked
+	case OutcomeDescartado:
+		// A pílula some: não houve erro nem texto a mostrar.
+		return OverlayHidden
 	case OutcomeError:
 		switch reason {
 		case ErrorReasonInsertClipboard:

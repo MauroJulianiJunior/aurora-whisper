@@ -192,6 +192,9 @@ type RawKeyEvent struct {
 	// antes de mandar o evento ao runtime. Verdadeira, a sessão é do gatilho
 	// "ditar para nota" (ADR-022): o texto vai para uma nota, não para o campo.
 	ParaNota bool
+	// Limpo também vem da decisão (Decision.Limpo), só na soltura: o toque
+	// teve só as teclas do gatilho, sem nenhuma outra no meio (ADR-025).
+	Limpo bool
 }
 
 // AudioBufferRef é uma referência opaca a um buffer de áudio mantido pelo
@@ -287,6 +290,12 @@ const (
 	OutcomeError
 	// OutcomeTimeout: watchdog interno expirou (mic perdido/travado etc.).
 	OutcomeTimeout
+	// OutcomeDescartado: a gravação solta foi jogada fora antes de
+	// transcrever, pelo Esc ou por um segundo aperto que era atalho
+	// (Ctrl+Win+seta). Nada vai ao ASR, nada é escrito, nada entra no
+	// histórico, e a pílula some (ADR-025, B.4). No fim da lista para não
+	// mudar o valor dos outros.
+	OutcomeDescartado
 )
 
 func (o Outcome) String() string {
@@ -303,6 +312,8 @@ func (o Outcome) String() string {
 		return "error"
 	case OutcomeTimeout:
 		return "timeout"
+	case OutcomeDescartado:
+		return "discarded"
 	default:
 		return "unknown"
 	}

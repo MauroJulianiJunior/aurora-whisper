@@ -235,6 +235,18 @@ type ShowOverlayEffect struct {
 
 func (ShowOverlayEffect) isEffect() {}
 
+// GravacaoSoltaEffect liga ou desliga, no runtime, o que só existe durante a
+// gravação solta (ADR-025, D): o hook do mouse, que transforma o clique
+// esquerdo em CliqueEvent, e o Esc que descarta. Ligada sai no segundo aperto
+// do duplo toque; desligada sai em toda saída da gravação solta, antes de
+// qualquer outro efeito da parada.
+type GravacaoSoltaEffect struct {
+	Attempt AttemptID
+	Ligada  bool
+}
+
+func (GravacaoSoltaEffect) isEffect() {}
+
 // PlayBeepEffect pede um beep de confirmação ao entrar em gravação.
 // Emitido apenas quando Config.BeepEnabled (AC-006).
 type PlayBeepEffect struct{ Attempt AttemptID }
@@ -258,6 +270,10 @@ type ResolveEffect struct {
 	Attempt   AttemptID
 	ASRResult ASRResultDTO
 	Focus     FocusTarget
+	// ReleFoco: a tentativa foi uma gravação solta (ADR-025, C.1). O texto
+	// vai para o campo com o cursor na hora de escrever, e não para o do
+	// começo: o runtime lê o foco de novo e usa esse, não Focus.
+	ReleFoco bool
 }
 
 func (ResolveEffect) isEffect() {}
@@ -268,6 +284,10 @@ type InsertEffect struct {
 	Attempt AttemptID
 	Text    string
 	Focus   FocusTarget
+	// ReleFoco: como em ResolveEffect. Se o campo relido for de senha, o
+	// runtime não escreve e responde com a inserção falha; o texto fica no
+	// histórico (ADR-025, C.2).
+	ReleFoco bool
 }
 
 func (InsertEffect) isEffect() {}

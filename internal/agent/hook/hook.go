@@ -139,6 +139,7 @@ func (h *Hook) deveIgnorar() bool {
 func (h *Hook) decidir(ev dictation.RawKeyEvent) (dictation.Decision, dictation.RawKeyEvent) {
 	d := h.decider.Decide(ev)
 	ev.ParaNota = d.Notify && d.ParaNota
+	ev.Limpo = d.Notify && d.Limpo
 	return d, ev
 }
 
