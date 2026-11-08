@@ -88,6 +88,7 @@ func TestPilulaEmPNG(t *testing.T) {
 		{"gravando-fala-normal", FrameState{Phase: dictation.OverlayRecording, Amps: falaSintetica(0.13)}},
 		{"gravando-fala-forte", FrameState{Phase: dictation.OverlayRecording, Amps: falaSintetica(0.4)}},
 		{"gravando-saturada", FrameState{Phase: dictation.OverlayRecording, Amps: constante(1.0)}},
+		{"gravando-solta", FrameState{Phase: dictation.OverlayRecording, Amps: falaSintetica(0.13), Solta: true}},
 		{"processando", FrameState{Phase: dictation.OverlayProcessing, Amps: falaSintetica(0.13)}},
 		{"inserido", FrameState{Phase: dictation.OverlaySuccess}},
 		{"bloqueado", FrameState{Phase: dictation.OverlayBlocked}},

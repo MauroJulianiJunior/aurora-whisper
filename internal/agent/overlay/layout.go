@@ -84,6 +84,9 @@ type Dimensoes struct {
 	// ComOnda: a fase desenha a onda em vez de texto. Gravação e
 	// processamento; nenhuma outra.
 	ComOnda bool
+	// Cadeado: a gravação solta, com o cadeado à esquerda da onda e a
+	// pílula LarguraDoCadeado mais larga (ver dimensoesDoQuadro).
+	Cadeado bool
 }
 
 // DimensoesPara devolve a geometria da pílula para phase.
@@ -107,6 +110,42 @@ func dimensoesCom(phase dictation.OverlayPhase, texto string) Dimensoes {
 		return ComporMensagemComTexto(phase, texto).Dim
 	}
 }
+
+// dimensoesDoQuadro é dimensoesCom com o que mais o quadro diz: a gravação
+// solta, que alarga a pílula de gravação para o cadeado caber antes da onda.
+//
+// Só a gravação. O processamento volta à pílula compacta, e o cadeado sai
+// junto: a gravação já não está solta, e a pílula diz isso no instante em que
+// o toque ou o clique a param.
+func dimensoesDoQuadro(s FrameState) Dimensoes {
+	d := dimensoesCom(s.Phase, s.Texto)
+	if s.Solta && s.Phase == dictation.OverlayRecording {
+		d.W += LarguraDoCadeado
+		d.Cadeado = true
+	}
+	return d
+}
+
+// O cadeado da gravação solta (ADR-025, D3). O Mauro escolheu entre três
+// opções desenhadas em PNG, em 07-nov-2026 (cadeado, ponto, contorno aceso):
+// "A". É o sinal que ele já conhece do áudio travado do WhatsApp.
+//
+// 7x8 px: a alça é um U invertido de 1 px, 5 de largura e 3 de altura; o
+// corpo, 7x5. Em corCinza, a cor da onda em repouso: discreto, e sem
+// competir com o verde, que é o sinal da voz.
+const (
+	// LarguraDoCadeado é quanto a pílula da gravação solta cresce, à
+	// esquerda. A onda anda o mesmo tanto, e fica com as mesmas folgas da
+	// pílula compacta.
+	LarguraDoCadeado = 10
+
+	cadeadoW = 7
+	cadeadoH = 8
+	// cadeadoX é o canto esquerdo dele na pílula, dentro da ponta redonda
+	// e a 9 px da primeira barra; cadeadoY o centra no eixo da onda.
+	cadeadoX = 9
+	cadeadoY = WaveAxisY - cadeadoH/2
+)
 
 // TamanhoDaSuperficie é o tamanho da superfície de desenho da janela: o
 // bastante para a maior pílula que qualquer fase pode pedir. É alocada uma

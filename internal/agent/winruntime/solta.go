@@ -1,6 +1,9 @@
 package winruntime
 
-import "github.com/MauroJulianiJunior/aurora-whisper/internal/agent/dictation"
+import (
+	"github.com/MauroJulianiJunior/aurora-whisper/internal/agent/dictation"
+	"github.com/MauroJulianiJunior/aurora-whisper/internal/agent/overlay"
+)
 
 // A gravação solta no runtime (ADR-025, D2). O núcleo decide tudo (quando
 // liga, o que para, o que descarta); aqui só se liga o que está fora dele:
@@ -11,7 +14,20 @@ import "github.com/MauroJulianiJunior/aurora-whisper/internal/agent/dictation"
 //     CliqueEvent (Run);
 //   - o campo relido na hora de escrever (ResolveEffect.ReleFoco e
 //     InsertEffect.ReleFoco), porque depois de um clique ou de um minuto
-//     ditando o cursor já não está onde estava no começo.
+//     ditando o cursor já não está onde estava no começo;
+//   - o cadeado da pílula (mostradorDaSolta).
+
+// mostradorDaSolta é o que o overlay oferece além de mostrador: o cadeado da
+// gravação solta (ADR-025, D3). Opcional, como mostradorComTexto: uma pílula
+// que não o tem mostra a gravação solta como a de sempre.
+type mostradorDaSolta interface {
+	SetGravacaoSolta(ligada bool)
+}
+
+// O overlay de verdade tem o cadeado. Sem esta linha, renomear o método
+// desligaria o cadeado calado: a asserção de tipo em aplicarGravacaoSolta só
+// deixaria de casar.
+var _ mostradorDaSolta = (*overlay.Overlay)(nil)
 
 // aplicarGravacaoSolta liga ou desliga o Esc e o hook do mouse, e registra a
 // mudança. O log diz só como a gravação solta terminou (toque, clique,
@@ -23,6 +39,11 @@ func (rt *Runtime) aplicarGravacaoSolta(e dictation.GravacaoSoltaEffect) {
 		args = append(args, "fim", e.Fim.String())
 	}
 	rt.log.Info("winruntime: gravação solta", args...)
+	// O cadeado entra e sai antes da fase: o núcleo emite este efeito antes
+	// do "Gravando" ao ligar e antes do "Processando" ao parar.
+	if m, ok := rt.overlay.(mostradorDaSolta); ok {
+		m.SetGravacaoSolta(e.Ligada)
+	}
 	if rt.hook == nil {
 		return
 	}

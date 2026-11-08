@@ -114,7 +114,9 @@ type Overlay struct {
 	phase dictation.OverlayPhase
 	// texto é o da mensagem no lugar do Label da fase (SetPhaseComTexto).
 	// SetPhase o limpa: só a fase que veio com ele o mostra.
-	texto     string
+	texto string
+	// solta liga o cadeado da pílula de gravação (SetGravacaoSolta).
+	solta     bool
 	amps      []amostraOnda
 	hideTimer *time.Timer
 
@@ -286,7 +288,7 @@ func (o *Overlay) wndProc(hwnd win32.HWND, msg uint32, wParam, lParam uintptr) u
 func (o *Overlay) redraw() {
 	o.mu.Lock()
 	agora := o.relogio()
-	state := FrameState{Phase: o.phase, Amps: o.recentes(agora), Texto: o.texto}
+	state := FrameState{Phase: o.phase, Amps: o.recentes(agora), Texto: o.texto, Solta: o.solta}
 	o.mu.Unlock()
 
 	if !Visible(state.Phase) {
@@ -347,6 +349,20 @@ func (o *Overlay) SetPhaseComTexto(phase dictation.OverlayPhase, texto string) {
 			o.SetPhase(dictation.OverlayHidden)
 		})
 	}
+	o.mu.Unlock()
+	o.wake()
+}
+
+// SetGravacaoSolta liga ou desliga o cadeado da gravação solta (ADR-025,
+// D3): ligada, a pílula de gravação fica LarguraDoCadeado mais larga, com o
+// cadeado à esquerda da onda. O runtime chama no dictation.GravacaoSoltaEffect,
+// que o núcleo emite antes do "Gravando" ao ligar e antes do "Processando" ao
+// parar; por isso a pílula nunca mostra o cadeado num ditado de sempre.
+//
+// Seguro de qualquer goroutine, como SetPhase.
+func (o *Overlay) SetGravacaoSolta(ligada bool) {
+	o.mu.Lock()
+	o.solta = ligada
 	o.mu.Unlock()
 	o.wake()
 }

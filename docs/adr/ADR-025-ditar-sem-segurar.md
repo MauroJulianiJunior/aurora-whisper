@@ -105,6 +105,12 @@ segurar continua como hoje. Ele respondeu, ponto a ponto:
 A mesma pílula e a mesma onda, com um detalhe mínimo que diz "gravando sem segurar". As opções vão
 ao Mauro como imagens antes de entrar (fase D3), e a escolhida entra no `08-ui-ux-spec.md`.
 
+**Escolhida em 07-nov-2026: o cadeado** ("A", entre cadeado, ponto e contorno aceso, vistos em PNG
+nos fundos claro, escuro e preto). Um cadeado de 7x8 px em cinza, na ponta esquerda, com a pílula
+10 px mais larga só durante a gravação solta. Ao parar, o cadeado sai e a pílula volta à compacta
+do "Processando": é o sinal de que a gravação já não está solta. [derivada] É o mesmo sinal do áudio
+travado do WhatsApp.
+
 ### F. Privacidade
 
 Nada novo sai do PC. O mouse só é visto durante a gravação solta, e o log registra só como ela

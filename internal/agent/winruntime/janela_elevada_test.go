@@ -40,10 +40,19 @@ var alvoProtegido = dictation.FocusTarget{Protected: true}
 type pilulaFalsa struct {
 	fases []dictation.OverlayPhase
 	amps  []float64
+	// soltas guarda cada pedido do cadeado (SetGravacaoSolta), e antesDa
+	// quantas fases já tinham sido mostradas quando ele chegou: é o que prova
+	// a ordem entre o cadeado e a fase.
+	soltas  []bool
+	antesDa []int
 }
 
 func (p *pilulaFalsa) SetPhase(f dictation.OverlayPhase) { p.fases = append(p.fases, f) }
 func (p *pilulaFalsa) PushAmplitude(a float64)           { p.amps = append(p.amps, a) }
+func (p *pilulaFalsa) SetGravacaoSolta(ligada bool) {
+	p.soltas = append(p.soltas, ligada)
+	p.antesDa = append(p.antesDa, len(p.fases))
+}
 
 // ultima devolve a última fase mostrada.
 func (p *pilulaFalsa) ultima(t *testing.T) dictation.OverlayPhase {

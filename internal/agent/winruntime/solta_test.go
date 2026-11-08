@@ -146,6 +146,46 @@ func TestSolta_CliqueParaEEscreveNoCampoDeAgora(t *testing.T) {
 	}
 }
 
+// TestSolta_CadeadoAntesDaFase: o cadeado liga antes do "Gravando" e desliga
+// antes do "Processando" (ADR-025, D3), e o ditado de sempre nunca o liga.
+func TestSolta_CadeadoAntesDaFase(t *testing.T) {
+	b := novaBancadaSolta(t)
+	b.ligar(t)
+	b.clicar()
+
+	p := b.pilula
+	if len(p.soltas) != 2 || !p.soltas[0] || p.soltas[1] {
+		t.Fatalf("pedidos do cadeado %v, quero ligar e desligar", p.soltas)
+	}
+	gravando, processando := -1, -1
+	for i, f := range p.fases {
+		if f == dictation.OverlayRecording && gravando < 0 {
+			gravando = i
+		}
+		if f == dictation.OverlayProcessing && processando < 0 {
+			processando = i
+		}
+	}
+	if gravando < 0 || processando < 0 {
+		t.Fatalf("fases %v, quero gravando e processando", p.fases)
+	}
+	if p.antesDa[0] > gravando {
+		t.Errorf("o cadeado ligou depois de mostrar gravando (fases %v, cadeado na %d)", p.fases, p.antesDa[0])
+	}
+	if p.antesDa[1] > processando {
+		t.Errorf("o cadeado desligou depois de mostrar processando (fases %v, cadeado na %d)", p.fases, p.antesDa[1])
+	}
+
+	h := novaBancadaSolta(t)
+	h.tecla(true, 0, false, false)
+	h.rt.clk.(*clock.Fake).Advance(700 * time.Millisecond)
+	h.rt.dispatch(<-h.rt.pending)
+	h.tecla(false, 3000, true, false)
+	if len(h.pilula.soltas) != 0 {
+		t.Fatalf("o ditado de sempre pediu o cadeado: %v", h.pilula.soltas)
+	}
+}
+
 // TestSolta_OHoldUsaOCampoDoComeco é o contraponto: no ditado de sempre, o
 // dicionário continua o do programa onde a tecla foi apertada, e o campo é
 // lido uma vez só, no aperto. A ADR-025 só muda a gravação solta.

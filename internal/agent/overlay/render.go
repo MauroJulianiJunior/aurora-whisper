@@ -44,13 +44,16 @@ type FrameState struct {
 	// Texto troca o Label da fase na mensagem (FaseNaNota: "Lista de compras
 	// +3"). Vazio é o Label.
 	Texto string
+	// Solta: a gravação é a solta (ADR-025), e a pílula de gravação leva o
+	// cadeado. Não muda nenhuma outra fase.
+	Solta bool
 }
 
 // Quadro devolve o frame de state num canvas do tamanho exato da pílula
 // da fase (DimensoesPara) — é o que a janela apresenta, e o tamanho que
 // ela assume (ver Overlay.redraw).
 func Quadro(state FrameState) *Canvas {
-	d := dimensoesCom(state.Phase, state.Texto)
+	d := dimensoesDoQuadro(state)
 	c := NewCanvas(d.W, d.H)
 	Render(c, state)
 	return c
@@ -68,16 +71,23 @@ func Quadro(state FrameState) *Canvas {
 func Render(c *Canvas, state FrameState) {
 	c.Clear()
 
-	if d := dimensoesCom(state.Phase, state.Texto); d.ComOnda {
+	if d := dimensoesDoQuadro(state); d.ComOnda {
 		px, py := (c.W-d.W)/2, (c.H-d.H)/2
 		desenhaPilula(c, px, py, d)
+		// A gravação solta põe o cadeado na ponta esquerda, e a onda anda o
+		// tanto que a pílula cresceu.
+		ondaX := px
+		if d.Cadeado {
+			desenhaCadeado(c, px+cadeadoX, py+cadeadoY)
+			ondaX += LarguraDoCadeado
+		}
 		// Gravação e processamento não têm texto nenhum. O rótulo
 		// "Gravando" saiu a pedido de Mauro — "por mim o próprio wave já
 		// mostra que está gravando" — e com ele saiu também o contador,
 		// que era o que denunciava a fase de processamento inexistente.
 		//
 		// Sem texto, a onda fica com a altura inteira da pílula.
-		drawBars(c, state.Amps, px, py, state.Phase)
+		drawBars(c, state.Amps, ondaX, py, state.Phase)
 		return
 	}
 
@@ -104,6 +114,16 @@ func desenhaPilula(c *Canvas, px, py int, d Dimensoes) {
 	sb, sg, sr := corCorpo.bgr()
 	c.FillRoundedRect(px+BordaPilula, py+BordaPilula,
 		d.W-2*BordaPilula, d.H-2*BordaPilula, d.Radius-BordaPilula, sb, sg, sr)
+}
+
+// desenhaCadeado desenha o cadeado da gravação solta com o canto em x/y (ver
+// cadeadoW e cadeadoH em layout.go).
+func desenhaCadeado(c *Canvas, x, y int) {
+	b, g, r := corCinza.bgr()
+	c.FillRect(x+2, y, 3, 1, b, g, r)   // alça: o topo
+	c.FillRect(x+1, y+1, 1, 2, b, g, r) // alça: o lado esquerdo
+	c.FillRect(x+5, y+1, 1, 2, b, g, r) // alça: o lado direito
+	c.FillRect(x, y+3, cadeadoW, cadeadoH-3, b, g, r)
 }
 
 // desenhaMensagem desenha, na pílula com canto em px/py, o ponto de estado
